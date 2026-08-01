@@ -1,0 +1,480 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  fullname  String
+  role      Role
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  histories History[]
+  sessions  Session[]
+}
+
+model Session {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Supplier {
+  id            Int        @id @default(autoincrement())
+  code          String     @unique
+  name          String
+  address       String?
+  city          String?
+  phone         String?
+  email         String?
+  contactPerson String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  purchases     Purchase[]
+  receipts      Receipt[]
+}
+
+model Customer {
+  id            Int        @id @default(autoincrement())
+  code          String     @unique
+  name          String
+  address       String?
+  city          String?
+  phone         String?
+  email         String?
+  contactPerson String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deliveries    Delivery[]
+}
+
+model Barang {
+  id               Int               @id @default(autoincrement())
+  code             String            @unique
+  barcode          String?           @unique
+  name             String
+  category         String?
+  brand            String?
+  unit             String
+  minimumStock     Float             @default(0)
+  stock            Float             @default(0)
+  purchasePrice    Float             @default(0)
+  sellingPrice     Float             @default(0)
+  hasExpired       Boolean           @default(false)
+  active           Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  adjustmentItems  AdjustmentItem[]
+  batches          BarangBatch[]
+  deliveryItems    DeliveryItem[]
+  inventory        Inventory?
+  stockMutations   StockMutation[]
+  purchaseItems    PurchaseItem[]
+  receiptItems     ReceiptItem[]
+  stockCards       StockCard[]
+  stockOpnameItems StockOpnameItem[]
+  batchStocks      BatchStock[]
+  expiredWarning   Int               @default(30)
+  mutationStocks   MutationStock[]
+}
+
+model BarangBatch {
+  id Int @id @default(autoincrement())
+
+  barangId Int
+
+  batchNumber String
+
+  expiredDate DateTime
+
+  qty Float
+
+  createdAt DateTime @default(now())
+
+  barang Barang @relation(fields: [barangId], references: [id], onDelete: Cascade)
+}
+
+model Purchase {
+  id           Int            @id @default(autoincrement())
+  number       String         @unique
+  supplierId   Int
+  purchaseDate DateTime       @default(now())
+  status       PurchaseStatus @default(DRAFT)
+  remarks      String?
+  total        Float          @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  supplier     Supplier       @relation(fields: [supplierId], references: [id])
+  items        PurchaseItem[]
+  receipts     Receipt[]
+}
+
+model PurchaseItem {
+  id          Int      @id @default(autoincrement())
+  purchaseId  Int
+  barangId    Int
+  qty         Float
+  receivedQty Float    @default(0)
+  price       Float
+  discount    Float    @default(0)
+  tax         Float    @default(0)
+  subtotal    Float
+  purchase    Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  barang      Barang   @relation(fields: [barangId], references: [id])
+}
+
+model Receipt {
+  id          Int           @id @default(autoincrement())
+  number      String        @unique
+  purchaseId  Int
+  supplierId  Int
+  receiptDate DateTime      @default(now())
+  remarks     String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  supplier    Supplier      @relation(fields: [supplierId], references: [id])
+  purchase    Purchase      @relation(fields: [purchaseId], references: [id])
+  items       ReceiptItem[]
+}
+
+model ReceiptItem {
+  id        Int     @id @default(autoincrement())
+  receiptId Int
+  barangId  Int
+  qty       Float
+  price     Float
+  subtotal  Float
+  barang    Barang  @relation(fields: [barangId], references: [id])
+  receipt   Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+}
+
+model Delivery {
+  id           Int            @id @default(autoincrement())
+  number       String         @unique
+  customerId   Int
+  deliveryDate DateTime       @default(now())
+  status       DeliveryStatus @default(DRAFT)
+  remarks      String?
+  totalQty     Float          @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  customer     Customer       @relation(fields: [customerId], references: [id])
+  items        DeliveryItem[]
+  suratJalan   SuratJalan?
+}
+
+model DeliveryItem {
+  id         Int      @id @default(autoincrement())
+  deliveryId Int
+  barangId   Int
+  qty        Float
+  price      Float    @default(0)
+  subtotal   Float    @default(0)
+  note       String?
+  delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  barang     Barang   @relation(fields: [barangId], references: [id])
+}
+
+model SuratJalan {
+  id            Int       @id @default(autoincrement())
+  number        String    @unique
+  deliveryId    Int       @unique
+  driver        String?
+  vehicleNumber String?
+  expedition    String?
+  receiver      String?
+  receiveDate   DateTime?
+  note          String?
+  printed       Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  delivery      Delivery  @relation(fields: [deliveryId], references: [id])
+}
+
+model StockCard {
+  id          Int      @id @default(autoincrement())
+  barangId    Int
+  trxDate     DateTime @default(now())
+  trxType     String
+  trxNumber   String
+  referenceId Int?
+  warehouse   String?  @default("MAIN")
+  qtyIn       Float    @default(0)
+  qtyOut      Float    @default(0)
+  balance     Float
+  unitPrice   Float    @default(0)
+  totalValue  Float    @default(0)
+  note        String?
+  createdAt   DateTime @default(now())
+  barang      Barang   @relation(fields: [barangId], references: [id])
+
+  @@index([barangId])
+  @@index([trxDate])
+}
+
+model MutationStock {
+  id            Int      @id @default(autoincrement())
+  number        String   @unique
+  barangId      Int
+  fromWarehouse String
+  toWarehouse   String
+  qty           Float
+  mutationDate  DateTime @default(now())
+  note          String?
+  createdAt     DateTime @default(now())
+  barang        Barang   @relation(fields: [barangId], references: [id])
+}
+
+model Inventory {
+  id             Int      @id @default(autoincrement())
+  barangId       Int      @unique
+  warehouse      String   @default("MAIN")
+  stock          Float    @default(0)
+  reservedStock  Float    @default(0)
+  availableStock Float    @default(0)
+  minimumStock   Float    @default(0)
+  maximumStock   Float    @default(0)
+  lastPurchase   Float    @default(0)
+  averageCost    Float    @default(0)
+  updatedAt      DateTime @updatedAt
+  barang         Barang   @relation(fields: [barangId], references: [id])
+}
+
+model StockOpname {
+  id         Int               @id @default(autoincrement())
+  number     String            @unique
+  opnameDate DateTime          @default(now())
+  warehouse  String            @default("MAIN")
+  status     String            @default("DRAFT")
+  remarks    String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  items      StockOpnameItem[]
+}
+
+model StockOpnameItem {
+  id            Int         @id @default(autoincrement())
+  stockOpnameId Int
+  barangId      Int
+  systemQty     Float
+  physicalQty   Float
+  difference    Float
+  barang        Barang      @relation(fields: [barangId], references: [id])
+  stockOpname   StockOpname @relation(fields: [stockOpnameId], references: [id], onDelete: Cascade)
+}
+
+model Adjustment {
+  id             Int              @id @default(autoincrement())
+  number         String           @unique
+  adjustmentDate DateTime         @default(now())
+  warehouse      String           @default("MAIN")
+  type           String           @default("IN")
+  reason         String?
+  remarks        String?
+  status         String           @default("DRAFT")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  items          AdjustmentItem[]
+}
+
+model AdjustmentItem {
+  id           Int        @id @default(autoincrement())
+  adjustmentId Int
+  barangId     Int
+  qty          Float
+  price        Float      @default(0)
+  type         String     @default("IN")
+  barang       Barang     @relation(fields: [barangId], references: [id])
+  adjustment   Adjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+}
+
+model History {
+  id              Int         @id @default(autoincrement())
+  transactionType HistoryType
+  referenceNumber String?
+  description     String
+  userId          Int?
+  createdAt       DateTime    @default(now())
+  user            User?       @relation(fields: [userId], references: [id])
+}
+
+model Employee {
+  id Int @id @default(autoincrement())
+
+  nik String @unique
+
+  name String
+
+  department String?
+
+  position String?
+
+  phone String?
+
+  address String?
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  attendances Attendance[]
+}
+
+model Attendance {
+  id Int @id @default(autoincrement())
+
+  employeeId Int
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  photo String?
+
+  note String?
+
+  latitude Float?
+
+  longitude Float?
+
+  checkIn DateTime @default(now())
+
+  checkOut DateTime?
+}
+
+model BatchStock {
+  id Int @id @default(autoincrement())
+
+  barangId Int
+  barang   Barang @relation(fields: [barangId], references: [id], onDelete: Cascade)
+
+  batchNumber String
+  expiredDate DateTime
+
+  qty Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([barangId])
+}
+
+model StockMutation {
+  id Int @id @default(autoincrement())
+
+  barangId Int
+
+  type String
+
+  qty Float
+
+  stockBefore Float
+
+  stockAfter Float
+
+  reference String?
+
+  description String?
+
+  createdAt DateTime @default(now())
+
+  barang Barang @relation(fields: [barangId], references: [id])
+}
+
+model Company {
+  id          Int      @id @default(autoincrement())
+
+  name        String
+
+  logo        String?
+
+  address     String?
+
+  city        String?
+
+  province    String?
+
+  postalCode  String?
+
+  phone       String?
+
+  email       String?
+
+  website     String?
+
+  npwp        String?
+
+  director    String?
+
+  footer      String?
+
+  createdAt   DateTime @default(now())
+
+  updatedAt   DateTime @updatedAt
+}
+
+model DocumentNumber {
+
+  id Int @id @default(autoincrement())
+
+  type String
+
+  prefix String
+
+  period String
+
+  lastNumber Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+
+  @@unique([type,period])
+
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  PURCHASING
+  GUDANG
+}
+
+enum PurchaseStatus {
+  DRAFT
+  APPROVED
+  RECEIVED
+}
+
+enum DeliveryStatus {
+  DRAFT
+  RELEASED
+  DELIVERED
+}
+
+enum AdjustmentType {
+  PLUS
+  MINUS
+}
+
+enum HistoryType {
+  MASTER_CREATE
+  STOCK_IN
+  STOCK_OUT
+  ADJUSTMENT
+  PURCHASE
+  RECEIPT
+  DELIVERY
+}
