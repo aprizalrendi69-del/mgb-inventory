@@ -2,42 +2,22 @@
 
 # dependencies
 /node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+/.next
+/out
 
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
 .env*
 
-# vercel
-.vercel
+npm-debug.log*
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# Database
+prisma/dev.db
+prisma/dev.db-journal
 
-/lib/generated/prisma
+# SQLite
+prisma/*.db
+prisma/*.db-journal
+
+# Environment
+.env
+.env.local
+.env.production
