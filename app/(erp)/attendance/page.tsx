@@ -1,30 +1,67 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-export default function AttendancePage() {
-
-  const [employees, setEmployees] = useState<any[]>([]);
-
-  const [employeeId, setEmployeeId] = useState("");
-
-  const [photo, setPhoto] = useState<File | null>(null);
-
-  const [latitude, setLatitude] = useState<number>(0);
-
-  const [longitude, setLongitude] = useState<number>(0);
-
-  const [loading, setLoading] = useState(false);
+import {
+  useEffect,
+  useRef,
+  useState
+} from "react";
 
 
+export default function AttendancePage(){
 
-  useEffect(() => {
+
+  const [employees,setEmployees] =
+  useState<any[]>([]);
+
+
+  const [employeeId,setEmployeeId] =
+  useState("");
+
+
+  const [loading,setLoading] =
+  useState(false);
+
+
+  const [photo,setPhoto] =
+  useState<File|null>(null);
+
+
+  const [preview,setPreview] =
+  useState("");
+
+
+
+  const videoRef =
+  useRef<HTMLVideoElement>(null);
+
+
+  const canvasRef =
+  useRef<HTMLCanvasElement>(null);
+
+
+  const streamRef =
+  useRef<MediaStream|null>(null);
+
+
+
+
+
+  useEffect(()=>{
 
     loadEmployee();
 
-    getLocation();
+    startCamera();
 
-  }, []);
+
+    return ()=>{
+
+      stopCamera();
+
+    };
+
+
+  },[]);
+
 
 
 
@@ -33,9 +70,12 @@ export default function AttendancePage() {
 
     try{
 
-      const res = await fetch("/api/employee");
+      const res =
+      await fetch("/api/employee");
 
-      const json = await res.json();
+
+      const json =
+      await res.json();
 
 
       if(json.success){
@@ -45,9 +85,9 @@ export default function AttendancePage() {
       }
 
 
-    }catch(error){
+    }catch(err){
 
-      console.error(error);
+      console.log(err);
 
     }
 
@@ -57,33 +97,192 @@ export default function AttendancePage() {
 
 
 
-  function getLocation(){
 
-    if(!navigator.geolocation){
+
+  async function startCamera(){
+
+
+    try{
+
+
+      const stream =
+      await navigator.mediaDevices.getUserMedia({
+
+        video:{
+          facingMode:"user",
+          width:720,
+          height:720
+        },
+
+        audio:false
+
+      });
+
+
+
+      streamRef.current = stream;
+
+
+
+      if(videoRef.current){
+
+        videoRef.current.srcObject =
+        stream;
+
+      }
+
+
+
+    }catch(err){
+
+      console.log(err);
+
+      alert(
+        "Kamera tidak tersedia"
+      );
+
+    }
+
+
+  }
+
+
+
+
+
+
+  function stopCamera(){
+
+
+    if(streamRef.current){
+
+
+      streamRef.current
+      .getTracks()
+      .forEach(
+        track=>track.stop()
+      );
+
+
+    }
+
+
+  }
+
+
+
+
+
+
+
+
+  function takePhoto(){
+
+
+    const video =
+    videoRef.current;
+
+
+    const canvas =
+    canvasRef.current;
+
+
+
+    if(!video || !canvas){
 
       return;
 
     }
 
 
-    navigator.geolocation.getCurrentPosition(
 
-      (pos)=>{
 
-        setLatitude(pos.coords.latitude);
+    canvas.width =
+    video.videoWidth;
 
-        setLongitude(pos.coords.longitude);
+
+    canvas.height =
+    video.videoHeight;
+
+
+
+
+    const ctx =
+    canvas.getContext("2d");
+
+
+
+    ctx?.drawImage(
+
+      video,
+
+      0,
+
+      0,
+
+      canvas.width,
+
+      canvas.height
+
+    );
+
+
+
+
+
+
+    canvas.toBlob(
+
+      blob=>{
+
+
+        if(!blob)
+        return;
+
+
+
+        const file =
+        new File(
+
+          [blob],
+
+          `attendance-${Date.now()}.jpg`,
+
+          {
+            type:"image/jpeg"
+          }
+
+        );
+
+
+
+        console.log(
+          "FILE FOTO:",
+          file
+        );
+
+
+
+        setPhoto(file);
+
+
+
+        setPreview(
+          URL.createObjectURL(blob)
+        );
+
+
 
       },
 
 
-      ()=>{
+      "image/jpeg",
 
-        alert("GPS tidak aktif");
+      0.9
 
-      }
 
     );
+
 
   }
 
@@ -93,22 +292,131 @@ export default function AttendancePage() {
 
 
 
-  async function absen(type:"IN"|"OUT"){
 
 
-    if(!employeeId){
-
-      alert("Pilih pegawai");
-
-      return;
-
-    }
+  async function uploadPhoto(){
 
 
 
     if(!photo){
 
-      alert("Foto selfie wajib");
+      throw new Error(
+        "Foto belum ada"
+      );
+
+    }
+
+
+
+
+    const form =
+    new FormData();
+
+
+
+    form.append(
+      "file",
+      photo
+    );
+
+
+
+
+
+    const res =
+    await fetch(
+
+      "/api/upload/attendance",
+
+      {
+
+        method:"POST",
+
+        body:form
+
+      }
+
+    );
+
+
+
+
+
+    const json =
+    await res.json();
+
+
+
+
+
+    console.log(
+      "UPLOAD RESULT:",
+      json
+    );
+
+
+
+
+
+
+    if(!json.success){
+
+      throw new Error(
+        json.message ||
+        "Upload gagal"
+      );
+
+    }
+
+
+
+
+
+
+    const url =
+    json.photo ||
+    json.url;
+
+
+
+
+
+    if(!url){
+
+      throw new Error(
+        "URL foto kosong"
+      );
+
+    }
+
+
+
+
+    return url;
+
+
+
+  }
+
+
+
+
+
+
+
+
+
+  async function absen(
+    type:"IN"|"OUT"
+  ){
+
+
+
+    if(!employeeId){
+
+      alert(
+        "Pilih pegawai dulu"
+      );
 
       return;
 
@@ -117,57 +425,47 @@ export default function AttendancePage() {
 
 
 
-    setLoading(true);
+    if(!photo){
+
+      alert(
+        "Ambil foto selfie dulu"
+      );
+
+      return;
+
+    }
+
+
 
 
 
     try{
 
 
-      // upload foto
+      setLoading(true);
 
-      const form = new FormData();
 
-      form.append(
-        "file",
-        photo
+
+
+      const photoUrl =
+      await uploadPhoto();
+
+
+
+
+
+      console.log(
+        "FOTO DIKIRIM:",
+        photoUrl
       );
 
 
 
-      const upload = await fetch(
-
-        "/api/upload/attendance",
-
-        {
-
-          method:"POST",
-
-          body:form
-
-        }
-
-      );
 
 
 
-      const img = await upload.json();
-
-
-
-
-      if(!upload.ok){
-
-        throw new Error(
-          "Upload foto gagal"
-        );
-
-      }
-
-
-
-
-      const res = await fetch(
+      const res =
+      await fetch(
 
         "/api/attendance",
 
@@ -178,7 +476,8 @@ export default function AttendancePage() {
 
           headers:{
 
-            "Content-Type":"application/json"
+            "Content-Type":
+            "application/json"
 
           },
 
@@ -187,21 +486,15 @@ export default function AttendancePage() {
 
             employeeId:Number(employeeId),
 
-            type,
+            type:type,
 
+            photo:photoUrl,
 
-            latitude,
-
-            longitude,
-
-
-            photo:
-              img.url ??
-              img.photo ??
-              null
+            note:""
 
 
           })
+
 
         }
 
@@ -211,11 +504,24 @@ export default function AttendancePage() {
 
 
 
-      const json = await res.json();
+
+
+      const json =
+      await res.json();
+
+
+
+
+      console.log(
+        "ABSEN:",
+        json
+      );
+
 
 
 
       alert(json.message);
+
 
 
 
@@ -227,17 +533,27 @@ export default function AttendancePage() {
 
         setPhoto(null);
 
+        setPreview("");
+
 
       }
 
 
 
-    }catch(error){
 
 
-      console.error(error);
 
-      alert("Terjadi kesalahan");
+
+    }catch(err:any){
+
+
+      console.log(err);
+
+
+      alert(
+        err.message ||
+        "Absensi gagal"
+      );
 
 
 
@@ -257,142 +573,155 @@ export default function AttendancePage() {
 
 
 
+
+
+
   return (
 
     <div className="p-8">
 
 
       <h1 className="text-3xl font-bold mb-6">
-
         Absensi Pegawai
-
       </h1>
 
 
 
 
-      <div className="bg-white rounded-lg shadow p-6 max-w-xl">
+
+      <div className="
+      bg-white
+      shadow
+      rounded-lg
+      p-6
+      max-w-xl
+      ">
 
 
 
-        <label className="block mb-2">
-
-          Pegawai
-
-        </label>
+      <label className="font-semibold">
+        Pegawai
+      </label>
 
 
 
-        <select
+      <select
 
-          className="border w-full p-3 rounded mb-4"
+        value={employeeId}
 
-          value={employeeId}
+        onChange={(e)=>
+          setEmployeeId(e.target.value)
+        }
 
-          onChange={(e)=>
-            setEmployeeId(e.target.value)
-          }
+        className="
+        border
+        w-full
+        p-3
+        rounded
+        mt-2
+        mb-5
+        "
 
-        >
-
-
-          <option value="">
-
-            Pilih Pegawai
-
-          </option>
+      >
 
 
+        <option value="">
+          Pilih Pegawai
+        </option>
 
-          {employees.map((e:any)=>(
+
+
+        {
+          employees.map(e=>(
 
             <option
-
               key={e.id}
-
               value={e.id}
-
             >
 
               {e.nik} - {e.name}
 
             </option>
 
+          ))
+        }
 
-          ))}
 
-
-
-        </select>
-
+      </select>
 
 
 
 
-        <label className="block mb-2">
 
-          Selfie
+      <video
 
-        </label>
+        ref={videoRef}
 
+        autoPlay
 
+        playsInline
 
-        <input
+        className="
+        w-full
+        rounded
+        border
+        bg-black
+        "
 
-
-          type="file"
-
-
-          accept="image/*"
-
-
-          capture="user"
-
-
-          className="border w-full p-3 rounded mb-4"
+      />
 
 
 
-          onChange={(e)=>{
+
+      <canvas
+        ref={canvasRef}
+        className="hidden"
+      />
 
 
-            if(e.target.files?.length){
-
-              setPhoto(
-                e.target.files[0]
-              );
-
-            }
 
 
-          }}
 
+      <button
+
+        onClick={takePhoto}
+
+        className="
+        mt-4
+        bg-blue-600
+        text-white
+        px-5
+        py-3
+        rounded
+        "
+
+      >
+
+        📷 Ambil Selfie
+
+      </button>
+
+
+
+
+
+
+      {
+        preview &&
+
+        <img
+
+          src={preview}
+
+          className="
+          mt-5
+          rounded
+          w-full
+          "
 
         />
 
-
-
-
-
-
-        <div className="mb-6">
-
-
-          <p>
-
-            Latitude : {latitude}
-
-          </p>
-
-
-          <p>
-
-            Longitude : {longitude}
-
-          </p>
-
-
-        </div>
+      }
 
 
 
@@ -400,59 +729,77 @@ export default function AttendancePage() {
 
 
 
-        <div className="flex gap-4">
-
-
-          <button
-
-
-            disabled={loading}
-
-
-            onClick={()=>
-              absen("IN")
-            }
-
-
-            className="bg-green-600 text-white px-6 py-3 rounded"
-
-          >
-
-            {loading ? "Proses..." : "Check In"}
-
-
-          </button>
+      <div className="
+      flex
+      gap-4
+      mt-6
+      ">
 
 
 
+      <button
+
+        disabled={loading}
+
+        onClick={()=>absen("IN")}
+
+        className="
+        bg-green-600
+        text-white
+        px-6
+        py-3
+        rounded
+        "
+
+      >
+
+        {
+          loading
+          ?
+          "Proses..."
+          :
+          "Check In"
+        }
+
+
+      </button>
 
 
 
 
-          <button
+
+      <button
+
+        disabled={loading}
+
+        onClick={()=>absen("OUT")}
+
+        className="
+        bg-red-600
+        text-white
+        px-6
+        py-3
+        rounded
+        "
+
+      >
+
+        {
+          loading
+          ?
+          "Proses..."
+          :
+          "Check Out"
+        }
 
 
-            disabled={loading}
-
-
-            onClick={()=>
-              absen("OUT")
-            }
-
-
-            className="bg-red-600 text-white px-6 py-3 rounded"
-
-
-          >
-
-            {loading ? "Proses..." : "Check Out"}
-
-
-          </button>
+      </button>
 
 
 
-        </div>
+
+      </div>
+
 
 
 
@@ -463,5 +810,6 @@ export default function AttendancePage() {
     </div>
 
   );
+
 
 }

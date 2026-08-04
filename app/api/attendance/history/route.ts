@@ -1,86 +1,134 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
-  try {
 
-    const employees = await prisma.employee.findMany({
-      include: {
-        attendances: true,
-      },
-      orderBy: {
-        name: "asc",
-      },
-    });
+export async function GET(req:Request){
 
-    const now = new Date();
+try{
 
-    const startMonth = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      1
-    );
 
-    const endMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-      23,
-      59,
-      59
-    );
+const {searchParams} =
+new URL(req.url);
 
-    const totalHari = endMonth.getDate();
 
-    const data = employees.map((employee) => {
 
-      const hadir = employee.attendances.filter((item) => {
+const employeeId =
+searchParams.get("employeeId");
 
-        const tanggal = new Date(item.checkIn);
 
-        return (
-          tanggal >= startMonth &&
-          tanggal <= endMonth
-        );
+const startDate =
+searchParams.get("start");
 
-      }).length;
 
-      return {
+const endDate =
+searchParams.get("end");
 
-        id: employee.id,
 
-        nik: employee.nik,
 
-        fullname: employee.name,
 
-        role: employee.position ?? "-",
 
-        totalHadir: hadir,
+const data =
+await prisma.attendance.findMany({
 
-        totalAbsen: totalHari - hadir
+where:{
 
-      };
 
-    });
+...(employeeId && {
 
-    return NextResponse.json({
-      success: true,
-      data,
-    });
+employeeId:Number(employeeId)
 
-  } catch (error: any) {
+}),
 
-    console.log(error);
 
-    return NextResponse.json(
-      {
-        success: false,
-        message: error.message,
-      },
-      {
-        status: 500,
-      }
-    );
 
-  }
+...(startDate && endDate && {
+
+date:{
+
+gte:new Date(startDate),
+
+lte:new Date(
+endDate+"T23:59:59"
+)
+
+}
+
+})
+
+
+},
+
+
+include:{
+
+
+employee:{
+
+
+select:{
+
+
+nik:true,
+
+name:true,
+
+department:true,
+
+position:true
+
+
+}
+
+
+}
+
+
+},
+
+
+
+orderBy:{
+
+
+date:"desc"
+
+
+}
+
+
+});
+
+
+
+
+
+return NextResponse.json({
+
+success:true,
+
+data
+
+});
+
+
+
+
+
+}catch(error:any){
+
+
+return NextResponse.json({
+
+success:false,
+
+message:error.message
+
+},{
+status:500
+});
+
+
+}
+
+
 }

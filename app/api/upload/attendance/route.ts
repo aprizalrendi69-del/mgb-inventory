@@ -1,60 +1,138 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
+import fs from "fs/promises";
 import path from "path";
 
-export async function POST(request: Request) {
-  try {
-    const formData = await request.formData();
 
-    const file = formData.get("file") as File;
+export async function POST(
+  req:Request
+){
 
-    if (!file) {
-      return NextResponse.json({
-        success: false,
-        message: "File tidak ditemukan",
-      });
-    }
+try{
 
-    const bytes = await file.arrayBuffer();
 
-    const buffer = Buffer.from(bytes);
+const formData =
+await req.formData();
 
-    const fileName =
-      Date.now() +
-      "-" +
-      file.name.replace(/\s/g, "_");
 
-    const uploadPath = path.join(
-      process.cwd(),
-      "public",
-      "uploads",
-      "attendance"
-    );
 
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, {
-        recursive: true,
-      });
-    }
+const file =
+formData.get("file") as File;
 
-    fs.writeFileSync(
-      path.join(uploadPath, fileName),
-      buffer
-    );
 
-    return NextResponse.json({
-      success: true,
-      photo: "/uploads/attendance/" + fileName,
-    });
 
-  } catch (error) {
+if(!file){
 
-    console.log(error);
+return NextResponse.json({
 
-    return NextResponse.json({
-      success: false,
-      message: "Upload gagal",
-    });
+success:false,
 
-  }
+message:"File tidak ditemukan"
+
+},{
+status:400
+});
+
+}
+
+
+
+
+const bytes =
+await file.arrayBuffer();
+
+
+const buffer =
+Buffer.from(bytes);
+
+
+
+
+const filename =
+`${Date.now()}-${file.name.replace(/\s/g,"-")}`;
+
+
+
+
+
+const uploadDir =
+path.join(
+process.cwd(),
+"public",
+"uploads",
+"attendance"
+);
+
+
+
+
+
+await fs.mkdir(
+uploadDir,
+{
+recursive:true
+}
+);
+
+
+
+
+
+const filepath =
+path.join(
+uploadDir,
+filename
+);
+
+
+
+
+
+await fs.writeFile(
+filepath,
+buffer
+);
+
+
+
+
+
+const photoUrl =
+`/uploads/attendance/${filename}`;
+
+
+
+
+
+return NextResponse.json({
+
+success:true,
+
+photo:photoUrl
+
+});
+
+
+
+
+
+}catch(error:any){
+
+
+console.log(error);
+
+
+return NextResponse.json({
+
+success:false,
+
+message:error.message
+
+},{
+status:500
+});
+
+
+}
+
+
 }

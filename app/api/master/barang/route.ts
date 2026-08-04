@@ -6,7 +6,6 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
 
     const search = searchParams.get("search") || "";
-
     const category = searchParams.get("category") || "";
 
     const data = await prisma.barang.findMany({
@@ -46,8 +45,8 @@ export async function GET(req: NextRequest) {
       success: true,
       data,
     });
-  } catch (err) {
-    console.log(err);
+  } catch (error) {
+    console.log(error);
 
     return NextResponse.json(
       {
@@ -65,16 +64,81 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
+    if (!body.code)
+      return NextResponse.json({
+        success: false,
+        message: "Kode barang wajib diisi",
+      });
+
+    if (!body.name)
+      return NextResponse.json({
+        success: false,
+        message: "Nama barang wajib diisi",
+      });
+
+    if (!body.unit)
+      return NextResponse.json({
+        success: false,
+        message: "Satuan wajib diisi",
+      });
+
+    const cekKode = await prisma.barang.findUnique({
+      where: {
+        code: body.code,
+      },
+    });
+
+    if (cekKode) {
+      return NextResponse.json({
+        success: false,
+        message: "Kode barang sudah digunakan",
+      });
+    }
+
+    const barcode =
+      body.barcode && body.barcode !== ""
+        ? body.barcode
+        : `MGB-${body.code}`;
+
+    const cekBarcode = await prisma.barang.findFirst({
+      where: {
+        barcode,
+      },
+    });
+
+    if (cekBarcode) {
+      return NextResponse.json({
+        success: false,
+        message: "Barcode sudah digunakan",
+      });
+    }
+
     const barang = await prisma.barang.create({
       data: {
         code: body.code,
-        barcode: body.barcode,
+        barcode,
+
         name: body.name,
-        category: body.category,
+
+        category: body.category || null,
+
+        brand: body.brand || null,
+
         unit: body.unit,
-        minStock: Number(body.minStock),
-        purchasePrice: Number(body.purchasePrice),
-        sellingPrice: Number(body.sellingPrice),
+
+        minimumStock: Number(body.minimumStock || 0),
+
+        stock: 0,
+
+        purchasePrice: Number(body.purchasePrice || 0),
+
+        sellingPrice: Number(body.sellingPrice || 0),
+
+        hasExpired: Boolean(body.hasExpired),
+
+        active: true,
+
+        expiredWarning: 30,
       },
     });
 

@@ -1,103 +1,553 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
 
-export default function AttendanceHistoryPage() {
-  const [data, setData] = useState<any[]>([]);
-  const [search, setSearch] = useState("");
+import {
+useEffect,
+useState
+} from "react";
 
-  useEffect(() => {
-    loadData();
-  }, []);
 
-  async function loadData() {
-    const res = await fetch("/api/attendance/history");
-    const json = await res.json();
 
-    if (json.success) {
-      setData(json.data);
-    }
-  }
+export default function AttendanceHistory(){
 
-  const filtered = data.filter((item: any) => {
-    const text = (
-      (item.fullname || "") +
-      (item.nik || "") +
-      (item.role || "")
-    ).toLowerCase();
 
-    return text.includes(search.toLowerCase());
-  });
 
-  return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold mb-6">
-        History Absensi Karyawan
-      </h1>
+const [data,setData]=useState<any[]>([]);
 
-      <input
-        className="border rounded p-3 w-full mb-6"
-        placeholder="Cari Nama / NIK / Jabatan..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
 
-      <div className="bg-white rounded-lg shadow overflow-auto">
-        <table className="w-full border-collapse">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="border p-3 text-left">Nama</th>
-              <th className="border p-3 text-left">NIK</th>
-              <th className="border p-3 text-left">Jabatan</th>
-              <th className="border p-3 text-left">Total Hadir</th>
-              <th className="border p-3 text-left">Total Absen</th>
-            </tr>
-          </thead>
+const [employees,setEmployees]=useState<any[]>([]);
 
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="border p-5 text-center">
-                  Belum ada data karyawan
-                </td>
-              </tr>
-            ) : (
-              filtered.map((item: any) => (
-                <tr
-                  key={item.id}
-                  className="hover:bg-gray-50"
-                >
-                  <td className="border p-3">
-                    <Link
-                      href={`/attendance/history/${item.id}`}
-                      className="text-blue-600 font-semibold"
-                    >
-                      {item.fullname}
-                    </Link>
-                  </td>
 
-                  <td className="border p-3">
-                    {item.nik}
-                  </td>
 
-                  <td className="border p-3">
-                    {item.role}
-                  </td>
+const [employeeId,setEmployeeId]=useState("");
 
-                  <td className="border p-3">
-                    {item.totalHadir}
-                  </td>
+const [start,setStart]=useState("");
 
-                  <td className="border p-3">
-                    {item.totalAbsen}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+const [end,setEnd]=useState("");
+
+
+
+
+
+useEffect(()=>{
+
+loadEmployee();
+
+load();
+
+},[]);
+
+
+
+
+
+
+async function loadEmployee(){
+
+
+const res =
+await fetch("/api/employee");
+
+
+const json =
+await res.json();
+
+
+if(json.success){
+
+setEmployees(json.data);
+
+}
+
+
+}
+
+
+
+
+
+
+async function load(){
+
+
+let url =
+"/api/attendance/history";
+
+
+
+const params =
+new URLSearchParams();
+
+
+
+if(employeeId)
+params.append(
+"employeeId",
+employeeId
+);
+
+
+if(start)
+params.append(
+"start",
+start
+);
+
+
+if(end)
+params.append(
+"end",
+end
+);
+
+
+
+if(params.toString()){
+
+url += "?"+params.toString();
+
+}
+
+
+
+
+const res =
+await fetch(url);
+
+
+
+const json =
+await res.json();
+
+
+
+if(json.success){
+
+setData(json.data);
+
+}
+
+
+
+}
+
+
+
+
+
+
+
+return (
+
+<div className="p-8">
+
+
+<h1 className="
+text-3xl
+font-bold
+mb-6
+">
+
+Riwayat Absensi
+
+</h1>
+
+
+
+
+
+<div className="
+bg-white
+p-5
+rounded
+shadow
+mb-6
+flex
+gap-3
+">
+
+
+
+
+
+<select
+
+className="
+border
+p-3
+rounded
+"
+
+value={employeeId}
+
+onChange={(e)=>
+setEmployeeId(e.target.value)
+}
+
+>
+
+
+<option value="">
+
+Semua Karyawan
+
+</option>
+
+
+
+{
+employees.map((e)=>(
+
+<option
+
+key={e.id}
+
+value={e.id}
+
+>
+
+{e.name}
+
+</option>
+
+))
+
+}
+
+
+</select>
+
+
+
+
+
+<input
+
+type="date"
+
+className="border p-3 rounded"
+
+value={start}
+
+onChange={(e)=>
+setStart(e.target.value)
+}
+
+/>
+
+
+
+
+
+<input
+
+type="date"
+
+className="border p-3 rounded"
+
+value={end}
+
+onChange={(e)=>
+setEnd(e.target.value)
+}
+
+/>
+
+
+
+
+
+<button
+
+onClick={load}
+
+className="
+bg-blue-600
+text-white
+px-5
+rounded
+"
+
+>
+
+Cari
+
+</button>
+
+
+
+</div>
+
+
+
+
+
+
+
+<div className="
+bg-white
+rounded
+shadow
+overflow-hidden
+">
+
+
+<table className="w-full">
+
+
+<thead className="bg-gray-100">
+
+
+<tr>
+
+<th className="p-3">
+Tanggal
+</th>
+
+
+<th>
+Nama
+</th>
+
+
+<th>
+Check In
+</th>
+
+
+<th>
+Foto In
+</th>
+
+
+<th>
+Check Out
+</th>
+
+
+<th>
+Foto Out
+</th>
+
+
+<th>
+Status
+</th>
+
+
+</tr>
+
+
+</thead>
+
+
+
+
+
+<tbody>
+
+
+{
+data.map((a)=>(
+
+
+<tr
+key={a.id}
+className="border-t"
+>
+
+
+
+<td className="p-3">
+
+{
+new Date(a.date)
+.toLocaleDateString("id-ID")
+
+}
+
+</td>
+
+
+
+
+
+<td>
+
+{a.employee.name}
+
+<br/>
+
+<span className="text-sm text-gray-500">
+
+{a.employee.department}
+
+</span>
+
+
+</td>
+
+
+
+
+
+
+<td>
+
+
+{
+a.checkIn &&
+
+new Date(a.checkIn)
+.toLocaleTimeString("id-ID")
+
+}
+
+
+</td>
+
+
+
+
+
+
+<td>
+
+
+{
+a.photoIn &&
+
+<img
+
+src={a.photoIn}
+
+className="
+w-16
+h-16
+rounded
+object-cover
+"
+
+/>
+
+}
+
+
+</td>
+
+
+
+
+
+
+
+<td>
+
+
+{
+a.checkOut
+
+?
+
+new Date(a.checkOut)
+.toLocaleTimeString("id-ID")
+
+:
+
+"-"
+
+}
+
+
+</td>
+
+
+
+
+
+
+<td>
+
+
+{
+a.photoOut &&
+
+<img
+
+src={a.photoOut}
+
+className="
+w-16
+h-16
+rounded
+object-cover
+"
+
+/>
+
+}
+
+
+</td>
+
+
+
+
+
+
+
+<td>
+
+
+{
+a.checkOut
+
+?
+
+<span className="text-green-600">
+Selesai
+</span>
+
+:
+
+<span className="text-red-600">
+Belum Pulang
+</span>
+
+}
+
+
+
+</td>
+
+
+
+
+</tr>
+
+
+))
+
+}
+
+
+
+</tbody>
+
+
+</table>
+
+
+
+</div>
+
+
+
+</div>
+
+
+);
+
+
+
 }

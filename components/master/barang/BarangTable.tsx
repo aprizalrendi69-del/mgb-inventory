@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 
 export default function BarangTable({
@@ -9,7 +10,43 @@ export default function BarangTable({
   data: any[];
   reload: () => void;
 }) {
+
+  const [selected, setSelected] = useState<number[]>([]);
+
+  function toggle(id: number) {
+    setSelected((old) =>
+      old.includes(id)
+        ? old.filter((x) => x !== id)
+        : [...old, id]
+    );
+  }
+
+  function toggleAll() {
+    if (selected.length === data.length) {
+      setSelected([]);
+    } else {
+      setSelected(data.map((x) => x.id));
+    }
+  }
+
+  function cetakBarcode() {
+
+    if (selected.length === 0) {
+      alert("Pilih minimal satu barang.");
+      return;
+    }
+
+    const ids = selected.join(",");
+
+    window.open(
+      `/master/barang/barcode?ids=${ids}`,
+      "_blank"
+    );
+
+  }
+
   async function hapus(id: number) {
+
     if (!confirm("Hapus barang ini?")) return;
 
     const res = await fetch(`/api/master/barang/${id}`, {
@@ -24,57 +61,229 @@ export default function BarangTable({
       alert(json.message);
     }
   }
-
   return (
-    <table className="w-full border mt-5">
-      <thead className="bg-slate-100">
-        <tr>
-          <th className="border p-2">Kode</th>
-          <th className="border p-2">Barcode</th>
-          <th className="border p-2">Nama</th>
-          <th className="border p-2">Kategori</th>
-          <th className="border p-2">Satuan</th>
-          <th className="border p-2">Stock</th>
-          <th className="border p-2">Harga Beli</th>
-          <th className="border p-2">Harga Jual</th>
-          <th className="border p-2">Aksi</th>
-        </tr>
-      </thead>
 
-      <tbody>
-        {data.map((item) => (
-          <tr key={item.id}>
-            <td className="border p-2">{item.code}</td>
-            <td className="border p-2">{item.barcode}</td>
-            <td className="border p-2">{item.name}</td>
-            <td className="border p-2">{item.category}</td>
-            <td className="border p-2">{item.unit}</td>
-            <td className="border p-2">{item.stock}</td>
-            <td className="border p-2">
-              {item.purchasePrice.toLocaleString()}
-            </td>
-            <td className="border p-2">
-              {item.sellingPrice.toLocaleString()}
-            </td>
+<>
 
-            <td className="border p-2 flex gap-2">
-              <Link
-                href={`/master/barang/${item.id}/edit`}
-                className="bg-yellow-500 text-white px-3 py-1 rounded"
-              >
-                Edit
-              </Link>
+<div className="flex justify-between items-center mb-4">
 
-              <button
-                onClick={() => hapus(item.id)}
-                className="bg-red-600 text-white px-3 py-1 rounded"
-              >
-                Hapus
-              </button>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
+<div className="text-sm text-gray-600">
+
+Total Barang : <b>{data.length}</b>
+
+</div>
+
+<div className="flex gap-2">
+
+<button
+onClick={cetakBarcode}
+disabled={selected.length===0}
+className={`
+
+px-4
+py-2
+rounded-lg
+text-white
+
+${
+selected.length===0
+?
+
+"bg-gray-400 cursor-not-allowed"
+
+:
+
+"bg-blue-600 hover:bg-blue-700"
+
+}
+
+`}
+>
+
+🏷 Cetak Barcode ({selected.length})
+
+</button>
+
+</div>
+
+</div>
+
+<table className="w-full border mt-5">
+
+<thead className="bg-slate-100">
+
+<tr>
+
+<th className="border p-2 w-12">
+
+<input
+
+type="checkbox"
+
+checked={
+data.length>0 &&
+selected.length===data.length
+}
+
+onChange={toggleAll}
+
+/>
+
+</th>
+
+<th className="border p-2">
+Kode
+</th>
+
+<th className="border p-2">
+Barcode
+</th>
+
+<th className="border p-2">
+Nama
+</th>
+
+<th className="border p-2">
+Kategori
+</th>
+
+<th className="border p-2">
+Satuan
+</th>
+
+<th className="border p-2">
+Stock
+</th>
+
+<th className="border p-2">
+Harga Beli
+</th>
+
+<th className="border p-2">
+Harga Jual
+</th>
+
+<th className="border p-2">
+Aksi
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+  {data.length === 0 && (
+
+    <tr>
+
+      <td
+        colSpan={10}
+        className="border p-6 text-center text-gray-500"
+      >
+        Tidak ada data barang
+      </td>
+
+    </tr>
+
+  )}
+
+  {data.map((item) => (
+
+    <tr
+      key={item.id}
+      className={
+        selected.includes(item.id)
+          ? "bg-blue-50"
+          : ""
+      }
+    >
+
+      <td className="border p-2 text-center">
+
+        <input
+          type="checkbox"
+          checked={selected.includes(item.id)}
+          onChange={() => toggle(item.id)}
+        />
+
+      </td>
+
+      <td className="border p-2">
+        {item.code}
+      </td>
+
+      <td className="border p-2">
+        {item.barcode}
+      </td>
+
+      <td className="border p-2">
+        {item.name}
+      </td>
+
+      <td className="border p-2">
+        {item.category}
+      </td>
+
+      <td className="border p-2">
+        {item.unit}
+      </td>
+
+      <td className="border p-2">
+        {item.stock}
+      </td>
+
+      <td className="border p-2">
+        {Number(item.purchasePrice).toLocaleString("id-ID")}
+      </td>
+
+      <td className="border p-2">
+        {Number(item.sellingPrice).toLocaleString("id-ID")}
+      </td>
+
+      <td className="border p-2">
+
+        <div className="flex gap-2 flex-wrap">
+
+          <button
+            onClick={() =>
+              window.open(
+                `/master/barang/barcode?ids=${item.id}`,
+                "_blank"
+              )
+            }
+            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded"
+          >
+            Barcode
+          </button>
+
+          <Link
+            href={`/master/barang/${item.id}/edit`}
+            className="bg-yellow-500 text-white px-3 py-1 rounded"
+          >
+            Edit
+          </Link>
+
+          <button
+            onClick={() => hapus(item.id)}
+            className="bg-red-600 text-white px-3 py-1 rounded"
+          >
+            Hapus
+          </button>
+
+        </div>
+
+      </td>
+
+    </tr>
+
+  ))}
+
+</tbody>
+</table>
+
+</>
+
+);
+
 }

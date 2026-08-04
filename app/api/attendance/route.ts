@@ -7,21 +7,36 @@ export async function POST(req:Request){
 try{
 
 
-const body = await req.json();
+const body =
+await req.json();
+
 
 
 const {
- employeeId,
- type,
- photo,
- note,
- latitude,
- longitude
+employeeId,
+type,
+photo,
+note
 }=body;
 
 
 
+
+console.log(
+"DATA ABSENSI MASUK:",
+{
+employeeId,
+type,
+photo
+}
+);
+
+
+
+
+
 if(!employeeId){
+
 
 return NextResponse.json({
 
@@ -33,12 +48,40 @@ message:"Pegawai belum dipilih"
 status:400
 });
 
+
 }
 
 
 
 
-const employee = await prisma.employee.findUnique({
+
+
+if(
+type !== "IN" &&
+type !== "OUT"
+){
+
+
+return NextResponse.json({
+
+success:false,
+
+message:"Type absensi tidak valid"
+
+},{
+status:400
+});
+
+
+}
+
+
+
+
+
+
+const employee =
+await prisma.employee.findUnique({
 
 where:{
 id:Number(employeeId)
@@ -48,7 +91,10 @@ id:Number(employeeId)
 
 
 
+
+
 if(!employee){
+
 
 return NextResponse.json({
 
@@ -60,7 +106,42 @@ message:"Pegawai tidak ditemukan"
 status:404
 });
 
+
 }
+
+
+
+
+
+
+
+
+const todayStart =
+new Date();
+
+
+todayStart.setHours(
+0,
+0,
+0,
+0
+);
+
+
+
+const todayEnd =
+new Date();
+
+
+todayEnd.setHours(
+23,
+59,
+59,
+999
+);
+
+
+
 
 
 
@@ -70,76 +151,116 @@ status:404
 // CHECK IN
 // =================
 
+
 if(type==="IN"){
 
 
 
-const start = new Date();
-
-start.setHours(0,0,0,0);
 
 
-
-const end = new Date();
-
-end.setHours(23,59,59,999);
-
-
-
-const exist = await prisma.attendance.findFirst({
+const exist =
+await prisma.attendance.findFirst({
 
 where:{
 
+
 employeeId:Number(employeeId),
 
-checkIn:{
-gte:start,
-lte:end
-}
+
+date:{
+
+gte:todayStart,
+
+lte:todayEnd
 
 }
+
+
+}
+
 
 });
+
+
 
 
 
 if(exist){
 
+
 return NextResponse.json({
 
 success:false,
 
-message:"Sudah melakukan Check In hari ini"
+message:"Pegawai sudah Check In hari ini"
 
 },{
 status:400
 });
 
+
 }
 
 
 
 
 
-const attendance = await prisma.attendance.create({
 
-data:{
+
+const data = {
 
 
 employeeId:Number(employeeId),
 
-photo:photo || null,
 
-note:note || null,
-
-latitude:Number(latitude) || null,
-
-longitude:Number(longitude) || null,
+date:new Date(),
 
 
-}
+checkIn:new Date(),
+
+
+
+photoIn:
+photo
+?
+String(photo)
+:
+null,
+
+
+
+note:
+note
+?
+String(note)
+:
+null
+
+
+};
+
+
+
+
+console.log(
+"SIMPAN CHECK IN:",
+data
+);
+
+
+
+
+
+
+const attendance =
+await prisma.attendance.create({
+
+data
 
 });
+
+
+
 
 
 
@@ -161,72 +282,131 @@ data:attendance
 
 
 
+
+
+
+
 // =================
 // CHECK OUT
 // =================
+
+
 
 if(type==="OUT"){
 
 
 
-const today = new Date();
-
-today.setHours(0,0,0,0);
 
 
-
-const attendance = await prisma.attendance.findFirst({
+const attendance =
+await prisma.attendance.findFirst({
 
 where:{
 
+
 employeeId:Number(employeeId),
 
-checkIn:{
-gte:today
-}
+
+date:{
+
+gte:todayStart,
+
+lte:todayEnd
 
 },
 
+
+checkOut:null
+
+
+},
+
+
 orderBy:{
 
-checkIn:"desc"
+
+id:"desc"
+
 
 }
 
+
 });
+
+
+
 
 
 
 if(!attendance){
 
+
 return NextResponse.json({
 
 success:false,
 
-message:"Belum Check In hari ini"
+message:
+"Belum Check In atau sudah Check Out"
 
 },{
 status:400
 });
 
+
 }
 
 
 
 
-const update = await prisma.attendance.update({
+
+
+
+const update =
+await prisma.attendance.update({
 
 where:{
+
+
 id:attendance.id
+
+
 },
+
 
 data:{
 
-checkOut:new Date()
+
+checkOut:new Date(),
+
+
+
+photoOut:
+photo
+?
+String(photo)
+:
+null
+
+
 
 }
 
+
 });
+
+
+
+
+
+
+
+console.log(
+"SIMPAN CHECK OUT:",
+update
+);
+
+
+
 
 
 
@@ -243,7 +423,10 @@ data:update
 
 
 
+
 }
+
+
 
 
 
@@ -251,7 +434,7 @@ return NextResponse.json({
 
 success:false,
 
-message:"Tipe absensi tidak valid"
+message:"Request tidak valid"
 
 },{
 status:400
@@ -259,10 +442,17 @@ status:400
 
 
 
+
+
+
 }catch(error:any){
 
 
-console.log(error);
+
+console.log(
+"ERROR ATTENDANCE:",
+error
+);
 
 
 
@@ -276,7 +466,9 @@ message:error.message
 status:500
 });
 
+
 }
+
 
 
 }

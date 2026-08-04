@@ -310,47 +310,37 @@ model History {
 }
 
 model Employee {
-  id Int @id @default(autoincrement())
-
-  nik String @unique
-
-  name String
-
+  id         Int     @id @default(autoincrement())
+  nik        String  @unique
+  name       String
+  gender     String?
+  position   String
   department String?
-
-  position String?
-
-  phone String?
-
-  address String?
-
-  active Boolean @default(true)
+  phone      String?
+  address    String?
+  photo      String?
+  active     Boolean @default(true)
 
   createdAt DateTime @default(now())
-
   updatedAt DateTime @updatedAt
 
   attendances Attendance[]
 }
 
 model Attendance {
-  id Int @id @default(autoincrement())
-
+  id         Int      @id @default(autoincrement())
   employeeId Int
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
-  employee Employee @relation(fields: [employeeId], references: [id])
-
-  photo String?
-
-  note String?
-
-  latitude Float?
-
-  longitude Float?
-
-  checkIn DateTime @default(now())
-
+  date     DateTime  @default(now())
+  checkIn  DateTime?
   checkOut DateTime?
+  photoIn  String?
+  photoOut String?
+  note     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model BatchStock {
@@ -393,39 +383,38 @@ model StockMutation {
 }
 
 model Company {
-  id          Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  name        String
+  name String
 
-  logo        String?
+  logo String?
 
-  address     String?
+  address String?
 
-  city        String?
+  city String?
 
-  province    String?
+  province String?
 
-  postalCode  String?
+  postalCode String?
 
-  phone       String?
+  phone String?
 
-  email       String?
+  email String?
 
-  website     String?
+  website String?
 
-  npwp        String?
+  npwp String?
 
-  director    String?
+  director String?
 
-  footer      String?
+  footer String?
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  updatedAt   DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 }
 
 model DocumentNumber {
-
   id Int @id @default(autoincrement())
 
   type String
@@ -440,9 +429,7 @@ model DocumentNumber {
 
   updatedAt DateTime @updatedAt
 
-
-  @@unique([type,period])
-
+  @@unique([type, period])
 }
 
 enum Role {

@@ -21,3 +21,6 @@ prisma/*.db-journal
 .env
 .env.local
 .env.production
+
+# Upload files
+public/uploads/

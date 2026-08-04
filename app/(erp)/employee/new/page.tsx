@@ -1,105 +1,419 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import {
+  useState
+} from "react";
 
-export default function NewEmployeePage() {
-  const router = useRouter();
-
-  const [nik, setNik] = useState("");
-  const [name, setName] = useState("");
-  const [position, setPosition] = useState("");
-
-  async function save() {
-    if (!nik || !name || !position) {
-      alert("Lengkapi data");
-      return;
-    }
-
-    const res = await fetch("/api/employee", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        nik,
-        name,
-        position,
-      }),
-    });
-
-    const json = await res.json();
-
-    if (json.success) {
-      alert("Berhasil disimpan");
-      router.push("/employee");
-    } else {
-      alert(json.message);
-    }
-  }
-
-  return (
-    <div className="max-w-xl mx-auto p-8">
-
-      <h1 className="text-3xl font-bold mb-6">
-        Tambah Karyawan
-      </h1>
-
-      <div className="space-y-4">
-
-        <input
-          className="border w-full p-3 rounded"
-          placeholder="NIK"
-          value={nik}
-          onChange={(e)=>setNik(e.target.value)}
-        />
-
-        <input
-          className="border w-full p-3 rounded"
-          placeholder="Nama Karyawan"
-          value={name}
-          onChange={(e)=>setName(e.target.value)}
-        />
+import {
+  useRouter
+} from "next/navigation";
 
 
-        <select
-          className="border w-full p-3 rounded"
-          value={position}
-          onChange={(e)=>setPosition(e.target.value)}
-        >
-
-          <option value="">
-            Pilih Role
-          </option>
-
-          <option value="ADMIN">
-            ADMIN
-          </option>
-
-          <option value="MANAGER">
-            MANAGER
-          </option>
-
-          <option value="PURCHASING">
-            PURCHASING
-          </option>
-
-          <option value="GUDANG">
-            GUDANG
-          </option>
-
-        </select>
+export default function EmployeeNewPage(){
 
 
-        <button
-          onClick={save}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded"
-        >
-          Simpan
-        </button>
+const router = useRouter();
 
-      </div>
 
-    </div>
-  );
+const [form,setForm] = useState({
+
+  nik:"",
+  name:"",
+  gender:"",
+  position:"",
+  department:"",
+  phone:"",
+  address:""
+
+});
+
+
+const [loading,setLoading] =
+useState(false);
+
+
+
+
+
+function change(
+e:any
+){
+
+setForm({
+
+...form,
+
+[e.target.name]:
+e.target.value
+
+});
+
+}
+
+
+
+
+
+async function save(){
+
+
+try{
+
+
+setLoading(true);
+
+
+
+const res =
+await fetch(
+"/api/employee",
+{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify(form)
+
+}
+
+);
+
+
+
+const json =
+await res.json();
+
+
+
+alert(json.message);
+
+
+
+if(json.success){
+
+router.push("/employee");
+
+router.refresh();
+
+}
+
+
+
+}catch(error){
+
+console.log(error);
+
+alert("Gagal simpan");
+
+
+}finally{
+
+setLoading(false);
+
+}
+
+
+}
+
+
+
+
+
+return (
+
+<div className="p-8">
+
+
+<h1 className="
+text-3xl
+font-bold
+mb-6
+">
+
+Tambah Karyawan
+
+</h1>
+
+
+
+
+<div className="
+bg-white
+shadow
+rounded-lg
+p-6
+max-w-xl
+">
+
+
+
+
+
+<label>
+NIK
+</label>
+
+<input
+
+name="nik"
+
+value={form.nik}
+
+onChange={change}
+
+className="
+border
+w-full
+p-3
+rounded
+mb-4
+"
+
+/>
+
+
+
+
+
+
+
+<label>
+Nama Karyawan
+</label>
+
+<input
+
+name="name"
+
+value={form.name}
+
+onChange={change}
+
+className="
+border
+w-full
+p-3
+rounded
+mb-4
+"
+
+/>
+
+
+
+
+
+
+
+<label>
+Jenis Kelamin
+</label>
+
+
+<select
+
+name="gender"
+
+value={form.gender}
+
+onChange={change}
+
+className="
+border
+w-full
+p-3
+rounded
+mb-4
+"
+
+>
+
+
+<option value="">
+Pilih
+</option>
+
+
+<option value="L">
+Laki-laki
+</option>
+
+
+<option value="P">
+Perempuan
+</option>
+
+
+</select>
+
+
+
+
+
+
+
+<label>
+Jabatan
+</label>
+
+
+<input
+
+name="position"
+
+value={form.position}
+
+onChange={change}
+
+className="
+border
+w-full
+p-3
+rounded
+mb-4
+"
+
+/>
+
+
+
+
+
+
+
+<label>
+Department
+</label>
+
+
+<input
+
+name="department"
+
+value={form.department}
+
+onChange={change}
+
+className="
+border
+w-full
+p-3
+rounded
+mb-4
+"
+
+/>
+
+
+
+
+
+
+
+<label>
+Nomor HP
+</label>
+
+
+<input
+
+name="phone"
+
+value={form.phone}
+
+onChange={change}
+
+className="
+border
+w-full
+p-3
+rounded
+mb-4
+"
+
+/>
+
+
+
+
+
+
+
+<label>
+Alamat
+</label>
+
+
+<textarea
+
+name="address"
+
+value={form.address}
+
+onChange={change}
+
+className="
+border
+w-full
+p-3
+rounded
+mb-4
+"
+
+/>
+
+
+
+
+
+
+
+
+<button
+
+
+disabled={loading}
+
+
+onClick={save}
+
+
+className="
+bg-blue-600
+text-white
+px-6
+py-3
+rounded-lg
+"
+
+
+>
+
+
+{
+loading
+?
+"Menyimpan..."
+:
+"Simpan Karyawan"
+}
+
+
+</button>
+
+
+
+
+</div>
+
+
+</div>
+
+
+);
+
+
 }

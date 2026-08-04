@@ -1,215 +1,660 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState
+} from "react";
+
 import Link from "next/link";
 
 
 export default function EmployeePage(){
 
-  const [employees,setEmployees]=useState<any[]>([]);
+
+  const [data,setData] =
+    useState<any[]>([]);
+
+
+  const [loading,setLoading] =
+    useState(true);
+
+
+
 
 
   useEffect(()=>{
 
-    loadData();
+    loadEmployee();
 
   },[]);
 
 
 
-  async function loadData(){
-
-    const res = await fetch("/api/employee");
-
-    const json = await res.json();
-
-
-    if(json.success){
-
-      setEmployees(json.data);
-
-    }
-
-  }
 
 
 
-  async function removeEmployee(id:number){
-
-    const yakin = confirm(
-      "Yakin hapus karyawan ini?"
-    );
+  async function loadEmployee(){
 
 
-    if(!yakin) return;
+    try{
+
+
+      setLoading(true);
 
 
 
-    const res = await fetch(
-      `/api/employee/${id}`,
-      {
-        method:"DELETE"
+      const res =
+        await fetch("/api/employee");
+
+
+
+      const json =
+        await res.json();
+
+
+
+
+      if(json.success){
+
+        setData(json.data);
+
       }
-    );
 
 
-    const json = await res.json();
+
+    }catch(error){
 
 
-    if(json.success){
+      console.log(error);
 
-      alert("Berhasil dihapus");
 
-      loadData();
+    }finally{
+
+
+      setLoading(false);
+
 
     }
+
 
   }
 
 
 
-  return (
 
-    <div className="p-8">
 
 
-      <div className="flex justify-between items-center mb-6">
+return (
 
+<div className="p-8">
 
-        <h1 className="text-3xl font-bold">
-          Master Employee
-        </h1>
 
 
-        <Link
-          href="/employee/new"
-          className="bg-blue-600 text-white px-4 py-2 rounded"
-        >
-          + Tambah Karyawan
-        </Link>
 
 
-      </div>
+<div
+className="
+flex
+justify-between
+items-center
+mb-6
+"
+>
 
 
+<div>
 
-      <div className="bg-white shadow rounded overflow-hidden">
+<h1
+className="
+text-3xl
+font-bold
+"
+>
 
+Master Karyawan
 
-        <table className="w-full">
+</h1>
 
 
-          <thead className="bg-gray-100">
+<p
+className="
+text-gray-500
+mt-1
+"
+>
 
-            <tr>
+Data pegawai perusahaan
 
-              <th className="border p-3">
-                NIK
-              </th>
+</p>
 
-              <th className="border p-3">
-                Nama
-              </th>
 
-              <th className="border p-3">
-                Jabatan
-              </th>
+</div>
 
-              <th className="border p-3">
-                Aksi
-              </th>
 
-            </tr>
 
-          </thead>
 
 
 
-          <tbody>
+<Link
 
+href="/employee/new"
 
-          {employees.map((item)=>(
-            
-            <tr key={item.id}>
+className="
+bg-blue-600
+hover:bg-blue-700
+text-white
+px-5
+py-3
+rounded-lg
+"
 
+>
 
-              <td className="border p-3">
-                {item.nik}
-              </td>
++ Tambah Karyawan
 
+</Link>
 
-              <td className="border p-3">
-                {item.name}
-              </td>
 
 
-              <td className="border p-3">
-                {item.position}
-              </td>
+</div>
 
 
-              <td className="border p-3">
 
 
-                <div className="flex gap-2">
 
 
-                  <Link
-                    href={`/employee/${item.id}/edit`}
-                    className="bg-yellow-500 text-white px-3 py-1 rounded"
-                  >
-                    Edit
-                  </Link>
 
 
+<div
+className="
+bg-white
+shadow
+rounded-lg
+overflow-hidden
+"
+>
 
-                  <button
-                    onClick={()=>removeEmployee(item.id)}
-                    className="bg-red-600 text-white px-3 py-1 rounded"
-                  >
-                    Hapus
-                  </button>
 
 
-                </div>
 
 
-              </td>
+<table
+className="
+w-full
+"
+>
 
 
-            </tr>
 
-          ))}
+<thead
+className="
+bg-gray-100
+"
+>
 
 
+<tr>
 
-          {employees.length===0 && (
 
-            <tr>
+<th
+className="
+p-3
+text-left
+"
+>
+Foto
+</th>
 
-              <td
-                colSpan={4}
-                className="border p-4 text-center"
-              >
-                Belum ada data
-              </td>
 
-            </tr>
 
-          )}
+<th
+className="
+p-3
+text-left
+"
+>
+NIK
+</th>
 
 
-          </tbody>
 
+<th
+className="
+p-3
+text-left
+"
+>
+Nama
+</th>
 
-        </table>
 
 
-      </div>
+<th
+className="
+p-3
+text-left
+"
+>
+Jabatan
+</th>
 
 
-    </div>
 
-  );
+<th
+className="
+p-3
+text-left
+"
+>
+Department
+</th>
+
+
+
+<th
+className="
+p-3
+text-left
+"
+>
+Telepon
+</th>
+
+
+
+<th
+className="
+p-3
+text-left
+"
+>
+Status
+</th>
+
+
+
+<th
+className="
+p-3
+text-left
+"
+>
+Aksi
+</th>
+
+
+
+</tr>
+
+
+</thead>
+
+
+
+
+
+
+
+
+<tbody>
+
+
+{
+
+loading ?
+
+
+<tr>
+
+
+<td
+
+colSpan={8}
+
+className="
+p-6
+text-center
+"
+
+>
+
+Loading data...
+
+</td>
+
+
+</tr>
+
+
+
+
+
+:
+
+data.length===0 ?
+
+
+<tr>
+
+
+<td
+
+colSpan={8}
+
+className="
+p-6
+text-center
+text-gray-500
+"
+
+>
+
+Belum ada data karyawan
+
+</td>
+
+
+</tr>
+
+
+
+
+
+:
+
+
+
+data.map((e)=>(
+
+
+
+<tr
+
+key={e.id}
+
+className="
+border-t
+hover:bg-gray-50
+"
+
+>
+
+
+
+
+<td
+className="
+p-3
+"
+>
+
+
+{
+
+e.photo ?
+
+
+<img
+
+src={e.photo}
+
+className="
+w-12
+h-12
+rounded-full
+object-cover
+"
+
+/>
+
+
+:
+
+
+<div
+
+className="
+w-12
+h-12
+rounded-full
+bg-gray-200
+flex
+items-center
+justify-center
+"
+
+>
+
+👤
+
+</div>
+
+
+}
+
+
+
+</td>
+
+
+
+
+
+
+
+
+<td
+className="
+p-3
+"
+>
+
+{e.nik}
+
+</td>
+
+
+
+
+
+
+
+
+<td>
+
+
+<Link
+
+href={`/employee/${e.id}`}
+
+className="
+text-blue-600
+font-semibold
+hover:underline
+"
+
+>
+
+{e.name}
+
+</Link>
+
+
+</td>
+
+
+
+
+
+
+
+<td>
+
+{e.position}
+
+</td>
+
+
+
+
+
+
+
+<td>
+
+{e.department || "-"}
+
+</td>
+
+
+
+
+
+
+
+<td>
+
+{e.phone || "-"}
+
+</td>
+
+
+
+
+
+
+
+
+<td>
+
+
+<span
+
+
+className={`
+
+px-3
+py-1
+rounded-full
+text-sm
+
+${
+e.active
+
+?
+
+"bg-green-100 text-green-700"
+
+:
+
+"bg-red-100 text-red-700"
+
+}
+
+`}
+
+
+>
+
+
+{
+
+e.active
+
+?
+
+"Aktif"
+
+:
+
+"Nonaktif"
+
+}
+
+
+</span>
+
+
+</td>
+
+
+
+
+
+
+
+
+<td>
+
+
+<Link
+
+
+href={`/employee/${e.id}`}
+
+
+className="
+bg-blue-600
+text-white
+px-3
+py-2
+rounded
+text-sm
+"
+
+>
+
+Detail
+
+</Link>
+
+
+
+</td>
+
+
+
+
+
+
+
+</tr>
+
+
+
+))
+
+
+}
+
+
+
+
+
+</tbody>
+
+
+
+
+
+
+</table>
+
+
+
+
+
+</div>
+
+
+
+
+
+
+</div>
+
+
+);
+
 
 }
