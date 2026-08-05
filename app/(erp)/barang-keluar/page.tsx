@@ -1,588 +1,1266 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-export default function BarangKeluarPage() {
-
-  const [barang, setBarang] = useState<any[]>([]);
-
-  const [customers, setCustomers] = useState<any[]>([]);
-
-  const [cart, setCart] = useState<any[]>([]);
-
-  const [customer, setCustomer] = useState("");
-
-  const [note, setNote] = useState("");
-
-  const [selectedBarang, setSelectedBarang] = useState("");
-
-  const [qty, setQty] = useState("");
+import BarcodeInputScanner from "@/components/BarcodeInputScanner";
+import CameraBarcodeScanner from "@/components/CameraBarcodeScanner";
 
 
+export default function BarangKeluarPage(){
 
-  async function loadBarang(){
 
-    try{
+const [barang,setBarang] =
+useState<any[]>([]);
 
-      const res = await fetch("/api/barang");
+const [customers,setCustomers] =
+useState<any[]>([]);
 
-      const json = await res.json();
+const [cart,setCart] =
+useState<any[]>([]);
 
-      setBarang(
-        Array.isArray(json)
-        ? json
-        : json.data || []
-      );
 
-    }catch(error){
+const [customer,setCustomer] =
+useState("");
 
-      console.error(error);
+const [note,setNote] =
+useState("");
 
-    }
 
-  }
+const [selectedBarang,setSelectedBarang] =
+useState("");
 
-    async function loadCustomer() {
-  try {
-    const res = await fetch("/api/customer");
-    const json = await res.json();
+const [qty,setQty] =
+useState("");
 
-    setCustomers(
-      Array.isArray(json)
-        ? json
-        : json.data || []
-    );
-  } catch (error) {
-    console.error(error);
-  }
+
+const [openCamera,setOpenCamera] =
+useState(false);
+
+
+const [scanBarang,setScanBarang] =
+useState<any>(null);
+
+
+const [scanQty,setScanQty] =
+useState("1");
+
+
+
+
+async function loadBarang(){
+
+try{
+
+const res =
+await fetch("/api/barang");
+
+const json =
+await res.json();
+
+
+setBarang(
+Array.isArray(json)
+? json
+: json.data || []
+);
+
+
+}catch(err){
+
+console.error(err);
+
 }
 
-  useEffect(() => {
-  loadBarang();
-  loadCustomer();
-}, []);
+}
 
 
 
-  function tambahBarang(){
 
+async function loadCustomer(){
 
-    if(!selectedBarang){
+try{
 
-      alert("Pilih barang");
+const res =
+await fetch("/api/customer");
 
-      return;
 
-    }
+const json =
+await res.json();
 
 
-    if(!qty || Number(qty)<=0){
+setCustomers(
+Array.isArray(json)
+? json
+: json.data || []
+);
 
-      alert("Qty tidak valid");
 
-      return;
+}catch(err){
 
-    }
+console.error(err);
 
+}
 
+}
 
-    const data =
-      barang.find(
-        (b)=>b.id === Number(selectedBarang)
-      );
 
 
 
-    if(!data){
+useEffect(()=>{
 
-      alert("Barang tidak ditemukan");
+loadBarang();
 
-      return;
+loadCustomer();
 
-    }
+},[]);
 
 
 
-    const cek =
-      cart.find(
-        (x)=>x.barangId === data.id
-      );
 
 
-    if(cek){
+function tambahKeCart(
+data:any,
+jumlah:number
+){
 
-      alert("Barang sudah ada");
 
-      return;
+if(jumlah<=0){
 
-    }
+return;
 
+}
 
 
-    setCart([
 
-      ...cart,
+if(jumlah > data.stock){
 
-      {
+alert(
+`Stock ${data.name} hanya ${data.stock}`
+);
 
-        barangId:data.id,
+return;
 
-        code:data.code,
+}
 
-        name:data.name,
 
-        unit:data.unit,
 
-        qty:Number(qty),
 
-        price:Number(data.sellingPrice || 0),
+setCart(prev=>{
 
-        subtotal:
-          Number(data.sellingPrice || 0)
-          *
-          Number(qty)
 
-      }
+const exist =
+prev.find(
+x=>x.barangId===data.id
+);
 
-    ]);
 
 
+if(exist){
 
-    setSelectedBarang("");
 
-    setQty("");
+return prev.map(x=>{
 
-  }
 
+if(x.barangId===data.id){
 
 
+const newQty =
+x.qty + jumlah;
 
-  function hapus(index:number){
 
-    setCart(
-      cart.filter(
-        (_,i)=>i!==index
-      )
-    );
 
-  }
+if(newQty > data.stock){
 
+alert(
+"Qty melebihi stock"
+);
 
+return x;
 
+}
 
 
-  const totalQty =
-    cart.reduce(
-      (a,b)=>a+b.qty,
-      0
-    );
 
+return {
 
-  const totalNominal =
-    cart.reduce(
-      (a,b)=>a+b.subtotal,
-      0
-    );
+...x,
 
+qty:newQty,
 
+subtotal:
+newQty*x.price
 
+};
 
 
-  async function simpan(){
+}
 
 
-    if(cart.length===0){
 
-      alert("Belum ada barang");
+return x;
 
-      return;
 
-    }
+});
 
 
+}
 
-    try{
 
 
-      const res =
-      await fetch(
-        "/api/barang-keluar",
-        {
 
-          method:"POST",
+return [
 
-          headers:{
+...prev,
 
-            "Content-Type":
-            "application/json"
+{
 
-          },
+barangId:data.id,
 
+code:data.code,
 
-          body: JSON.stringify({
-  customerId: Number(customer),
-  note,
-  items: cart.map((item) => ({
-    barangId: item.barangId,
-    qty: item.qty,
-  })),
+name:data.name,
+
+unit:data.unit,
+
+qty:jumlah,
+
+price:
+Number(data.sellingPrice || 0),
+
+subtotal:
+Number(data.sellingPrice || 0)
+*
+jumlah,
+
+stock:data.stock,
+
+barcode:data.barcode
+
+
+}
+
+];
+
+
+});
+
+
+}
+
+
+
+
+
+
+async function scanBarcode(
+barcode:string
+){
+
+
+try{
+
+
+const res =
+await fetch(
+`/api/barang/barcode/${barcode}`
+);
+
+
+
+const json =
+await res.json();
+
+
+
+
+if(!json.success){
+
+alert(
+json.message
+);
+
+return;
+
+}
+
+
+
+
+setScanBarang(
+json.data
+);
+
+
+setScanQty("1");
+
+
+
+}catch(err){
+
+console.error(err);
+
+alert(
+"Barcode gagal diproses"
+);
+
+}
+
+
+}
+
+
+
+
+
+
+function tambahDariScan(){
+
+
+if(!scanBarang){
+
+return;
+
+}
+
+
+
+tambahKeCart(
+
+scanBarang,
+
+Number(scanQty)
+
+);
+
+
+
+setScanBarang(null);
+
+setScanQty("1");
+
+
+}
+
+
+
+
+
+
+function tambahManual(){
+
+
+const data =
+barang.find(
+b=>b.id===Number(selectedBarang)
+);
+
+
+
+if(!data){
+
+alert(
+"Pilih barang"
+);
+
+return;
+
+}
+
+
+
+tambahKeCart(
+data,
+Number(qty)
+);
+
+
+
+setSelectedBarang("");
+
+setQty("");
+
+}
+
+
+
+
+
+
+function hapus(index:number){
+
+
+setCart(
+cart.filter(
+(_,i)=>i!==index
+)
+);
+
+
+}
+
+
+
+
+async function simpan(){
+
+
+if(cart.length===0){
+
+alert(
+"Belum ada barang"
+);
+
+return;
+
+}
+
+
+const res =
+await fetch(
+"/api/barang-keluar",
+{
+
+method:"POST",
+
+headers:{
+"Content-Type":
+"application/json"
+},
+
+
+body:JSON.stringify({
+
+customerId:
+Number(customer),
+
+note,
+
+items:
+cart.map(item=>({
+
+barangId:
+item.barangId,
+
+qty:
+item.qty
+
+}))
+
 })
 
-        }
 
-      );
+}
 
+);
 
 
-      const json =
-      await res.json();
 
+const json =
+await res.json();
 
 
-      if(json.success){
 
+if(json.success){
 
-        alert(
-          "Barang keluar berhasil"
-        );
 
+alert(
+"Barang keluar berhasil"
+);
 
-        setCart([]);
 
-        setCustomer("");
+setCart([]);
 
-        setNote("");
+setCustomer("");
 
+setNote("");
 
-      }else{
 
+}else{
 
-        alert(
-          json.message ||
-          "Gagal menyimpan"
-        );
 
+alert(
+json.message ||
+"Gagal simpan"
+);
 
-      }
 
-
-
-    }catch(error){
-
-      console.error(error);
-
-      alert(
-        "Terjadi kesalahan"
-      );
-
-    }
-
-
-  }
-
-
-
-
-
-  return (
-
-    <div className="p-8">
-
-
-      <h1 className="text-3xl font-bold mb-6">
-        Barang Keluar
-      </h1>
-
-
-
-      <div className="bg-white rounded-xl shadow p-6">
-
-
-        <div className="grid grid-cols-2 gap-4 mb-6">
-
-
-          <div>
-
-            <label>
-              Customer
-            </label>
-
-            <select
-  className="border w-full p-3 rounded"
-  value={customer}
-  onChange={(e) => setCustomer(e.target.value)}
->
-  <option value="">-- Pilih Customer --</option>
-
-  {customers.map((c: any) => (
-    <option key={c.id} value={c.id}>
-      {c.code} - {c.name}
-    </option>
-  ))}
-</select>
-
-          </div>
-
-
-
-          <div>
-
-            <label>
-              Keterangan
-            </label>
-
-
-            <input
-
-              className="border w-full p-3 rounded"
-
-              value={note}
-
-              onChange={
-                e=>setNote(e.target.value)
-              }
-
-              placeholder="Keterangan"
-
-            />
-
-
-          </div>
-
-
-        </div>
-
-
-
-
-
-        <div className="flex gap-3 mb-6">
-
-
-          <select
-
-            className="border p-3 rounded flex-1"
-
-            value={selectedBarang}
-
-            onChange={
-              e=>setSelectedBarang(e.target.value)
-            }
-
-          >
-
-            <option value="">
-              -- Pilih Barang --
-            </option>
-
-
-            {
-  barang.map((b:any)=>(
-
-    <option
-      key={b.id}
-      value={b.id}
-    >
-      {b.code} - {b.name} | Stock: {b.stock}
-    </option>
-
-  ))
 }
 
 
-          </select>
+}
 
 
 
+const totalQty =
+cart.reduce(
+(a,b)=>a+b.qty,
+0
+);
 
-          <input
 
-            type="number"
 
-            className="border p-3 rounded w-32"
+const totalNominal =
+cart.reduce(
+(a,b)=>a+b.subtotal,
+0
+);
+return (
 
-            placeholder="Qty"
+<div className="p-8">
 
-            value={qty}
 
-            onChange={
-              e=>setQty(e.target.value)
-            }
+<h1 className="text-3xl font-bold mb-6">
+Barang Keluar
+</h1>
 
-          />
 
 
+<div className="bg-white shadow rounded-xl p-6">
 
-          <button
 
-            onClick={tambahBarang}
 
-            className="bg-green-600 text-white px-5 rounded"
+{
+scanBarang && (
 
-          >
+<div className="
+fixed
+inset-0
+bg-black/50
+flex
+items-center
+justify-center
+z-50
+">
 
-            Tambah
 
-          </button>
+<div className="
+bg-white
+rounded-xl
+p-6
+w-96
+">
 
 
-        </div>
+<h2 className="
+text-xl
+font-bold
+mb-4
+">
 
+Detail Barang
 
+</h2>
 
 
 
-        <table className="w-full border">
+<p>
+Kode :
+<b>
+{" "}
+{scanBarang.code}
+</b>
+</p>
 
 
-          <thead className="bg-gray-100">
 
-            <tr>
+<p>
+Barcode :
+<b>
+{" "}
+{scanBarang.barcode}
+</b>
+</p>
 
-              <th className="border p-2">
-                Barang
-              </th>
 
-              <th className="border p-2">
-                Satuan
-              </th>
 
-              <th className="border p-2">
-                Qty
-              </th>
+<p>
+Nama :
+<b>
+{" "}
+{scanBarang.name}
+</b>
+</p>
 
-              <th className="border p-2">
-                Harga
-              </th>
 
-              <th className="border p-2">
-                Total
-              </th>
 
-              <th className="border p-2">
-                Aksi
-              </th>
+<p>
+Stock :
+<b>
+{" "}
+{scanBarang.stock}
+</b>
+</p>
 
-            </tr>
 
-          </thead>
 
+<p>
+Satuan :
+<b>
+{" "}
+{scanBarang.unit}
+</b>
+</p>
 
-          <tbody>
 
 
-          {
-            cart.map((item,index)=>(
+<div className="mt-4">
 
 
-              <tr key={index}>
+<label>
+Qty Keluar
+</label>
 
 
-                <td className="border p-2">
-                  {item.name}
-                </td>
+<input
 
+type="number"
 
-                <td className="border p-2 text-center">
-                  {item.unit}
-                </td>
+className="
+border
+w-full
+p-3
+rounded
+"
 
+value={scanQty}
 
-                <td className="border p-2 text-center">
-                  {item.qty}
-                </td>
+onChange={
+e=>setScanQty(e.target.value)
+}
 
 
-                <td className="border p-2 text-right">
+/>
 
-                  Rp {Number(item.price).toLocaleString("id-ID")}
 
-                </td>
+</div>
 
 
-                <td className="border p-2 text-right">
 
-                  Rp {Number(item.subtotal).toLocaleString("id-ID")}
 
-                </td>
 
+<div className="
+flex
+gap-3
+mt-5
+">
 
-                <td className="border p-2 text-center">
 
-                  <button
+<button
 
-                    onClick={()=>hapus(index)}
+onClick={tambahDariScan}
 
-                    className="bg-red-500 text-white px-3 py-1 rounded"
+className="
+bg-blue-600
+text-white
+px-5
+py-2
+rounded
+"
 
-                  >
+>
 
-                    Hapus
+Tambah
 
-                  </button>
+</button>
 
-                </td>
 
 
-              </tr>
 
+<button
 
-            ))
-          }
+onClick={()=>setScanBarang(null)}
 
+className="
+bg-gray-500
+text-white
+px-5
+py-2
+rounded
+"
 
-          </tbody>
+>
 
+Batal
 
-        </table>
+</button>
 
 
 
+</div>
 
 
-        <div className="mt-6 text-right">
 
+</div>
 
-          <p className="text-lg">
-            Total Qty :
-            <b> {totalQty}</b>
-          </p>
 
+</div>
 
+)
 
-          <p className="text-2xl font-bold">
+}
 
-            Total :
-            {" "}
-            Rp {totalNominal.toLocaleString()}
 
-          </p>
 
 
-        </div>
 
+<div className="mb-6">
 
 
+<label className="
+font-semibold
+block
+mb-2
+">
 
+Scan Barcode Barang
 
-        <button
+</label>
 
-          onClick={simpan}
 
-          className="mt-6 bg-blue-600 text-white px-8 py-3 rounded-lg"
 
-        >
 
-          Simpan Barang Keluar
+<div className="
+flex
+gap-3
+">
 
-        </button>
 
+<div className="flex-1">
 
-      </div>
 
+<BarcodeInputScanner
 
-    </div>
+onScan={scanBarcode}
 
-  );
+/>
+
+
+</div>
+
+
+
+<button
+
+onClick={()=>
+setOpenCamera(true)
+}
+
+className="
+bg-purple-600
+text-white
+px-5
+rounded-lg
+"
+
+>
+
+📷 Scan Kamera
+
+</button>
+
+
+</div>
+
+
+
+
+{
+openCamera && (
+
+
+<div className="
+mt-5
+bg-black
+rounded-xl
+p-4
+">
+
+
+<p className="
+text-white
+mb-3
+">
+
+Arahkan kamera ke barcode
+
+</p>
+
+
+
+<CameraBarcodeScanner
+
+onScan={(barcode)=>{
+
+
+setOpenCamera(false);
+
+scanBarcode(barcode);
+
+
+}}
+
+
+/>
+
+
+
+<button
+
+onClick={()=>
+setOpenCamera(false)
+}
+
+className="
+mt-3
+bg-red-500
+text-white
+px-5
+py-2
+rounded
+"
+
+>
+
+Tutup Kamera
+
+</button>
+
+
+
+</div>
+
+
+)
+
+}
+
+
+
+</div>
+
+
+
+
+
+
+
+<div className="
+grid
+grid-cols-2
+gap-4
+mb-6
+">
+
+
+<div>
+
+
+<label>
+Customer
+</label>
+
+
+
+<select
+
+className="
+border
+w-full
+p-3
+rounded
+"
+
+value={customer}
+
+onChange={
+e=>setCustomer(e.target.value)
+}
+
+>
+
+
+<option value="">
+-- Pilih Customer --
+</option>
+
+
+
+{
+customers.map(c=>(
+
+<option
+
+key={c.id}
+
+value={c.id}
+
+>
+
+{c.code} - {c.name}
+
+</option>
+
+))
+
+}
+
+
+</select>
+
+
+</div>
+
+
+
+
+
+<div>
+
+
+<label>
+Keterangan
+</label>
+
+
+
+<input
+
+className="
+border
+w-full
+p-3
+rounded
+"
+
+value={note}
+
+onChange={
+e=>setNote(e.target.value)
+}
+
+placeholder="Keterangan"
+
+/>
+
+
+</div>
+
+
+
+</div>
+
+
+
+
+
+
+
+<div className="
+flex
+gap-3
+mb-6
+">
+
+
+<select
+
+className="
+border
+p-3
+rounded
+flex-1
+"
+
+value={selectedBarang}
+
+onChange={
+e=>setSelectedBarang(e.target.value)
+}
+
+>
+
+
+<option value="">
+-- Pilih Barang --
+</option>
+
+
+
+{
+barang.map(b=>(
+
+<option
+
+key={b.id}
+
+value={b.id}
+
+>
+
+{b.code} - {b.name}
+| Stock {b.stock}
+
+</option>
+
+))
+
+}
+
+
+
+</select>
+
+
+
+
+
+<input
+
+type="number"
+
+className="
+border
+p-3
+w-32
+rounded
+"
+
+placeholder="Qty"
+
+value={qty}
+
+onChange={
+e=>setQty(e.target.value)
+}
+
+/>
+
+
+
+
+<button
+
+onClick={tambahManual}
+
+className="
+bg-green-600
+text-white
+px-5
+rounded
+"
+
+>
+
+Tambah
+
+</button>
+
+
+
+</div>
+
+
+
+
+
+
+
+<table className="w-full border">
+
+
+<thead className="bg-gray-100">
+
+<tr>
+
+
+<th className="border p-2">
+Barang
+</th>
+
+
+<th className="border p-2">
+Stock
+</th>
+
+
+<th className="border p-2">
+Qty
+</th>
+
+
+<th className="border p-2">
+Harga
+</th>
+
+
+<th className="border p-2">
+Total
+</th>
+
+
+<th className="border p-2">
+Aksi
+</th>
+
+
+</tr>
+
+
+</thead>
+
+
+
+<tbody>
+
+
+{
+
+cart.map((item,index)=>(
+
+
+<tr key={index}>
+
+
+<td className="border p-2">
+{item.name}
+</td>
+
+
+<td className="border p-2 text-center">
+{item.stock}
+</td>
+
+
+<td className="border p-2 text-center">
+{item.qty}
+</td>
+
+
+<td className="border p-2 text-right">
+
+Rp {item.price.toLocaleString("id-ID")}
+
+</td>
+
+
+<td className="border p-2 text-right">
+
+Rp {item.subtotal.toLocaleString("id-ID")}
+
+</td>
+
+
+<td className="border p-2 text-center">
+
+
+<button
+
+onClick={()=>
+hapus(index)
+}
+
+className="
+bg-red-500
+text-white
+px-3
+py-1
+rounded
+"
+
+>
+
+Hapus
+
+</button>
+
+
+</td>
+
+
+</tr>
+
+
+))
+
+
+}
+
+
+
+</tbody>
+
+
+</table>
+
+
+
+
+
+
+
+<div className="
+mt-6
+text-right
+">
+
+
+<p>
+Total Qty :
+<b>
+{" "}
+{totalQty}
+</b>
+</p>
+
+
+
+<p className="
+text-2xl
+font-bold
+">
+
+Total :
+Rp {totalNominal.toLocaleString("id-ID")}
+
+</p>
+
+
+
+</div>
+
+
+
+
+
+
+
+<button
+
+onClick={simpan}
+
+className="
+mt-6
+bg-blue-600
+text-white
+px-8
+py-3
+rounded-lg
+"
+
+>
+
+Simpan Barang Keluar
+
+</button>
+
+
+
+</div>
+
+
+</div>
+
+
+);
+
 
 }

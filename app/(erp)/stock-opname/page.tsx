@@ -1,748 +1,473 @@
 "use client";
 
-import {
-useEffect,
-useState
-} from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 
 
 export default function StockOpnamePage(){
 
 
-const [history,setHistory]=useState<any[]>([]);
+  const [data,setData] =
+    useState<any[]>([]);
 
-const [barang,setBarang]=useState<any[]>([]);
 
-const [physical,setPhysical]=useState<any>({});
+  const [loading,setLoading] =
+    useState(true);
 
-const [loading,setLoading]=useState(false);
 
-const [adjustLoading,setAdjustLoading]=useState<number|null>(null);
 
+  async function loadData(){
 
+    try{
 
-async function load(){
+      const res =
+        await fetch(
+          "/api/stock-opname",
+          {
+            cache:"no-store"
+          }
+        );
 
 
-const opname =
-await fetch("/api/stock-opname");
+      const json =
+        await res.json();
 
 
-const opnameResult =
-await opname.json();
+      console.log(
+        "STOCK OPNAME LIST:",
+        json
+      );
 
 
-if(opnameResult.success){
+      if(json.success){
 
-setHistory(opnameResult.data);
+        setData(
+          json.data ?? []
+        );
 
-}
+      }else{
 
+        setData([]);
 
+      }
 
-const brg =
-await fetch("/api/barang");
 
 
-const brgResult =
-await brg.json();
+    }catch(error){
 
+      console.error(
+        "LOAD STOCK OPNAME ERROR",
+        error
+      );
 
+      setData([]);
 
-if(brgResult.success){
+    }
 
-setBarang(brgResult.data);
 
-}
+    setLoading(false);
 
+  }
 
-}
 
 
 
-useEffect(()=>{
 
-load();
 
-},[]);
 
+  useEffect(()=>{
 
+    loadData();
 
+  },[]);
 
 
-function changeQty(
-id:number,
-value:string
-){
 
-setPhysical({
 
-...physical,
 
-[id]:Number(value)
 
-});
 
-}
+  async function buatOpname(){
 
 
+    const ok =
+      confirm(
+        "Buat Stock Opname baru?"
+      );
 
 
+    if(!ok) return;
 
-async function simpan(){
 
 
-const items =
-barang.map((b:any)=>({
 
-barangId:b.id,
+    try{
 
-physicalQty:
-physical[b.id] ?? b.stock
 
-}));
+      const res =
+        await fetch(
+          "/api/stock-opname",
+          {
+            method:"POST"
+          }
+        );
 
 
 
-setLoading(true);
+      const json =
+        await res.json();
 
 
 
-const res =
-await fetch(
-"/api/stock-opname",
-{
+      console.log(
+        "CREATE STOCK OPNAME:",
+        json
+      );
 
-method:"POST",
 
-headers:{
-"Content-Type":"application/json"
-},
 
-body:JSON.stringify({
 
-items
+      if(json.success){
 
-})
 
-}
+        alert(
+          "Stock Opname berhasil dibuat"
+        );
 
-);
 
+        loadData();
 
 
-const result =
-await res.json();
+      }else{
 
 
+        alert(
+          json.message
+        );
 
-setLoading(false);
 
+      }
 
 
-if(result.success){
 
-alert(
-"Stock Opname berhasil disimpan"
-);
+    }catch(error){
 
+      console.error(error);
 
-setPhysical({});
+      alert(
+        "Gagal membuat Stock Opname"
+      );
 
+    }
 
-load();
 
 
-}
+  }
 
-else{
 
-alert(result.message);
 
-}
 
 
-}
 
+  return (
 
+    <div className="p-6">
 
 
+      <div className="flex justify-between mb-5">
 
-async function buatAdjustment(
-id:number
-){
 
+        <div>
 
-setAdjustLoading(id);
+          <h1 className="text-2xl font-bold">
+            Stock Opname
+          </h1>
 
 
+          <p className="text-gray-500">
+            Pemeriksaan stok fisik gudang
+          </p>
 
-const res =
-await fetch(
 
-`/api/stock-opname/${id}/adjustment`,
+        </div>
 
-{
-method:"POST"
-}
 
-);
 
 
+        <button
 
-const result =
-await res.json();
+          onClick={buatOpname}
 
+          className="
+          bg-blue-600
+          text-white
+          px-4
+          py-2
+          rounded
+          "
 
+        >
 
-setAdjustLoading(null);
+          + Buat Opname
 
+        </button>
 
 
-if(result.success){
+      </div>
 
-alert(
-"Adjustment berhasil dibuat"
-);
 
-load();
 
-}
 
-else{
 
-alert(result.message);
 
-}
 
+      <div className="bg-white rounded shadow overflow-hidden">
 
-}
 
+        <table className="w-full">
 
 
+          <thead>
 
 
+            <tr className="bg-gray-100">
 
-return (
 
-<div className="p-6">
+              <th className="p-3 border">
+                No
+              </th>
 
 
-<div className="bg-white rounded-xl shadow p-6">
+              <th className="p-3 border">
+                Kode
+              </th>
 
 
+              <th className="p-3 border">
+                Tanggal
+              </th>
 
-<h1 className="text-2xl font-bold mb-6">
 
-Stock Opname
+              <th className="p-3 border">
+                Status
+              </th>
 
-</h1>
 
+              <th className="p-3 border">
+                Jumlah Item
+              </th>
 
 
+              <th className="p-3 border">
+                Aksi
+              </th>
 
-<h2 className="font-bold mb-3">
 
-Input Stock Opname Baru
+            </tr>
 
-</h2>
 
+          </thead>
 
 
-<table className="w-full border mb-5">
 
 
-<thead>
 
-<tr className="bg-gray-100">
+          <tbody>
 
 
-<th className="border p-2">
-No
-</th>
+          {
 
+          loading ?
 
-<th className="border p-2">
-Barang
-</th>
 
+          <tr>
 
-<th className="border p-2">
-Stock Sistem
-</th>
+            <td
+              colSpan={6}
+              className="p-5 text-center"
+            >
 
+              Loading...
 
-<th className="border p-2">
-Stock Fisik
-</th>
+            </td>
 
 
-<th className="border p-2">
-Selisih
-</th>
+          </tr>
 
 
-</tr>
 
-</thead>
+          :
 
 
 
-<tbody>
+          data.length===0 ?
 
 
-{
-barang.map(
-(b:any,index:number)=>(
 
+          <tr>
 
-<tr key={b.id}>
+            <td
+              colSpan={6}
+              className="p-5 text-center"
+            >
 
+              Belum ada Stock Opname
 
-<td className="border p-2 text-center">
-{index+1}
-</td>
+            </td>
 
 
+          </tr>
 
-<td className="border p-2">
-{b.name}
-</td>
 
 
+          :
 
-<td className="border p-2 text-center">
-{b.stock}
-</td>
 
 
+          data.map(
+            (item,index)=>(
 
-<td className="border p-2">
 
+            <tr
+              key={item.id}
+            >
 
-<input
 
-type="number"
+              <td className="border p-3 text-center">
 
-className="border rounded p-1 w-24"
+                {index+1}
 
-value={
-physical[b.id] ?? b.stock
-}
+              </td>
 
 
-onChange={(e)=>
-changeQty(
-b.id,
-e.target.value
-)
-}
 
+              <td className="border p-3">
 
-/>
+                {item.code}
 
+              </td>
 
-</td>
 
 
 
-<td className="border p-2 text-center">
+              <td className="border p-3">
 
 
-{
-(
-physical[b.id] ?? b.stock
-)
--
-b.stock
-}
+                {
+                  item.date
+                  ?
+                  new Date(
+                    item.date
+                  )
+                  .toLocaleDateString(
+                    "id-ID"
+                  )
+                  :
+                  "-"
+                }
 
 
-</td>
+              </td>
 
 
 
-</tr>
 
 
-)
+              <td className="border p-3 text-center">
 
-)
 
+                <span
 
-}
+                className={`
+                px-3 py-1 rounded text-sm
 
+                ${
+                  item.status==="APPROVED"
 
-</tbody>
+                  ?
 
+                  "bg-green-100 text-green-700"
 
-</table>
+                  :
 
+                  "bg-yellow-100 text-yellow-700"
 
+                }
 
+                `}
 
-<button
+                >
 
-onClick={simpan}
+                  {item.status}
 
-disabled={loading}
+                </span>
 
-className="
-bg-blue-600
-text-white
-px-5
-py-2
-rounded
-"
 
->
+              </td>
 
 
-{
-loading
-?
-"Menyimpan..."
-:
-"Simpan Stock Opname"
-}
 
 
-</button>
 
+              <td className="border p-3 text-center">
 
+                {item.totalItem ?? 0}
 
+              </td>
 
 
-<hr className="my-8"/>
 
 
 
 
-<h2 className="text-xl font-bold mb-4">
+              <td className="border p-3 text-center">
 
-History Stock Opname
 
-</h2>
+                <Link
 
+                href={`/stock-opname/${item.id}`}
 
+                className="
+                bg-blue-600
+                text-white
+                px-3
+                py-1
+                rounded
+                "
 
+                >
 
+                  Detail
 
+                </Link>
 
-{
-history.map(
-(opname:any)=>(
 
+              </td>
 
 
-<div
 
-key={opname.id}
+            </tr>
 
-className="
-border
-rounded-lg
-p-5
-mb-5
-"
 
->
+          ))
 
 
 
-<div className="flex gap-2 mb-5 flex-wrap">
+          }
 
 
+          </tbody>
 
-<a
 
-href={`/stock-opname/print?id=${opname.id}`}
+        </table>
 
-target="_blank"
 
-className="
-bg-gray-700
-text-white
-px-4
-py-2
-rounded
-"
+      </div>
 
->
 
-Print
+    </div>
 
-</a>
-
-
-
-
-<a
-
-href={`/api/stock-opname/export/pdf?id=${opname.id}`}
-
-className="
-bg-red-600
-text-white
-px-4
-py-2
-rounded
-"
-
->
-
-Export PDF
-
-</a>
-
-
-
-
-<a
-
-href={`/api/stock-opname/export/excel?id=${opname.id}`}
-
-className="
-bg-green-600
-text-white
-px-4
-py-2
-rounded
-"
-
->
-
-Export Excel
-
-</a>
-
-
-
-
-
-<button
-
-onClick={()=>
-buatAdjustment(opname.id)
-}
-
-disabled={
-adjustLoading===opname.id
-}
-
-
-className="
-bg-orange-600
-text-white
-px-4
-py-2
-rounded
-"
-
->
-
-
-{
-adjustLoading===opname.id
-?
-"Proses..."
-:
-"Buat Adjustment"
-}
-
-
-</button>
-
-
-
-</div>
-
-
-
-
-
-
-<div className="grid grid-cols-4 mb-4">
-
-
-<div>
-
-<b>Nomor</b>
-
-<br/>
-
-{opname.number}
-
-</div>
-
-
-
-<div>
-
-<b>Tanggal</b>
-
-<br/>
-
-{
-new Date(
-opname.opnameDate
-)
-.toLocaleDateString("id-ID")
-}
-
-</div>
-
-
-
-
-<div>
-
-<b>Status</b>
-
-<br/>
-
-{opname.status}
-
-</div>
-
-
-
-
-<div>
-
-<b>Warehouse</b>
-
-<br/>
-
-{opname.warehouse}
-
-</div>
-
-
-
-</div>
-
-
-
-
-
-
-
-<table className="w-full border">
-
-
-<thead>
-
-<tr className="bg-gray-100">
-
-
-<th className="border p-2">
-Barang
-</th>
-
-
-<th className="border p-2">
-Sistem
-</th>
-
-
-<th className="border p-2">
-Fisik
-</th>
-
-
-<th className="border p-2">
-Selisih
-</th>
-
-
-</tr>
-
-
-</thead>
-
-
-
-
-<tbody>
-
-
-{
-opname.items?.map(
-(item:any)=>(
-
-
-<tr key={item.id}>
-
-
-<td className="border p-2">
-
-{item.barang?.name}
-
-</td>
-
-
-
-<td className="border p-2 text-center">
-
-{item.systemQty}
-
-</td>
-
-
-
-<td className="border p-2 text-center">
-
-{item.physicalQty}
-
-</td>
-
-
-
-<td className="border p-2 text-center">
-
-{item.difference}
-
-</td>
-
-
-
-</tr>
-
-
-)
-
-)
-
-}
-
-
-
-</tbody>
-
-
-</table>
-
-
-
-</div>
-
-
-
-)
-
-)
-
-}
-
-
-
-</div>
-
-
-</div>
-
-)
+  );
 
 
 }

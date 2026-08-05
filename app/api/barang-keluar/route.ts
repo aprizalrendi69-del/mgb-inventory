@@ -1,171 +1,93 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function POST(req: NextRequest) {
-  try {
 
-    const body = await req.json();
+export async function POST(
+ req:NextRequest
+){
 
-    const {
-      customerId,
-      customer,
-      note,
-      items
-    } = body;
+try{
 
 
-    if (!Array.isArray(items) || items.length === 0) {
+const body =
+await req.json();
 
-      return NextResponse.json(
-        {
-          success:false,
-          message:"Barang belum dipilih"
-        },
-        {
-          status:400
-        }
-      );
 
-    }
 
+const {
+ customerId,
+ note,
+ items
+}=body;
 
 
-    let idCustomer = Number(customerId);
 
 
+if(
+!customerId ||
+!items ||
+items.length===0
+){
 
-    // =========================
-    // BUAT / CARI CUSTOMER
-    // =========================
+return NextResponse.json({
 
-    if (!idCustomer) {
+success:false,
 
-      const namaCustomer =
-        customer || "UMUM";
+message:"Data tidak lengkap"
 
+},{
+status:400
+});
 
-      let customerData =
-        await prisma.customer.findFirst({
-          where:{
-            name:namaCustomer
-          }
-        });
+}
 
 
 
-      if (!customerData) {
 
-        customerData =
-          await prisma.customer.create({
+const result =
+await prisma.$transaction(
+async(tx)=>{
 
-            data:{
-              code:
-              "CUST-" + Date.now(),
 
-              name:namaCustomer
 
-            }
+// nomor delivery
 
-          });
+const count =
+await tx.delivery.count();
 
-      }
 
 
-      idCustomer = customerData.id;
+const number =
+`DO-${String(count+1).padStart(5,"0")}`;
 
-    }
 
 
+let totalQty = 0;
 
 
-    const number =
-      "OUT-" + Date.now();
 
+const delivery =
+await tx.delivery.create({
 
+data:{
 
-    const result =
-    await prisma.$transaction(async(tx)=>{
 
+number,
 
-      let totalQty = 0;
 
+customerId:Number(customerId),
 
 
-      // =========================
-      // CEK SEMUA STOCK DULU
-      // =========================
+status:"DELIVERED",
 
 
-      for (const item of items) {
+remarks:note,
 
 
-        const barangId =
-          Number(item.barangId);
+totalQty:0
 
 
-        const qty =
-          Number(item.qty);
-
-
-
-        const inventory =
-          await tx.inventory.findUnique({
-
-            where:{
-              barangId
-            },
-
-            include:{
-              barang:true
-            }
-
-          });
-
-
-
-        if(!inventory){
-
-          throw new Error(
-            "Inventory tidak ditemukan"
-          );
-
-        }
-
-
-
-        if(inventory.stock < qty){
-
-          throw new Error(
-            `Stock ${inventory.barang.name} tidak cukup`
-          );
-
-        }
-
-
-      }
-
-
-
-
-// =========================
-// BUAT DELIVERY HEADER
-// =========================
-
-const delivery = await tx.delivery.create({
-
-  data:{
-
-    number,
-
-    customerId:idCustomer,
-
-    status:"DELIVERED",
-
-    remarks:note || "Barang Keluar",
-
-    totalQty:0
-
-  }
+}
 
 });
 
@@ -173,124 +95,109 @@ const delivery = await tx.delivery.create({
 
 
 
-      // =========================
-      // PROSES ITEM
-      // =========================
-
-
-      for (const item of items) {
-
-
-        const barangId =
-          Number(item.barangId);
-
-
-        const qty =
-          Number(item.qty);
+for(
+const item of items
+){
 
 
 
-        const barang =
-        await tx.barang.findUnique({
+const barang =
+await tx.barang.findUnique({
 
-          where:{
-            id:barangId
-          }
+where:{
+id:item.barangId
+}
 
-        });
-
-
-
-        if(!barang){
-
-          throw new Error(
-            "Barang tidak ditemukan"
-          );
-
-        }
+});
 
 
 
-        const inventory =
-        await tx.inventory.findUnique({
+if(!barang){
 
-          where:{
-            barangId
-          }
+throw new Error(
+"Barang tidak ditemukan"
+);
 
-        });
-
-
-
-        const newStock =
-          inventory!.stock - qty;
-
-
-
-
-        // update inventory
-
-        await tx.inventory.update({
-
-          where:{
-            barangId
-          },
-
-          data:{
-
-            stock:newStock,
-
-            availableStock:
-            Math.max(
-              inventory!.availableStock - qty,
-              0
-            )
-
-          }
-
-        });
-
-
-
-
-        // update barang
-
-        await tx.barang.update({
-
-          where:{
-            id:barangId
-          },
-
-          data:{
-            stock:newStock
-          }
-
-        });
+}
 
 
 
 
 
-        // delivery detail
+if(
+barang.stock < item.qty
+){
 
+throw new Error(
+
+`Stock ${barang.name} tidak cukup`
+
+);
+
+}
+
+
+
+
+const before =
+barang.stock;
+
+
+
+const after =
+before - item.qty;
+
+
+
+
+// kurangi stock
+
+await tx.barang.update({
+
+where:{
+id:barang.id
+},
+
+data:{
+
+stock:after
+
+}
+
+});
+
+
+
+
+
+// delivery item
 
 await tx.deliveryItem.create({
 
-  data:{
+data:{
 
-    deliveryId:delivery.id,
 
-    barangId,
+deliveryId:
+delivery.id,
 
-    qty,
 
-    price:barang.sellingPrice,
+barangId:
+barang.id,
 
-    subtotal:barang.sellingPrice * qty,
 
-    note:item.note || null
+qty:item.qty,
 
-  }
+
+price:
+barang.sellingPrice,
+
+
+subtotal:
+barang.sellingPrice *
+item.qty
+
+
+}
 
 });
 
@@ -298,128 +205,242 @@ await tx.deliveryItem.create({
 
 
 
-        // stock card
+// inventory
 
+await tx.inventory.upsert({
 
-        await tx.stockCard.create({
+where:{
+barangId:barang.id
+},
 
-          data:{
+update:{
 
-            barangId,
+stock:after,
 
-            trxDate:new Date(),
+availableStock:after
 
-            trxType:"OUT",
+},
 
-            trxNumber:number,
+create:{
 
-            warehouse:"MAIN",
 
-            qtyIn:0,
+barangId:
+barang.id,
 
-            qtyOut:qty,
 
-            balance:newStock,
+stock:after,
 
-            unitPrice:
-            barang.purchasePrice,
 
-            totalValue:
-            barang.purchasePrice * qty,
+availableStock:after,
 
-            note:
-            note || "Barang Keluar"
 
-          }
+minimumStock:
+barang.minimumStock
 
-        });
 
+}
 
+});
 
 
 
-        await tx.history.create({
 
-          data:{
 
-            transactionType:
-            "STOCK_OUT",
 
-            referenceNumber:number,
+// stock card
 
-            description:
-            `${barang.name} keluar sebanyak ${qty}`
+await tx.stockCard.create({
 
-          }
+data:{
 
-        });
 
+barangId:
+barang.id,
 
 
-        totalQty += qty;
+trxType:
+"OUT",
 
 
-      }
+trxNumber:
+number,
 
 
+qtyIn:0,
 
 
+qtyOut:
+item.qty,
 
-      await tx.delivery.update({
 
-        where:{
-          id:delivery.id
-        },
+balance:
+after,
 
-        data:{
-          totalQty
-        }
 
-      });
+unitPrice:
+barang.sellingPrice,
 
 
+totalValue:
+barang.sellingPrice *
+item.qty,
 
-      return delivery;
 
+note:
+note || "Barang Keluar"
 
-    });
 
+}
 
+});
 
 
-    return NextResponse.json({
 
-      success:true,
 
-      message:
-      "Barang keluar berhasil",
 
-      data:result
+// stock mutation
 
-    });
+await tx.stockMutation.create({
 
+data:{
 
 
-  } catch(error:any){
+barangId:
+barang.id,
 
 
-    console.error(error);
+type:
+"OUT",
 
 
-    return NextResponse.json({
+qty:
+item.qty,
 
-      success:false,
 
-      message:
-      error.message ||
-      "Gagal proses barang keluar"
+stockBefore:
+before,
 
-    },{
 
-      status:500
+stockAfter:
+after,
 
-    });
 
+reference:
+number,
 
-  }
+
+description:
+"Barang Keluar"
+
+
+}
+
+});
+
+
+
+
+
+totalQty += item.qty;
+
+
+
+}
+
+
+
+
+
+await tx.delivery.update({
+
+where:{
+id:delivery.id
+},
+
+data:{
+
+totalQty
+
+}
+
+});
+
+
+
+
+
+// history
+
+await tx.history.create({
+
+data:{
+
+
+transactionType:
+"DELIVERY",
+
+
+referenceNumber:
+number,
+
+
+description:
+`Barang keluar ${number}`
+
+
+}
+
+});
+
+
+
+
+
+return delivery;
+
+
+
+});
+
+
+
+
+
+return NextResponse.json({
+
+success:true,
+
+message:
+"Barang keluar berhasil",
+
+data:result
+
+});
+
+
+
+
+}catch(error:any){
+
+
+console.error(error);
+
+
+
+return NextResponse.json({
+
+success:false,
+
+message:
+error.message ||
+"Server error"
+
+},{
+status:500
+});
+
+}
+
+
+
 }

@@ -3,196 +3,302 @@ import { prisma } from "@/lib/prisma";
 
 
 
+// =================================
+// LIST STOCK OPNAME
+// =================================
+
 export async function GET(){
 
-try{
+  try{
 
 
-const data =
-await prisma.stockOpname.findMany({
+    const data =
+      await prisma.stockOpname.findMany({
 
-include:{
+        include:{
 
-items:{
-include:{
-barang:true
+          items:true
+
+        },
+
+
+        orderBy:{
+
+          id:"desc"
+
+        }
+
+      });
+
+
+
+
+
+    const result =
+      data.map((item)=>({
+
+
+        id:item.id,
+
+        code:item.code,
+
+        date:item.date,
+
+        status:item.status,
+
+        totalItem:item.items.length
+
+
+
+      }));
+
+
+
+
+
+    return NextResponse.json({
+
+      success:true,
+
+      data:result
+
+    });
+
+
+
+
+  }catch(error){
+
+
+    console.error(
+      "GET STOCK OPNAME ERROR",
+      error
+    );
+
+
+    return NextResponse.json(
+      {
+        success:false,
+        message:"Gagal mengambil data"
+      },
+      {
+        status:500
+      }
+    );
+
+
+  }
+
+
 }
-}
-
-},
-
-orderBy:{
-opnameDate:"desc"
-}
-
-});
-
-
-return NextResponse.json({
-
-success:true,
-
-data
-
-});
-
-
-}
-catch(error){
-
-console.log(error);
-
-
-return NextResponse.json({
-
-success:false,
-
-message:"Gagal mengambil data opname"
-
-},{
-status:500
-});
-
-
-}
-
-}
 
 
 
 
 
+
+
+
+// =================================
+// CREATE STOCK OPNAME
+// =================================
 
 export async function POST(
-req:NextRequest
+  req:NextRequest
 ){
 
-try{
+  try{
 
 
-const body =
-await req.json();
+    const total =
+      await prisma.stockOpname.count();
 
 
 
+    const nomor =
+      String(total + 1)
+      .padStart(4,"0");
 
-const opname =
-await prisma.stockOpname.create({
 
-data:{
 
+    const code =
+      `SO-${new Date().getFullYear()}-${nomor}`;
 
-number:
-"OPN-" + Date.now(),
 
 
 
-items:{
 
 
-create:
 
-await Promise.all(
+    const barang =
+      await prisma.barang.findMany({
 
-body.items.map(
-async(item:any)=>{
+        orderBy:{
 
+          name:"asc"
 
-const barang =
-await prisma.barang.findUnique({
+        }
 
-where:{
-id:Number(item.barangId)
-}
+      });
 
-});
 
 
 
-return {
 
+    if(barang.length===0){
 
-barangId:
-Number(item.barangId),
 
+      return NextResponse.json(
+        {
+          success:false,
+          message:"Master barang masih kosong"
+        },
+        {
+          status:400
+        }
+      );
 
-systemQty:
-barang?.stock ?? 0,
 
+    }
 
-physicalQty:
-Number(item.physicalQty),
 
 
-difference:
-Number(item.physicalQty)
--
-Number(barang?.stock ?? 0)
 
 
-};
 
+    const opname =
+      await prisma.stockOpname.create({
 
-}
+        data:{
 
-)
 
+          code,
 
-)
 
+          createdBy:1,
 
-}
 
+          status:"COUNTING"
 
-},
 
+        }
 
-include:{
+      });
 
 
-items:true
 
 
-}
 
 
-});
 
 
+    await prisma.stockOpnameItem.createMany({
 
+      data:
 
-return NextResponse.json({
+      barang.map((b)=>({
 
-success:true,
 
-data:opname,
+        opnameId:opname.id,
 
-message:
-"Stock Opname berhasil disimpan"
 
-});
+        barangId:b.id,
 
 
-}
-catch(error){
+        systemQty:b.stock ?? 0,
 
 
-console.log(error);
+        physicalQty:b.stock ?? 0,
 
 
-return NextResponse.json({
+        difference:0
 
-success:false,
 
-message:
-"Gagal membuat opname"
 
-},{
-status:500
-});
+      }))
 
 
-}
+    });
+
+
+
+
+
+
+
+
+    const detail =
+      await prisma.stockOpname.findUnique({
+
+        where:{
+
+          id:opname.id
+
+        },
+
+
+        include:{
+
+
+          items:true
+
+
+        }
+
+
+      });
+
+
+
+
+
+
+
+    return NextResponse.json({
+
+      success:true,
+
+
+      message:
+      "Stock Opname berhasil dibuat",
+
+
+      data:detail
+
+
+
+    });
+
+
+
+
+
+  }catch(error){
+
+
+    console.error(
+
+      "CREATE STOCK OPNAME ERROR",
+
+      error
+
+    );
+
+
+
+    return NextResponse.json(
+      {
+        success:false,
+        message:"Gagal membuat Stock Opname"
+      },
+      {
+        status:500
+      }
+    );
+
+
+
+  }
 
 
 }
