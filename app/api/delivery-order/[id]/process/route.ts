@@ -39,56 +39,126 @@ export async function POST(
     }
 
     await prisma.$transaction(async (tx) => {
-      for (const item of delivery.items) {
-        const barang = await tx.barang.findUnique({
-          where: {
-            id: item.barangId,
-          },
-        });
+  for (const item of delivery.items) {
 
-        if (!barang) {
-          throw new Error("Barang tidak ditemukan");
-        }
+  const barang = await tx.barang.findUnique({
+    where: {
+      id: item.barangId,
+    },
+  });
 
-        if (barang.stock < item.qty) {
-          throw new Error(`Stock ${barang.name} tidak mencukupi`);
-        }
+  if (!barang) {
+    throw new Error("Barang tidak ditemukan");
+  }
 
-        const stockBaru = barang.stock - item.qty;
+  if (barang.stock < item.qty) {
+    throw new Error(`Stock ${barang.name} tidak mencukupi`);
+  }
 
-        await tx.barang.update({
-          where: {
-            id: barang.id,
-          },
-          data: {
-            stock: stockBaru,
-          },
-        });
+  // ==========================================
+  // FEFO (First Expired First Out)
+  // ==========================================
+  if (barang.hasExpired) {
 
-        await tx.inventory.updateMany({
-          where: {
-            barangId: barang.id,
-          },
-          data: {
-            stock: stockBaru,
-            availableStock: stockBaru,
-          },
-        });
+    let sisaKeluar = Number(item.qty);
 
-        await tx.stockCard.create({
-          data: {
-            barangId: barang.id,
-            trxType: "DELIVERY",
-            trxNumber: delivery.number,
-            referenceId: delivery.id,
-            qtyOut: item.qty,
-            balance: stockBaru,
-            unitPrice: barang.sellingPrice,
-            totalValue: item.qty * barang.sellingPrice,
-            note: "Barang Keluar Delivery",
-          },
-        });
-      }
+    const batches = await tx.batchStock.findMany({
+      where: {
+        barangId: barang.id,
+        qty: {
+          gt: 0,
+        },
+      },
+      orderBy: {
+        expiredDate: "asc",
+      },
+    });
+
+    for (const batch of batches) {
+
+      if (sisaKeluar <= 0) break;
+
+      const ambil = Math.min(batch.qty, sisaKeluar);
+
+      const sisaBatch = batch.qty - ambil;
+
+if (sisaBatch <= 0) {
+
+  await tx.batchStock.delete({
+    where: {
+      id: batch.id,
+    },
+  });
+
+} else {
+
+  await tx.batchStock.update({
+    where: {
+      id: batch.id,
+    },
+    data: {
+      qty: sisaBatch,
+    },
+  });
+
+}
+
+      sisaKeluar -= ambil;
+    }
+
+    if (sisaKeluar > 0) {
+      throw new Error(
+        `Batch stock ${barang.name} tidak mencukupi`
+      );
+    }
+  }
+
+  // ==========================================
+  // UPDATE STOCK BARANG
+  // ==========================================
+  const stockBaru = barang.stock - Number(item.qty);
+
+  await tx.barang.update({
+    where: {
+      id: barang.id,
+    },
+    data: {
+      stock: stockBaru,
+    },
+  });
+
+  // ==========================================
+  // UPDATE INVENTORY
+  // ==========================================
+  await tx.inventory.updateMany({
+    where: {
+      barangId: barang.id,
+    },
+    data: {
+      stock: stockBaru,
+      availableStock: stockBaru,
+    },
+  });
+
+  // ==========================================
+  // STOCK CARD
+  // ==========================================
+  await tx.stockCard.create({
+    data: {
+      barangId: barang.id,
+      trxType: "DELIVERY",
+      trxNumber: delivery.number,
+      referenceId: delivery.id,
+      qtyIn: 0,
+      qtyOut: Number(item.qty),
+      balance: stockBaru,
+      unitPrice: barang.sellingPrice,
+      totalValue: Number(item.qty) * barang.sellingPrice,
+      note: "Barang Keluar Delivery",
+    },
+  });
+
+}
 
       await tx.delivery.update({
         where: {

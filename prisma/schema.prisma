@@ -30,16 +30,18 @@ model Session {
 }
 
 model Supplier {
-  id            Int        @id @default(autoincrement())
-  code          String     @unique
+  id            Int            @id @default(autoincrement())
+  code          String         @unique
   name          String
   address       String?
   city          String?
   phone         String?
   email         String?
   contactPerson String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  MasterHarga   MasterHarga[]
+  priceSummary  PriceSummary[]
   purchases     Purchase[]
   receipts      Receipt[]
 }
@@ -80,13 +82,15 @@ model Barang {
   batchStocks        BatchStock[]
   deliveryItems      DeliveryItem[]
   inventory          Inventory?
+  MasterHarga        MasterHarga[]
+  priceSummary       PriceSummary?
   mutationStocks     MutationStock[]
   purchaseItems      PurchaseItem[]
   receiptItems       ReceiptItem[]
   stockCards         StockCard[]
   stockMutations     StockMutation[]
-  stockOpnameItems   StockOpnameItem[]
   stockOpnameHistory StockOpnameHistory[]
+  stockOpnameItems   StockOpnameItem[]
 }
 
 model BarangBatch {
@@ -246,45 +250,28 @@ model Inventory {
 }
 
 model StockOpname {
-  id Int @id @default(autoincrement())
-
-  code String @unique
-
-  date DateTime @default(now())
-
-  status String @default("COUNTING")
-
-  createdBy Int?
-
+  id         Int                  @id @default(autoincrement())
+  code       String               @unique
+  date       DateTime             @default(now())
+  status     String               @default("COUNTING")
+  createdBy  Int?
   approvedBy Int?
-
-  createdAt DateTime @default(now())
-
-  updatedAt DateTime @updatedAt
-
-  items StockOpnameItem[]
-
-  histories StockOpnameHistory[]
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  histories  StockOpnameHistory[]
+  items      StockOpnameItem[]
 }
 
 model StockOpnameItem {
-  id Int @id @default(autoincrement())
-
-  opnameId Int
-
-  barangId Int
-
-  systemQty Float
-
-  physicalQty Float @default(0)
-
-  difference Float @default(0)
-
-  note String?
-
-  opname StockOpname @relation(fields: [opnameId], references: [id], onDelete: Cascade)
-
-  barang Barang @relation(fields: [barangId], references: [id])
+  id          Int         @id @default(autoincrement())
+  opnameId    Int
+  barangId    Int
+  systemQty   Float
+  physicalQty Float       @default(0)
+  difference  Float       @default(0)
+  note        String?
+  barang      Barang      @relation(fields: [barangId], references: [id])
+  opname      StockOpname @relation(fields: [opnameId], references: [id], onDelete: Cascade)
 }
 
 model Adjustment {
@@ -409,25 +396,82 @@ model DocumentNumber {
 }
 
 model StockOpnameHistory {
+  id          Int         @id @default(autoincrement())
+  opnameId    Int
+  barangId    Int
+  systemQty   Float
+  physicalQty Float
+  difference  Float
+  createdBy   Int?
+  createdAt   DateTime    @default(now())
+  barang      Barang      @relation(fields: [barangId], references: [id])
+  opname      StockOpname @relation(fields: [opnameId], references: [id], onDelete: Cascade)
+}
+
+model MasterHarga {
   id Int @id @default(autoincrement())
 
-  opnameId Int
+  barangId   Int
+  supplierId Int
 
-  barangId Int
+  purchaseId     Int?
+  purchaseItemId Int?
 
-  systemQty Float
+  poNumber String?
 
-  physicalQty Float
+  hargaLama Float
+  hargaBaru Float
 
-  difference Float
+  selisihHarga Float @default(0)
+  persenNaik   Float @default(0)
 
-  createdBy Int?
+  qty   Float @default(0)
+  total Float @default(0)
+
+  akumulasi Float @default(0)
+
+  status String
+
+  receiveDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  barang   Barang   @relation(fields: [barangId], references: [id])
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+
+  @@index([barangId])
+  @@index([supplierId])
+}
+
+model PriceSummary {
+  id Int @id @default(autoincrement())
+
+  barangId Int @unique
+
+  supplierId Int?
+
+  lastPrice Float @default(0)
+
+  averagePrice Float @default(0)
+
+  highestPrice Float @default(0)
+
+  lowestPrice Float @default(0)
+
+  totalPurchase Float @default(0)
+
+  lastReceiveDate DateTime?
 
   createdAt DateTime @default(now())
 
-  opname StockOpname @relation(fields: [opnameId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @updatedAt
 
   barang Barang @relation(fields: [barangId], references: [id])
+
+  supplier Supplier? @relation(fields: [supplierId], references: [id])
+
+  @@index([supplierId])
 }
 
 enum Role {

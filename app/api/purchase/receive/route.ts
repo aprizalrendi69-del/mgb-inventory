@@ -1,100 +1,96 @@
-import {NextResponse} from "next/server";
-import {prisma} from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
 
-req:Request,
+  try {
 
-{params}:{params:Promise<{id:string}>}
+    const { id } = await params;
 
-){
+    const purchase = await prisma.purchase.findUnique({
 
-try{
+      where: {
+        id: Number(id)
+      },
 
-const {id}=await params;
+      include: {
+        items: true
+      }
 
-const purchase=await prisma.purchase.findUnique({
+    });
 
-where:{
 
-id:Number(id)
+    if (!purchase) {
 
-},
+      return NextResponse.json({
 
-include:{
+        success: false
 
-items:true
+      }, { status: 404 });
 
-}
+    }
 
-});
 
-if(!purchase){
+    await prisma.purchase.update({
 
-return NextResponse.json({
+      where: {
+        id: purchase.id
+      },
 
-success:false
+      data: {
 
-},{status:404});
+        status: "RECEIVED"
 
-}
+      }
 
-await prisma.purchase.update({
+    });
 
-where:{
 
-id:purchase.id
+    for (const item of purchase.items) {
 
-},
+      await prisma.barang.update({
 
-data:{
+        where: {
+          id: item.barangId
+        },
 
-status:"RECEIVED"
+        data: {
 
-}
+          stock: {
 
-});
+            increment: item.qty
 
-for(const item of purchase.items){
+          }
 
-await prisma.barang.update({
+        }
 
-where:{
+      });
 
-id:item.barangId
+    }
 
-},
 
-data:{
+    return NextResponse.json({
 
-stock:{
+      success: true
 
-increment:item.qty
+    });
 
-}
 
-}
+  } catch (error) {
 
-});
+    console.log(error);
 
-}
 
-return NextResponse.json({
+    return NextResponse.json({
 
-success:true
+      success: false
 
-});
+    }, { status: 500 });
 
-}catch(error){
 
-console.log(error);
-
-return NextResponse.json({
-
-success:false
-
-},{status:500});
-
-}
+  }
 
 }

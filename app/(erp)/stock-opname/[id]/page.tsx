@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-
+import StockOpnameScanner from "@/components/StockOpnameScanner";
 
 export default function StockOpnameDetailPage(){
 
@@ -12,13 +12,20 @@ export default function StockOpnameDetailPage(){
   const id = params.id;
 
 
-
   const [data,setData] =
   useState<any>(null);
 
 
   const [loading,setLoading] =
   useState(true);
+
+
+  const [scanResult,setScanResult] =
+  useState("");
+
+
+  const [showScanner,setShowScanner] =
+  useState(false);
 
 
 
@@ -47,9 +54,7 @@ export default function StockOpnameDetailPage(){
 
       if(json.success){
 
-        setData(
-          json.data
-        );
+        setData(json.data);
 
       }
 
@@ -71,16 +76,13 @@ export default function StockOpnameDetailPage(){
 
   useEffect(()=>{
 
-
     if(id){
 
       loadData();
 
     }
 
-
   },[id]);
-
 
 
 
@@ -92,7 +94,6 @@ export default function StockOpnameDetailPage(){
     itemId:number,
     qty:number
   ){
-
 
     try{
 
@@ -119,14 +120,76 @@ export default function StockOpnameDetailPage(){
       );
 
 
-
       loadData();
-
 
 
     }catch(error){
 
       console.error(error);
+
+    }
+
+
+  }
+
+
+
+
+
+
+
+  function findBarangByBarcode(
+    barcode:string
+  ){
+
+
+    if(!data?.items)
+    return;
+
+
+
+    const found =
+    data.items.find(
+      (item:any)=>
+      item.barang?.barcode === barcode
+    );
+
+
+
+    if(found){
+
+
+      alert(
+        `Barang ditemukan: ${found.barang.name}`
+      );
+
+
+
+      const el =
+      document.getElementById(
+        `item-${found.id}`
+      );
+
+
+
+      if(el){
+
+        el.scrollIntoView({
+          behavior:"smooth",
+          block:"center"
+        });
+
+      }
+
+
+
+    }else{
+
+
+      alert(
+        "Barcode tidak ditemukan dalam Stock Opname"
+      );
+
 
     }
 
@@ -164,6 +227,7 @@ export default function StockOpnameDetailPage(){
     );
 
 
+
     const json =
     await res.json();
 
@@ -177,11 +241,9 @@ export default function StockOpnameDetailPage(){
 
     if(json.success){
 
-
       router.push(
         "/stock-opname"
       );
-
 
     }
 
@@ -194,20 +256,17 @@ export default function StockOpnameDetailPage(){
 
 
 
+
+
   if(loading){
 
     return(
-
       <div className="p-6">
-
         Loading...
-
       </div>
-
     );
 
   }
-
 
 
 
@@ -215,13 +274,9 @@ export default function StockOpnameDetailPage(){
   if(!data){
 
     return(
-
       <div className="p-6">
-
         Data tidak ditemukan
-
       </div>
-
     );
 
   }
@@ -233,159 +288,165 @@ export default function StockOpnameDetailPage(){
 
 
 
-  return (
+return (
 
-    <div className="p-6">
+<div className="p-6">
 
 
 
+<div className="
+flex
+justify-between
+items-start
+mb-6
+">
 
 
-      <div className="
-      flex
-      justify-between
-      items-start
-      mb-6
-      ">
 
+<div>
 
 
-        <div>
+<h1 className="
+text-2xl
+font-bold
+">
 
+Stock Opname {data.code}
 
-          <h1 className="
-          text-2xl
-          font-bold
-          ">
+</h1>
 
-            Stock Opname {data.code}
 
-          </h1>
 
+<p className="mt-2">
 
+Status :
 
-          <p className="mt-2">
+<span className="
+ml-2
+font-bold
+">
 
-            Status :
+{data.status}
 
-            <span className="
-            ml-2
-            font-bold
-            ">
+</span>
 
-              {data.status}
+</p>
 
-            </span>
 
 
-          </p>
+<p>
 
+Tanggal :
 
+{" "}
 
-          <p>
+{
+new Date(data.date)
+.toLocaleDateString(
+"id-ID"
+)
+}
 
-            Tanggal :
+</p>
 
-            {" "}
 
-            {
-              new Date(
-                data.date
-              )
-              .toLocaleDateString(
-                "id-ID"
-              )
-            }
+</div>
 
-          </p>
 
 
 
-        </div>
 
+<div className="
+flex
+gap-2
+">
 
 
 
+<button
 
+onClick={()=>setShowScanner(true)}
 
-        <div className="
-        flex
-        gap-2
-        ">
+className="
+bg-purple-600
+text-white
+px-4
+py-2
+rounded
+"
 
+>
 
+📷 SCAN BARCODE
 
-          <button
+</button>
 
-          onClick={()=>window.print()}
 
-          className="
-          bg-gray-700
-          text-white
-          px-4
-          py-2
-          rounded
-          "
 
-          >
 
-            PRINT
+<button
 
-          </button>
+onClick={()=>window.print()}
 
+className="
+bg-gray-700
+text-white
+px-4
+py-2
+rounded
+"
 
+>
 
+PRINT
 
+</button>
 
 
-          <a
 
-          href={
-            `/api/laporan/stock-opname/${id}/pdf`
-          }
 
-          target="_blank"
 
-          className="
-          bg-red-600
-          text-white
-          px-4
-          py-2
-          rounded
-          "
+<a
 
-          >
+href={`/api/laporan/stock-opname/${id}/pdf`}
 
-            PDF
+target="_blank"
 
-          </a>
+className="
+bg-red-600
+text-white
+px-4
+py-2
+rounded
+"
 
+>
 
+PDF
 
+</a>
 
 
 
 
-          <a
 
-          href={
-            `/api/laporan/stock-opname/${id}/excel`
-          }
+<a
 
-          className="
-          bg-green-600
-          text-white
-          px-4
-          py-2
-          rounded
-          "
+href={`/api/laporan/stock-opname/${id}/excel`}
 
-          >
+className="
+bg-green-600
+text-white
+px-4
+py-2
+rounded
+"
 
-            EXCEL
+>
 
-          </a>
+EXCEL
 
+</a>
 
 
 
@@ -393,117 +454,137 @@ export default function StockOpnameDetailPage(){
 
 
 
-          {
-            data.status !== "APPROVED" &&
+{
+data.status !== "APPROVED" &&
 
 
-            <button
+<button
 
-            onClick={approve}
+onClick={approve}
 
-            className="
-            bg-blue-600
-            text-white
-            px-4
-            py-2
-            rounded
-            "
+className="
+bg-blue-600
+text-white
+px-4
+py-2
+rounded
+"
 
-            >
+>
 
-              APPROVE
+APPROVE
 
-            </button>
+</button>
 
+}
 
-          }
 
+</div>
 
 
+</div>
 
-        </div>
 
 
 
 
-      </div>
 
 
 
 
 
+{
+showScanner && (
 
+<div className="
+mb-5
+p-4
+bg-gray-100
+rounded
+">
 
 
+<h3 className="font-bold mb-3">
 
-      <div className="
-      bg-white
-      rounded
-      shadow
-      overflow-hidden
-      ">
+Scan Barcode Barang
 
+</h3>
 
 
 
-      <table className="w-full border">
+<input
 
+autoFocus
 
+className="
+border
+p-2
+w-full
+"
 
-        <thead>
+placeholder="Scan barcode..."
 
+value={scanResult}
 
-          <tr className="bg-gray-100">
+onChange={(e)=>{
 
 
+const value =
+e.target.value;
 
-            <th className="border p-3">
 
-              No
+setScanResult(value);
 
-            </th>
 
 
+if(value.length >= 3){
 
-            <th className="border p-3">
 
-              Barang
+findBarangByBarcode(value);
 
-            </th>
 
+setScanResult("");
 
 
+}
 
-            <th className="border p-3">
 
-              System
 
-            </th>
+}}
 
 
+/>
 
 
-            <th className="border p-3">
 
-              Fisik
 
-            </th>
+<button
 
+onClick={()=>setShowScanner(false)}
 
+className="
+mt-3
+bg-red-600
+text-white
+px-4
+py-2
+rounded
+"
 
+>
 
-            <th className="border p-3">
+Tutup
 
-              Selisih
+</button>
 
-            </th>
 
 
+</div>
 
-          </tr>
+)
 
+}
 
-        </thead>
 
 
 
@@ -511,168 +592,200 @@ export default function StockOpnameDetailPage(){
 
 
 
-        <tbody>
 
+<div className="
+bg-white
+rounded
+shadow
+overflow-hidden
+">
 
 
-        {
 
+<table className="w-full border">
 
-          data.items.map(
 
-            (item:any,index:number)=>(
+<thead>
 
+<tr className="bg-gray-100">
 
 
-            <tr key={item.id}>
+<th className="border p-3">
+No
+</th>
 
 
+<th className="border p-3">
+Barang
+</th>
 
-              <td className="border p-3 text-center">
 
-                {index+1}
+<th className="border p-3">
+System
+</th>
 
-              </td>
 
+<th className="border p-3">
+Fisik
+</th>
 
 
+<th className="border p-3">
+Selisih
+</th>
 
 
-              <td className="border p-3">
+</tr>
 
-                {item.barang?.name}
+</thead>
 
-              </td>
 
 
+<tbody>
 
 
+{
 
-              <td className="border p-3 text-center">
+data.items.map(
 
-                {item.systemQty}
+(item:any,index:number)=>(
 
-              </td>
 
+<tr
 
+key={item.id}
 
+id={`item-${item.id}`}
 
+>
 
-              <td className="border p-3 text-center">
 
 
+<td className="border p-3 text-center">
 
-                <input
+{index+1}
 
+</td>
 
-                type="number"
 
 
-                value={
-                  item.physicalQty
-                }
 
+<td className="border p-3">
 
-                disabled={
-                  data.status==="APPROVED"
-                }
+{item.barang?.name}
 
+</td>
 
-                onChange={(e)=>{
 
 
-                  updateQty(
 
-                    item.id,
+<td className="border p-3 text-center">
 
-                    Number(
-                      e.target.value
-                    )
+{item.systemQty}
 
-                  );
+</td>
 
 
-                }}
 
 
+<td className="border p-3 text-center">
 
-                className="
-                border
-                px-2
-                py-1
-                w-24
-                text-center
-                "
 
+<input
 
-                />
+type="number"
 
+value={item.physicalQty}
 
+disabled={
+data.status==="APPROVED"
+}
 
-              </td>
+onChange={(e)=>{
 
+updateQty(
 
+item.id,
 
+Number(
+e.target.value
+)
 
+);
 
+}}
 
-              <td className={`
-              border
-              p-3
-              text-center
-              font-bold
+className="
+border
+px-2
+py-1
+w-24
+text-center
+"
 
-              ${
-                item.difference !== 0
-                ?
-                "text-red-600"
-                :
-                "text-green-600"
-              }
+/>
 
-              `}>
 
+</td>
 
-                {item.difference}
 
 
-              </td>
 
 
+<td className={`
 
+border
+p-3
+text-center
+font-bold
 
+${
+item.difference !== 0
 
-            </tr>
+?
 
+"text-red-600"
 
-            )
+:
 
-          )
+"text-green-600"
 
+}
 
-        }
+`}>
 
+{item.difference}
 
+</td>
 
-        </tbody>
 
 
+</tr>
 
 
-      </table>
+)
 
+)
 
 
-      </div>
+}
 
 
 
+</tbody>
 
 
-    </div>
+</table>
 
 
-  );
+</div>
+
+
+
+</div>
+
+
+);
 
 
 }

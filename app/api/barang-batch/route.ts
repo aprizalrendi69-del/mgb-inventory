@@ -1,44 +1,88 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export async function GET() {
+  try {
+    const today = new Date();
 
-export async function GET(){
+    const batches = await prisma.batchStock.findMany({
+      where: {
+        qty: {
+          gt: 0,
+        },
+      },
+      include: {
+        barang: true,
+      },
+      orderBy: {
+        expiredDate: "asc",
+      },
+    });
 
-try{
+    const data = batches.map((batch) => {
 
-const data = await prisma.barangBatch.findMany({
+      const sisaHari = Math.ceil(
+        (
+          batch.expiredDate.getTime() -
+          today.getTime()
+        ) / (1000 * 60 * 60 * 24)
+      );
 
-include:{
-barang:true
-},
+      let status = "AMAN";
 
-orderBy:{
-expiredDate:"asc"
-}
+      if (sisaHari < 0) {
 
-});
+        status = "EXPIRED";
 
+      } else if (
+        sisaHari <= (batch.barang.expiredWarning ?? 30)
+      ) {
 
-return NextResponse.json({
+        status = "WARNING";
 
-success:true,
+      }
 
-data
+      return {
 
-});
+        id: batch.id,
 
+        barangId: batch.barangId,
 
-}catch(error){
+        namaBarang: batch.barang.name,
 
-return NextResponse.json({
+        kodeBarang: batch.barang.code,
 
-success:false,
-message:"Gagal mengambil batch"
+        batchNumber: batch.batchNumber,
 
-},{
-status:500
-});
+        qty: batch.qty,
 
-}
+        expiredDate: batch.expiredDate,
 
+        sisaHari,
+
+        status,
+
+      };
+
+    });
+
+    return NextResponse.json({
+      success: true,
+      data,
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Gagal mengambil data batch",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
 }

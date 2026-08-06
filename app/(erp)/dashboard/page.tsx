@@ -889,9 +889,7 @@ Tidak ada delivery pending
 
 </h2>
 
-
 {
-
 data.expired?.length > 0 ?
 
 data.expired.map((item:any)=>(
@@ -901,23 +899,56 @@ key={item.id}
 className="border-b pb-3 mb-3"
 >
 
+<div className="flex justify-between">
+
+<div>
+
 <div className="font-semibold">
 
 {item.name}
 
 </div>
 
-
 <div className="text-sm text-gray-500">
 
-Batch : {item.batch ?? "-"}
+Batch : {item.batch}
 
 </div>
 
+<div className="text-sm text-gray-500">
 
-<div className="text-orange-600">
+Qty : {item.qty}
 
-Expired :
+</div>
+
+</div>
+
+<div className="text-right">
+
+{
+
+item.status==="EXPIRED"
+
+?
+
+<span className="bg-red-600 text-white px-3 py-1 rounded-full text-xs">
+
+EXPIRED
+
+</span>
+
+:
+
+<span className="bg-yellow-500 text-white px-3 py-1 rounded-full text-xs">
+
+WARNING
+
+</span>
+
+}
+
+<div className="mt-2 text-sm">
+
 {
 new Date(item.expired)
 .toLocaleDateString("id-ID")
@@ -925,6 +956,27 @@ new Date(item.expired)
 
 </div>
 
+<div className="text-xs text-gray-500">
+
+{
+
+item.status==="EXPIRED"
+
+?
+
+`${Math.abs(item.sisaHari)} Hari Lewat`
+
+:
+
+`${item.sisaHari} Hari Lagi`
+
+}
+
+</div>
+
+</div>
+
+</div>
 
 </div>
 
@@ -932,11 +984,9 @@ new Date(item.expired)
 
 :
 
+<div className="text-green-600 font-semibold">
 
-
-<div className="text-gray-500">
-
-Tidak ada barang expired
+✅ Tidak ada barang expired
 
 </div>
 

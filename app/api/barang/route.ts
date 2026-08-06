@@ -93,18 +93,23 @@ export async function POST(req: NextRequest) {
     const barang = await prisma.$transaction(async (tx) => {
       const item = await tx.barang.create({
         data: {
-          code: body.code,
-          barcode: body.barcode || null,
-          name: body.name,
-          category: body.category || null,
-          brand: null,
-          unit: body.unit,
-          minimumStock: Number(body.minStock ?? 0),
-          purchasePrice: Number(body.purchasePrice ?? 0),
-          sellingPrice: Number(body.sellingPrice ?? 0),
-          stock: 0,
-          active: true,
-        },
+  code: body.code.trim(),
+  barcode: body.barcode?.trim() || null,
+  name: body.name.trim(),
+  category: body.category?.trim() || null,
+  brand: null,
+  unit: body.unit.trim(),
+
+  minimumStock: Number(body.minStock ?? 0),
+  purchasePrice: Number(body.purchasePrice ?? 0),
+  sellingPrice: Number(body.sellingPrice ?? 0),
+
+  hasExpired: Boolean(body.hasExpired),
+  expiredWarning: Number(body.expiredWarning ?? 30),
+
+  stock: 0,
+  active: true,
+},
       });
 
       await tx.inventory.create({

@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import {
-  BrowserMultiFormatReader,
-} from "@zxing/browser";
+import { BrowserMultiFormatReader } from "@zxing/browser";
 
 
 interface Props {
@@ -16,127 +14,181 @@ export default function CameraBarcodeScanner({
 }:Props){
 
 
-  const videoRef =
-    useRef<HTMLVideoElement | null>(null);
+const videoRef =
+useRef<HTMLVideoElement|null>(null);
+
+
+const readerRef =
+useRef<BrowserMultiFormatReader|null>(null);
+
+
+const runningRef =
+useRef(false);
 
 
 
-  useEffect(()=>{
+useEffect(()=>{
 
 
-    const codeReader =
-      new BrowserMultiFormatReader();
+const start = async()=>{
 
 
-
-    async function start(){
-
-
-      try{
+try{
 
 
-        const devices =
-          await BrowserMultiFormatReader
-          .listVideoInputDevices();
+const reader =
+new BrowserMultiFormatReader();
+
+
+readerRef.current = reader;
 
 
 
-        const backCamera =
-          devices.find(
-            d =>
-            d.label
-            .toLowerCase()
-            .includes("back")
-            ||
-            d.label
-            .toLowerCase()
-            .includes("rear")
-          );
+const devices =
+await BrowserMultiFormatReader.listVideoInputDevices();
 
 
 
-        const deviceId =
-          backCamera
-          ? backCamera.deviceId
-          : devices[0]?.deviceId;
+if(devices.length===0){
+
+console.error(
+"Tidak ada kamera"
+);
+
+return;
+
+}
 
 
 
-        await codeReader.decodeFromVideoDevice(
-
-          deviceId,
-
-          videoRef.current!,
-
-          (result)=>{
-
-
-            if(result){
-
-
-              const text =
-              result.getText();
+const cameraId =
+devices[0].deviceId;
 
 
 
-              console.log(
-                "ZXING SCAN:",
-                text
-              );
-
-
-              onScan(text);
+runningRef.current=true;
 
 
 
-              codeReader.reset();
+await reader.decodeFromVideoDevice(
 
-            }
+cameraId,
 
+videoRef.current!,
 
-          }
-
-        );
-
+(result,error)=>{
 
 
-      }catch(err){
-
-        console.error(
-          err
-        );
-
-      }
+if(result){
 
 
-    }
+const text =
+result.getText();
 
 
-    start();
+if(text){
+
+onScan(text);
+
+}
+
+}
 
 
+}
 
-    return()=>{
-
-      codeReader.reset();
-
-    };
-
-
-  },[onScan]);
+);
 
 
 
-  return (
+}catch(err){
 
-    <video
-      ref={videoRef}
-      style={{
-        width:"100%",
-        borderRadius:"12px"
-      }}
-    />
 
-  );
+console.error(
+"CAMERA ERROR",
+err
+);
+
+
+}
+
+
+};
+
+
+
+start();
+
+
+
+return()=>{
+
+
+if(readerRef.current && runningRef.current){
+
+
+try{
+
+
+readerRef.current.stopContinuousDecode();
+
+
+}catch(e){
+
+
+console.log(
+"stop camera selesai"
+);
+
+
+}
+
+
+}
+
+
+
+runningRef.current=false;
+
+
+};
+
+
+},[]);
+
+
+
+return (
+
+<div>
+
+
+<video
+
+ref={videoRef}
+
+className="
+w-full
+rounded-xl
+"
+
+style={{
+
+width:"100%",
+
+height:"300px",
+
+objectFit:"cover"
+
+}}
+
+/>
+
+
+</div>
+
+
+);
+
 
 }

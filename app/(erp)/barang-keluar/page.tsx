@@ -8,40 +8,33 @@ import CameraBarcodeScanner from "@/components/CameraBarcodeScanner";
 export default function BarangKeluarPage(){
 
 
-const [barang,setBarang] =
-useState<any[]>([]);
-
-const [customers,setCustomers] =
-useState<any[]>([]);
-
-const [cart,setCart] =
-useState<any[]>([]);
+const [barang,setBarang] = useState<any[]>([]);
+const [customers,setCustomers] = useState<any[]>([]);
+const [cart,setCart] = useState<any[]>([]);
 
 
-const [customer,setCustomer] =
-useState("");
-
-const [note,setNote] =
-useState("");
+const [customer,setCustomer] = useState("");
+const [note,setNote] = useState("");
 
 
-const [selectedBarang,setSelectedBarang] =
-useState("");
+// SEARCH BARANG
 
-const [qty,setQty] =
-useState("");
-
-
-const [openCamera,setOpenCamera] =
-useState(false);
+const [searchBarang,setSearchBarang] = useState("");
+const [showBarang,setShowBarang] = useState(false);
+const [selectedBarang,setSelectedBarang] = useState<any>(null);
 
 
-const [scanBarang,setScanBarang] =
-useState<any>(null);
+const [qty,setQty] = useState("");
 
 
-const [scanQty,setScanQty] =
-useState("1");
+// CAMERA SCANNER
+
+const [openCamera,setOpenCamera] = useState(false);
+
+const [scanBarang,setScanBarang] = useState<any>(null);
+
+const [scanQty,setScanQty] = useState("1");
+
 
 
 
@@ -50,17 +43,17 @@ async function loadBarang(){
 
 try{
 
-const res =
-await fetch("/api/barang");
+const res = await fetch("/api/barang");
 
-const json =
-await res.json();
+const json = await res.json();
 
 
 setBarang(
 Array.isArray(json)
-? json
-: json.data || []
+?
+json
+:
+json.data || []
 );
 
 
@@ -71,6 +64,7 @@ console.error(err);
 }
 
 }
+
 
 
 
@@ -79,18 +73,17 @@ async function loadCustomer(){
 
 try{
 
-const res =
-await fetch("/api/customer");
+const res = await fetch("/api/customer");
 
-
-const json =
-await res.json();
+const json = await res.json();
 
 
 setCustomers(
 Array.isArray(json)
-? json
-: json.data || []
+?
+json
+:
+json.data || []
 );
 
 
@@ -101,6 +94,7 @@ console.error(err);
 }
 
 }
+
 
 
 
@@ -117,13 +111,44 @@ loadCustomer();
 
 
 
+const filteredBarang = barang.filter(b=>{
+
+
+const text =
+`${b.code} ${b.name}`.toLowerCase();
+
+
+return text.includes(
+searchBarang.toLowerCase()
+);
+
+
+}).slice(0,20);
+
+
+
+
+
+function pilihBarang(data:any){
+
+setSelectedBarang(data);
+
+setSearchBarang(
+`${data.code} - ${data.name}`
+);
+
+setShowBarang(false);
+
+}
 function tambahKeCart(
 data:any,
 jumlah:number
 ){
 
 
-if(jumlah<=0){
+if(!jumlah || jumlah <= 0){
+
+alert("Qty tidak valid");
 
 return;
 
@@ -143,13 +168,12 @@ return;
 
 
 
-
 setCart(prev=>{
 
 
 const exist =
 prev.find(
-x=>x.barangId===data.id
+x=>x.barangId === data.id
 );
 
 
@@ -160,7 +184,7 @@ if(exist){
 return prev.map(x=>{
 
 
-if(x.barangId===data.id){
+if(x.barangId === data.id){
 
 
 const newQty =
@@ -187,7 +211,7 @@ return {
 qty:newQty,
 
 subtotal:
-newQty*x.price
+newQty * x.price
 
 };
 
@@ -207,6 +231,7 @@ return x;
 
 
 
+
 return [
 
 ...prev,
@@ -217,23 +242,27 @@ barangId:data.id,
 
 code:data.code,
 
+barcode:data.barcode,
+
 name:data.name,
 
 unit:data.unit,
 
+stock:data.stock,
+
 qty:jumlah,
 
 price:
-Number(data.sellingPrice || 0),
+Number(
+data.purchasePrice ?? 0
+),
 
 subtotal:
-Number(data.sellingPrice || 0)
+Number(
+data.purchasePrice ?? 0
+)
 *
-jumlah,
-
-stock:data.stock,
-
-barcode:data.barcode
+jumlah
 
 
 }
@@ -246,6 +275,44 @@ barcode:data.barcode
 
 }
 
+
+
+
+
+
+
+function tambahManual(){
+
+
+if(!selectedBarang){
+
+alert(
+"Pilih barang terlebih dahulu"
+);
+
+return;
+
+}
+
+
+
+tambahKeCart(
+
+selectedBarang,
+
+Number(qty)
+
+);
+
+
+
+setSelectedBarang(null);
+
+setSearchBarang("");
+
+setQty("");
+
+}
 
 
 
@@ -271,11 +338,11 @@ await res.json();
 
 
 
-
 if(!json.success){
 
 alert(
-json.message
+json.message ||
+"Barcode tidak ditemukan"
 );
 
 return;
@@ -284,10 +351,10 @@ return;
 
 
 
-
 setScanBarang(
 json.data
 );
+
 
 
 setScanQty("1");
@@ -306,6 +373,7 @@ alert(
 
 
 }
+
 
 
 
@@ -345,57 +413,23 @@ setScanQty("1");
 
 
 
-function tambahManual(){
-
-
-const data =
-barang.find(
-b=>b.id===Number(selectedBarang)
-);
-
-
-
-if(!data){
-
-alert(
-"Pilih barang"
-);
-
-return;
-
-}
-
-
-
-tambahKeCart(
-data,
-Number(qty)
-);
-
-
-
-setSelectedBarang("");
-
-setQty("");
-
-}
-
-
-
-
-
 
 function hapus(index:number){
 
 
 setCart(
+
 cart.filter(
 (_,i)=>i!==index
 )
+
 );
 
 
 }
+
+
+
 
 
 
@@ -414,6 +448,8 @@ return;
 }
 
 
+
+
 const res =
 await fetch(
 "/api/barang-keluar",
@@ -422,10 +458,11 @@ await fetch(
 method:"POST",
 
 headers:{
+
 "Content-Type":
 "application/json"
-},
 
+},
 
 body:JSON.stringify({
 
@@ -434,16 +471,17 @@ Number(customer),
 
 note,
 
+
 items:
+
 cart.map(item=>({
 
-barangId:
-item.barangId,
+barangId:item.barangId,
 
-qty:
-item.qty
+qty:item.qty
 
 }))
+
 
 })
 
@@ -454,8 +492,10 @@ item.qty
 
 
 
+
 const json =
 await res.json();
+
 
 
 
@@ -487,6 +527,8 @@ json.message ||
 
 
 }
+
+
 
 
 
@@ -561,7 +603,6 @@ Kode :
 </p>
 
 
-
 <p>
 Barcode :
 <b>
@@ -602,12 +643,13 @@ Satuan :
 
 
 
-<div className="mt-4">
 
+<label className="block mt-4">
 
-<label>
 Qty Keluar
+
 </label>
+
 
 
 <input
@@ -627,13 +669,7 @@ onChange={
 e=>setScanQty(e.target.value)
 }
 
-
 />
-
-
-</div>
-
-
 
 
 
@@ -688,7 +724,6 @@ Batal
 </div>
 
 
-
 </div>
 
 
@@ -697,6 +732,8 @@ Batal
 )
 
 }
+
+
 
 
 
@@ -718,14 +755,10 @@ Scan Barcode Barang
 
 
 
-<div className="
-flex
-gap-3
-">
+<div className="flex gap-3">
 
 
 <div className="flex-1">
-
 
 <BarcodeInputScanner
 
@@ -733,8 +766,8 @@ onScan={scanBarcode}
 
 />
 
-
 </div>
+
 
 
 
@@ -753,9 +786,10 @@ rounded-lg
 
 >
 
-📷 Scan Kamera
+📷 Kamera
 
 </button>
+
 
 
 </div>
@@ -763,9 +797,9 @@ rounded-lg
 
 
 
+
 {
 openCamera && (
-
 
 <div className="
 mt-5
@@ -790,11 +824,9 @@ Arahkan kamera ke barcode
 
 onScan={(barcode)=>{
 
-
 setOpenCamera(false);
 
 scanBarcode(barcode);
-
 
 }}
 
@@ -828,7 +860,6 @@ Tutup Kamera
 
 </div>
 
-
 )
 
 }
@@ -849,6 +880,7 @@ grid-cols-2
 gap-4
 mb-6
 ">
+
 
 
 <div>
@@ -904,6 +936,7 @@ value={c.id}
 }
 
 
+
 </select>
 
 
@@ -931,13 +964,13 @@ p-3
 rounded
 "
 
+placeholder="Keterangan"
+
 value={note}
 
 onChange={
 e=>setNote(e.target.value)
 }
-
-placeholder="Keterangan"
 
 />
 
@@ -945,15 +978,7 @@ placeholder="Keterangan"
 </div>
 
 
-
 </div>
-
-
-
-
-
-
-
 <div className="
 flex
 gap-3
@@ -961,53 +986,169 @@ mb-6
 ">
 
 
-<select
+
+<div className="flex-1 relative">
+
+
+<label className="
+block
+font-semibold
+mb-2
+">
+
+Cari Barang
+
+</label>
+
+
+
+<input
 
 className="
 border
 p-3
 rounded
-flex-1
+w-full
 "
 
-value={selectedBarang}
+placeholder="
+Ketik kode atau nama barang...
+"
 
-onChange={
-e=>setSelectedBarang(e.target.value)
-}
-
->
+value={searchBarang}
 
 
-<option value="">
--- Pilih Barang --
-</option>
+onFocus={()=>{
+
+setShowBarang(true);
+
+}}
+
+
+
+onChange={e=>{
+
+setSearchBarang(
+e.target.value
+);
+
+setShowBarang(true);
+
+setSelectedBarang(null);
+
+}}
+
+
+/>
+
+
 
 
 
 {
-barang.map(b=>(
+showBarang && searchBarang && (
 
-<option
+<div className="
+absolute
+z-50
+bg-white
+border
+rounded
+shadow
+w-full
+max-h-72
+overflow-y-auto
+">
+
+
+{
+
+filteredBarang.length === 0 && (
+
+<div className="
+p-3
+text-gray-500
+">
+
+Barang tidak ditemukan
+
+</div>
+
+)
+
+}
+
+
+
+
+{
+
+filteredBarang.map(b=>(
+
+
+<div
 
 key={b.id}
 
-value={b.id}
+onClick={()=>pilihBarang(b)}
+
+className="
+p-3
+cursor-pointer
+hover:bg-gray-100
+border-b
+"
 
 >
 
-{b.code} - {b.name}
-| Stock {b.stock}
 
-</option>
+<div className="font-semibold">
+
+{b.code} - {b.name}
+
+</div>
+
+
+<div className="
+text-sm
+text-gray-500
+">
+
+Stock {b.stock}
+&nbsp; | &nbsp;
+{b.unit}
+
+&nbsp; | &nbsp;
+
+Harga Rp
+{
+Number(
+b.purchasePrice || 0
+)
+.toLocaleString("id-ID")
+}
+
+
+</div>
+
+
+
+</div>
+
 
 ))
 
 }
 
 
+</div>
 
-</select>
+)
+
+}
+
+
+</div>
 
 
 
@@ -1022,6 +1163,7 @@ border
 p-3
 w-32
 rounded
+mt-8
 "
 
 placeholder="Qty"
@@ -1046,6 +1188,7 @@ bg-green-600
 text-white
 px-5
 rounded
+mt-8
 "
 
 >
@@ -1057,6 +1200,8 @@ Tambah
 
 
 </div>
+
+
 
 
 
@@ -1109,6 +1254,7 @@ Aksi
 
 
 
+
 <tbody>
 
 
@@ -1121,18 +1267,28 @@ cart.map((item,index)=>(
 
 
 <td className="border p-2">
+
 {item.name}
+
 </td>
 
 
+
 <td className="border p-2 text-center">
+
 {item.stock}
+
 </td>
+
 
 
 <td className="border p-2 text-center">
+
 {item.qty}
+
 </td>
+
+
 
 
 <td className="border p-2 text-right">
@@ -1142,6 +1298,8 @@ Rp {item.price.toLocaleString("id-ID")}
 </td>
 
 
+
+
 <td className="border p-2 text-right">
 
 Rp {item.subtotal.toLocaleString("id-ID")}
@@ -1149,14 +1307,15 @@ Rp {item.subtotal.toLocaleString("id-ID")}
 </td>
 
 
+
+
+
 <td className="border p-2 text-center">
 
 
 <button
 
-onClick={()=>
-hapus(index)
-}
+onClick={()=>hapus(index)}
 
 className="
 bg-red-500
@@ -1174,6 +1333,7 @@ Hapus
 
 
 </td>
+
 
 
 </tr>
@@ -1197,6 +1357,7 @@ Hapus
 
 
 
+
 <div className="
 mt-6
 text-right
@@ -1204,11 +1365,14 @@ text-right
 
 
 <p>
+
 Total Qty :
+
 <b>
 {" "}
 {totalQty}
 </b>
+
 </p>
 
 
@@ -1219,10 +1383,10 @@ font-bold
 ">
 
 Total :
+
 Rp {totalNominal.toLocaleString("id-ID")}
 
 </p>
-
 
 
 </div>
@@ -1251,6 +1415,9 @@ rounded-lg
 Simpan Barang Keluar
 
 </button>
+
+
+
 
 
 

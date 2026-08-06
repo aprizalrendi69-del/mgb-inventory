@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
 import { exportReportPdf } from "@/lib/exportReportPdf";
 import { exportReportExcel } from "@/lib/exportReportExcel";
 import { printTable } from "@/lib/print";
@@ -8,60 +9,108 @@ import { printTable } from "@/lib/print";
 
 export default function LaporanBarangKeluar(){
 
-const [data,setData]=useState<any[]>([]);
 
-const [totalQty,setTotalQty]=useState(0);
-const [totalNominal,setTotalNominal]=useState(0);
+const [data,setData] = useState<any[]>([]);
+
+const [totalQty,setTotalQty] = useState(0);
+
+const [totalNominal,setTotalNominal] = useState(0);
 
 
-const [start,setStart]=useState("");
-const [end,setEnd]=useState("");
+const [start,setStart] = useState("");
+
+const [end,setEnd] = useState("");
+
 
 
 
 async function loadData(){
 
-let url="/api/laporan/barang-keluar";
+
+try{
+
+
+let url =
+"/api/laporan/barang-keluar";
+
 
 
 if(start && end){
 
-url+=`?start=${start}&end=${end}`;
+url +=
+`?start=${start}&end=${end}`;
 
 }
 
 
-const res=await fetch(url);
 
-const result=await res.json();
-
-
-setData(result.data ?? []);
+const res =
+await fetch(url);
 
 
-let qty=0;
-let nominal=0;
+
+const result =
+await res.json();
 
 
-(result.data ?? []).forEach((item:any)=>{
 
-item.items?.forEach((detail:any)=>{
+const list =
+result.data ?? [];
 
-qty += detail.qty;
 
-nominal += Number(detail.subtotal ?? 0);
+
+setData(list);
+
+
+
+let qty = 0;
+
+let nominal = 0;
+
+
+
+list.forEach((delivery:any)=>{
+
+
+delivery.items?.forEach((item:any)=>{
+
+
+qty += Number(item.qty || 0);
+
+
+nominal += Number(
+item.subtotal ||
+(item.qty * item.price) ||
+0
+);
+
 
 });
 
 
 });
+
 
 
 setTotalQty(qty);
+
 setTotalNominal(nominal);
 
 
+
+}catch(err){
+
+console.error(err);
+
+setData([]);
+
 }
+
+
+
+}
+
+
 
 
 
@@ -71,93 +120,232 @@ loadData();
 
 },[]);
 
+
+
+
+
+
 const columns = [
-  "No",
-  "Tanggal",
-  "Customer",
-  "Barang",
-  "Qty",
-  "Subtotal",
+
+"No",
+
+"Tanggal",
+
+"No Delivery",
+
+"Customer",
+
+"Kode Barang",
+
+"Nama Barang",
+
+"Qty",
+
+"Harga",
+
+"Subtotal"
+
 ];
 
-const rows: any[] = [];
 
-data.forEach((delivery: any, index: number) => {
-  delivery.items?.forEach((item: any) => {
-    rows.push([
-      index + 1,
-      new Date(delivery.deliveryDate).toLocaleDateString("id-ID"),
-      delivery.customer?.name ?? "-",
-      item.barang?.name ?? "-",
-      item.qty,
-      "Rp " + Number(item.subtotal ?? 0).toLocaleString("id-ID"),
-    ]);
-  });
+
+
+
+const rows:any[] = [];
+
+
+let nomor = 1;
+
+
+
+data.forEach((delivery:any)=>{
+
+
+delivery.items?.forEach((item:any)=>{
+
+
+rows.push([
+
+
+nomor++,
+
+
+new Date(
+delivery.deliveryDate
+)
+.toLocaleDateString("id-ID"),
+
+
+
+delivery.number ?? "-",
+
+
+
+delivery.customer?.name ?? "-",
+
+
+
+item.barang?.code ?? "-",
+
+
+
+item.barang?.name ?? "-",
+
+
+
+item.qty ?? 0,
+
+
+
+"Rp "+
+Number(
+item.price ?? 0
+)
+.toLocaleString("id-ID"),
+
+
+
+"Rp "+
+Number(
+item.subtotal ||
+(item.qty * item.price) ||
+0
+)
+.toLocaleString("id-ID")
+
+
+
+]);
+
+
+
 });
 
+
+
+});
+
+
+
+
+
+
 return (
+
 
 <div className="p-8">
 
 
+
 <h1 className="text-3xl font-bold mb-6">
+
 Laporan Barang Keluar
+
 </h1>
 
 
 
-<div className="bg-white rounded-xl shadow p-5 mb-6">
 
 
-<div className="flex gap-3 items-end">
+<div className="bg-white shadow rounded-xl p-5 mb-6">
+
+
+
+<div className="flex gap-4 items-end">
 
 
 <div>
 
 <label className="block text-sm">
+
 Tanggal Awal
+
 </label>
 
+
 <input
+
 type="date"
-className="border p-2 rounded"
+
+className="
+border
+p-2
+rounded
+"
+
 value={start}
-onChange={(e)=>setStart(e.target.value)}
+
+onChange={
+e=>setStart(e.target.value)
+}
+
 />
 
 </div>
+
 
 
 
 <div>
 
 <label className="block text-sm">
+
 Tanggal Akhir
+
 </label>
 
+
 <input
+
 type="date"
-className="border p-2 rounded"
+
+className="
+border
+p-2
+rounded
+"
+
 value={end}
-onChange={(e)=>setEnd(e.target.value)}
+
+onChange={
+e=>setEnd(e.target.value)
+}
+
 />
 
 </div>
+
 
 
 
 <button
+
 onClick={loadData}
-className="bg-blue-600 text-white px-4 py-2 rounded"
+
+className="
+bg-blue-600
+text-white
+px-5
+py-2
+rounded
+"
+
 >
+
 Filter
+
 </button>
 
 
 </div>
 
 
+
 </div>
+
+
+
+
 
 
 
@@ -166,31 +354,52 @@ Filter
 
 <div className="bg-white shadow rounded-xl p-5">
 
-<p>Total Transaksi</p>
+<p>
+Total Transaksi
+</p>
+
 
 <h2 className="text-2xl font-bold">
+
 {data.length}
+
 </h2>
+
 
 </div>
 
 
 
+
+
 <div className="bg-white shadow rounded-xl p-5">
 
-<p>Total Qty Keluar</p>
+
+<p>
+Total Qty Keluar
+</p>
+
 
 <h2 className="text-2xl font-bold">
+
 {totalQty}
+
 </h2>
+
 
 </div>
 
 
 
+
+
 <div className="bg-white shadow rounded-xl p-5">
 
-<p>Total Nominal</p>
+
+<p>
+Total Nominal
+</p>
+
 
 <h2 className="text-2xl font-bold">
 
@@ -198,10 +407,15 @@ Rp {totalNominal.toLocaleString("id-ID")}
 
 </h2>
 
+
 </div>
 
 
+
 </div>
+
+
+
 
 
 
@@ -210,40 +424,103 @@ Rp {totalNominal.toLocaleString("id-ID")}
 
 
 <button
-className="bg-red-600 text-white px-4 py-2 rounded"
-onClick={() =>
-  exportReportPdf(
-    "Laporan Barang Keluar",
-    columns,
-    rows
-  )
+
+onClick={()=>
+
+
+exportReportPdf(
+
+"Laporan Barang Keluar",
+
+columns,
+
+rows
+
+)
+
+
 }
+
+className="
+bg-red-600
+text-white
+px-5
+py-2
+rounded
+"
+
 >
+
 Export PDF
+
 </button>
 
 
 
+
+
 <button
-onClick={() =>
-  exportReportExcel(
-    "Laporan Barang Keluar",
-    columns,
-    rows
-  )
+
+onClick={()=>
+
+
+exportReportExcel(
+
+"Laporan Barang Keluar",
+
+columns,
+
+rows
+
+)
+
+
 }
+
+className="
+bg-green-600
+text-white
+px-5
+py-2
+rounded
+"
+
 >
+
 Export Excel
+
 </button>
+
+
 
 
 
 <button
-className="bg-gray-700 text-white px-4 py-2 rounded"
-onClick={()=>printTable("laporan-barang-keluar")}
+
+onClick={()=>
+
+
+printTable(
+"laporan-barang-keluar"
+)
+
+
+}
+
+className="
+bg-gray-700
+text-white
+px-5
+py-2
+rounded
+"
+
 >
+
 Print
+
 </button>
+
 
 
 </div>
@@ -252,122 +529,231 @@ Print
 
 
 
+
+
+
 <div
+
 id="laporan-barang-keluar"
-className="bg-white shadow rounded-xl overflow-hidden"
+
+className="
+bg-white
+shadow
+rounded-xl
+overflow-hidden
+"
+
 >
+
 
 
 <table className="w-full">
 
 
+
 <thead className="bg-gray-100">
+
 
 <tr>
 
-<th className="p-3 text-left">
+
+<th className="p-3">
 No
 </th>
 
-<th className="p-3 text-left">
+
+<th className="p-3">
 Tanggal
 </th>
 
-<th className="p-3 text-left">
+
+<th className="p-3">
+No Delivery
+</th>
+
+
+<th className="p-3">
 Customer
 </th>
 
-<th className="p-3 text-left">
+
+<th className="p-3">
+Kode
+</th>
+
+
+<th className="p-3">
 Barang
 </th>
+
 
 <th className="p-3 text-right">
 Qty
 </th>
 
+
+<th className="p-3 text-right">
+Harga
+</th>
+
+
 <th className="p-3 text-right">
 Subtotal
 </th>
 
+
 </tr>
 
+
 </thead>
+
 
 
 
 <tbody>
 
 
+
 {
+
 data.map((delivery:any,index:number)=>(
 
-delivery.items?.map((item:any)=>(
+
+delivery.items?.map((item:any)=>{
+
+
+const subtotal =
+Number(
+item.subtotal ||
+(item.qty * item.price) ||
+0
+);
+
+
+
+return (
+
+
 <tr
+
 key={item.id}
+
 className="border-t"
+
 >
 
 
+
 <td className="p-3">
+
 {index+1}
+
 </td>
+
+
 
 
 <td className="p-3">
 
 {
-new Date(delivery.deliveryDate)
+new Date(
+delivery.deliveryDate
+)
 .toLocaleDateString("id-ID")
 }
 
 </td>
 
 
+
+
 <td className="p-3">
 
-{
-delivery.customer?.name
-}
+{delivery.number}
 
 </td>
 
 
 
+
 <td className="p-3">
 
-{
-item.barang?.name
-}
+{delivery.customer?.name}
 
 </td>
+
+
+
+
+<td className="p-3">
+
+{item.barang?.code}
+
+</td>
+
+
+
+
+<td className="p-3">
+
+{item.barang?.name}
+
+</td>
+
 
 
 
 <td className="p-3 text-right">
 
-{
-item.qty
+{item.qty}
+
+</td>
+
+
+
+
+<td className="p-3 text-right">
+
+Rp {
+Number(
+item.price ?? 0
+)
+.toLocaleString("id-ID")
 }
 
 </td>
 
 
 
+
 <td className="p-3 text-right">
 
-Rp {item.subtotal?.toLocaleString("id-ID")}
+Rp {
+subtotal.toLocaleString("id-ID")
+}
 
 </td>
+
 
 
 </tr>
-))
+
+
+);
+
+
+})
+
 
 ))
+
+
 }
 
 
+
 </tbody>
+
 
 
 </table>
@@ -376,7 +762,10 @@ Rp {item.subtotal?.toLocaleString("id-ID")}
 </div>
 
 
+
+
 </div>
+
 
 );
 

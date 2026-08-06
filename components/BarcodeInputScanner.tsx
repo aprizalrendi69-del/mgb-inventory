@@ -1,81 +1,141 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Html5Qrcode } from "html5-qrcode";
+
+import {
+useEffect,
+useRef,
+useState
+} from "react";
+
+
+
+interface Props{
+
+onScan:(barcode:string)=>void;
+
+}
+
+
 
 export default function BarcodeInputScanner({
-  onScan,
-}: {
-  onScan: (barcode: string) => void;
-}) {
 
-  const scanner = useRef<Html5Qrcode | null>(null);
-  const scanned = useRef(false);
+onScan
 
-
-  useEffect(() => {
-
-    const id = "stock-camera";
-
-    const qr = new Html5Qrcode(id);
-
-    scanner.current = qr;
-
-
-    qr.start(
-      {
-        facingMode: "environment",
-      },
-      {
-        fps: 10,
-        qrbox: {
-          width: 280,
-          height: 150,
-        },
-      },
-      async (barcode)=>{
-
-        if(scanned.current) return;
-
-        scanned.current = true;
-
-        onScan(barcode);
-
-
-        setTimeout(()=>{
-
-          scanned.current=false;
-
-        },1500);
-
-      },
-      ()=>{}
-    )
-    .catch(console.error);
+}:Props){
 
 
 
-    return ()=>{
-
-      qr.stop()
-      .then(()=>qr.clear())
-      .catch(()=>{});
-
-    };
-
-
-  },[onScan]);
+const [value,setValue]=
+useState("");
 
 
 
-  return (
-    <div
-      id="stock-camera"
-      style={{
-        width:"100%",
-        maxWidth:400
-      }}
-    />
-  );
+const inputRef =
+useRef<HTMLInputElement|null>(null);
+
+
+
+useEffect(()=>{
+
+
+inputRef.current?.focus();
+
+
+
+},[]);
+
+
+
+
+function handleChange(
+e:React.ChangeEvent<HTMLInputElement>
+){
+
+
+const val =
+e.target.value;
+
+
+
+setValue(val);
+
+
+
+}
+
+
+
+function handleKey(
+e:React.KeyboardEvent<HTMLInputElement>
+){
+
+
+
+if(e.key==="Enter"){
+
+
+const code =
+value.trim();
+
+
+
+if(code){
+
+
+onScan(code);
+
+
+}
+
+
+
+setValue("");
+
+
+
+}
+
+
+
+}
+
+
+
+
+return (
+
+
+<input
+
+
+ref={inputRef}
+
+
+className="
+border
+p-3
+rounded
+w-full
+"
+
+
+placeholder="Scan barcode..."
+
+
+value={value}
+
+
+onChange={handleChange}
+
+
+onKeyDown={handleKey}
+
+
+/>
+
+
+
+);
+
 
 }

@@ -70,6 +70,12 @@ const menus = [
   },
 
   {
+  title: "Master Harga",
+  url: "/master-harga",
+  roles: ["ADMIN", "MANAGER", "PURCHASING"]
+},
+
+  {
     title: "Approval Purchase",
     url: "/purchase/approve",
     roles: ["ADMIN", "MANAGER"]

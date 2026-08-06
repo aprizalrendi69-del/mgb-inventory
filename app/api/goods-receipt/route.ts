@@ -89,12 +89,6 @@ export async function POST(req: NextRequest) {
     for(const item of items){
 
 
-      const poItem =
-      purchase.items.find(
-        x =>
-        x.barangId === Number(item.barangId)
-      );
-
 
       if(!poItem){
 
@@ -170,31 +164,42 @@ export async function POST(req: NextRequest) {
 
 
 
-      await tx.receiptItem.createMany({
+     
 
-        data:
+       await tx.receiptItem.createMany({
 
-        items.map((item:any)=>({
+  data:
 
-          receiptId:
-          receipt.id,
+  items.map((item:any)=>{
 
-          barangId:
-          Number(item.barangId),
+    const poItem =
+      purchase.items.find(
+        p => p.barangId === Number(item.barangId)
+      );
 
-          qty:
-          Number(item.qty),
+    return {
 
-          price:
-          Number(item.price),
+      receiptId:
+      receipt.id,
 
-          subtotal:
-          Number(item.qty) *
-          Number(item.price)
+      barangId:
+      Number(item.barangId),
 
-        }))
+      qty:
+      Number(item.qty),
 
-      });
+      price:
+      Number(item.price),
+
+      subtotal:
+      Number(item.qty) *
+      Number(item.price)
+
+    };
+
+  })
+
+});
 
 
 
@@ -204,18 +209,27 @@ export async function POST(req: NextRequest) {
 
       for(const item of items){
 
+  const barangId =
+  Number(item.barangId);
 
+  const qty =
+  Number(item.qty);
 
-        const barangId =
-        Number(item.barangId);
+  const price =
+  Number(item.price);
 
+  const poItem =
+  purchase.items.find(
+    p => p.barangId === barangId
+  );
 
-        const qty =
-        Number(item.qty);
+  if(!poItem){
 
+    throw new Error(
+      "Purchase Item tidak ditemukan"
+    );
 
-        const price =
-        Number(item.price);
+  }
 
 
 
@@ -240,7 +254,13 @@ export async function POST(req: NextRequest) {
 
         }
 
+const poItem = purchase.items.find(
+  (x) => x.barangId === barangId
+);
 
+if (!poItem) {
+  throw new Error("Purchase Item tidak ditemukan");
+}
 
 
 
@@ -446,7 +466,179 @@ export async function POST(req: NextRequest) {
 
         });
 
+// ====================================
+// SIMPAN MASTER HARGA
+// ====================================
 
+const hargaLama = barang.purchasePrice;
+const hargaBaru = price;
+
+const selisihHarga =
+  hargaBaru - hargaLama;
+
+const persenNaik =
+  hargaLama > 0
+    ? (selisihHarga / hargaLama) * 100
+    : 0;
+
+const qtyHistory =
+await tx.masterHarga.aggregate({
+
+  where:{
+    barangId
+  },
+
+  _sum:{
+    qty:true
+  }
+
+});
+
+const akumulasi =
+(qtyHistory._sum.qty ?? 0)
++
+qty;
+
+await tx.masterHarga.create({
+  data: {
+    barangId: barangId,
+
+    supplierId: purchase.supplierId,
+
+    purchaseId: purchase.id,
+
+    purchaseItemId: poItem.id,
+
+    poNumber: purchase.number,
+
+    hargaLama: hargaLama,
+
+    hargaBaru: hargaBaru,
+
+    selisihHarga: selisihHarga,
+
+    persenNaik: persenNaik,
+
+    qty: qty,
+
+    total: qty * hargaBaru,
+
+    akumulasi: akumulasi,
+
+    status: "RECEIVED",
+
+    receiveDate: receipt.receiptDate,
+
+    createdAt: new Date(),
+  },
+});
+
+// ====================================
+// UPDATE PRICE SUMMARY
+// ====================================
+
+const histories =
+await tx.masterHarga.findMany({
+
+  where:{
+    barangId
+  },
+
+  orderBy:{
+    receiveDate:"desc"
+  }
+
+});
+
+const hargaTerakhir =
+histories[0]?.hargaBaru ?? 0;
+
+const hargaTertinggi =
+Math.max(
+  ...histories.map(h=>h.hargaBaru)
+);
+
+const hargaTerendah =
+Math.min(
+  ...histories.map(h=>h.hargaBaru)
+);
+
+const totalQty =
+histories.reduce(
+  (a,b)=>a+b.qty,
+  0
+);
+
+const totalNilai =
+histories.reduce(
+  (a,b)=>a+b.total,
+  0
+);
+
+const hargaRata =
+totalQty===0
+?0
+:totalNilai/totalQty;
+
+await tx.priceSummary.upsert({
+
+  where:{
+    barangId
+  },
+
+  update:{
+
+    supplierId:
+    purchase.supplierId,
+
+    lastPrice:
+    hargaTerakhir,
+
+    highestPrice:
+    hargaTertinggi,
+
+    lowestPrice:
+    hargaTerendah,
+
+    averagePrice:
+    hargaRata,
+
+    lastReceiveDate:
+    receipt.receiptDate,
+
+    totalPurchase:
+    totalQty
+
+  },
+
+  create:{
+
+    barangId,
+
+    supplierId:
+    purchase.supplierId,
+
+    lastPrice:
+    hargaTerakhir,
+
+    highestPrice:
+    hargaTertinggi,
+
+    lowestPrice:
+    hargaTerendah,
+
+    averagePrice:
+    hargaRata,
+
+    lastReceiveDate:
+    receipt.receiptDate,
+
+    totalPurchase:
+    totalQty
+
+  }
+
+});
 
 
 

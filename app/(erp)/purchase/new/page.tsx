@@ -8,6 +8,7 @@ export default function NewPurchasePage() {
 
   const [supplier, setSupplier] = useState<any[]>([]);
   const [barang, setBarang] = useState<any[]>([]);
+  const [priceWarning, setPriceWarning] = useState<any>({});
 
   const [form, setForm] = useState({
     supplierId: "",
@@ -81,6 +82,118 @@ export default function NewPurchasePage() {
       items: arr,
     });
   }
+
+  async function loadLastPrice(
+  index:number,
+  barangId:string
+){
+
+async function checkPrice(
+  index:number,
+  barangId:string,
+  harga:number
+){
+
+  if(!barangId || harga <= 0){
+    return;
+  }
+
+
+  try{
+
+    const res =
+    await fetch(
+      `/api/master-harga/check/${barangId}/${harga}`
+    );
+
+
+    const json =
+    await res.json();
+
+
+    if(
+      json.success &&
+      json.data
+    ){
+
+      setPriceWarning(
+        (prev:any)=>({
+
+          ...prev,
+
+          [index]:
+          json.data
+
+        })
+      );
+
+    }
+
+
+  }
+  catch(error){
+
+    console.log(error);
+
+  }
+
+}
+
+  if(!barangId){
+    return;
+  }
+
+
+  try{
+
+    const res =
+    await fetch(
+      `/api/master-harga/latest/${barangId}`
+    );
+
+
+    const json =
+    await res.json();
+
+
+    if(
+      json.success &&
+      json.data
+    ){
+
+      const arr = [...form.items];
+
+
+      arr[index] = {
+
+        ...arr[index],
+
+        barangId,
+
+        price:
+        json.data.hargaTerakhir
+
+      };
+
+
+      setForm({
+
+        ...form,
+
+        items:arr
+
+      });
+
+    }
+
+
+  }catch(error){
+
+    console.log(error);
+
+  }
+
+}
 
   async function savePurchase() {
     const res = await fetch("/api/purchase", {
@@ -175,12 +288,15 @@ export default function NewPurchasePage() {
           >
 
             <select
-              className="border rounded p-2"
-              value={row.barangId}
-              onChange={(e) =>
-                updateItem(index, "barangId", e.target.value)
-              }
-            >
+  className="border rounded p-2"
+  value={row.barangId}
+  onChange={(e) =>
+    loadLastPrice(
+      index,
+      e.target.value
+    )
+  }
+>
 
               <option value="">
                 Barang
@@ -207,14 +323,31 @@ export default function NewPurchasePage() {
             />
 
             <input
-              type="number"
-              className="border rounded p-2"
-              placeholder="Harga"
-              value={row.price}
-              onChange={(e) =>
-                updateItem(index, "price", Number(e.target.value))
-              }
-            />
+  type="number"
+  className="border rounded p-2"
+  placeholder="Harga terakhir"
+  value={row.price}
+  onChange={(e)=>{
+
+    const value =
+    Number(e.target.value);
+
+
+    updateItem(
+      index,
+      "price",
+      value
+    );
+
+
+    checkPrice(
+      index,
+      row.barangId,
+      value
+    );
+
+  }}
+/>
 
             <button
               onClick={() => removeItem(index)}
@@ -244,7 +377,54 @@ export default function NewPurchasePage() {
         </button>
 
       </div>
+{priceWarning[index] && (
 
+  <div className="col-span-4 bg-yellow-100 text-yellow-800 p-3 rounded">
+
+    ⚠ Harga berubah dari{" "}
+
+    Rp{" "}
+    {priceWarning[index]
+      .hargaLama
+      .toLocaleString("id-ID")
+    }
+
+
+    {" "}menjadi{" "}
+
+    Rp{" "}
+    {priceWarning[index]
+      .hargaBaru
+      .toLocaleString("id-ID")
+    }
+
+
+    <br />
+
+
+    Perubahan:
+
+    {" "}
+    {priceWarning[index]
+      .persen
+      .toFixed(2)
+    }%
+
+
+    <br />
+
+
+    Supplier terakhir:
+
+    {" "}
+    {priceWarning[index]
+      .supplier
+    }
+
+
+  </div>
+
+)}
     </div>
   );
 }

@@ -5,429 +5,464 @@ import { prisma } from "@/lib/prisma";
 export async function PUT(
   req: NextRequest,
   {
-    params
+    params,
   }: {
-    params: Promise<{ id:string }>
+    params: Promise<{ id: string }>;
   }
 ) {
 
+  try {
 
-try {
 
+    const { id } = await params;
 
-const { id } = await params;
+    const purchaseId = Number(id);
 
 
-const purchaseId = Number(id);
+    const body = await req.json();
 
-const body = await req.json();
+    const receiveItems = body.items;
 
-const receiveItems = body.items;
 
-for(const item of receiveItems){
 
-const barang = await prisma.barang.findUnique({
-where:{
-id:item.barangId
-}
-});
+    if (!Array.isArray(receiveItems)) {
 
+      return NextResponse.json({
 
-if(barang?.hasExpired && !item.expiredDate){
+        success: false,
 
-return NextResponse.json({
+        message: "Item receive kosong"
 
-success:false,
+      }, {
+        status: 400
+      });
 
-message:
-`Barang ${barang.name} harus memiliki expired date`
+    }
 
-},{
-status:400
-});
 
-}
 
-}
+    // cek expired date
 
-if(!Array.isArray(receiveItems)){
+    for (const item of receiveItems) {
 
-return NextResponse.json({
 
-success:false,
+      const barang = await prisma.barang.findUnique({
 
-message:"Item receive kosong"
+        where: {
 
-},{
-status:400
-});
+          id: item.barangId
 
-}
+        }
 
-// ambil PO
+      });
 
-const purchase = await prisma.purchase.findUnique({
 
-where:{
-id:purchaseId
-},
 
-include:{
+      if (barang?.hasExpired && !item.expiredDate) {
 
 
-supplier:true,
+        return NextResponse.json({
 
+          success: false,
 
-items:{
+          message:
+            `Barang ${barang.name} harus memiliki expired date`
 
-include:{
+        }, {
+          status: 400
+        });
 
-barang:true
 
-}
+      }
 
-}
 
+    }
 
-}
 
-});
 
 
 
-if(!purchase){
+    // ambil PO
 
+    const purchase = await prisma.purchase.findUnique({
 
-return NextResponse.json({
+      where: {
 
-success:false,
+        id: purchaseId
 
-message:"Purchase tidak ditemukan"
+      },
 
-},{
-status:404
-});
+      include: {
 
+        supplier: true,
 
-}
+        items: {
 
+          include: {
 
+            barang: true
 
+          }
 
-if(purchase.status==="RECEIVED"){
+        }
 
+      }
 
-return NextResponse.json({
+    });
 
-success:false,
 
-message:"Purchase sudah diterima"
 
-},{
-status:400
-});
 
 
-}
+    if (!purchase) {
 
 
+      return NextResponse.json({
 
+        success: false,
 
+        message: "Purchase tidak ditemukan"
 
-// semua proses dalam transaction
+      }, {
+        status: 404
+      });
 
-const receipt = await prisma.$transaction(async(tx)=>{
 
+    }
 
 
-// buat header receipt
 
-const newReceipt = await tx.receipt.create({
 
-data:{
 
+    if (purchase.status === "RECEIVED") {
 
-number:"RC-"+Date.now(),
 
+      return NextResponse.json({
 
-receiptDate:new Date(),
+        success: false,
 
+        message: "Purchase sudah diterima"
 
-purchaseId:purchase.id,
+      }, {
+        status: 400
+      });
 
 
-supplierId:purchase.supplierId,
+    }
 
 
-remarks:
-"Receive Purchase "+purchase.number
 
 
-}
 
-});
 
 
+    const receipt = await prisma.$transaction(async (tx) => {
 
 
 
+      // HEADER RECEIPT
 
-// proses detail barang
+      const newReceipt = await tx.receipt.create({
 
-for(const item of receiveItems){
+        data: {
 
 
+          number:
+            "RC-" + Date.now(),
 
-// cek barang
 
-const barang = await tx.barang.findUnique({
+          receiptDate:
+            new Date(),
 
-where:{
 
-id:item.barangId
+          purchaseId:
+            purchase.id,
 
-}
 
-});
+          supplierId:
+            purchase.supplierId,
 
 
-if(!barang){
+          remarks:
+            "Receive Purchase " + purchase.number
 
-throw new Error(
-"Barang tidak ditemukan ID : "+item.barangId
-);
 
-}
+        }
 
+      });
 
 
 
 
-// ambil stock lama
 
-const stockBefore = barang.stock;
 
 
-// tambah stock
+      // DETAIL BARANG
 
-const updatedBarang = await tx.barang.update({
+      for (const item of receiveItems) {
 
-where:{
 
-id:item.barangId
 
-},
+        const barang = await tx.barang.findUnique({
 
-data:{
+          where: {
 
+            id: item.barangId
 
-stock:{
+          }
 
-increment:item.qty
+        });
 
-}
 
 
-}
 
+        if (!barang) {
 
-});
+          throw new Error(
+            "Barang tidak ditemukan ID : " + item.barangId
+          );
 
+        }
 
-// buat mutasi stock
 
-await tx.stockMutation.create({
 
-data:{
 
 
-barangId:item.barangId,
+        const stockBefore = barang.stock;
 
 
-type:"MASUK",
 
 
-qty:item.qty,
+        const updatedBarang = await tx.barang.update({
 
+          where: {
 
-stockBefore:stockBefore,
+            id: item.barangId
 
+          },
 
-stockAfter:
-updatedBarang.stock,
+          data: {
 
+            stock: {
 
-reference:
-"RC-"+purchase.number,
+              increment: Number(item.qty)
 
+            }
 
-description:
-"Receive Purchase "+purchase.number
+          }
 
+        });
 
-}
 
-});
 
 
 
 
+        // STOCK MUTATION
 
+        await tx.stockMutation.create({
 
+          data: {
 
-// simpan detail receipt
 
-await tx.receiptItem.create({
+            barangId:
+              item.barangId,
 
-data:{
 
+            type:
+              "MASUK",
 
-receiptId:newReceipt.id,
 
+            qty:
+              Number(item.qty),
 
-barangId:item.barangId,
 
+            stockBefore:
+              stockBefore,
 
-qty:item.qty,
 
+            stockAfter:
+              updatedBarang.stock,
 
-price:barang.purchasePrice ?? 0,
 
+            reference:
+              "RC-" + purchase.number,
 
-subtotal:
-item.qty *
-(barang.purchasePrice ?? 0)
 
+            description:
+              "Receive Purchase " + purchase.number
 
-}
 
-});
+          }
 
-// =======================
-// SIMPAN BATCH EXPIRED
-// =======================
+        });
 
-if(barang.hasExpired){
 
 
-if(!item.expiredDate){
 
-throw new Error(
-`Expired date wajib untuk ${barang.name}`
-);
 
-}
 
 
 
-await tx.batchStock.create({
+        // RECEIPT ITEM
 
-data:{
+        await tx.receiptItem.create({
 
+          data: {
 
-barangId:item.barangId,
 
+            receiptId:
+              newReceipt.id,
 
-batchNumber:
-"RC-"+purchase.number,
 
+            barangId:
+              item.barangId,
 
-expiredDate:
-new Date(item.expiredDate),
 
+            qty:
+              Number(item.qty),
 
-qty:
-Number(item.qty)
 
+            price:
+              barang.purchasePrice ?? 0,
 
-}
 
-});
+            subtotal:
+              Number(item.qty) *
+              (barang.purchasePrice ?? 0)
 
 
-}
+          }
 
+        });
 
-}
 
 
-}
 
-}
 
 
 
+        // BATCH EXPIRED
 
+        if (barang.hasExpired) {
 
-// update status PO
 
-await tx.purchase.update({
 
-where:{
+          await tx.batchStock.create({
 
-id:purchase.id
+            data: {
 
-},
 
-data:{
+              barangId:
+                item.barangId,
 
 
-status:"RECEIVED"
+              batchNumber:
+                "RC-" + purchase.number,
 
-}
 
-});
+              expiredDate:
+                new Date(item.expiredDate),
 
 
+              qty:
+                Number(item.qty)
 
 
+            }
 
-return newReceipt;
+          });
 
 
 
-});
+        }
 
 
 
 
+      }
 
 
-return NextResponse.json({
 
-success:true,
 
-message:"Barang berhasil diterima",
 
-data:receipt
 
 
-});
+      // UPDATE STATUS PURCHASE
 
+      await tx.purchase.update({
 
+        where: {
 
+          id: purchase.id
 
+        },
 
-}
-catch(error){
+        data: {
 
+          status:
+            "RECEIVED"
 
-console.log("RECEIVE ERROR :",error);
+        }
 
+      });
 
 
-return NextResponse.json({
 
-success:false,
 
-message:"Receive gagal"
+      return newReceipt;
 
-},{
-status:500
-});
 
 
-}
+    });
 
+
+
+
+
+
+
+
+    return NextResponse.json({
+
+      success: true,
+
+      message:
+        "Barang berhasil diterima",
+
+      data:
+        receipt
+
+
+    });
+
+
+
+
+
+
+  } catch (error) {
+
+
+    console.log(
+      "RECEIVE ERROR :",
+      error
+    );
+
+
+
+    return NextResponse.json({
+
+      success: false,
+
+      message:
+        "Receive gagal"
+
+    }, {
+      status: 500
+    });
+
+
+  }
 
 }

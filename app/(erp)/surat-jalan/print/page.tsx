@@ -3,167 +3,392 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-export default function PrintSuratJalan() {
+
+export default function PrintSuratJalan(){
+
   const searchParams = useSearchParams();
+
   const id = searchParams.get("id");
 
-  const [data, setData] = useState<any>(null);
+  const [data,setData] = useState<any>(null);
+  const [error,setError] = useState("");
 
-  useEffect(() => {
-    async function load() {
-      const res = await fetch(`/api/delivery-order/${id}`);
-      const json = await res.json();
 
-      if (json.success) {
+
+  useEffect(()=>{
+
+
+    if(!id){
+      setError("ID Surat Jalan tidak ditemukan");
+      return;
+    }
+
+
+    async function load(){
+
+
+      try{
+
+
+        const res =
+          await fetch(
+            `/api/delivery-order/${id}`
+          );
+
+
+        const json =
+          await res.json();
+
+
+
+        if(!json.success){
+
+          setError(
+            json.message ||
+            "Data tidak ditemukan"
+          );
+
+          return;
+
+        }
+
+
+
         setData(json.data);
 
-        setTimeout(() => {
+
+
+        setTimeout(()=>{
+
           window.print();
-        }, 500);
+
+        },700);
+
+
+
+      }catch(err){
+
+        console.error(err);
+
+        setError(
+          "Gagal mengambil data surat jalan"
+        );
+
       }
+
+
     }
 
-    if (id) {
-      load();
-    }
-  }, [id]);
 
-  if (!data) {
-    return <div className="p-10">Loading...</div>;
+    load();
+
+
+  },[id]);
+
+
+
+
+  if(error){
+
+    return (
+
+      <div className="p-10 text-red-600">
+
+        {error}
+
+      </div>
+
+    );
+
   }
 
-  const total = data.items.reduce(
-    (sum: number, item: any) => sum + Number(item.subtotal || 0),
-    0
-  );
+
+
+  if(!data){
+
+    return (
+
+      <div className="p-10">
+
+        Loading...
+
+      </div>
+
+    );
+
+  }
+
+
+
+  const total =
+    data.items?.reduce(
+      (
+        sum:number,
+        item:any
+      ) =>
+        sum +
+        Number(
+          item.subtotal ??
+          item.qty * item.price ??
+          0
+        ),
+      0
+    ) || 0;
+
+
 
   return (
-    <div className="max-w-5xl mx-auto bg-white p-10">
 
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold">
-          PT. MITRA GARAM BOGATAMA
-        </h1>
+<div className="max-w-5xl mx-auto bg-white p-10">
 
-        <h2 className="text-xl mt-2 font-semibold">
-          SURAT JALAN
-        </h2>
-      </div>
 
-      <div className="grid grid-cols-2 gap-5 mb-8">
+<div className="text-center mb-8">
 
-        <div>
-          <b>No Surat Jalan</b><br />
-          {data.suratJalan?.number}
-        </div>
+<h1 className="text-3xl font-bold">
+PT. MITRA GARAM BOGATAMA
+</h1>
 
-        <div>
-          <b>No Delivery</b><br />
-          {data.number}
-        </div>
+<h2 className="text-xl mt-2 font-semibold">
+SURAT JALAN
+</h2>
 
-        <div>
-          <b>Customer</b><br />
-          {data.customer?.name}
-        </div>
+</div>
 
-        <div>
-          <b>Tanggal</b><br />
-          {new Date(data.deliveryDate).toLocaleDateString("id-ID")}
-        </div>
 
-      </div>
 
-      <table className="w-full border border-collapse">
 
-        <thead>
+<div className="grid grid-cols-2 gap-5 mb-8">
 
-          <tr className="bg-gray-100">
 
-            <th className="border p-2">No</th>
-            <th className="border p-2">Kode</th>
-            <th className="border p-2">Barang</th>
-            <th className="border p-2">Satuan</th>
-            <th className="border p-2">Qty</th>
-            <th className="border p-2">Harga</th>
-            <th className="border p-2">Subtotal</th>
+<div>
+<b>No Surat Jalan</b>
+<br/>
+{data.suratJalan?.number || "-"}
+</div>
 
-          </tr>
 
-        </thead>
 
-        <tbody>
+<div>
+<b>No Delivery</b>
+<br/>
+{data.number}
+</div>
 
-          {data.items.map((item: any, index: number) => (
 
-            <tr key={item.id}>
 
-              <td className="border p-2 text-center">
-                {index + 1}
-              </td>
+<div>
+<b>Customer</b>
+<br/>
+{data.customer?.name}
+</div>
 
-              <td className="border p-2">
-                {item.barang?.code}
-              </td>
 
-              <td className="border p-2">
-                {item.barang?.name}
-              </td>
 
-              <td className="border p-2 text-center">
-                {item.barang?.unit}
-              </td>
+<div>
+<b>Tanggal</b>
+<br/>
+{
+new Date(
+data.deliveryDate
+)
+.toLocaleDateString("id-ID")
+}
+</div>
 
-              <td className="border p-2 text-center">
-                {item.qty}
-              </td>
 
-              <td className="border p-2 text-right">
-                Rp {Number(item.price).toLocaleString("id-ID")}
-              </td>
 
-              <td className="border p-2 text-right">
-                Rp {Number(item.subtotal).toLocaleString("id-ID")}
-              </td>
+</div>
 
-            </tr>
 
-          ))}
 
-        </tbody>
 
-      </table>
 
-      <div className="flex justify-end mt-8">
+<table className="w-full border-collapse border">
 
-        <div className="text-xl font-bold">
-          Total : Rp {total.toLocaleString("id-ID")}
-        </div>
 
-      </div>
+<thead>
 
-      <div className="grid grid-cols-3 text-center mt-24">
+<tr className="bg-gray-100">
 
-        <div>
-          Dibuat
-          <br /><br /><br /><br />
-          __________________
-        </div>
 
-        <div>
-          Gudang
-          <br /><br /><br /><br />
-          __________________
-        </div>
+<th className="border p-2">
+No
+</th>
 
-        <div>
-          Penerima
-          <br /><br /><br /><br />
-          __________________
-        </div>
+<th className="border p-2">
+Kode
+</th>
 
-      </div>
+<th className="border p-2">
+Barang
+</th>
 
-    </div>
+<th className="border p-2">
+Satuan
+</th>
+
+<th className="border p-2">
+Qty
+</th>
+
+<th className="border p-2">
+Harga
+</th>
+
+<th className="border p-2">
+Subtotal
+</th>
+
+
+</tr>
+
+</thead>
+
+
+
+<tbody>
+
+
+{
+data.items?.map(
+(item:any,index:number)=>(
+
+
+<tr key={item.id}>
+
+
+<td className="border p-2 text-center">
+{index+1}
+</td>
+
+
+<td className="border p-2">
+{item.barang?.code}
+</td>
+
+
+<td className="border p-2">
+{item.barang?.name}
+</td>
+
+
+<td className="border p-2 text-center">
+{item.barang?.unit}
+</td>
+
+
+<td className="border p-2 text-center">
+{item.qty}
+</td>
+
+
+<td className="border p-2 text-right">
+
+Rp {
+Number(
+item.price || 0
+)
+.toLocaleString("id-ID")
+}
+
+</td>
+
+
+
+<td className="border p-2 text-right">
+
+Rp {
+Number(
+item.subtotal || 0
+)
+.toLocaleString("id-ID")
+}
+
+</td>
+
+
+
+</tr>
+
+
+)
+
+)
+
+}
+
+
+</tbody>
+
+
+</table>
+
+
+
+
+
+<div className="flex justify-end mt-8">
+
+<div className="text-xl font-bold">
+
+Total :
+Rp {total.toLocaleString("id-ID")}
+
+</div>
+
+
+</div>
+
+
+
+
+
+<div className="grid grid-cols-3 text-center mt-24">
+
+
+<div>
+
+Dibuat
+
+<br/><br/><br/>
+
+__________________
+
+</div>
+
+
+
+<div>
+
+Gudang
+
+<br/><br/><br/>
+
+__________________
+
+</div>
+
+
+
+<div>
+
+Penerima
+
+<br/><br/><br/>
+
+__________________
+
+</div>
+
+
+
+</div>
+
+
+
+</div>
+
+
   );
+
 }
