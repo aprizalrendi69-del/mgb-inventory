@@ -15,75 +15,51 @@ export default function PrintSuratJalan(){
 
 
 
-  useEffect(()=>{
+  useEffect(() => {
+  if (!id) {
+    setError("ID Surat Jalan tidak ditemukan");
+    return;
+  }
 
+  console.log("PRINT ID =", id);
 
-    if(!id){
-      setError("ID Surat Jalan tidak ditemukan");
-      return;
-    }
+  const deliveryId = Number(id);
 
+  if (Number.isNaN(deliveryId)) {
+    setError(`ID Delivery tidak valid: ${id}`);
+    return;
+  }
 
-    async function load(){
+  async function load() {
+    try {
+      const res = await fetch(
+        `/api/delivery-order/${deliveryId}`
+      );
 
+      const json = await res.json();
 
-      try{
-
-
-        const res =
-          await fetch(
-            `/api/delivery-order/${id}`
-          );
-
-
-        const json =
-          await res.json();
-
-
-
-        if(!json.success){
-
-          setError(
-            json.message ||
-            "Data tidak ditemukan"
-          );
-
-          return;
-
-        }
-
-
-
-        setData(json.data);
-
-
-
-        setTimeout(()=>{
-
-          window.print();
-
-        },700);
-
-
-
-      }catch(err){
-
-        console.error(err);
-
+      if (!json.success) {
         setError(
-          "Gagal mengambil data surat jalan"
+          json.message || "Data tidak ditemukan"
         );
-
+        return;
       }
 
+      setData(json.data);
 
+      setTimeout(() => {
+        window.print();
+      }, 700);
+
+    } catch (err) {
+      console.error(err);
+      setError("Gagal mengambil data surat jalan");
     }
+  }
 
+  load();
 
-    load();
-
-
-  },[id]);
+}, [id]);
 
 
 
@@ -120,20 +96,20 @@ export default function PrintSuratJalan(){
 
 
 
-  const total =
-    data.items?.reduce(
-      (
-        sum:number,
-        item:any
-      ) =>
-        sum +
-        Number(
-          item.subtotal ??
-          item.qty * item.price ??
-          0
-        ),
-      0
-    ) || 0;
+  const total = (data.items ?? []).reduce(
+  (sum: number, item: any) => {
+    const qty = Number(item.qty ?? 0);
+    const price = Number(item.price ?? 0);
+
+    const subtotal =
+      item.subtotal != null
+        ? Number(item.subtotal)
+        : qty * price;
+
+    return sum + subtotal;
+  },
+  0
+);
 
 
 

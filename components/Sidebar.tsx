@@ -3,279 +3,371 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const menus = [
+type Role =
+  | "ADMIN"
+  | "MANAGER"
+  | "PURCHASING"
+  | "GUDANG";
+
+interface User {
+  id?: number;
+  username?: string;
+  fullname?: string;
+  role?: Role;
+}
+
+interface Menu {
+  title: string;
+  url?: string;
+  roles?: Role[];
+  header?: boolean;
+}
+
+const menus: Menu[] = [
+
+  // =========================
+  // UTAMA
+  // =========================
 
   {
     title: "Dashboard",
     url: "/dashboard",
-    roles: ["ADMIN", "MANAGER", "PURCHASING", "GUDANG"]
+    roles: ["ADMIN", "MANAGER", "PURCHASING", "GUDANG"],
   },
 
   {
     title: "Attendance",
     url: "/attendance",
-    roles: ["ADMIN", "MANAGER", "PURCHASING", "GUDANG"]
+    roles: ["ADMIN", "MANAGER", "PURCHASING", "GUDANG"],
   },
 
   {
     title: "Riwayat Absensi",
     url: "/attendance/history",
-    roles: ["ADMIN", "MANAGER", "PURCHASING", "GUDANG"]
+    roles: ["ADMIN", "MANAGER", "PURCHASING", "GUDANG"],
   },
+
+
+  // =========================
+  // MASTER DATA
+  // =========================
 
   {
     title: "MASTER DATA",
-    header: true
+    header: true,
   },
 
   {
     title: "Master Barang",
     url: "/master-barang",
-    roles: ["ADMIN", "PURCHASING"]
+    roles: ["ADMIN", "PURCHASING"],
   },
 
   {
     title: "Master Supplier",
     url: "/supplier",
-    roles: ["ADMIN", "PURCHASING"]
+    roles: ["ADMIN", "PURCHASING"],
   },
 
   {
     title: "Master Customer",
     url: "/customer",
-    roles: ["ADMIN"]
+    roles: ["ADMIN"],
   },
 
   {
     title: "Master User",
     url: "/master/user",
-    roles: ["ADMIN"]
+    roles: ["ADMIN"],
   },
 
   {
     title: "Master Karyawan",
     url: "/employee",
-    roles: ["ADMIN", "MANAGER"]
+    roles: ["ADMIN", "MANAGER"],
   },
+
+
+  // =========================
+  // PURCHASE
+  // =========================
 
   {
     title: "PURCHASE",
-    header: true
+    header: true,
   },
 
   {
     title: "Purchase Order",
     url: "/purchase",
-    roles: ["ADMIN", "PURCHASING"]
+    roles: ["ADMIN", "PURCHASING"],
   },
 
   {
-  title: "Master Harga",
-  url: "/master-harga",
-  roles: ["ADMIN", "MANAGER", "PURCHASING"]
-},
+    title: "Master Harga",
+    url: "/master-harga",
+    roles: ["ADMIN", "MANAGER", "PURCHASING"],
+  },
 
   {
     title: "Approval Purchase",
     url: "/purchase/approve",
-    roles: ["ADMIN", "MANAGER"]
+    roles: ["ADMIN", "MANAGER"],
   },
 
   {
     title: "Barang Masuk",
     url: "/barang-masuk",
-    roles: ["ADMIN", "GUDANG"]
+    roles: ["ADMIN", "GUDANG"],
   },
 
-  {
-    title: "Print Purchase",
-    url: "/purchase/print",
-    roles: ["ADMIN", "PURCHASING"]
-  },
+
+  // =========================
+  // GUDANG
+  // =========================
 
   {
     title: "GUDANG",
-    header: true
+    header: true,
   },
 
   {
-  title: "Kartu Stok",
-  url: "/gudang/stock-card",
-  roles: ["ADMIN", "GUDANG"]
-},
+    title: "Kartu Stok",
+    url: "/gudang/stock-card",
+    roles: ["ADMIN", "GUDANG"],
+  },
 
   {
     title: "Expired Barang",
     url: "/expired",
-    roles: ["ADMIN", "GUDANG"]
+    roles: ["ADMIN", "GUDANG"],
   },
 
   {
     title: "Barang Keluar",
     url: "/barang-keluar",
-    roles: ["ADMIN", "GUDANG"]
+    roles: ["ADMIN", "GUDANG"],
   },
 
   {
     title: "Stock Card",
     url: "/stock-card",
-    roles: ["ADMIN", "GUDANG"]
+    roles: ["ADMIN", "GUDANG"],
   },
 
   {
     title: "Mutasi Stock",
     url: "/mutasi-stock",
-    roles: ["ADMIN", "GUDANG"]
+    roles: ["ADMIN", "GUDANG"],
   },
 
-  // ===== MENU BARU =====
   {
     title: "Stock Opname",
     url: "/stock-opname",
-    roles: ["ADMIN", "GUDANG"]
+    roles: ["ADMIN", "GUDANG"],
   },
 
   {
     title: "Adjustment Stock",
     url: "/adjustment",
-    roles: ["ADMIN", "GUDANG"]
+    roles: ["ADMIN", "GUDANG"],
   },
 
   {
     title: "History Stock",
     url: "/history",
-    roles: ["ADMIN", "GUDANG"]
+    roles: ["ADMIN", "GUDANG"],
   },
+
+
+  // =========================
+  // PENJUALAN
+  // =========================
 
   {
     title: "PENJUALAN",
-    header: true
+    header: true,
   },
 
   {
     title: "Delivery Order",
     url: "/pengiriman",
-    roles: ["ADMIN"]
+    roles: ["ADMIN"],
   },
 
   {
     title: "Surat Jalan",
     url: "/surat-jalan",
-    roles: ["ADMIN", "GUDANG"]
+    roles: ["ADMIN", "GUDANG"],
   },
+
+
+  // =========================
+  // INVENTORY
+  // =========================
 
   {
     title: "INVENTORY",
-    header: true
+    header: true,
   },
 
   {
     title: "Inventory",
     url: "/inventory",
-    roles: ["ADMIN", "MANAGER", "GUDANG"]
+    roles: ["ADMIN", "MANAGER", "GUDANG"],
   },
+
+
+  // =========================
+  // LAPORAN
+  // =========================
 
   {
     title: "LAPORAN",
-    header: true
+    header: true,
   },
 
   {
     title: "Laporan Purchase",
     url: "/laporan/purchase",
-    roles: ["ADMIN", "MANAGER", "PURCHASING"]
+    roles: ["ADMIN", "MANAGER", "PURCHASING"],
   },
 
   {
     title: "Laporan Barang Masuk",
     url: "/laporan/barang-masuk",
-    roles: ["ADMIN", "MANAGER", "GUDANG"]
+    roles: ["ADMIN", "MANAGER", "GUDANG"],
   },
 
   {
     title: "Laporan Barang Keluar",
     url: "/laporan/barang-keluar",
-    roles: ["ADMIN", "MANAGER", "GUDANG"]
+    roles: ["ADMIN", "MANAGER", "GUDANG"],
   },
 
   {
     title: "Laporan Inventory",
     url: "/laporan/inventory",
-    roles: ["ADMIN", "MANAGER"]
+    roles: ["ADMIN", "MANAGER"],
   },
 
   {
     title: "Laporan Supplier",
     url: "/laporan/supplier",
-    roles: ["ADMIN", "MANAGER", "PURCHASING"]
+    roles: ["ADMIN", "MANAGER", "PURCHASING"],
   },
 
   {
     title: "Laporan Customer",
     url: "/laporan/customer",
-    roles: ["ADMIN", "MANAGER"]
+    roles: ["ADMIN", "MANAGER", "PURCHASING"],
   },
 
   {
     title: "Laporan Attendance",
     url: "/laporan/attendance",
-    roles: ["ADMIN", "MANAGER"]
+    roles: ["ADMIN", "MANAGER"],
   },
 
-   {
-  title: "Laporan Stock Opname",
-  url: "/laporan/stock-opname",
-  roles: ["ADMIN", "MANAGER", "GUDANG"]
-},
+  {
+    title: "Laporan Stock Opname",
+    url: "/laporan/stock-opname",
+    roles: ["ADMIN", "MANAGER", "GUDANG"],
+  },
+
+
+  // =========================
+  // SETTING
+  // =========================
 
   {
     title: "SETTING",
-    header: true
+    header: true,
   },
 
   {
-  title: "Pengaturan",
-  url: "/pengaturan",
-  roles: ["ADMIN"]
-}
+    title: "Pengaturan",
+    url: "/pengaturan",
+    roles: ["ADMIN"],
+  },
 
 ];
 
 export default function Sidebar({
-  user
+  user,
 }: {
-  user: any;
+  user: User | null;
 }) {
 
   const pathname = usePathname();
 
-  const allowedMenus = menus.filter(menu => {
+  const role = user?.role;
 
-    if (menu.header) return true;
+  /*
+   * Filter menu berdasarkan role.
+   */
+  const visibleMenus = menus.filter((menu) => {
 
-    return menu.roles?.includes(user?.role);
+    // Header diproses nanti.
+    if (menu.header) {
+      return true;
+    }
 
+    if (!menu.roles) {
+      return false;
+    }
+
+    return role
+      ? menu.roles.includes(role)
+      : false;
   });
+
+
+  /*
+   * Hapus header yang tidak mempunyai
+   * menu yang terlihat di bawahnya.
+   */
+  const allowedMenus = visibleMenus.filter(
+    (menu, index, array) => {
+
+      if (!menu.header) {
+        return true;
+      }
+
+      const nextMenu = array[index + 1];
+
+      if (!nextMenu) {
+        return false;
+      }
+
+      return !nextMenu.header;
+    }
+  );
+
 
   return (
 
     <aside
       className="
-      w-72
-      h-screen
-      bg-slate-900
-      text-white
-      overflow-y-auto
-      border-r
-      border-slate-700
+        w-72
+        h-screen
+        bg-slate-900
+        text-white
+        overflow-y-auto
+        border-r
+        border-slate-700
       "
     >
 
+      {/* ========================= */}
+      {/* HEADER */}
+      {/* ========================= */}
+
       <div
         className="
-        p-6
-        border-b
-        border-slate-700
+          p-6
+          border-b
+          border-slate-700
         "
       >
 
@@ -287,44 +379,72 @@ export default function Sidebar({
           ERP Inventory System
         </p>
 
-        <p className="text-xs mt-3 text-blue-400">
-          Login : {user?.fullname}
-          <br />
-          Role : {user?.role}
-        </p>
+        <div className="mt-3">
+
+          <p className="text-xs text-slate-400">
+            Login
+          </p>
+
+          <p className="text-sm text-blue-400 font-medium">
+            {user?.fullname || user?.username || "-"}
+          </p>
+
+          <p className="text-xs text-slate-400 mt-1">
+            Role
+          </p>
+
+          <p className="text-xs text-blue-400 font-semibold">
+            {user?.role || "-"}
+          </p>
+
+        </div>
 
       </div>
+
+
+      {/* ========================= */}
+      {/* MENU */}
+      {/* ========================= */}
 
       <nav className="p-4">
 
         {allowedMenus.map((menu, index) => {
 
+          /*
+           * HEADER
+           */
           if (menu.header) {
 
             return (
               <div
-                key={index}
+                key={`header-${index}`}
                 className="
-                text-xs
-                uppercase
-                text-slate-400
-                font-bold
-                mt-6
-                mb-3
+                  text-xs
+                  uppercase
+                  text-slate-400
+                  font-bold
+                  mt-6
+                  mb-3
                 "
               >
                 {menu.title}
               </div>
             );
-
           }
 
-          const active = pathname === menu.url;
+
+          /*
+           * ACTIVE MENU
+           */
+          const active =
+            pathname === menu.url ||
+            pathname.startsWith(`${menu.url}/`);
+
 
           return (
 
             <Link
-              key={index}
+              key={menu.url}
               href={menu.url!}
               className={`
                 block
@@ -333,9 +453,10 @@ export default function Sidebar({
                 py-3
                 mb-2
                 transition
+
                 ${
                   active
-                    ? "bg-blue-600"
+                    ? "bg-blue-600 text-white"
                     : "text-slate-200 hover:bg-slate-800"
                 }
               `}
@@ -350,7 +471,5 @@ export default function Sidebar({
       </nav>
 
     </aside>
-
   );
-
 }

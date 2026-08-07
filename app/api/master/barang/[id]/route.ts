@@ -27,20 +27,21 @@ export async function PUT(
   const body = await req.json();
 
   const data = await prisma.barang.update({
-    where: {
-      id: Number(id),
-    },
-    data: {
-      code: body.code,
-      barcode: body.barcode,
-      name: body.name,
-      category: body.category,
-      unit: body.unit,
-      minStock: Number(body.minStock),
-      purchasePrice: Number(body.purchasePrice),
-      sellingPrice: Number(body.sellingPrice),
-    },
-  });
+  where: {
+    id: Number(id),
+  },
+  data: {
+    code: body.code,
+    barcode: body.barcode,
+    name: body.name,
+    category: body.category,
+    unit: body.unit,
+    minimumStock: Number(body.minimumStock) || 0,
+    purchasePrice: Number(body.purchasePrice) || 0,
+    sellingPrice: Number(body.sellingPrice) || 0,
+    hasExpired: Boolean(body.hasExpired),
+  },
+});
 
   return NextResponse.json({
     success: true,

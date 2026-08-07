@@ -86,45 +86,30 @@ export async function POST(req: NextRequest) {
 
 
 
-    for(const item of items){
+    for (const item of items) {
 
+  const barangId = Number(item.barangId);
 
+  const poItem = purchase.items.find(
+    (p) => p.barangId === barangId
+  );
 
-      if(!poItem){
+  if (!poItem) {
+    throw new Error("Barang tidak ada dalam PO");
+  }
 
-        throw new Error(
-          "Barang tidak ada dalam PO"
-        );
+  const sisa =
+    poItem.qty - poItem.receivedQty;
 
-      }
+  if (Number(item.qty) > sisa) {
+    throw new Error("Qty melebihi sisa PO");
+  }
 
+  if (Number(item.qty) <= 0) {
+    throw new Error("Qty harus lebih dari 0");
+  }
 
-
-      const sisa =
-      poItem.qty - poItem.receivedQty;
-
-
-
-      if(Number(item.qty) > sisa){
-
-        throw new Error(
-          "Qty melebihi sisa PO"
-        );
-
-      }
-
-
-
-      if(Number(item.qty)<=0){
-
-        throw new Error(
-          "Qty harus lebih dari 0"
-        );
-
-      }
-
-
-    }
+}
 
 
 
@@ -253,10 +238,6 @@ export async function POST(req: NextRequest) {
           );
 
         }
-
-const poItem = purchase.items.find(
-  (x) => x.barangId === barangId
-);
 
 if (!poItem) {
   throw new Error("Purchase Item tidak ditemukan");

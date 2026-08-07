@@ -5,69 +5,67 @@ import { DeliveryStatus, HistoryType } from "@prisma/client";
 export async function GET() {
   try {
     const data = await prisma.delivery.findMany({
-      select:{
-        id:true,
-        number:true,
-        deliveryDate:true,
-        status:true,
-        totalQty:true,
-        remarks:true,
+      select: {
+        id: true,
+        number: true,
+        deliveryDate: true,
+        status: true,
+        totalQty: true,
+        remarks: true,
 
-        customer:{
-          select:{
-            id:true,
-            name:true,
-            address:true,
-          }
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+          },
         },
 
-        suratJalan:{
-          select:{
-            id:true,
-            number:true,
-          }
+        suratJalan: {
+          select: {
+            id: true,
+            number: true,
+          },
         },
 
-        items:{
-          select:{
-            id:true,
-            qty:true,
-            note:true,
+        items: {
+          select: {
+            id: true,
+            qty: true,
+            price: true,
+            subtotal: true,
+            note: true,
 
-            barang:{
-              select:{
-                id:true,
-                code:true,
-                name:true,
-              }
-            }
-          }
-        }
+            barang: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
+            },
+          },
+        },
       },
 
-      orderBy:{
-        deliveryDate:"desc",
+      orderBy: {
+        deliveryDate: "desc",
       },
     });
-
 
     return NextResponse.json({
-      success:true,
+      success: true,
       data,
     });
-
-
-  } catch(error){
-
+  } catch (error) {
     console.error(error);
 
     return NextResponse.json(
       {
-        success:false,
-        message:"Gagal mengambil Delivery Order",
+        success: false,
+        message: "Gagal mengambil Delivery Order",
       },
       {
-        status:500,
+        status: 500,
       }
     );
   }
@@ -143,6 +141,28 @@ export async function POST(req: NextRequest) {
       "-" +
       Date.now();
 
+    const deliveryItems = await Promise.all(
+      body.items.map(async (item: any) => {
+        const barangId = Number(item.barangId);
+
+        const summary = await prisma.priceSummary.findUnique({
+          where: {
+            barangId,
+          },
+        });
+
+        const harga = summary?.lastPrice ?? 0;
+
+        return {
+          barangId,
+          qty: Number(item.qty),
+          price: harga,
+          subtotal: harga * Number(item.qty),
+          note: item.note ?? null,
+        };
+      })
+    );
+
     const delivery = await prisma.delivery.create({
       data: {
         number,
@@ -152,11 +172,7 @@ export async function POST(req: NextRequest) {
         status: DeliveryStatus.DRAFT,
 
         items: {
-          create: body.items.map((item: any) => ({
-            barangId: Number(item.barangId),
-            qty: Number(item.qty),
-            note: item.note ?? null,
-          })),
+          create: deliveryItems,
         },
       },
 
