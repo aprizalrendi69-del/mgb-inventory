@@ -3,59 +3,44 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   req: NextRequest,
-  {
-    params,
-  }: {
+  context: {
     params: Promise<{
       id: string;
     }>;
   }
 ) {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
+
+    const deliveryId = Number(id);
+
+    if (!Number.isInteger(deliveryId)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "ID Delivery Order tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
     const delivery = await prisma.delivery.findUnique({
       where: {
-        id: Number(id),
+        id: deliveryId,
       },
 
-      select: {
-        id: true,
-        deliveryDate: true,
-        status: true,
-        remarks: true,
+      include: {
+        customer: true,
 
-        customer: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            address: true,
-            phone: true,
-          },
-        },
-
-        suratJalan: {
-          select: {
-            id: true,
-            number: true,
-            createdAt:true,
-          },
-        },
+        suratJalan: true,
 
         items: {
-          select: {
-            id: true,
-            qty: true,
-            price: true,
-            subtotal: true,
-
+          include: {
             barang: {
-              select: {
-                id: true,
-                code: true,
-                name: true,
-                unit: true,
+              include: {
+                priceSummary: true,
               },
             },
           },
@@ -63,37 +48,83 @@ export async function GET(
       },
     });
 
-
     if (!delivery) {
       return NextResponse.json(
         {
-          success:false,
-          message:"Delivery Order tidak ditemukan",
+          success: false,
+          message: "Delivery Order tidak ditemukan",
         },
         {
-          status:404,
+          status: 404,
         }
       );
     }
 
+    const items = delivery.items.map((item) => {
+      const qty = Number(item.qty ?? 0);
 
-    return NextResponse.json({
-      success:true,
-      data:delivery,
+      const deliveryPrice = Number(item.price ?? 0);
+
+      const summaryPrice = Number(
+        item.barang?.priceSummary?.lastPrice ?? 0
+      );
+
+      // Prioritas:
+      // 1. Harga yang sudah tersimpan di DeliveryItem
+      // 2. PriceSummary.lastPrice
+      const price =
+        deliveryPrice > 0
+          ? deliveryPrice
+          : summaryPrice;
+
+      const subtotal = qty * price;
+
+      return {
+        ...item,
+
+        price,
+
+        subtotal,
+
+        barang: {
+          ...item.barang,
+
+          priceSummary: undefined,
+        },
+      };
     });
 
+    const total = items.reduce(
+      (sum, item) => {
+        return sum + Number(item.subtotal ?? 0);
+      },
+      0
+    );
 
-  } catch(error){
+    return NextResponse.json({
+      success: true,
 
-    console.error(error);
+      data: {
+        ...delivery,
+
+        items,
+
+        total,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "GET DELIVERY ORDER DETAIL ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
-        success:false,
-        message:"Server Error",
+        success: false,
+        message: "Gagal mengambil Delivery Order",
       },
       {
-        status:500,
+        status: 500,
       }
     );
   }
