@@ -3,6 +3,32 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import {
+  LayoutDashboard,
+  CalendarCheck,
+  History,
+  Package,
+  Truck,
+  Users,
+  UserCog,
+  UserRound,
+  ShoppingCart,
+  Tag,
+  ClipboardCheck,
+  ArrowDownToLine,
+  Warehouse,
+  Boxes,
+  PackageMinus,
+  ArrowLeftRight,
+  ClipboardList,
+  SlidersHorizontal,
+  FileClock,
+  Send,
+  FileText,
+  Settings,
+  ChevronRight,
+} from "lucide-react";
+
 type Role =
   | "ADMIN"
   | "MANAGER"
@@ -21,36 +47,38 @@ interface Menu {
   url?: string;
   roles?: Role[];
   header?: boolean;
+  icon?: React.ElementType;
 }
 
 const menus: Menu[] = [
-
-  // =========================
+  // =====================================================
   // UTAMA
-  // =========================
+  // =====================================================
 
   {
     title: "Dashboard",
     url: "/dashboard",
     roles: ["ADMIN", "MANAGER", "PURCHASING", "GUDANG"],
+    icon: LayoutDashboard,
   },
 
   {
     title: "Attendance",
     url: "/attendance",
     roles: ["ADMIN", "MANAGER", "PURCHASING", "GUDANG"],
+    icon: CalendarCheck,
   },
 
   {
     title: "Riwayat Absensi",
     url: "/attendance/history",
     roles: ["ADMIN", "MANAGER", "PURCHASING", "GUDANG"],
+    icon: History,
   },
 
-
-  // =========================
+  // =====================================================
   // MASTER DATA
-  // =========================
+  // =====================================================
 
   {
     title: "MASTER DATA",
@@ -61,36 +89,40 @@ const menus: Menu[] = [
     title: "Master Barang",
     url: "/master-barang",
     roles: ["ADMIN", "PURCHASING"],
+    icon: Package,
   },
 
   {
     title: "Master Supplier",
     url: "/supplier",
     roles: ["ADMIN", "PURCHASING"],
+    icon: Truck,
   },
 
   {
     title: "Master Customer",
     url: "/customer",
     roles: ["ADMIN"],
+    icon: Users,
   },
 
   {
     title: "Master User",
     url: "/master/user",
     roles: ["ADMIN"],
+    icon: UserCog,
   },
 
   {
     title: "Master Karyawan",
     url: "/employee",
     roles: ["ADMIN", "MANAGER"],
+    icon: UserRound,
   },
 
-
-  // =========================
+  // =====================================================
   // PURCHASE
-  // =========================
+  // =====================================================
 
   {
     title: "PURCHASE",
@@ -101,30 +133,33 @@ const menus: Menu[] = [
     title: "Purchase Order",
     url: "/purchase",
     roles: ["ADMIN", "PURCHASING"],
+    icon: ShoppingCart,
   },
 
   {
     title: "Master Harga",
     url: "/master-harga",
     roles: ["ADMIN", "MANAGER", "PURCHASING"],
+    icon: Tag,
   },
 
   {
     title: "Approval Purchase",
     url: "/purchase/approve",
     roles: ["ADMIN", "MANAGER"],
+    icon: ClipboardCheck,
   },
 
   {
     title: "Barang Masuk",
     url: "/barang-masuk",
     roles: ["ADMIN", "GUDANG"],
+    icon: ArrowDownToLine,
   },
 
-
-  // =========================
+  // =====================================================
   // GUDANG
-  // =========================
+  // =====================================================
 
   {
     title: "GUDANG",
@@ -135,54 +170,61 @@ const menus: Menu[] = [
     title: "Kartu Stok",
     url: "/gudang/stock-card",
     roles: ["ADMIN", "GUDANG"],
+    icon: Warehouse,
   },
 
   {
     title: "Expired Barang",
     url: "/expired",
     roles: ["ADMIN", "GUDANG"],
+    icon: Package,
   },
 
   {
     title: "Barang Keluar",
     url: "/barang-keluar",
     roles: ["ADMIN", "GUDANG"],
+    icon: PackageMinus,
   },
 
   {
     title: "Stock Card",
     url: "/stock-card",
     roles: ["ADMIN", "GUDANG"],
+    icon: Boxes,
   },
 
   {
     title: "Mutasi Stock",
     url: "/mutasi-stock",
     roles: ["ADMIN", "GUDANG"],
+    icon: ArrowLeftRight,
   },
 
   {
     title: "Stock Opname",
     url: "/stock-opname",
     roles: ["ADMIN", "GUDANG"],
+    icon: ClipboardList,
   },
 
   {
     title: "Adjustment Stock",
     url: "/adjustment",
     roles: ["ADMIN", "GUDANG"],
+    icon: SlidersHorizontal,
   },
 
   {
     title: "History Stock",
     url: "/history",
     roles: ["ADMIN", "GUDANG"],
+    icon: FileClock,
   },
 
-
-  // =========================
+  // =====================================================
   // PENJUALAN
-  // =========================
+  // =====================================================
 
   {
     title: "PENJUALAN",
@@ -193,18 +235,19 @@ const menus: Menu[] = [
     title: "Delivery Order",
     url: "/pengiriman",
     roles: ["ADMIN"],
+    icon: Send,
   },
 
   {
     title: "Surat Jalan",
     url: "/surat-jalan",
     roles: ["ADMIN", "GUDANG"],
+    icon: FileText,
   },
 
-
-  // =========================
+  // =====================================================
   // INVENTORY
-  // =========================
+  // =====================================================
 
   {
     title: "INVENTORY",
@@ -215,12 +258,12 @@ const menus: Menu[] = [
     title: "Inventory",
     url: "/inventory",
     roles: ["ADMIN", "MANAGER", "GUDANG"],
+    icon: Boxes,
   },
 
-
-  // =========================
+  // =====================================================
   // LAPORAN
-  // =========================
+  // =====================================================
 
   {
     title: "LAPORAN",
@@ -231,54 +274,61 @@ const menus: Menu[] = [
     title: "Laporan Purchase",
     url: "/laporan/purchase",
     roles: ["ADMIN", "MANAGER", "PURCHASING"],
+    icon: FileText,
   },
 
   {
     title: "Laporan Barang Masuk",
     url: "/laporan/barang-masuk",
     roles: ["ADMIN", "MANAGER", "GUDANG"],
+    icon: FileText,
   },
 
   {
     title: "Laporan Barang Keluar",
     url: "/laporan/barang-keluar",
     roles: ["ADMIN", "MANAGER", "GUDANG"],
+    icon: FileText,
   },
 
   {
     title: "Laporan Inventory",
     url: "/laporan/inventory",
     roles: ["ADMIN", "MANAGER"],
+    icon: FileText,
   },
 
   {
     title: "Laporan Supplier",
     url: "/laporan/supplier",
     roles: ["ADMIN", "MANAGER", "PURCHASING"],
+    icon: FileText,
   },
 
   {
     title: "Laporan Customer",
     url: "/laporan/customer",
     roles: ["ADMIN", "MANAGER", "PURCHASING"],
+    icon: FileText,
   },
 
   {
     title: "Laporan Attendance",
     url: "/laporan/attendance",
     roles: ["ADMIN", "MANAGER"],
+    icon: FileText,
   },
 
   {
     title: "Laporan Stock Opname",
     url: "/laporan/stock-opname",
     roles: ["ADMIN", "MANAGER", "GUDANG"],
+    icon: FileText,
   },
 
-
-  // =========================
+  // =====================================================
   // SETTING
-  // =========================
+  // =====================================================
 
   {
     title: "SETTING",
@@ -289,8 +339,8 @@ const menus: Menu[] = [
     title: "Pengaturan",
     url: "/pengaturan",
     roles: ["ADMIN"],
+    icon: Settings,
   },
-
 ];
 
 export default function Sidebar({
@@ -298,17 +348,15 @@ export default function Sidebar({
 }: {
   user: User | null;
 }) {
-
   const pathname = usePathname();
 
   const role = user?.role;
 
-  /*
-   * Filter menu berdasarkan role.
-   */
-  const visibleMenus = menus.filter((menu) => {
+  // =====================================================
+  // FILTER MENU
+  // =====================================================
 
-    // Header diproses nanti.
+  const visibleMenus = menus.filter((menu) => {
     if (menu.header) {
       return true;
     }
@@ -322,14 +370,12 @@ export default function Sidebar({
       : false;
   });
 
+  // =====================================================
+  // HAPUS HEADER KOSONG
+  // =====================================================
 
-  /*
-   * Hapus header yang tidak mempunyai
-   * menu yang terlihat di bawahnya.
-   */
   const allowedMenus = visibleMenus.filter(
     (menu, index, array) => {
-
       if (!menu.header) {
         return true;
       }
@@ -344,87 +390,233 @@ export default function Sidebar({
     }
   );
 
+  // =====================================================
+  // USER
+  // =====================================================
+
+  const displayName =
+    user?.fullname ||
+    user?.username ||
+    "User";
+
+  const initials = displayName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word.charAt(0))
+    .join("")
+    .toUpperCase();
+
+  // =====================================================
+  // RENDER
+  // =====================================================
 
   return (
-
     <aside
       className="
-        w-72
+        sticky
+        top-0
+        flex
         h-screen
-        bg-slate-900
-        text-white
-        overflow-y-auto
+        w-[280px]
+        shrink-0
+        flex-col
+        overflow-hidden
         border-r
-        border-slate-700
+        border-[#668A7C]
+        bg-[#527A6B]
+        text-white
+        shadow-[4px_0_20px_rgba(48,78,67,0.12)]
       "
     >
 
-      {/* ========================= */}
-      {/* HEADER */}
-      {/* ========================= */}
+      {/* =================================================
+          BRAND
+      ================================================= */}
 
       <div
         className="
-          p-6
+          shrink-0
           border-b
-          border-slate-700
+          border-[#668A7C]
+          px-6
+          pb-5
+          pt-6
         "
       >
+        <div className="flex items-start gap-3">
 
-        <h1 className="text-xl font-bold">
-          PT. MITRA GARAM BOGATAMA
-        </h1>
+          {/* LOGO */}
 
-        <p className="text-sm text-slate-400 mt-2">
-          ERP Inventory System
-        </p>
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-[#6F9384]
+              shadow-[0_5px_14px_rgba(42,69,59,0.18)]
+            "
+          >
+            <Package
+              size={19}
+              strokeWidth={1.9}
+              className="text-white"
+            />
+          </div>
 
-        <div className="mt-3">
+          {/* COMPANY */}
 
-          <p className="text-xs text-slate-400">
-            Login
-          </p>
+          <div className="min-w-0 pt-0.5">
+            <h1
+              className="
+                text-[25px]
+                font-bold
+                leading-[1.35]
+                tracking-[-0.015em]
+                text-white
+              "
+            >
+              PT. MITRA GARAM
+              <br />
+              BOGATAMA
+            </h1>
 
-          <p className="text-sm text-blue-400 font-medium">
-            {user?.fullname || user?.username || "-"}
-          </p>
-
-          <p className="text-xs text-slate-400 mt-1">
-            Role
-          </p>
-
-          <p className="text-xs text-blue-400 font-semibold">
-            {user?.role || "-"}
-          </p>
+            <p
+              className="
+                mt-1.5
+                text-[9px]
+                font-semibold
+                uppercase
+                tracking-[0.13em]
+                text-[#D5E3DD]
+              "
+            >
+              ERP Inventory System
+            </p>
+          </div>
 
         </div>
 
+        {/* USER CARD */}
+
+        <div
+          className="
+            mt-5
+            rounded-xl
+            border
+            border-[#668A7C]
+            bg-[#486D60]
+            px-3
+            py-3
+          "
+        >
+          <div className="flex items-center gap-3">
+
+            {/* AVATAR */}
+
+            <div
+              className="
+                flex
+                h-9
+                w-9
+                shrink-0
+                items-center
+                justify-center
+                rounded-full
+                bg-[#719789]
+                text-[11px]
+                font-bold
+                text-white
+              "
+            >
+              {initials || "U"}
+            </div>
+
+            {/* USER DETAIL */}
+
+            <div className="min-w-0 flex-1">
+              <p
+                className="
+                  truncate
+                  text-[12px]
+                  font-bold
+                  leading-4
+                  text-white
+                "
+              >
+                {displayName}
+              </p>
+
+              <p
+                className="
+                  mt-0.5
+                  text-[9px]
+                  font-semibold
+                  uppercase
+                  tracking-[0.06em]
+                  text-[#C9DCD4]
+                "
+              >
+                {user?.role || "USER"}
+              </p>
+            </div>
+
+            {/* ONLINE */}
+
+            <span
+              className="
+                h-1.5
+                w-1.5
+                shrink-0
+                rounded-full
+                bg-[#B7D3C5]
+                shadow-[0_0_6px_rgba(183,211,197,0.4)]
+              "
+            />
+
+          </div>
+        </div>
       </div>
 
+      {/* =================================================
+          NAVIGATION
+      ================================================= */}
 
-      {/* ========================= */}
-      {/* MENU */}
-      {/* ========================= */}
+      <nav
+        className="
+          flex-1
+          overflow-y-auto
+          px-4
+          py-4
 
-      <nav className="p-4">
-
+          [&::-webkit-scrollbar]:w-1.5
+          [&::-webkit-scrollbar-track]:bg-transparent
+          [&::-webkit-scrollbar-thumb]:rounded-full
+          [&::-webkit-scrollbar-thumb]:bg-[#6A8D80]
+        "
+      >
         {allowedMenus.map((menu, index) => {
 
-          /*
-           * HEADER
-           */
-          if (menu.header) {
+          // SECTION HEADER
 
+          if (menu.header) {
             return (
               <div
                 key={`header-${index}`}
                 className="
-                  text-xs
-                  uppercase
-                  text-slate-400
+                  mb-2
+                  mt-5
+                  px-3
+                  pt-1
+                  text-[10px]
                   font-bold
-                  mt-6
-                  mb-3
+                  uppercase
+                  tracking-[0.16em]
+                  text-[#CFE0D8]
                 "
               >
                 {menu.title}
@@ -432,43 +624,202 @@ export default function Sidebar({
             );
           }
 
+          // ACTIVE
 
-          /*
-           * ACTIVE MENU
-           */
           const active =
             pathname === menu.url ||
             pathname.startsWith(`${menu.url}/`);
 
+          const Icon =
+            menu.icon || Package;
 
           return (
-
             <Link
               key={menu.url}
               href={menu.url!}
               className={`
-                block
-                rounded-lg
-                px-4
-                py-3
-                mb-2
-                transition
+                group
+                relative
+                mb-1
+                flex
+                h-[42px]
+                items-center
+                rounded-[10px]
+                px-3
+                transition-all
+                duration-150
 
                 ${
                   active
-                    ? "bg-blue-600 text-white"
-                    : "text-slate-200 hover:bg-slate-800"
+                    ? `
+                      bg-[#6F9384]
+                      text-white
+                      shadow-[0_5px_14px_rgba(42,69,59,0.15)]
+                    `
+                    : `
+                      text-[#DFEAE5]
+                      hover:bg-[#486D60]
+                      hover:text-white
+                    `
                 }
               `}
             >
-              {menu.title}
+
+              {/* ACTIVE BAR */}
+
+              {active && (
+                <span
+                  className="
+                    absolute
+                    left-0
+                    top-1/2
+                    h-5
+                    w-[3px]
+                    -translate-y-1/2
+                    rounded-r-full
+                    bg-[#E4EFEA]
+                  "
+                />
+              )}
+
+              {/* ICON */}
+
+              <span
+                className={`
+                  flex
+                  h-7
+                  w-7
+                  shrink-0
+                  items-center
+                  justify-center
+                  rounded-lg
+
+                  ${
+                    active
+                      ? "text-white"
+                      : "text-[#C2D7CE] group-hover:text-white"
+                  }
+                `}
+              >
+                <Icon
+                  size={17}
+                  strokeWidth={1.8}
+                />
+              </span>
+
+              {/* TEXT */}
+
+              <span
+                className={`
+                  ml-2.5
+                  truncate
+                  text-[12px]
+                  leading-none
+
+                  ${
+                    active
+                      ? "font-bold text-white"
+                      : "font-semibold text-inherit"
+                  }
+                `}
+              >
+                {menu.title}
+              </span>
+
+              {/* ACTIVE ARROW */}
+
+              {active && (
+                <ChevronRight
+                  size={14}
+                  strokeWidth={1.9}
+                  className="
+                    ml-auto
+                    text-white/70
+                  "
+                />
+              )}
+
             </Link>
-
           );
-
         })}
-
       </nav>
+
+      {/* =================================================
+          FOOTER
+      ================================================= */}
+
+      <div
+        className="
+          shrink-0
+          border-t
+          border-[#668A7C]
+          px-5
+          py-4
+        "
+      >
+        <div className="flex items-center justify-between">
+
+          <div>
+            <p
+              className="
+                text-[9px]
+                font-bold
+                uppercase
+                tracking-[0.16em]
+                text-[#CFE0D8]
+              "
+            >
+              MGB ERP
+            </p>
+
+            <p
+              className="
+                mt-1
+                text-[9px]
+                font-medium
+                text-[#B9CEC5]
+              "
+            >
+              Enterprise Management
+            </p>
+          </div>
+
+          <div
+            className="
+              flex
+              items-center
+              gap-1.5
+              rounded-full
+              border
+              border-[#668A7C]
+              bg-[#486D60]
+              px-2.5
+              py-1.5
+            "
+          >
+            <span
+              className="
+                h-1.5
+                w-1.5
+                rounded-full
+                bg-[#B7D3C5]
+              "
+            />
+
+            <span
+              className="
+                text-[8px]
+                font-bold
+                tracking-wide
+                text-[#DCE9E4]
+              "
+            >
+              ONLINE
+            </span>
+          </div>
+
+        </div>
+      </div>
 
     </aside>
   );

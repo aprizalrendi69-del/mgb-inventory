@@ -81,7 +81,7 @@ export default function ERPLayout({
         <div className="p-6">
 
 
-          <Header user={user}/>
+          <Header />
 
 
           {children}

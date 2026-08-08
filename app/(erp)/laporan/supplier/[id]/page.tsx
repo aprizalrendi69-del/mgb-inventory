@@ -4,12 +4,22 @@ import { useEffect, useMemo, useState } from "react";
 import { exportSupplierExcel } from "@/lib/exportSupplierExcel";
 import { exportSupplierPdf } from "@/lib/exportSupplierPdf";
 
+type Supplier = {
+  id: number;
+  code?: string;
+  name: string;
+  city?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+};
+
 export default function DetailSupplierPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const [supplier, setSupplier] = useState<any>(null);
+  const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [purchases, setPurchases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -17,30 +27,47 @@ export default function DetailSupplierPage({
   const [to, setTo] = useState("");
 
   async function loadData() {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const { id } = await params;
+      const { id } = await params;
 
-    let url = `/api/laporan/supplier/${id}`;
+      let url = `/api/laporan/supplier/${id}`;
 
-    const query = [];
+      const query: string[] = [];
 
-    if (from) query.push(`from=${from}`);
-    if (to) query.push(`to=${to}`);
+      if (from) {
+        query.push(`from=${encodeURIComponent(from)}`);
+      }
 
-    if (query.length > 0) {
-      url += "?" + query.join("&");
+      if (to) {
+        query.push(`to=${encodeURIComponent(to)}`);
+      }
+
+      if (query.length > 0) {
+        url += "?" + query.join("&");
+      }
+
+      const res = await fetch(url, {
+        cache: "no-store",
+      });
+
+      const json = await res.json();
+
+      if (json.success) {
+        setSupplier(json.supplier);
+        setPurchases(json.purchases || []);
+      } else {
+        setSupplier(null);
+        setPurchases([]);
+      }
+    } catch (error) {
+      console.error("DETAIL SUPPLIER ERROR:", error);
+      setSupplier(null);
+      setPurchases([]);
+    } finally {
+      setLoading(false);
     }
-
-    const res = await fetch(url);
-    const json = await res.json();
-
-    if (json.success) {
-      setSupplier(json.supplier);
-      setPurchases(json.purchases);
-    }
-
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -53,11 +80,13 @@ export default function DetailSupplierPage({
     let grandTotal = 0;
 
     purchases.forEach((po: any) => {
-      grandTotal += po.total;
+      grandTotal += Number(po.total || 0);
 
-      po.items.forEach((item: any) => {
-        totalQty += item.qty;
-      });
+      if (Array.isArray(po.items)) {
+        po.items.forEach((item: any) => {
+          totalQty += Number(item.qty || 0);
+        });
+      }
     });
 
     return {
@@ -68,360 +97,464 @@ export default function DetailSupplierPage({
   }, [purchases]);
 
   if (loading) {
-    return <div className="p-8">Loading...</div>;
+    return (
+      <div className="min-h-screen bg-slate-50 p-6">
+        <div className="mx-auto max-w-7xl">
+          <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
+            <div className="text-lg font-semibold text-slate-700">
+              Loading...
+            </div>
+
+            <div className="mt-2 text-sm text-slate-500">
+              Memuat detail supplier
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!supplier) {
-    return <div className="p-8">Supplier tidak ditemukan.</div>;
+    return (
+      <div className="min-h-screen bg-slate-50 p-6">
+        <div className="mx-auto max-w-7xl">
+          <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
+            <div className="text-lg font-semibold text-slate-700">
+              Supplier tidak ditemukan
+            </div>
+
+            <a
+              href="/laporan/supplier"
+              className="mt-5 inline-block rounded-lg bg-[#497F70] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#3d6d60]"
+            >
+              Kembali
+            </a>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="p-8">
+    <div className="min-h-screen bg-slate-50 p-6">
+      <div className="mx-auto max-w-7xl">
 
-      <div className="flex justify-between items-center mb-6">
+        {/* HEADER */}
 
-        <div>
-
-          <h1 className="text-3xl font-bold">
-            {supplier.name}
-          </h1>
-
-          <p className="text-gray-500">
-            {supplier.city}
-          </p>
-
-        </div>
-
-        <a
-          href="/laporan/supplier"
-          className="bg-gray-600 text-white px-4 py-2 rounded"
-        >
-          Kembali
-        </a>
-
-      </div>
-            <div className="bg-white rounded-xl shadow p-5 mb-6">
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
+            <h1 className="text-3xl font-bold text-slate-800">
+              {supplier.name}
+            </h1>
 
-            <label className="block mb-1 font-semibold">
-              Dari Tanggal
-            </label>
+            <div className="mt-1 flex flex-wrap gap-2 text-sm text-slate-500">
+              {supplier.code && (
+                <span>
+                  {supplier.code}
+                </span>
+              )}
 
-            <input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="border rounded-lg p-2 w-full"
-            />
-
+              {supplier.city && (
+                <>
+                  <span>•</span>
+                  <span>
+                    {supplier.city}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
 
-          <div>
+          <a
+            href="/laporan/supplier"
+            className="rounded-lg bg-slate-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Kembali
+          </a>
+        </div>
 
-            <label className="block mb-1 font-semibold">
-              Sampai Tanggal
-            </label>
+        {/* SUPPLIER INFO */}
 
-            <input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="border rounded-lg p-2 w-full"
-            />
+        <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Supplier
+              </div>
+
+              <div className="mt-1 font-semibold text-slate-700">
+                {supplier.name}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Kota
+              </div>
+
+              <div className="mt-1 font-semibold text-slate-700">
+                {supplier.city || "-"}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Telepon
+              </div>
+
+              <div className="mt-1 font-semibold text-slate-700">
+                {supplier.phone || "-"}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Email
+              </div>
+
+              <div className="mt-1 break-all font-semibold text-slate-700">
+                {supplier.email || "-"}
+              </div>
+            </div>
 
           </div>
+        </div>
 
-          <div className="flex items-end">
+        {/* FILTER */}
 
-            <button
-              onClick={loadData}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg"
-            >
-              Filter
-            </button>
+        <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-bold text-slate-800">
+              Filter Laporan
+            </h2>
 
+            <p className="text-sm text-slate-500">
+              Pilih periode transaksi supplier
+            </p>
           </div>
 
-          <div className="flex items-end justify-end gap-2">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 
-            <button
-              onClick={() => window.print()}
-              className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-lg"
-            >
-              Print
-            </button>
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                Dari Tanggal
+              </label>
 
-            <button
-  onClick={() =>
-    exportSupplierExcel(
-      supplier,
-      purchases
-    )
-  }
-  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg"
->
-  Export Excel
-</button>
+              <input
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-white p-2.5 text-sm outline-none focus:border-[#497F70]"
+              />
+            </div>
 
-            <button
-  onClick={() =>
-    exportSupplierPdf(
-      supplier,
-      purchases
-    )
-  }
-  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg"
->
-  Export PDF
-</button>
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                Sampai Tanggal
+              </label>
 
+              <input
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-white p-2.5 text-sm outline-none focus:border-[#497F70]"
+              />
+            </div>
+
+            <div className="flex items-end">
+              <button
+                onClick={loadData}
+                className="w-full rounded-lg bg-[#497F70] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#3d6d60]"
+              >
+                Filter
+              </button>
+            </div>
+
+            <div className="flex items-end justify-start gap-2 lg:justify-end">
+
+              <button
+                onClick={() => window.print()}
+                className="rounded-lg bg-slate-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                Print
+              </button>
+
+              <button
+                onClick={() =>
+                  exportSupplierExcel(
+                    supplier,
+                    purchases
+                  )
+                }
+                className="rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700"
+              >
+                Excel
+              </button>
+
+              <button
+                onClick={() =>
+                  exportSupplierPdf(
+                    supplier,
+                    purchases
+                  )
+                }
+                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700"
+              >
+                PDF
+              </button>
+
+            </div>
+
+          </div>
+        </div>
+
+        {/* SUMMARY */}
+
+        <div className="mb-6 grid gap-5 md:grid-cols-3">
+
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
+            <div className="text-sm font-medium text-slate-500">
+              Total PO
+            </div>
+
+            <div className="mt-2 text-3xl font-bold text-slate-800">
+              {summary.totalPO.toLocaleString("id-ID")}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-green-100 bg-green-50 p-5">
+            <div className="text-sm font-medium text-slate-500">
+              Total Qty
+            </div>
+
+            <div className="mt-2 text-3xl font-bold text-slate-800">
+              {summary.totalQty.toLocaleString("id-ID")}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-orange-100 bg-orange-50 p-5">
+            <div className="text-sm font-medium text-slate-500">
+              Total Nilai PO
+            </div>
+
+            <div className="mt-2 text-2xl font-bold text-slate-800">
+              Rp{" "}
+              {summary.grandTotal.toLocaleString("id-ID")}
+            </div>
           </div>
 
         </div>
 
-      </div>
+        {/* PURCHASE HISTORY */}
 
-      <div className="grid md:grid-cols-3 gap-5 mb-6">
+        <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
 
-        <div className="bg-blue-50 border rounded-xl p-5">
+          <div className="border-b border-slate-100 p-5">
+            <h2 className="text-xl font-bold text-slate-800">
+              Riwayat Purchase Order
+            </h2>
 
-          <div className="text-gray-500">
-            Total PO
+            <p className="mt-1 text-sm text-slate-500">
+              Daftar transaksi Purchase Order supplier
+            </p>
           </div>
 
-          <div className="text-3xl font-bold mt-2">
-            {summary.totalPO}
-          </div>
+          <div className="overflow-x-auto">
 
-        </div>
+            <table className="w-full border-collapse">
 
-        <div className="bg-green-50 border rounded-xl p-5">
+              <thead>
+                <tr className="bg-slate-50">
 
-          <div className="text-gray-500">
-            Total Qty
-          </div>
+                  <th className="border border-slate-200 p-3 text-left text-sm font-semibold text-slate-700">
+                    No PO
+                  </th>
 
-          <div className="text-3xl font-bold mt-2">
-            {summary.totalQty.toLocaleString("id-ID")}
-          </div>
+                  <th className="border border-slate-200 p-3 text-left text-sm font-semibold text-slate-700">
+                    Tanggal
+                  </th>
 
-        </div>
+                  <th className="border border-slate-200 p-3 text-left text-sm font-semibold text-slate-700">
+                    Status
+                  </th>
 
-        <div className="bg-orange-50 border rounded-xl p-5">
-
-          <div className="text-gray-500">
-            Total Nilai PO
-          </div>
-
-          <div className="text-2xl font-bold mt-2">
-
-            Rp{" "}
-
-            {summary.grandTotal.toLocaleString("id-ID")}
-
-          </div>
-
-        </div>
-
-      </div>
-
-      <div className="bg-white rounded-xl shadow p-5">
-
-        <h2 className="text-xl font-bold mb-5">
-
-          Riwayat Purchase Order
-
-        </h2>
-                <table className="w-full border border-collapse">
-
-          <thead>
-
-            <tr className="bg-slate-100">
-
-              <th className="border p-3">
-                No PO
-              </th>
-
-              <th className="border p-3">
-                Tanggal
-              </th>
-
-              <th className="border p-3">
-                Status
-              </th>
-
-              <th className="border p-3">
-                Total
-              </th>
-
-            </tr>
-
-          </thead>
-
-          <tbody>
-
-            {
-
-              purchases.length === 0 && (
-
-                <tr>
-
-                  <td
-                    colSpan={4}
-                    className="text-center p-8"
-                  >
-
-                    Tidak ada transaksi.
-
-                  </td>
+                  <th className="border border-slate-200 p-3 text-right text-sm font-semibold text-slate-700">
+                    Total
+                  </th>
 
                 </tr>
+              </thead>
 
-              )
+              <tbody>
 
-            }
-
-            {
-
-              purchases.map((po: any) => (
-
-                <>
-
-                  <tr
-                    key={po.id}
-                    className="bg-blue-50 font-semibold"
-                  >
-
-                    <td className="border p-3">
-
-                      {po.number}
-
-                    </td>
-
-                    <td className="border p-3">
-
-                      {new Date(
-                        po.purchaseDate
-                      ).toLocaleDateString("id-ID")}
-
-                    </td>
-
-                    <td className="border p-3">
-
-                      {po.status}
-
-                    </td>
-
-                    <td className="border p-3 text-right">
-
-                      Rp{" "}
-
-                      {Number(po.total).toLocaleString("id-ID")}
-
-                    </td>
-
-                  </tr>
-
+                {purchases.length === 0 && (
                   <tr>
+                    <td
+                      colSpan={4}
+                      className="p-10 text-center text-sm text-slate-500"
+                    >
+                      Tidak ada transaksi.
+                    </td>
+                  </tr>
+                )}
 
+                {purchases.map((po: any) => (
+
+                  /*
+                   * KEY HARUS ADA DI ELEMENT TERLUAR
+                   * YANG DIHASILKAN OLEH MAP.
+                   */
+                  <tr
+                    key={`purchase-${po.id}`}
+                    className="border-b border-slate-100"
+                  >
                     <td
                       colSpan={4}
                       className="p-0"
                     >
 
-                      <table className="w-full">
-
-                        <thead>
-
-                          <tr className="bg-gray-100">
-
-                            <th className="border p-2">
-                              Barang
-                            </th>
-
-                            <th className="border p-2">
-                              Qty
-                            </th>
-
-                            <th className="border p-2">
-                              Harga
-                            </th>
-
-                            <th className="border p-2">
-                              Subtotal
-                            </th>
-
-                          </tr>
-
-                        </thead>
+                      <table className="w-full border-collapse">
 
                         <tbody>
 
-                          {
+                          {/* PURCHASE HEADER */}
 
-                            po.items.map((item: any) => (
+                          <tr className="bg-blue-50 font-semibold">
 
-                              <tr key={item.id}>
+                            <td className="border border-slate-200 p-3">
+                              {po.number || "-"}
+                            </td>
 
-                                <td className="border p-2">
+                            <td className="border border-slate-200 p-3">
+                              {po.purchaseDate
+                                ? new Date(
+                                    po.purchaseDate
+                                  ).toLocaleDateString(
+                                    "id-ID"
+                                  )
+                                : "-"
+                              }
+                            </td>
 
-                                  {item.barang?.name}
+                            <td className="border border-slate-200 p-3">
+                              {po.status || "-"}
+                            </td>
 
-                                </td>
+                            <td className="border border-slate-200 p-3 text-right">
+                              Rp{" "}
+                              {Number(
+                                po.total || 0
+                              ).toLocaleString(
+                                "id-ID"
+                              )}
+                            </td>
 
-                                <td className="border p-2 text-center">
+                          </tr>
 
-                                  {item.qty}
+                          {/* ITEMS */}
 
-                                </td>
+                          <tr>
+                            <td
+                              colSpan={4}
+                              className="border border-slate-200 p-0"
+                            >
 
-                                <td className="border p-2 text-right">
+                              <table className="w-full border-collapse">
 
-                                  Rp{" "}
+                                <thead>
+                                  <tr className="bg-slate-100">
 
-                                  {Number(item.price).toLocaleString("id-ID")}
+                                    <th className="border border-slate-200 p-2 text-left text-xs font-semibold text-slate-600">
+                                      Barang
+                                    </th>
 
-                                </td>
+                                    <th className="border border-slate-200 p-2 text-center text-xs font-semibold text-slate-600">
+                                      Qty
+                                    </th>
 
-                                <td className="border p-2 text-right">
+                                    <th className="border border-slate-200 p-2 text-right text-xs font-semibold text-slate-600">
+                                      Harga
+                                    </th>
 
-                                  Rp{" "}
+                                    <th className="border border-slate-200 p-2 text-right text-xs font-semibold text-slate-600">
+                                      Subtotal
+                                    </th>
 
-                                  {Number(item.subtotal).toLocaleString("id-ID")}
+                                  </tr>
+                                </thead>
 
-                                </td>
+                                <tbody>
 
-                              </tr>
+                                  {Array.isArray(
+                                    po.items
+                                  ) &&
+                                    po.items.map(
+                                      (item: any) => (
+                                        <tr
+                                          key={`purchase-${po.id}-item-${item.id}`}
+                                        >
 
-                            ))
+                                          <td className="border border-slate-200 p-2 text-sm">
+                                            {item.barang?.name ||
+                                              "-"}
+                                          </td>
 
-                          }
+                                          <td className="border border-slate-200 p-2 text-center text-sm">
+                                            {Number(
+                                              item.qty || 0
+                                            ).toLocaleString(
+                                              "id-ID"
+                                            )}
+                                          </td>
+
+                                          <td className="border border-slate-200 p-2 text-right text-sm">
+                                            Rp{" "}
+                                            {Number(
+                                              item.price || 0
+                                            ).toLocaleString(
+                                              "id-ID"
+                                            )}
+                                          </td>
+
+                                          <td className="border border-slate-200 p-2 text-right text-sm">
+                                            Rp{" "}
+                                            {Number(
+                                              item.subtotal || 0
+                                            ).toLocaleString(
+                                              "id-ID"
+                                            )}
+                                          </td>
+
+                                        </tr>
+                                      )
+                                    )}
+
+                                </tbody>
+
+                              </table>
+
+                            </td>
+                          </tr>
 
                         </tbody>
 
                       </table>
 
                     </td>
-
                   </tr>
 
-                </>
+                ))}
 
-              ))
+              </tbody>
 
-            }
+            </table>
 
-          </tbody>
+          </div>
 
-        </table>
+        </div>
 
       </div>
-
     </div>
-
   );
-
 }
