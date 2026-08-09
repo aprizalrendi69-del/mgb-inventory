@@ -1,295 +1,964 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Search,
+  X,
+  RefreshCw,
+  Tag,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Package,
+} from "lucide-react";
 
 export default function MasterHargaPage() {
-
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     loadData();
   }, []);
 
-
   async function loadData() {
+    try {
+      setLoading(true);
 
-    setLoading(true);
+      const res = await fetch("/api/master-harga", {
+        cache: "no-store",
+      });
 
-    const res = await fetch("/api/master-harga");
-    const json = await res.json();
+      const json = await res.json();
 
-
-    if (json.success) {
-      setRows(json.data);
+      if (json.success) {
+        setRows(json.data ?? []);
+      } else {
+        setRows([]);
+      }
+    } catch (error) {
+      console.error("Gagal mengambil master harga:", error);
+      setRows([]);
+    } finally {
+      setLoading(false);
     }
-
-
-    setLoading(false);
-
   }
 
+  const filteredRows = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+
+    if (!keyword) {
+      return rows;
+    }
+
+    return rows.filter((row) => {
+      const po = String(row.poNumber ?? "").toLowerCase();
+
+      const supplier = String(
+        row.supplier?.name ?? ""
+      ).toLowerCase();
+
+      const barang = String(
+        row.barang?.name ?? ""
+      ).toLowerCase();
+
+      const kodeBarang = String(
+        row.barang?.code ?? ""
+      ).toLowerCase();
+
+      const barcode = String(
+        row.barang?.barcode ?? ""
+      ).toLowerCase();
+
+      return (
+        po.includes(keyword) ||
+        supplier.includes(keyword) ||
+        barang.includes(keyword) ||
+        kodeBarang.includes(keyword) ||
+        barcode.includes(keyword)
+      );
+    });
+  }, [rows, search]);
+
+  function formatNumber(value: any) {
+    return Number(value ?? 0).toLocaleString("id-ID");
+  }
+
+  function formatPercent(value: any) {
+    return Number(value ?? 0).toFixed(2);
+  }
+
+  const totalData = rows.length;
+
+  const totalNaik = rows.filter(
+    (row) =>
+      Number(row.hargaBaru ?? 0) >
+      Number(row.hargaLama ?? 0)
+  ).length;
+
+  const totalTurun = rows.filter(
+    (row) =>
+      Number(row.hargaBaru ?? 0) <
+      Number(row.hargaLama ?? 0)
+  ).length;
+
+  const totalTetap = rows.filter(
+    (row) =>
+      Number(row.hargaBaru ?? 0) ===
+      Number(row.hargaLama ?? 0)
+  ).length;
 
   return (
-
-    <div>
-
-      <h1 className="text-2xl font-bold mb-6">
-        Master Harga
-      </h1>
-
-
-      <div className="overflow-auto rounded-lg border">
-
-
-        <table className="min-w-full text-sm">
-
-
-          <thead className="bg-gray-100">
-
-            <tr>
-
-              <th className="p-3 text-left">
-                Tanggal
-              </th>
-
-              <th className="p-3 text-left">
-                PO
-              </th>
-
-              <th className="p-3 text-left">
-                Supplier
-              </th>
-
-              <th className="p-3 text-left">
-                Barang
-              </th>
-
-              <th className="p-3 text-right">
-                Harga Lama
-              </th>
-
-              <th className="p-3 text-right">
-                Harga Baru
-              </th>
-
-              <th className="p-3 text-right">
-                Selisih
-              </th>
-
-              <th className="p-3 text-right">
-                %
-              </th>
-
-              <th className="p-3 text-center">
-                Status
-              </th>
-
-              <th className="p-3 text-right">
-                Qty
-              </th>
-
-              <th className="p-3 text-right">
-                Total
-              </th>
-
-            </tr>
-
-          </thead>
-
-
-
-          <tbody>
-
-
-            {loading && (
-
-              <tr>
-
-                <td colSpan={11} className="text-center p-8">
-
-                  Loading...
-
-                </td>
-
-              </tr>
-
-            )}
-
-
-
-            {!loading && rows.length === 0 && (
-
-              <tr>
-
-                <td colSpan={11} className="text-center p-8">
-
-                  Belum ada histori harga
-
-                </td>
-
-              </tr>
-
-            )}
-
-
-
-
-            {rows.map((row) => (
-
-              <tr
-                key={row.id}
-                className="border-t"
-              >
-
-
-                <td className="p-3">
-
-                  {row.receiveDate
-                    ? new Date(row.receiveDate).toLocaleDateString("id-ID")
-                    : "-"}
-
-                </td>
-
-
-
-                <td className="p-3">
-
-                  {row.poNumber}
-
-                </td>
-
-
-
-                <td className="p-3">
-
-                  {row.supplier?.name}
-
-                </td>
-
-
-
-                <td className="p-3">
-
-                  {row.barang?.name}
-
-                </td>
-
-
-
-                <td className="p-3 text-right">
-
-                  {row.hargaLama.toLocaleString()}
-
-                </td>
-
-
-
-                <td className="p-3 text-right">
-
-                  {row.hargaBaru.toLocaleString()}
-
-                </td>
-
-
-
-                <td className="p-3 text-right">
-
-                  {row.selisihHarga.toLocaleString()}
-
-                </td>
-
-
-
-                <td className="p-3 text-right">
-
-                  {row.persenNaik.toFixed(2)}%
-
-                </td>
-
-
-
-                <td className="p-3">
-
-                  {
-                    row.hargaBaru > row.hargaLama ? (
-
-                      <div className="flex items-center justify-center gap-2 text-red-600 font-medium">
-
-                        <span className="w-3 h-3 rounded-full bg-red-600"></span>
-
-                        Naik
-
-                      </div>
-
-
-                    ) : row.hargaBaru === row.hargaLama ? (
-
-
-                      <div className="flex items-center justify-center gap-2 text-blue-600 font-medium">
-
-                        <span className="w-3 h-3 rounded-full bg-blue-600"></span>
-
-                        Tetap
-
-                      </div>
-
-
-                    ) : (
-
-
-                      <div className="flex items-center justify-center gap-2 text-green-600 font-medium">
-
-                        <span className="w-3 h-3 rounded-full bg-green-600"></span>
-
-                        Turun
-
-                      </div>
-
-                    )
-                  }
-
-
-                </td>
-
-
-
-
-                <td className="p-3 text-right">
-
-                  {row.qty}
-
-                </td>
-
-
-
-
-                <td className="p-3 text-right">
-
-                  {row.total.toLocaleString()}
-
-                </td>
-
-
-
-              </tr>
-
-
-            ))}
-
-
-          </tbody>
-
-
-        </table>
-
+    <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
+
+      {/* ================= HEADER ================= */}
+
+      <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
+        <div className="flex items-center gap-3">
+
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#497F70] text-white shadow-sm">
+            <Tag size={23} />
+          </div>
+
+          <div>
+
+            <h1 className="text-2xl font-bold tracking-tight text-[#18352D] md:text-3xl">
+              Master Harga
+            </h1>
+
+            <p className="mt-1 text-sm text-gray-500">
+              Riwayat perubahan harga pembelian barang
+            </p>
+
+          </div>
+
+        </div>
+
+        <button
+          type="button"
+          onClick={loadData}
+          disabled={loading}
+          className="
+            inline-flex
+            items-center
+            justify-center
+            gap-2
+            rounded-xl
+            border
+            border-[#D5E5DC]
+            bg-white
+            px-5
+            py-3
+            text-sm
+            font-semibold
+            text-[#35564C]
+            shadow-sm
+            transition
+            hover:bg-[#F5F8F6]
+            disabled:cursor-not-allowed
+            disabled:opacity-50
+          "
+        >
+
+          <RefreshCw
+            size={17}
+            className={loading ? "animate-spin" : ""}
+          />
+
+          Refresh Data
+
+        </button>
 
       </div>
 
 
+      {/* ================= SUMMARY ================= */}
+
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+        {/* TOTAL */}
+
+        <div className="
+          rounded-2xl
+          border
+          border-[#DDE9E4]
+          bg-white
+          p-5
+          shadow-sm
+        ">
+
+          <div className="flex items-center justify-between">
+
+            <div>
+
+              <p className="text-sm text-gray-500">
+                Total Histori
+              </p>
+
+              <p className="mt-1 text-2xl font-bold text-[#18352D]">
+                {totalData}
+              </p>
+
+            </div>
+
+            <div className="
+              flex
+              h-11
+              w-11
+              items-center
+              justify-center
+              rounded-xl
+              bg-[#EAF3EF]
+              text-[#497F70]
+            ">
+              <Package size={21} />
+            </div>
+
+          </div>
+
+        </div>
+
+
+        {/* NAIK */}
+
+        <div className="
+          rounded-2xl
+          border
+          border-red-100
+          bg-white
+          p-5
+          shadow-sm
+        ">
+
+          <div className="flex items-center justify-between">
+
+            <div>
+
+              <p className="text-sm text-gray-500">
+                Harga Naik
+              </p>
+
+              <p className="mt-1 text-2xl font-bold text-red-600">
+                {totalNaik}
+              </p>
+
+            </div>
+
+            <div className="
+              flex
+              h-11
+              w-11
+              items-center
+              justify-center
+              rounded-xl
+              bg-red-50
+              text-red-600
+            ">
+              <TrendingUp size={21} />
+            </div>
+
+          </div>
+
+        </div>
+
+
+        {/* TURUN */}
+
+        <div className="
+          rounded-2xl
+          border
+          border-green-100
+          bg-white
+          p-5
+          shadow-sm
+        ">
+
+          <div className="flex items-center justify-between">
+
+            <div>
+
+              <p className="text-sm text-gray-500">
+                Harga Turun
+              </p>
+
+              <p className="mt-1 text-2xl font-bold text-green-600">
+                {totalTurun}
+              </p>
+
+            </div>
+
+            <div className="
+              flex
+              h-11
+              w-11
+              items-center
+              justify-center
+              rounded-xl
+              bg-green-50
+              text-green-600
+            ">
+              <TrendingDown size={21} />
+            </div>
+
+          </div>
+
+        </div>
+
+
+        {/* TETAP */}
+
+        <div className="
+          rounded-2xl
+          border
+          border-blue-100
+          bg-white
+          p-5
+          shadow-sm
+        ">
+
+          <div className="flex items-center justify-between">
+
+            <div>
+
+              <p className="text-sm text-gray-500">
+                Harga Tetap
+              </p>
+
+              <p className="mt-1 text-2xl font-bold text-blue-600">
+                {totalTetap}
+              </p>
+
+            </div>
+
+            <div className="
+              flex
+              h-11
+              w-11
+              items-center
+              justify-center
+              rounded-xl
+              bg-blue-50
+              text-blue-600
+            ">
+              <Minus size={21} />
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      {/* ================= SEARCH ================= */}
+
+      <div className="
+        mb-6
+        rounded-2xl
+        border
+        border-[#DDE9E4]
+        bg-white
+        p-4
+        shadow-sm
+        md:p-5
+      ">
+
+        <div className="
+          flex
+          flex-col
+          gap-3
+          lg:flex-row
+          lg:items-center
+          lg:justify-between
+        ">
+
+          <div className="relative w-full lg:max-w-xl">
+
+            <Search
+              size={19}
+              className="
+                absolute
+                left-3
+                top-1/2
+                -translate-y-1/2
+                text-gray-400
+              "
+            />
+
+            <input
+              type="text"
+              value={search}
+              onChange={(e) =>
+                setSearch(e.target.value)
+              }
+              placeholder="Cari PO, supplier, kode, barcode, atau nama barang..."
+              className="
+                w-full
+                rounded-xl
+                border
+                border-[#D5E5DC]
+                bg-[#FAFCFB]
+                py-3
+                pl-10
+                pr-10
+                text-sm
+                text-gray-700
+                outline-none
+                transition
+                placeholder:text-gray-400
+                focus:border-[#497F70]
+                focus:bg-white
+                focus:ring-2
+                focus:ring-[#497F70]/10
+              "
+            />
+
+            {search && (
+
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="
+                  absolute
+                  right-3
+                  top-1/2
+                  -translate-y-1/2
+                  rounded-lg
+                  p-1
+                  text-gray-400
+                  transition
+                  hover:bg-gray-100
+                  hover:text-gray-600
+                "
+                title="Hapus pencarian"
+              >
+
+                <X size={17} />
+
+              </button>
+
+            )}
+
+          </div>
+
+
+          <div className="text-sm text-gray-500">
+
+            {search ? (
+              <>
+                Menampilkan{" "}
+                <span className="font-semibold text-[#18352D]">
+                  {filteredRows.length}
+                </span>{" "}
+                dari{" "}
+                <span className="font-semibold text-[#18352D]">
+                  {rows.length}
+                </span>{" "}
+                data
+              </>
+            ) : (
+              <>
+                <span className="font-semibold text-[#18352D]">
+                  {rows.length}
+                </span>{" "}
+                histori harga
+              </>
+            )}
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      {/* ================= TABLE ================= */}
+
+      <div className="
+        overflow-hidden
+        rounded-2xl
+        border
+        border-[#DDE9E4]
+        bg-white
+        shadow-sm
+      ">
+
+        <div className="overflow-x-auto">
+
+          <table className="min-w-[1250px] w-full text-sm">
+
+            <thead className="bg-[#F5F8F6]">
+
+              <tr className="border-b border-[#E5ECE9]">
+
+                <th className="whitespace-nowrap px-5 py-4 text-left font-semibold text-[#35564C]">
+                  Tanggal
+                </th>
+
+                <th className="whitespace-nowrap px-5 py-4 text-left font-semibold text-[#35564C]">
+                  PO
+                </th>
+
+                <th className="whitespace-nowrap px-5 py-4 text-left font-semibold text-[#35564C]">
+                  Supplier
+                </th>
+
+                <th className="whitespace-nowrap px-5 py-4 text-left font-semibold text-[#35564C]">
+                  Barang
+                </th>
+
+                <th className="whitespace-nowrap px-5 py-4 text-right font-semibold text-[#35564C]">
+                  Harga Lama
+                </th>
+
+                <th className="whitespace-nowrap px-5 py-4 text-right font-semibold text-[#35564C]">
+                  Harga Baru
+                </th>
+
+                <th className="whitespace-nowrap px-5 py-4 text-right font-semibold text-[#35564C]">
+                  Selisih
+                </th>
+
+                <th className="whitespace-nowrap px-5 py-4 text-right font-semibold text-[#35564C]">
+                  %
+                </th>
+
+                <th className="whitespace-nowrap px-5 py-4 text-center font-semibold text-[#35564C]">
+                  Status
+                </th>
+
+                <th className="whitespace-nowrap px-5 py-4 text-right font-semibold text-[#35564C]">
+                  Qty
+                </th>
+
+                <th className="whitespace-nowrap px-5 py-4 text-right font-semibold text-[#35564C]">
+                  Total
+                </th>
+
+              </tr>
+
+            </thead>
+
+
+            <tbody>
+
+              {/* LOADING */}
+
+              {loading && (
+
+                <tr>
+
+                  <td
+                    colSpan={11}
+                    className="px-5 py-14 text-center"
+                  >
+
+                    <div className="
+                      flex
+                      flex-col
+                      items-center
+                      gap-3
+                      text-gray-500
+                    ">
+
+                      <RefreshCw
+                        size={25}
+                        className="animate-spin text-[#497F70]"
+                      />
+
+                      <span>
+                        Memuat data master harga...
+                      </span>
+
+                    </div>
+
+                  </td>
+
+                </tr>
+
+              )}
+
+
+              {/* EMPTY */}
+
+              {!loading &&
+                filteredRows.length === 0 && (
+
+                  <tr>
+
+                    <td
+                      colSpan={11}
+                      className="px-5 py-14 text-center"
+                    >
+
+                      <div className="
+                        flex
+                        flex-col
+                        items-center
+                      ">
+
+                        <div className="
+                          mb-3
+                          flex
+                          h-14
+                          w-14
+                          items-center
+                          justify-center
+                          rounded-full
+                          bg-[#EAF3EF]
+                          text-[#497F70]
+                        ">
+
+                          <Search size={25} />
+
+                        </div>
+
+                        <p className="
+                          font-semibold
+                          text-gray-700
+                        ">
+
+                          {search
+                            ? "Data tidak ditemukan"
+                            : "Belum ada histori harga"}
+
+                        </p>
+
+                        <p className="
+                          mt-1
+                          text-sm
+                          text-gray-400
+                        ">
+
+                          {search
+                            ? "Coba gunakan kata pencarian yang berbeda."
+                            : "Histori perubahan harga akan muncul di sini."}
+
+                        </p>
+
+                      </div>
+
+                    </td>
+
+                  </tr>
+
+                )}
+
+
+              {/* DATA */}
+
+              {!loading &&
+                filteredRows.map(
+                  (row: any) => {
+
+                    const hargaLama =
+                      Number(row.hargaLama ?? 0);
+
+                    const hargaBaru =
+                      Number(row.hargaBaru ?? 0);
+
+                    const selisih =
+                      Number(row.selisihHarga ?? 0);
+
+                    const naik =
+                      hargaBaru > hargaLama;
+
+                    const turun =
+                      hargaBaru < hargaLama;
+
+                    return (
+
+                      <tr
+                        key={row.id}
+                        className="
+                          border-b
+                          border-[#EDF2EF]
+                          transition
+                          hover:bg-[#FAFCFB]
+                        "
+                      >
+
+                        {/* TANGGAL */}
+
+                        <td className="
+                          whitespace-nowrap
+                          px-5
+                          py-4
+                          text-gray-600
+                        ">
+
+                          {row.receiveDate
+                            ? new Date(
+                                row.receiveDate
+                              ).toLocaleDateString(
+                                "id-ID"
+                              )
+                            : "-"}
+
+                        </td>
+
+
+                        {/* PO */}
+
+                        <td className="
+                          whitespace-nowrap
+                          px-5
+                          py-4
+                          font-semibold
+                          text-[#18352D]
+                        ">
+
+                          {row.poNumber || "-"}
+
+                        </td>
+
+
+                        {/* SUPPLIER */}
+
+                        <td className="
+                          px-5
+                          py-4
+                          text-gray-600
+                        ">
+
+                          {row.supplier?.name || "-"}
+
+                        </td>
+
+
+                        {/* BARANG */}
+
+                        <td className="px-5 py-4">
+
+                          <div className="
+                            font-semibold
+                            text-gray-700
+                          ">
+
+                            {row.barang?.name || "-"}
+
+                          </div>
+
+                          {row.barang?.code && (
+
+                            <div className="
+                              mt-1
+                              text-xs
+                              text-gray-400
+                            ">
+
+                              {row.barang.code}
+
+                              {row.barang?.barcode && (
+                                <>
+                                  {" • "}
+                                  {row.barang.barcode}
+                                </>
+                              )}
+
+                            </div>
+
+                          )}
+
+                        </td>
+
+
+                        {/* HARGA LAMA */}
+
+                        <td className="
+                          whitespace-nowrap
+                          px-5
+                          py-4
+                          text-right
+                          text-gray-500
+                        ">
+
+                          Rp {formatNumber(hargaLama)}
+
+                        </td>
+
+
+                        {/* HARGA BARU */}
+
+                        <td className="
+                          whitespace-nowrap
+                          px-5
+                          py-4
+                          text-right
+                          font-semibold
+                          text-[#18352D]
+                        ">
+
+                          Rp {formatNumber(hargaBaru)}
+
+                        </td>
+
+
+                        {/* SELISIH */}
+
+                        <td
+                          className={`
+                            whitespace-nowrap
+                            px-5
+                            py-4
+                            text-right
+                            font-semibold
+                            ${
+                              naik
+                                ? "text-red-600"
+                                : turun
+                                ? "text-green-600"
+                                : "text-gray-500"
+                            }
+                          `}
+                        >
+
+                          {naik ? "+" : ""}
+
+                          Rp {formatNumber(selisih)}
+
+                        </td>
+
+
+                        {/* PERSEN */}
+
+                        <td className="
+                          whitespace-nowrap
+                          px-5
+                          py-4
+                          text-right
+                          text-gray-600
+                        ">
+
+                          {formatPercent(
+                            row.persenNaik
+                          )}
+                          %
+
+                        </td>
+
+
+                        {/* STATUS */}
+
+                        <td className="px-5 py-4">
+
+                          <div className="flex justify-center">
+
+                            {naik ? (
+
+                              <span className="
+                                inline-flex
+                                items-center
+                                gap-1.5
+                                rounded-full
+                                bg-red-50
+                                px-3
+                                py-1.5
+                                text-xs
+                                font-semibold
+                                text-red-600
+                              ">
+
+                                <TrendingUp size={13} />
+
+                                Naik
+
+                              </span>
+
+                            ) : turun ? (
+
+                              <span className="
+                                inline-flex
+                                items-center
+                                gap-1.5
+                                rounded-full
+                                bg-green-50
+                                px-3
+                                py-1.5
+                                text-xs
+                                font-semibold
+                                text-green-600
+                              ">
+
+                                <TrendingDown size={13} />
+
+                                Turun
+
+                              </span>
+
+                            ) : (
+
+                              <span className="
+                                inline-flex
+                                items-center
+                                gap-1.5
+                                rounded-full
+                                bg-blue-50
+                                px-3
+                                py-1.5
+                                text-xs
+                                font-semibold
+                                text-blue-600
+                              ">
+
+                                <Minus size={13} />
+
+                                Tetap
+
+                              </span>
+
+                            )}
+
+                          </div>
+
+                        </td>
+
+
+                        {/* QTY */}
+
+                        <td className="
+                          whitespace-nowrap
+                          px-5
+                          py-4
+                          text-right
+                          text-gray-600
+                        ">
+
+                          {formatNumber(row.qty)}
+
+                        </td>
+
+
+                        {/* TOTAL */}
+
+                        <td className="
+                          whitespace-nowrap
+                          px-5
+                          py-4
+                          text-right
+                          font-semibold
+                          text-[#18352D]
+                        ">
+
+                          Rp {formatNumber(row.total)}
+
+                        </td>
+
+                      </tr>
+
+                    );
+                  }
+                )}
+
+            </tbody>
+
+          </table>
+
+        </div>
+
+      </div>
+
     </div>
-
   );
-
 }
