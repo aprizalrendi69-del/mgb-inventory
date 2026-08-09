@@ -19,6 +19,7 @@ export default function CameraBarcodeScanner({
 
   useEffect(() => {
     let mounted = true;
+    let scanLocked = false;
 
     async function startCamera() {
       try {
@@ -27,17 +28,27 @@ export default function CameraBarcodeScanner({
 
         console.log("=== START CAMERA ===");
 
-        if (!navigator.mediaDevices) {
+        if (
+          typeof navigator === "undefined" ||
+          !navigator.mediaDevices ||
+          !navigator.mediaDevices.getUserMedia
+        ) {
           throw new Error(
             "Browser tidak mendukung kamera."
           );
         }
 
+        const video = videoRef.current;
+
+        if (!video) {
+          throw new Error(
+            "Element video tidak ditemukan."
+          );
+        }
+
         /*
-         * Minta izin kamera terlebih dahulu.
-         *
-         * facingMode environment =
-         * kamera belakang HP.
+         * Buka kamera terlebih dahulu.
+         * Menggunakan kamera belakang jika tersedia.
          */
         const stream =
           await navigator.mediaDevices.getUserMedia({
@@ -66,10 +77,11 @@ export default function CameraBarcodeScanner({
         streamRef.current = stream;
 
         console.log(
-          "CAMERA STREAM BERHASIL:"
+          "CAMERA STREAM BERHASIL"
         );
 
         console.log(
+          "CAMERA SETTINGS:",
           stream
             .getVideoTracks()
             .map((track) =>
@@ -77,124 +89,58 @@ export default function CameraBarcodeScanner({
             )
         );
 
-        const video =
-          videoRef.current;
-
-        if (!video) {
-          throw new Error(
-            "Element video tidak ditemukan."
-          );
-        }
-
+        /*
+         * Hubungkan stream ke video.
+         */
         video.srcObject = stream;
-
         video.setAttribute(
           "playsinline",
           "true"
         );
-
         video.setAttribute(
           "autoplay",
           "true"
         );
-
         video.muted = true;
 
         await video.play();
+
+        if (!mounted) {
+          return;
+        }
 
         console.log(
           "VIDEO BERHASIL PLAY"
         );
 
         /*
-         * ZXING
+         * Buat ZXing reader.
          */
-
         const reader =
           new BrowserMultiFormatReader();
 
         readerRef.current = reader;
 
         /*
-         * Setelah kamera berhasil dibuka,
-         * ambil daftar device kamera.
-         */
-
-        let devices: MediaDeviceInfo[] = [];
-
-        try {
-          devices =
-            await BrowserMultiFormatReader.listVideoInputDevices();
-
-          console.log(
-            "DAFTAR KAMERA:",
-            devices
-          );
-        } catch (error) {
-          console.warn(
-            "Tidak bisa membaca daftar kamera:",
-            error
-          );
-        }
-
-        /*
-         * Cari kamera belakang.
-         */
-
-        let selectedCameraId =
-          devices[0]?.deviceId;
-
-        const backCamera =
-          devices.find((device) => {
-
-            const label =
-              device.label.toLowerCase();
-
-            return (
-              label.includes("back") ||
-              label.includes("rear") ||
-              label.includes("environment") ||
-              label.includes("belakang")
-            );
-          });
-
-        if (backCamera) {
-          selectedCameraId =
-            backCamera.deviceId;
-
-          console.log(
-            "KAMERA BELAKANG DIPILIH:",
-            backCamera.label
-          );
-        } else {
-          console.log(
-            "Kamera belakang tidak ditemukan dari label."
-          );
-        }
-
-        if (!selectedCameraId) {
-          throw new Error(
-            "Tidak ada kamera yang tersedia."
-          );
-        }
-
-        /*
-         * Jalankan ZXing.
+         * Jalankan scanner.
          *
-         * Jangan memanggil getUserMedia
-         * kedua kali secara agresif.
+         * Kita menggunakan stream kamera
+         * yang sudah dibuka sebelumnya.
          */
-
-        await reader.decodeFromVideoDevice(
-          selectedCameraId,
+        await reader.decodeFromStream(
+          stream,
           video,
           (result, error) => {
-
             if (!mounted) {
               return;
             }
 
-            if (result) {
+            /*
+             * Setelah barcode berhasil dibaca,
+             * jangan baca berkali-kali.
+             */
+            if (result && !scanLocked) {
+              scanLocked = true;
 
               const text =
                 result
@@ -202,6 +148,7 @@ export default function CameraBarcodeScanner({
                   .trim();
 
               if (!text) {
+                scanLocked = false;
                 return;
               }
 
@@ -213,11 +160,8 @@ export default function CameraBarcodeScanner({
               onScan(text);
 
               /*
-               * Setelah berhasil membaca,
-               * hentikan scanner supaya tidak
-               * membaca barcode berkali-kali.
+               * Stop scanner setelah berhasil.
                */
-
               try {
                 reader.reset();
               } catch {}
@@ -226,22 +170,22 @@ export default function CameraBarcodeScanner({
             }
 
             /*
-             * Error seperti NotFoundException
-             * adalah NORMAL ketika kamera
-             * belum menemukan barcode.
+             * NotFoundException,
+             * ChecksumException,
+             * No Micro QR finder pattern,
+             * dll adalah normal ketika kamera
+             * sedang mencari barcode.
              *
-             * Jadi jangan console.error.
+             * Jangan console.error.
              */
-
+            void error;
           }
         );
 
         console.log(
           "ZXING SCANNER AKTIF"
         );
-
       } catch (error: any) {
-
         console.error(
           "CAMERA START ERROR:",
           error
@@ -260,57 +204,52 @@ export default function CameraBarcodeScanner({
         ) {
           message =
             "Izin kamera ditolak. Izinkan kamera pada browser.";
-        }
-
-        if (
+        } else if (
           error?.name ===
           "NotReadableError"
         ) {
           message =
-            "Kamera sedang digunakan aplikasi/browser lain.";
-        }
-
-        if (
+            "Kamera sedang digunakan aplikasi atau browser lain.";
+        } else if (
           error?.name ===
           "NotFoundError"
         ) {
           message =
             "Kamera tidak ditemukan pada perangkat.";
-        }
-
-        if (
+        } else if (
           error?.name ===
           "OverconstrainedError"
         ) {
           message =
             "Kamera tidak mendukung pengaturan yang diminta.";
+        } else if (
+          error?.message
+        ) {
+          message =
+            error.message;
         }
 
         setCameraError(message);
-
       } finally {
-
         if (mounted) {
           setStarting(false);
         }
-
       }
     }
 
     startCamera();
 
     return () => {
-
       mounted = false;
+      scanLocked = true;
 
       console.log(
         "=== STOP CAMERA ==="
       );
 
       /*
-       * Stop ZXing
+       * Stop ZXing.
        */
-
       try {
         readerRef.current?.reset();
       } catch {}
@@ -318,39 +257,36 @@ export default function CameraBarcodeScanner({
       readerRef.current = null;
 
       /*
-       * Stop kamera
+       * Stop kamera.
        */
-
       if (streamRef.current) {
-
         streamRef.current
           .getTracks()
           .forEach((track) => {
-
             try {
               track.stop();
             } catch {}
-
           });
 
         streamRef.current = null;
       }
 
       /*
-       * Bersihkan video
+       * Bersihkan video.
        */
-
       if (videoRef.current) {
-        videoRef.current.pause();
-        videoRef.current.srcObject = null;
-      }
+        try {
+          videoRef.current.pause();
+        } catch {}
 
+        videoRef.current.srcObject =
+          null;
+      }
     };
   }, [onScan]);
 
   return (
     <div className="w-full">
-
       <div
         className="
           relative
@@ -359,9 +295,10 @@ export default function CameraBarcodeScanner({
           bg-black
           rounded-xl
           overflow-hidden
+          border
+          border-gray-200
         "
       >
-
         <video
           ref={videoRef}
           autoPlay
@@ -375,7 +312,6 @@ export default function CameraBarcodeScanner({
         />
 
         {/* Scanner frame */}
-
         <div
           className="
             absolute
@@ -386,22 +322,93 @@ export default function CameraBarcodeScanner({
             pointer-events-none
           "
         >
-
           <div
             className="
-              w-[75%]
-              h-[35%]
+              relative
+              w-[78%]
+              h-[36%]
               border-2
               border-white
               rounded-xl
-              shadow-lg
+              shadow-[0_0_0_9999px_rgba(0,0,0,0.25)]
             "
-          />
+          >
+            {/* Corner indicators */}
+            <span
+              className="
+                absolute
+                -top-[2px]
+                -left-[2px]
+                w-8
+                h-8
+                border-t-4
+                border-l-4
+                border-white
+                rounded-tl-lg
+              "
+            />
 
+            <span
+              className="
+                absolute
+                -top-[2px]
+                -right-[2px]
+                w-8
+                h-8
+                border-t-4
+                border-r-4
+                border-white
+                rounded-tr-lg
+              "
+            />
+
+            <span
+              className="
+                absolute
+                -bottom-[2px]
+                -left-[2px]
+                w-8
+                h-8
+                border-b-4
+                border-l-4
+                border-white
+                rounded-bl-lg
+              "
+            />
+
+            <span
+              className="
+                absolute
+                -bottom-[2px]
+                -right-[2px]
+                w-8
+                h-8
+                border-b-4
+                border-r-4
+                border-white
+                rounded-br-lg
+              "
+            />
+
+            {/* Scan line */}
+            {!cameraError && !starting && (
+              <div
+                className="
+                  absolute
+                  left-3
+                  right-3
+                  top-1/2
+                  h-[2px]
+                  bg-white/90
+                  shadow-[0_0_8px_rgba(255,255,255,0.9)]
+                  animate-pulse
+                "
+              />
+            )}
+          </div>
         </div>
 
         {/* Loading */}
-
         {starting && !cameraError && (
           <div
             className="
@@ -410,17 +417,25 @@ export default function CameraBarcodeScanner({
               flex
               items-center
               justify-center
-              bg-black/50
+              bg-black/60
               text-white
               text-sm
+              font-medium
             "
           >
-            Membuka kamera...
+            <div className="text-center">
+              <div className="mb-2">
+                Membuka kamera...
+              </div>
+
+              <div className="text-xs text-white/70">
+                Izinkan akses kamera jika diminta
+              </div>
+            </div>
           </div>
         )}
 
         {/* Error */}
-
         {cameraError && (
           <div
             className="
@@ -431,26 +446,54 @@ export default function CameraBarcodeScanner({
               justify-center
               p-6
               text-center
-              bg-black/70
+              bg-black/75
               text-white
             "
           >
-
             <div>
-
               <div className="text-red-400 font-bold mb-2">
                 Kamera tidak dapat dibuka
               </div>
 
-              <div className="text-sm">
+              <div className="text-sm text-white/90">
                 {cameraError}
               </div>
-
             </div>
-
           </div>
         )}
 
+        {/* Camera active indicator */}
+        {!starting && !cameraError && (
+          <div
+            className="
+              absolute
+              top-3
+              left-3
+              flex
+              items-center
+              gap-2
+              px-3
+              py-1.5
+              rounded-full
+              bg-black/60
+              text-white
+              text-xs
+              backdrop-blur-sm
+            "
+          >
+            <span
+              className="
+                w-2
+                h-2
+                rounded-full
+                bg-green-400
+                animate-pulse
+              "
+            />
+
+            Kamera aktif
+          </div>
+        )}
       </div>
 
       <div
@@ -463,7 +506,6 @@ export default function CameraBarcodeScanner({
       >
         Arahkan kamera ke barcode barang
       </div>
-
     </div>
   );
 }
