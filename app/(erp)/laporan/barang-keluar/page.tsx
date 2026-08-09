@@ -8,13 +8,13 @@ import { printTable } from "@/lib/print";
 
 type DeliveryItem = {
   id: number;
+  barangId?: number;
+  code?: string;
+  name?: string;
+  unit?: string;
   qty?: number;
   price?: number;
   subtotal?: number;
-  barang?: {
-    code?: string;
-    name?: string;
-  };
 };
 
 type Delivery = {
@@ -22,6 +22,7 @@ type Delivery = {
   number?: string;
   deliveryDate: string;
   customer?: {
+    id?: number | null;
     name?: string;
   };
   items?: DeliveryItem[];
@@ -95,6 +96,18 @@ export default function LaporanBarangKeluar() {
   /*
    * Ubah data delivery menjadi
    * data per barang.
+   *
+   * API mengembalikan item dengan struktur:
+   *
+   * {
+   *   barangId,
+   *   code,
+   *   name,
+   *   unit,
+   *   qty,
+   *   price,
+   *   subtotal
+   * }
    */
   const rowsData = useMemo<ReportRow[]>(() => {
     const result: ReportRow[] = [];
@@ -116,8 +129,11 @@ export default function LaporanBarangKeluar() {
           tanggal: delivery.deliveryDate,
           noDelivery: delivery.number ?? "-",
           customer: delivery.customer?.name ?? "-",
-          kodeBarang: item.barang?.code ?? "-",
-          barang: item.barang?.name ?? "-",
+
+          // Sesuai struktur response API
+          kodeBarang: item.code ?? "-",
+          barang: item.name ?? "-",
+
           qty,
           harga,
           subtotal,
@@ -129,7 +145,7 @@ export default function LaporanBarangKeluar() {
   }, [data]);
 
   /*
-   * Filter pencarian.
+   * Filter pencarian
    */
   const filteredRows = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -157,7 +173,7 @@ export default function LaporanBarangKeluar() {
   }, [rowsData, search]);
 
   /*
-   * Total Qty.
+   * Total Qty
    */
   const totalQty = useMemo(() => {
     return filteredRows.reduce(
@@ -167,7 +183,7 @@ export default function LaporanBarangKeluar() {
   }, [filteredRows]);
 
   /*
-   * Total nominal.
+   * Total nominal
    */
   const totalNominal = useMemo(() => {
     return filteredRows.reduce(
@@ -177,7 +193,7 @@ export default function LaporanBarangKeluar() {
   }, [filteredRows]);
 
   /*
-   * Jumlah Delivery Order unik.
+   * Jumlah Delivery Order unik
    */
   const totalDelivery = useMemo(() => {
     return new Set(
@@ -205,7 +221,7 @@ export default function LaporanBarangKeluar() {
   }
 
   /*
-   * Data export.
+   * Data export
    */
   const columns = [
     "No",
@@ -248,10 +264,7 @@ export default function LaporanBarangKeluar() {
   }
 
   function handlePrint() {
-    printTable(
-      columns,
-      rows
-    );
+    printTable(columns, rows);
   }
 
   function resetFilter() {
@@ -259,20 +272,15 @@ export default function LaporanBarangKeluar() {
     setStart("");
     setEnd("");
 
-    /*
-     * Reload semua data setelah reset.
-     */
     setTimeout(() => {
       loadData();
     }, 0);
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
-
+    <div>
       {/* HEADER */}
       <div className="mb-6">
-
         <h1 className="text-2xl md:text-3xl font-bold text-slate-800">
           Laporan Barang Keluar
         </h1>
@@ -280,16 +288,13 @@ export default function LaporanBarangKeluar() {
         <p className="mt-1 text-sm text-slate-500">
           Riwayat barang yang keluar melalui pengiriman
         </p>
-
       </div>
-
 
       {/* SUMMARY */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
 
         {/* TOTAL DELIVERY */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
           <p className="text-sm text-slate-500">
             Total Delivery
           </p>
@@ -301,13 +306,10 @@ export default function LaporanBarangKeluar() {
           <p className="mt-1 text-xs text-slate-400">
             Nomor pengiriman
           </p>
-
         </div>
-
 
         {/* TOTAL QTY */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
           <p className="text-sm text-slate-500">
             Total Qty Keluar
           </p>
@@ -319,13 +321,10 @@ export default function LaporanBarangKeluar() {
           <p className="mt-1 text-xs text-slate-400">
             Seluruh barang keluar
           </p>
-
         </div>
-
 
         {/* TOTAL NOMINAL */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
           <p className="text-sm text-slate-500">
             Total Nilai
           </p>
@@ -337,17 +336,14 @@ export default function LaporanBarangKeluar() {
           <p className="mt-1 text-xs text-slate-400">
             Berdasarkan harga barang
           </p>
-
         </div>
 
       </div>
-
 
       {/* FILTER */}
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 
         <div className="mb-4">
-
           <h2 className="font-semibold text-slate-800">
             Filter Laporan
           </h2>
@@ -355,15 +351,12 @@ export default function LaporanBarangKeluar() {
           <p className="text-sm text-slate-500">
             Cari barang, customer atau nomor delivery
           </p>
-
         </div>
-
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 
           {/* SEARCH */}
           <div className="lg:col-span-2">
-
             <label className="mb-1 block text-sm font-medium text-slate-600">
               Pencarian
             </label>
@@ -391,13 +384,10 @@ export default function LaporanBarangKeluar() {
                 focus:ring-slate-100
               "
             />
-
           </div>
-
 
           {/* START */}
           <div>
-
             <label className="mb-1 block text-sm font-medium text-slate-600">
               Dari Tanggal
             </label>
@@ -423,13 +413,10 @@ export default function LaporanBarangKeluar() {
                 focus:ring-slate-100
               "
             />
-
           </div>
-
 
           {/* END */}
           <div>
-
             <label className="mb-1 block text-sm font-medium text-slate-600">
               Sampai Tanggal
             </label>
@@ -455,11 +442,9 @@ export default function LaporanBarangKeluar() {
                 focus:ring-slate-100
               "
             />
-
           </div>
 
         </div>
-
 
         <div className="mt-4 flex flex-wrap gap-3">
 
@@ -478,7 +463,6 @@ export default function LaporanBarangKeluar() {
           >
             Terapkan Filter
           </button>
-
 
           <button
             onClick={resetFilter}
@@ -499,23 +483,18 @@ export default function LaporanBarangKeluar() {
           </button>
 
         </div>
-
       </div>
-
 
       {/* ACTION BAR */}
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 
         <div className="text-sm text-slate-500">
-
           Menampilkan{" "}
           <span className="font-semibold text-slate-800">
             {filteredRows.length}
           </span>{" "}
           baris data
-
         </div>
-
 
         <div className="flex flex-wrap gap-2">
 
@@ -538,7 +517,6 @@ export default function LaporanBarangKeluar() {
             Export PDF
           </button>
 
-
           <button
             onClick={handleExportExcel}
             disabled={filteredRows.length === 0}
@@ -557,7 +535,6 @@ export default function LaporanBarangKeluar() {
           >
             Export Excel
           </button>
-
 
           <button
             onClick={handlePrint}
@@ -579,9 +556,7 @@ export default function LaporanBarangKeluar() {
           </button>
 
         </div>
-
       </div>
-
 
       {/* TABLE */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -591,7 +566,6 @@ export default function LaporanBarangKeluar() {
           <table className="min-w-[1100px] w-full text-sm">
 
             <thead className="bg-slate-100">
-
               <tr>
 
                 <th className="px-4 py-3 text-center font-semibold text-slate-600">
@@ -631,36 +605,30 @@ export default function LaporanBarangKeluar() {
                 </th>
 
               </tr>
-
             </thead>
-
 
             <tbody>
 
               {loading ? (
 
                 <tr>
-
                   <td
                     colSpan={9}
                     className="px-4 py-12 text-center text-slate-500"
                   >
                     Memuat laporan barang keluar...
                   </td>
-
                 </tr>
 
               ) : filteredRows.length === 0 ? (
 
                 <tr>
-
                   <td
                     colSpan={9}
                     className="px-4 py-12 text-center text-slate-500"
                   >
                     Tidak ada data barang keluar
                   </td>
-
                 </tr>
 
               ) : (
@@ -692,7 +660,7 @@ export default function LaporanBarangKeluar() {
                       {row.customer}
                     </td>
 
-                    <td className="px-4 py-3 text-slate-600">
+                    <td className="px-4 py-3 font-mono text-slate-600">
                       {row.kodeBarang}
                     </td>
 
@@ -725,7 +693,6 @@ export default function LaporanBarangKeluar() {
         </div>
 
       </div>
-
     </div>
   );
 }
