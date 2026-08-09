@@ -1,714 +1,1153 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
 import {
   Camera,
-  MapPin,
-  UserCheck,
-  ClipboardList,
+  CheckCircle2,
+  LogIn,
+  LogOut,
+  RefreshCw,
+  UserRound,
+  X,
 } from "lucide-react";
 
+type Employee = {
+  id: number;
+  nik: string;
+  name: string;
+  position?: string | null;
+  department?: string | null;
+};
+
 export default function AbsensiPage() {
-
-  const [employee, setEmployee] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeeId, setEmployeeId] = useState("");
-  const [note, setNote] = useState("");
-  const [photo, setPhoto] = useState("");
 
-  const [location,setLocation] = useState({
-    latitude:null,
-    longitude:null
-  });
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [preview, setPreview] = useState("");
 
+  const [loadingEmployees, setLoadingEmployees] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  async function loadEmployee(){
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState("");
 
-    const res = await fetch("/api/employee");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  /*
+  |--------------------------------------------------------------------------
+  | LOAD EMPLOYEE
+  |--------------------------------------------------------------------------
+  */
+
+  useEffect(() => {
+    loadEmployees();
+    startCamera();
+
+    return () => {
+      stopCamera();
+
+      if (preview) {
+        URL.revokeObjectURL(preview);
+      }
+    };
+  }, []);
+
+  async function loadEmployees() {
+    try {
+      setLoadingEmployees(true);
+
+      const res = await fetch("/api/employee", {
+        cache: "no-store",
+      });
+
+      const json = await res.json();
+
+      if (json.success) {
+        setEmployees(json.data || []);
+      } else {
+        alert(json.message || "Gagal mengambil data karyawan");
+      }
+    } catch (error) {
+      console.error("LOAD EMPLOYEE ERROR:", error);
+      alert("Gagal mengambil data karyawan");
+    } finally {
+      setLoadingEmployees(false);
+    }
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | CAMERA
+  |--------------------------------------------------------------------------
+  */
+
+  async function startCamera() {
+    try {
+      setCameraError("");
+      setCameraReady(false);
+
+      if (
+        typeof navigator === "undefined" ||
+        !navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia
+      ) {
+        setCameraError(
+          "Browser tidak mendukung akses kamera."
+        );
+        return;
+      }
+
+      const stream =
+        await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "user",
+            width: {
+              ideal: 720,
+            },
+            height: {
+              ideal: 720,
+            },
+          },
+          audio: false,
+        });
+
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+
+        await videoRef.current.play().catch(() => {});
+
+        setCameraReady(true);
+      }
+    } catch (error) {
+      console.error("CAMERA ERROR:", error);
+
+      setCameraReady(false);
+
+      setCameraError(
+        "Kamera tidak dapat digunakan. Pastikan izin kamera sudah diberikan."
+      );
+    }
+  }
+
+  function stopCamera() {
+    if (streamRef.current) {
+      streamRef.current
+        .getTracks()
+        .forEach((track) => track.stop());
+
+      streamRef.current = null;
+    }
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | TAKE SELFIE
+  |--------------------------------------------------------------------------
+  */
+
+  function takePhoto() {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    if (!video || !canvas) {
+      alert("Kamera belum siap");
+      return;
+    }
+
+    if (
+      video.videoWidth === 0 ||
+      video.videoHeight === 0
+    ) {
+      alert("Kamera belum siap. Tunggu beberapa detik.");
+      return;
+    }
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) {
+      alert("Gagal mengambil gambar");
+      return;
+    }
+
+    /*
+     * Mirror selfie supaya hasil foto terlihat natural.
+     */
+    ctx.save();
+
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+
+    ctx.drawImage(
+      video,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    ctx.restore();
+
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          alert("Gagal membuat foto");
+          return;
+        }
+
+        const file = new File(
+          [blob],
+          `attendance-${Date.now()}.jpg`,
+          {
+            type: "image/jpeg",
+          }
+        );
+
+        if (preview) {
+          URL.revokeObjectURL(preview);
+        }
+
+        const previewUrl =
+          URL.createObjectURL(blob);
+
+        setPhoto(file);
+        setPreview(previewUrl);
+      },
+      "image/jpeg",
+      0.9
+    );
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | RESET PHOTO
+  |--------------------------------------------------------------------------
+  */
+
+  function resetPhoto() {
+    if (preview) {
+      URL.revokeObjectURL(preview);
+    }
+
+    setPhoto(null);
+    setPreview("");
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | UPLOAD PHOTO
+  |--------------------------------------------------------------------------
+  */
+
+  async function uploadPhoto() {
+    if (!photo) {
+      throw new Error("Foto selfie belum diambil");
+    }
+
+    const formData = new FormData();
+
+    formData.append(
+      "file",
+      photo
+    );
+
+    const res = await fetch(
+      "/api/upload/attendance",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
 
     const json = await res.json();
 
-    if(json.success){
+    console.log(
+      "UPLOAD ATTENDANCE:",
+      json
+    );
 
-      setEmployee(json.data);
-
+    if (!res.ok || !json.success) {
+      throw new Error(
+        json.message ||
+          "Upload foto gagal"
+      );
     }
 
+    const photoUrl =
+      json.photo ||
+      json.url;
+
+    if (!photoUrl) {
+      throw new Error(
+        "URL foto tidak ditemukan"
+      );
+    }
+
+    return photoUrl;
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | ABSEN
+  |--------------------------------------------------------------------------
+  */
 
+  async function absen(
+    type: "IN" | "OUT"
+  ) {
+    if (!employeeId) {
+      alert("Pilih karyawan terlebih dahulu");
+      return;
+    }
 
-  useEffect(()=>{
+    if (!photo) {
+      alert("Ambil foto selfie terlebih dahulu");
+      return;
+    }
 
-    loadEmployee();
+    try {
+      setLoading(true);
 
-    getLocation();
+      /*
+       * Upload foto terlebih dahulu.
+       */
+      const photoUrl =
+        await uploadPhoto();
 
-  },[]);
+      console.log(
+        "FOTO ABSENSI:",
+        photoUrl
+      );
 
+      /*
+       * Kirim ke API attendance.
+       */
+      const res = await fetch(
+        "/api/attendance",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            employeeId:
+              Number(employeeId),
 
+            type,
 
-  function getLocation(){
+            photo:
+              photoUrl,
 
-    navigator.geolocation.getCurrentPosition(
+            note: "",
+          }),
+        }
+      );
 
-      (position)=>{
+      const json =
+        await res.json();
 
-        setLocation({
+      console.log(
+        "ATTENDANCE RESULT:",
+        json
+      );
 
-          latitude:position.coords.latitude,
-
-          longitude:position.coords.longitude
-
-        });
-
-      },
-
-      ()=>{
-
-        alert(
-          "GPS tidak aktif atau izin lokasi ditolak"
+      if (!res.ok || !json.success) {
+        throw new Error(
+          json.message ||
+            "Absensi gagal"
         );
-
-      },
-
-      {
-        enableHighAccuracy:true,
-        timeout:10000,
-        maximumAge:0
       }
-
-    );
-
-  }
-
-
-
-  async function uploadPhoto(e:any){
-
-    const file=e.target.files[0];
-
-    if(!file)return;
-
-
-    const form=new FormData();
-
-    form.append(
-      "file",
-      file
-    );
-
-
-    const res=await fetch(
-      "/api/upload/attendance",
-      {
-        method:"POST",
-        body:form
-      }
-    );
-
-
-    const json=await res.json();
-
-
-    if(json.success){
-
-      setPhoto(json.photo);
-
-    }else{
-
-      alert(json.message);
-
-    }
-
-  }
-
-
-
-  async function checkIn(){
-
-    if(!employeeId){
 
       alert(
-        "Pilih karyawan"
+        json.message ||
+          "Absensi berhasil"
       );
 
-      return;
-
-    }
-
-
-    if(
-      !location.latitude ||
-      !location.longitude
-    ){
-
-      alert(
-        "Lokasi GPS belum terbaca"
-      );
-
-      getLocation();
-
-      return;
-
-    }
-
-
-
-    const res=await fetch(
-      "/api/attendance",
-      {
-
-        method:"POST",
-
-        headers:{
-          "Content-Type":"application/json"
-        },
-
-        body:JSON.stringify({
-
-          employeeId:Number(employeeId),
-
-          photo,
-
-          note,
-
-          latitude:location.latitude,
-
-          longitude:location.longitude
-
-        })
-
-      }
-    );
-
-
-
-    const json=await res.json();
-
-
-    alert(json.message);
-
-
-    if(json.success){
-
+      /*
+       * Reset form setelah berhasil.
+       */
       setEmployeeId("");
 
-      setPhoto("");
+      resetPhoto();
 
-      setNote("");
+    } catch (error: any) {
+      console.error(
+        "ABSENSI ERROR:",
+        error
+      );
 
+      alert(
+        error.message ||
+          "Absensi gagal"
+      );
+    } finally {
+      setLoading(false);
     }
-
   }
 
-
-
-return (
-
-<div className="space-y-6 p-6 md:p-8">
-
-
-{/* HEADER */}
-
-<div>
-
-<h1 className="
-text-3xl
-font-bold
-text-[#29483A]
-">
-
-Absensi Karyawan
-
-</h1>
-
-
-<p className="
-mt-2
-text-sm
-text-[#71827A]
-">
-
-Kelola absensi karyawan dengan foto dan lokasi
-
-</p>
-
-
-</div>
-
-
-
-
-
-<div className="
-grid
-grid-cols-1
-xl:grid-cols-3
-gap-6
-">
-
-
-
-{/* FORM */}
-
-<div className="
-xl:col-span-2
-rounded-2xl
-border
-border-[#D5E5DC]
-bg-[#F9FCFA]
-p-6
-shadow-[0_4px_20px_rgba(73,127,112,0.05)]
-">
-
-
-<div className="
-flex
-items-center
-gap-3
-mb-6
-">
-
-
-<div className="
-h-10
-w-10
-rounded-xl
-bg-[#E8F3EC]
-flex
-items-center
-justify-center
-">
-
-<UserCheck
-size={20}
-className="text-[#497F70]"
-/>
-
-</div>
-
-
-<div>
-
-<h2 className="
-font-bold
-text-[#29483A]
-">
-
-Form Check In
-
-</h2>
-
-
-<p className="
-text-xs
-text-[#71827A]
-">
-
-Input data kehadiran
-
-</p>
-
-
-</div>
-
-
-</div>
-
-
-
-
-
-<label className="
-text-sm
-font-medium
-text-[#40584C]
-">
-
-Karyawan
-
-</label>
-
-
-<select
-
-value={employeeId}
-
-onChange={(e)=>setEmployeeId(e.target.value)}
-
-className="
-mt-2
-w-full
-rounded-xl
-border
-border-[#D5E5DC]
-bg-white
-p-3
-outline-none
-focus:border-[#497F70]
-"
-
->
-
-
-<option value="">
-
--- Pilih Karyawan --
-
-</option>
-
-
-{
-
-employee.map((item:any)=>(
-
-<option
-
-key={item.id}
-
-value={item.id}
-
->
-
-{item.nik} - {item.name}
-
-</option>
-
-))
-
-}
-
-
-</select>
-
-
-
-
-
-<div className="mt-5">
-
-
-<label className="
-text-sm
-font-medium
-text-[#40584C]
-">
-
-Foto Absensi
-
-</label>
-
-
-<div className="
-mt-2
-rounded-xl
-border
-border-dashed
-border-[#BFD8CA]
-bg-[#EAF4EE]
-p-5
-">
-
-<div className="
-flex
-items-center
-gap-3
-mb-3
-text-[#497F70]
-">
-
-<Camera size={18}/>
-
-<span className="text-sm">
-
-Ambil foto selfie
-
-</span>
-
-
-</div>
-
-
-<input
-
-type="file"
-
-accept="image/*"
-
-capture="environment"
-
-onChange={uploadPhoto}
-
-className="
-w-full
-text-sm
-"
-
- />
-
-</div>
-
-
-</div>
-
-
-
-
-{
-photo &&
-
-<div className="mt-5">
-
-<img
-
-src={photo}
-
-className="
-w-48
-rounded-xl
-border
-border-[#D5E5DC]
-"
-
-/>
-
-</div>
-
-}
-
-
-
-
-<div className="mt-5">
-
-
-<label className="
-text-sm
-font-medium
-text-[#40584C]
-">
-
-Keterangan
-
-</label>
-
-
-<textarea
-
-value={note}
-
-onChange={(e)=>setNote(e.target.value)}
-
-className="
-mt-2
-w-full
-rounded-xl
-border
-border-[#D5E5DC]
-p-3
-h-28
-outline-none
-focus:border-[#497F70]
-"
-
-/>
-
-
-</div>
-
-
-
-
-
-<button
-
-onClick={checkIn}
-
-className="
-mt-6
-rounded-xl
-bg-[#497F70]
-px-6
-py-3
-font-semibold
-text-white
-transition
-hover:bg-[#386657]
-"
-
->
-
-Check In
-
-</button>
-
-
-
-</div>
-
-
-
-
-
-
-{/* INFO */}
-
-<div className="
-rounded-2xl
-border
-border-[#D5E5DC]
-bg-[#E8F3EC]
-p-6
-">
-
-
-<div className="
-flex
-items-center
-gap-3
-mb-5
-">
-
-<MapPin
-size={22}
-className="text-[#497F70]"
-/>
-
-
-<h2 className="
-font-bold
-text-[#29483A]
-">
-
-Status Lokasi
-
-</h2>
-
-
-</div>
-
-
-
-
-<div className="
-rounded-xl
-bg-white
-p-4
-border
-border-[#D5E5DC]
-">
-
-
-<p className="
-text-xs
-text-[#71827A]
-">
-
-Latitude
-
-</p>
-
-
-<p className="
-font-semibold
-text-[#29483A]
-">
-
-{location.latitude ?? "-"}
-
-</p>
-
-
-</div>
-
-
-
-
-<div className="
-mt-3
-rounded-xl
-bg-white
-p-4
-border
-border-[#D5E5DC]
-">
-
-
-<p className="
-text-xs
-text-[#71827A]
-">
-
-Longitude
-
-</p>
-
-
-<p className="
-font-semibold
-text-[#29483A]
-">
-
-{location.longitude ?? "-"}
-
-</p>
-
-
-</div>
-
-
-
-
-<div className="
-mt-5
-rounded-xl
-bg-[#F9FCFA]
-p-4
-">
-
-
-<div className="
-flex
-items-center
-gap-2
-text-[#497F70]
-">
-
-<ClipboardList size={18}/>
-
-<span className="text-sm font-semibold">
-
-Catatan
-
-</span>
-
-</div>
-
-
-<p className="
-mt-2
-text-xs
-text-[#71827A]
-">
-
-Pastikan kamera dan lokasi aktif sebelum melakukan check in.
-
-</p>
-
-
-</div>
-
-
-</div>
-
-
-
-</div>
-
-
-</div>
-
-
-);
-
+  /*
+  |--------------------------------------------------------------------------
+  | SELECTED EMPLOYEE
+  |--------------------------------------------------------------------------
+  */
+
+  const selectedEmployee =
+    employees.find(
+      (employee) =>
+        String(employee.id) ===
+        employeeId
+    );
+
+  /*
+  |--------------------------------------------------------------------------
+  | UI
+  |--------------------------------------------------------------------------
+  */
+
+  return (
+    <div className="min-h-screen bg-[#F5F7F6] p-4 md:p-6 lg:p-8">
+
+      {/* HEADER */}
+      <div className="mb-6">
+
+        <div className="flex items-center gap-3">
+
+          <div className="
+            flex
+            h-11
+            w-11
+            items-center
+            justify-center
+            rounded-xl
+            bg-[#497F70]
+            text-white
+            shadow-sm
+          ">
+            <UserRound size={22} />
+          </div>
+
+          <div>
+            <h1 className="
+              text-2xl
+              font-bold
+              tracking-tight
+              text-[#173C32]
+            ">
+              Absensi Karyawan
+            </h1>
+
+            <p className="
+              mt-1
+              text-sm
+              text-gray-500
+            ">
+              Check In dan Check Out menggunakan
+              foto selfie
+            </p>
+          </div>
+
+        </div>
+
+      </div>
+
+
+      {/* MAIN GRID */}
+      <div className="
+        grid
+        grid-cols-1
+        gap-6
+        lg:grid-cols-[minmax(0,1fr)_380px]
+      ">
+
+        {/* CAMERA */}
+        <div className="
+          overflow-hidden
+          rounded-2xl
+          border
+          border-[#DCE8E2]
+          bg-white
+          shadow-sm
+        ">
+
+          <div className="
+            flex
+            items-center
+            justify-between
+            border-b
+            border-[#E7EFEB]
+            px-5
+            py-4
+          ">
+
+            <div>
+
+              <h2 className="
+                font-semibold
+                text-[#173C32]
+              ">
+                Kamera Selfie
+              </h2>
+
+              <p className="
+                mt-1
+                text-xs
+                text-gray-500
+              ">
+                Pastikan wajah terlihat jelas
+              </p>
+
+            </div>
+
+            <div className={`
+              flex
+              items-center
+              gap-2
+              rounded-full
+              px-3
+              py-1.5
+              text-xs
+              font-medium
+              ${
+                cameraReady
+                  ? "bg-green-50 text-green-700"
+                  : "bg-red-50 text-red-600"
+              }
+            `}>
+
+              <span className={`
+                h-2
+                w-2
+                rounded-full
+                ${
+                  cameraReady
+                    ? "bg-green-500"
+                    : "bg-red-500"
+                }
+              `} />
+
+              {cameraReady
+                ? "Kamera Aktif"
+                : "Kamera Tidak Aktif"}
+
+            </div>
+
+          </div>
+
+
+          {/* CAMERA AREA */}
+          <div className="
+            relative
+            aspect-square
+            w-full
+            overflow-hidden
+            bg-black
+          ">
+
+            {preview ? (
+              <img
+                src={preview}
+                alt="Preview selfie"
+                className="
+                  h-full
+                  w-full
+                  object-cover
+                "
+              />
+            ) : (
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                className="
+                  h-full
+                  w-full
+                  object-cover
+                  [transform:scaleX(-1)]
+                "
+              />
+            )}
+
+            {/* CAMERA GUIDE */}
+            {!preview && cameraReady && (
+              <div className="
+                pointer-events-none
+                absolute
+                inset-0
+                flex
+                items-center
+                justify-center
+              ">
+
+                <div className="
+                  h-[65%]
+                  w-[55%]
+                  rounded-[45%]
+                  border-2
+                  border-white/70
+                  shadow-[0_0_0_9999px_rgba(0,0,0,0.20)]
+                " />
+
+              </div>
+            )}
+
+
+            {/* CAMERA ERROR */}
+            {cameraError && !preview && (
+              <div className="
+                absolute
+                inset-0
+                flex
+                flex-col
+                items-center
+                justify-center
+                bg-gray-950
+                px-6
+                text-center
+                text-white
+              ">
+
+                <Camera
+                  size={42}
+                  className="mb-4 opacity-60"
+                />
+
+                <p className="
+                  max-w-sm
+                  text-sm
+                  text-gray-300
+                ">
+                  {cameraError}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  className="
+                    mt-4
+                    inline-flex
+                    items-center
+                    gap-2
+                    rounded-lg
+                    bg-white
+                    px-4
+                    py-2
+                    text-sm
+                    font-medium
+                    text-gray-800
+                    hover:bg-gray-100
+                  "
+                >
+                  <RefreshCw size={16} />
+                  Aktifkan Kamera
+                </button>
+
+              </div>
+            )}
+
+          </div>
+
+
+          {/* CAMERA ACTION */}
+          <div className="p-5">
+
+            <canvas
+              ref={canvasRef}
+              className="hidden"
+            />
+
+            {preview ? (
+              <div className="
+                flex
+                gap-3
+              ">
+
+                <button
+                  type="button"
+                  onClick={resetPhoto}
+                  disabled={loading}
+                  className="
+                    flex
+                    flex-1
+                    items-center
+                    justify-center
+                    gap-2
+                    rounded-xl
+                    border
+                    border-gray-200
+                    bg-white
+                    px-4
+                    py-3
+                    text-sm
+                    font-semibold
+                    text-gray-700
+                    transition
+                    hover:bg-gray-50
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
+                  "
+                >
+                  <X size={18} />
+                  Foto Ulang
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetPhoto();
+                  }}
+                  disabled={loading}
+                  className="
+                    flex
+                    flex-1
+                    items-center
+                    justify-center
+                    gap-2
+                    rounded-xl
+                    bg-[#497F70]
+                    px-4
+                    py-3
+                    text-sm
+                    font-semibold
+                    text-white
+                    transition
+                    hover:bg-[#3D6D60]
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
+                  "
+                >
+                  <CheckCircle2 size={18} />
+                  Gunakan Foto
+                </button>
+
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={takePhoto}
+                disabled={
+                  !cameraReady ||
+                  loading
+                }
+                className="
+                  flex
+                  w-full
+                  items-center
+                  justify-center
+                  gap-2
+                  rounded-xl
+                  bg-[#497F70]
+                  px-5
+                  py-3
+                  font-semibold
+                  text-white
+                  transition
+                  hover:bg-[#3D6D60]
+                  disabled:cursor-not-allowed
+                  disabled:bg-gray-300
+                "
+              >
+                <Camera size={20} />
+                Ambil Selfie
+              </button>
+            )}
+
+          </div>
+
+        </div>
+
+
+        {/* FORM */}
+        <div className="
+          h-fit
+          rounded-2xl
+          border
+          border-[#DCE8E2]
+          bg-white
+          p-5
+          shadow-sm
+        ">
+
+          <div className="mb-5">
+
+            <h2 className="
+              font-semibold
+              text-[#173C32]
+            ">
+              Data Absensi
+            </h2>
+
+            <p className="
+              mt-1
+              text-xs
+              text-gray-500
+            ">
+              Pilih karyawan dan lakukan absensi
+            </p>
+
+          </div>
+
+
+          {/* EMPLOYEE */}
+          <div className="mb-5">
+
+            <label className="
+              mb-2
+              block
+              text-sm
+              font-semibold
+              text-gray-700
+            ">
+              Karyawan
+            </label>
+
+            <select
+              value={employeeId}
+              onChange={(e) =>
+                setEmployeeId(
+                  e.target.value
+                )
+              }
+              disabled={
+                loading ||
+                loadingEmployees
+              }
+              className="
+                w-full
+                rounded-xl
+                border
+                border-[#D5E5DC]
+                bg-white
+                px-4
+                py-3
+                text-sm
+                outline-none
+                transition
+                focus:border-[#497F70]
+                focus:ring-2
+                focus:ring-[#497F70]/10
+                disabled:bg-gray-50
+              "
+            >
+
+              <option value="">
+                {loadingEmployees
+                  ? "Memuat karyawan..."
+                  : "Pilih Karyawan"}
+              </option>
+
+              {employees.map(
+                (employee) => (
+                  <option
+                    key={employee.id}
+                    value={employee.id}
+                  >
+                    {employee.nik} -{" "}
+                    {employee.name}
+                  </option>
+                )
+              )}
+
+            </select>
+
+          </div>
+
+
+          {/* SELECTED EMPLOYEE */}
+          {selectedEmployee && (
+            <div className="
+              mb-5
+              rounded-xl
+              border
+              border-[#DCE8E2]
+              bg-[#F5F9F7]
+              p-4
+            ">
+
+              <div className="
+                flex
+                items-start
+                gap-3
+              ">
+
+                <div className="
+                  flex
+                  h-10
+                  w-10
+                  shrink-0
+                  items-center
+                  justify-center
+                  rounded-full
+                  bg-[#497F70]/10
+                  text-[#497F70]
+                ">
+                  <UserRound size={19} />
+                </div>
+
+                <div className="min-w-0">
+
+                  <p className="
+                    font-semibold
+                    text-[#173C32]
+                  ">
+                    {selectedEmployee.name}
+                  </p>
+
+                  <p className="
+                    mt-1
+                    text-xs
+                    text-gray-500
+                  ">
+                    NIK: {selectedEmployee.nik}
+                  </p>
+
+                  {selectedEmployee.position && (
+                    <p className="
+                      text-xs
+                      text-gray-500
+                    ">
+                      {selectedEmployee.position}
+                    </p>
+                  )}
+
+                  {selectedEmployee.department && (
+                    <p className="
+                      text-xs
+                      text-gray-500
+                    ">
+                      {selectedEmployee.department}
+                    </p>
+                  )}
+
+                </div>
+
+              </div>
+
+            </div>
+          )}
+
+
+          {/* PHOTO STATUS */}
+          <div className="
+            mb-5
+            rounded-xl
+            border
+            border-dashed
+            border-[#D5E5DC]
+            p-4
+          ">
+
+            <div className="
+              flex
+              items-center
+              justify-between
+            ">
+
+              <div className="
+                flex
+                items-center
+                gap-3
+              ">
+
+                <div className={`
+                  flex
+                  h-10
+                  w-10
+                  items-center
+                  justify-center
+                  rounded-full
+                  ${
+                    photo
+                      ? "bg-green-50 text-green-600"
+                      : "bg-gray-100 text-gray-400"
+                  }
+                `}>
+
+                  {photo ? (
+                    <CheckCircle2
+                      size={19}
+                    />
+                  ) : (
+                    <Camera
+                      size={19}
+                    />
+                  )}
+
+                </div>
+
+                <div>
+
+                  <p className="
+                    text-sm
+                    font-semibold
+                    text-gray-700
+                  ">
+                    Foto Selfie
+                  </p>
+
+                  <p className="
+                    mt-0.5
+                    text-xs
+                    text-gray-500
+                  ">
+                    {photo
+                      ? "Foto sudah siap"
+                      : "Foto wajib diambil"}
+                  </p>
+
+                </div>
+
+              </div>
+
+              {photo && (
+                <span className="
+                  rounded-full
+                  bg-green-50
+                  px-2.5
+                  py-1
+                  text-xs
+                  font-semibold
+                  text-green-700
+                ">
+                  Siap
+                </span>
+              )}
+
+            </div>
+
+          </div>
+
+
+          {/* ACTION */}
+          <div className="
+            grid
+            grid-cols-1
+            gap-3
+            sm:grid-cols-2
+          ">
+
+            <button
+              type="button"
+              disabled={
+                loading ||
+                !employeeId ||
+                !photo
+              }
+              onClick={() =>
+                absen("IN")
+              }
+              className="
+                flex
+                items-center
+                justify-center
+                gap-2
+                rounded-xl
+                bg-green-600
+                px-4
+                py-3
+                text-sm
+                font-bold
+                text-white
+                transition
+                hover:bg-green-700
+                disabled:cursor-not-allowed
+                disabled:bg-gray-300
+              "
+            >
+
+              <LogIn size={19} />
+
+              {loading
+                ? "Proses..."
+                : "Check In"}
+
+            </button>
+
+
+            <button
+              type="button"
+              disabled={
+                loading ||
+                !employeeId ||
+                !photo
+              }
+              onClick={() =>
+                absen("OUT")
+              }
+              className="
+                flex
+                items-center
+                justify-center
+                gap-2
+                rounded-xl
+                bg-red-500
+                px-4
+                py-3
+                text-sm
+                font-bold
+                text-white
+                transition
+                hover:bg-red-600
+                disabled:cursor-not-allowed
+                disabled:bg-gray-300
+              "
+            >
+
+              <LogOut size={19} />
+
+              {loading
+                ? "Proses..."
+                : "Check Out"}
+
+            </button>
+
+          </div>
+
+
+          {/* INFO */}
+          <div className="
+            mt-5
+            rounded-xl
+            bg-[#F5F9F7]
+            p-4
+            text-xs
+            leading-5
+            text-gray-500
+          ">
+
+            <p className="
+              font-semibold
+              text-[#497F70]
+            ">
+              Informasi
+            </p>
+
+            <p className="mt-1">
+              Pastikan karyawan sudah dipilih
+              dan foto selfie sudah diambil
+              sebelum melakukan Check In atau
+              Check Out.
+            </p>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  );
 }
