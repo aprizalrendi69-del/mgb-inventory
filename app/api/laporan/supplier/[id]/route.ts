@@ -12,23 +12,70 @@ export async function GET(
   try {
     const { id } = await params;
 
+    const supplierId = Number(id);
+
+    if (!Number.isInteger(supplierId)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "ID supplier tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
     const supplier = await prisma.supplier.findUnique({
       where: {
-        id: Number(id),
+        id: supplierId,
       },
     });
 
     if (!supplier) {
-      return NextResponse.json({
-        success: false,
-        message: "Supplier tidak ditemukan",
-      });
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Supplier tidak ditemukan",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
+
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+
+    const where: any = {
+      supplierId,
+    };
+
+    // FILTER DARI TANGGAL
+    if (from) {
+      const fromDate = new Date(`${from}T00:00:00`);
+
+      where.purchaseDate = {
+        ...(where.purchaseDate || {}),
+        gte: fromDate,
+      };
+    }
+
+    // FILTER SAMPAI TANGGAL
+    if (to) {
+      const toDate = new Date(`${to}T23:59:59.999`);
+
+      where.purchaseDate = {
+        ...(where.purchaseDate || {}),
+        lte: toDate,
+      };
     }
 
     const purchases = await prisma.purchase.findMany({
-      where: {
-        supplierId: Number(id),
-      },
+      where,
+
       include: {
         items: {
           include: {
@@ -36,6 +83,7 @@ export async function GET(
           },
         },
       },
+
       orderBy: {
         purchaseDate: "desc",
       },
@@ -47,7 +95,7 @@ export async function GET(
       purchases,
     });
   } catch (error) {
-    console.error(error);
+    console.error("DETAIL SUPPLIER ERROR:", error);
 
     return NextResponse.json(
       {
