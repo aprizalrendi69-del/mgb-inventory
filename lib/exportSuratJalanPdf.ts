@@ -4,86 +4,158 @@ import autoTable from "jspdf-autotable";
 import { COMPANY } from "@/lib/company";
 
 export function exportSuratJalanPDF(data: any) {
-  const doc = new jsPDF();
+  const doc = new jsPDF("p", "mm", "a4");
 
-  // =========================
+  // =====================================================
+  // KONFIGURASI HALAMAN
+  // =====================================================
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  const marginLeft = 14;
+  const marginRight = 14;
+
+  // =====================================================
   // HEADER PERUSAHAAN
-  // =========================
+  // =====================================================
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
+  function drawCompanyHeader() {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
 
-  doc.text(COMPANY.name.toUpperCase(), 105, 15, {
-    align: "center",
-  });
+    doc.text(
+      COMPANY.name.toUpperCase(),
+      pageWidth / 2,
+      15,
+      {
+        align: "center",
+      }
+    );
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
 
-  // Alamat
-  if (COMPANY.address) {
-    doc.text(COMPANY.address, 105, 21, {
-      align: "center",
-    });
+    let headerLineY = 21;
+
+    // Alamat
+    if (COMPANY.address) {
+      doc.text(
+        COMPANY.address,
+        pageWidth / 2,
+        headerLineY,
+        {
+          align: "center",
+        }
+      );
+
+      headerLineY += 5;
+    }
+
+    // Telepon
+    if (COMPANY.phone) {
+      doc.text(
+        `Telp : ${COMPANY.phone}`,
+        pageWidth / 2,
+        headerLineY,
+        {
+          align: "center",
+        }
+      );
+
+      headerLineY += 5;
+    }
+
+    // Email
+    if (COMPANY.email) {
+      doc.text(
+        `Email : ${COMPANY.email}`,
+        pageWidth / 2,
+        headerLineY,
+        {
+          align: "center",
+        }
+      );
+
+      headerLineY += 5;
+    }
+
+    // Website
+    if (COMPANY.website) {
+      doc.text(
+        `Website : ${COMPANY.website}`,
+        pageWidth / 2,
+        headerLineY,
+        {
+          align: "center",
+        }
+      );
+
+      headerLineY += 5;
+    }
+
+    // Garis header
+    doc.setLineWidth(0.8);
+
+    doc.line(
+      marginLeft,
+      headerLineY,
+      pageWidth - marginRight,
+      headerLineY
+    );
+
+    doc.setLineWidth(0.2);
+
+    doc.line(
+      marginLeft,
+      headerLineY + 1.5,
+      pageWidth - marginRight,
+      headerLineY + 1.5
+    );
+
+    return headerLineY;
   }
 
-  // Telepon
-  if (COMPANY.phone) {
-    doc.text(`Telp : ${COMPANY.phone}`, 105, 26, {
-      align: "center",
-    });
-  }
+  // =====================================================
+  // HEADER HALAMAN PERTAMA
+  // =====================================================
 
-  // Email jika ada
-  let headerLineY = 30;
+  const headerLineY = drawCompanyHeader();
 
-  if (COMPANY.email) {
-    doc.text(`Email : ${COMPANY.email}`, 105, 31, {
-      align: "center",
-    });
-
-    headerLineY = 35;
-  }
-
-  // Website jika ada
-  if (COMPANY.website) {
-    doc.text(`Website : ${COMPANY.website}`, 105, headerLineY, {
-      align: "center",
-    });
-
-    headerLineY += 4;
-  }
-
-  // Garis header
-  doc.setLineWidth(0.8);
-  doc.line(14, headerLineY, 196, headerLineY);
-
-  doc.setLineWidth(0.2);
-  doc.line(14, headerLineY + 1.5, 196, headerLineY + 1.5);
-
-  // =========================
+  // =====================================================
   // JUDUL
-  // =========================
+  // =====================================================
 
   const titleY = headerLineY + 10;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(15);
 
-  doc.text("SURAT JALAN", 105, titleY, {
-    align: "center",
-  });
+  doc.text(
+    "SURAT JALAN",
+    pageWidth / 2,
+    titleY,
+    {
+      align: "center",
+    }
+  );
 
-  // =========================
+  // =====================================================
   // INFORMASI DOKUMEN
-  // =========================
+  // =====================================================
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
 
   const infoStartY = titleY + 10;
 
-  doc.text("No Surat Jalan", 14, infoStartY);
+  // Kiri
+
+  doc.text(
+    "No Surat Jalan",
+    14,
+    infoStartY
+  );
 
   doc.text(
     ": " + (data.suratJalan?.number ?? "-"),
@@ -91,7 +163,11 @@ export function exportSuratJalanPDF(data: any) {
     infoStartY
   );
 
-  doc.text("No Delivery", 14, infoStartY + 7);
+  doc.text(
+    "No Delivery",
+    14,
+    infoStartY + 7
+  );
 
   doc.text(
     ": " + (data.number ?? "-"),
@@ -99,7 +175,11 @@ export function exportSuratJalanPDF(data: any) {
     infoStartY + 7
   );
 
-  doc.text("Customer", 14, infoStartY + 14);
+  doc.text(
+    "Customer",
+    14,
+    infoStartY + 14
+  );
 
   doc.text(
     ": " + (data.customer?.name ?? "-"),
@@ -107,50 +187,115 @@ export function exportSuratJalanPDF(data: any) {
     infoStartY + 14
   );
 
-  doc.text("Alamat", 14, infoStartY + 21);
-
   doc.text(
-    ": " + (data.customer?.address ?? "-"),
-    50,
+    "Alamat",
+    14,
     infoStartY + 21
   );
 
-  doc.text("Tanggal", 130, infoStartY);
+  // Alamat dibuat max width agar tidak keluar halaman
+  const customerAddress =
+    data.customer?.address ?? "-";
+
+  doc.text(
+    ": " + customerAddress,
+    50,
+    infoStartY + 21,
+    {
+      maxWidth: 75,
+    }
+  );
+
+  // Kanan
+
+  doc.text(
+    "Tanggal",
+    130,
+    infoStartY
+  );
 
   doc.text(
     ": " +
-      new Date(data.deliveryDate).toLocaleDateString("id-ID"),
+      (data.deliveryDate
+        ? new Date(
+            data.deliveryDate
+          ).toLocaleDateString("id-ID")
+        : "-"),
     155,
     infoStartY
   );
 
-  // =========================
-  // TABEL BARANG
-  // =========================
+  // =====================================================
+  // DATA BARANG
+  // =====================================================
 
-  const tableStartY = infoStartY + 29;
+  const items = data.items ?? [];
+
+  // =====================================================
+  // HITUNG TOTAL
+  // =====================================================
+
+  const total = items.reduce(
+    (acc: number, item: any) => {
+      const subtotal =
+        item.subtotal ??
+        Number(item.qty ?? 0) *
+          Number(item.price ?? 0);
+
+      return acc + Number(subtotal);
+    },
+    0
+  );
+
+  // =====================================================
+  // TABEL BARANG
+  // =====================================================
+
+  const tableStartY =
+    infoStartY + 30;
 
   autoTable(doc, {
     startY: tableStartY,
 
-    tableWidth: "auto",
-
     margin: {
-      left: 14,
-      right: 14,
+      top: 15,
+      left: marginLeft,
+      right: marginRight,
+      bottom: 20,
     },
 
     theme: "grid",
+
+    pageBreak: "auto",
+
+    showHead: "everyPage",
+
+    rowPageBreak: "avoid",
+
+    styles: {
+      font: "helvetica",
+      fontSize: 8,
+      cellPadding: 2.5,
+      overflow: "linebreak",
+      valign: "middle",
+    },
 
     headStyles: {
       fillColor: [22, 163, 74],
       textColor: 255,
       halign: "center",
+      valign: "middle",
       fontStyle: "bold",
+      fontSize: 8,
     },
 
     bodyStyles: {
       halign: "left",
+      textColor: 20,
+    },
+
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
     },
 
     columnStyles: {
@@ -200,7 +345,7 @@ export function exportSuratJalanPDF(data: any) {
       ],
     ],
 
-    body: (data.items ?? []).map(
+    body: items.map(
       (item: any, index: number) => [
         index + 1,
 
@@ -210,80 +355,264 @@ export function exportSuratJalanPDF(data: any) {
 
         item.barang?.unit ?? "-",
 
-        item.qty,
+        Number(item.qty ?? 0).toLocaleString(
+          "id-ID"
+        ),
 
-        Number(item.price ?? 0).toLocaleString("id-ID"),
+        Number(
+          item.price ?? 0
+        ).toLocaleString("id-ID"),
 
         Number(
           item.subtotal ??
-            Number(item.qty ?? 0) * Number(item.price ?? 0)
+            Number(item.qty ?? 0) *
+              Number(item.price ?? 0)
         ).toLocaleString("id-ID"),
       ]
     ),
+
+    // =================================================
+    // FOOTER SETIAP HALAMAN
+    // =================================================
+
+    didDrawPage: function () {
+      const pageNumber =
+        doc.getCurrentPageInfo()
+          .pageNumber;
+
+      const pageCount =
+        (doc as any).internal.getNumberOfPages();
+
+      doc.setFontSize(8);
+      doc.setFont(
+        "helvetica",
+        "normal"
+      );
+
+      doc.text(
+        `Halaman ${pageNumber} dari ${pageCount}`,
+        pageWidth / 2,
+        pageHeight - 8,
+        {
+          align: "center",
+        }
+      );
+    },
   });
 
-  // =========================
+  // =====================================================
+  // POSISI SETELAH TABEL
+  // =====================================================
+
+  let finalY =
+    ((doc as any).lastAutoTable
+      ?.finalY ?? tableStartY) + 10;
+
+  // =====================================================
+  // CEK RUANG UNTUK TOTAL + CATATAN + TTD
+  // =====================================================
+
+  const requiredSpace = 75;
+
+  if (
+    finalY + requiredSpace >
+    pageHeight - 15
+  ) {
+    doc.addPage();
+
+    finalY = 20;
+
+    doc.setFont(
+      "helvetica",
+      "bold"
+    );
+
+    doc.setFontSize(11);
+
+    doc.text(
+      "SURAT JALAN - LANJUTAN",
+      marginLeft,
+      finalY
+    );
+
+    finalY += 10;
+  }
+
+  // =====================================================
   // TOTAL
-  // =========================
-
-  const total = (data.items ?? []).reduce(
-    (a: number, b: any) =>
-      a +
-      Number(
-        b.subtotal ??
-          Number(b.qty ?? 0) * Number(b.price ?? 0)
-      ),
-    0
-  );
-
-  const y =
-    ((doc as any).lastAutoTable?.finalY ?? tableStartY) + 15;
+  // =====================================================
 
   doc.setDrawColor(120);
+  doc.setLineWidth(0.3);
 
-  doc.line(120, y - 4, 195, y - 4);
+  doc.line(
+    120,
+    finalY,
+    196,
+    finalY
+  );
 
-  doc.setFont("helvetica", "bold");
+  doc.setFont(
+    "helvetica",
+    "bold"
+  );
+
   doc.setFontSize(12);
 
   doc.text(
-    "TOTAL : Rp " + total.toLocaleString("id-ID"),
+    "TOTAL : Rp " +
+      total.toLocaleString("id-ID"),
     125,
-    y + 2
+    finalY + 7
   );
 
-  // =========================
+  // =====================================================
   // CATATAN
-  // =========================
+  // =====================================================
 
-  doc.setFont("helvetica", "normal");
+  const note =
+    data.note ??
+    data.remarks ??
+    "-";
+
+  doc.setFont(
+    "helvetica",
+    "normal"
+  );
+
   doc.setFontSize(10);
 
   doc.text(
-    "Catatan : " + (data.note ?? data.remarks ?? "-"),
+    "Catatan :",
     14,
-    y + 15
+    finalY + 20
   );
 
-  // =========================
+  doc.text(
+    String(note),
+    35,
+    finalY + 20,
+    {
+      maxWidth: 160,
+    }
+  );
+
+  // =====================================================
   // TANDA TANGAN
-  // =========================
+  // =====================================================
 
-  const signY = y + 35;
+  const signY =
+    finalY + 38;
 
-  doc.text("Dibuat", 25, signY);
-  doc.text("Gudang", 75, signY);
-  doc.text("Pengirim", 125, signY);
-  doc.text("Penerima", 175, signY);
+  doc.setFontSize(10);
 
-  doc.line(12, signY + 28, 42, signY + 28);
-  doc.line(62, signY + 28, 92, signY + 28);
-  doc.line(112, signY + 28, 142, signY + 28);
-  doc.line(162, signY + 28, 192, signY + 28);
+  doc.text(
+    "Dibuat",
+    27,
+    signY,
+    {
+      align: "center",
+    }
+  );
 
-  // =========================
+  doc.text(
+    "Gudang",
+    77,
+    signY,
+    {
+      align: "center",
+    }
+  );
+
+  doc.text(
+    "Pengirim",
+    127,
+    signY,
+    {
+      align: "center",
+    }
+  );
+
+  doc.text(
+    "Penerima",
+    177,
+    signY,
+    {
+      align: "center",
+    }
+  );
+
+  // Garis tanda tangan
+
+  doc.line(
+    12,
+    signY + 28,
+    42,
+    signY + 28
+  );
+
+  doc.line(
+    62,
+    signY + 28,
+    92,
+    signY + 28
+  );
+
+  doc.line(
+    112,
+    signY + 28,
+    142,
+    signY + 28
+  );
+
+  doc.line(
+    162,
+    signY + 28,
+    192,
+    signY + 28
+  );
+
+  // =====================================================
+  // UPDATE NOMOR HALAMAN
+  // =====================================================
+
+  const totalPages =
+    (doc as any).internal.getNumberOfPages();
+
+  for (
+    let page = 1;
+    page <= totalPages;
+    page++
+  ) {
+    doc.setPage(page);
+
+    doc.setFont(
+      "helvetica",
+      "normal"
+    );
+
+    doc.setFontSize(8);
+
+    doc.text(
+      `Halaman ${page} dari ${totalPages}`,
+      pageWidth / 2,
+      pageHeight - 8,
+      {
+        align: "center",
+      }
+    );
+  }
+
+  // =====================================================
   // SIMPAN PDF
-  // =========================
+  // =====================================================
 
-  doc.save(`${data.number}.pdf`);
+  const fileName =
+    data.suratJalan?.number ??
+    data.number ??
+    "surat-jalan";
+
+  doc.save(
+    `${fileName}.pdf`
+  );
 }
