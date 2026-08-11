@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+
 import {
   Search,
   RefreshCw,
@@ -32,7 +33,9 @@ export default function ExpiredPage() {
     try {
       setLoading(true);
 
-      const res = await fetch("/api/barang-batch");
+      const res = await fetch("/api/barang-batch", {
+        cache: "no-store",
+      });
 
       const json = await res.json();
 
@@ -125,10 +128,12 @@ export default function ExpiredPage() {
     <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
 
       {/* HEADER */}
+
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
         <div>
           <div className="flex items-center gap-3">
+
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50">
               <Package className="h-6 w-6 text-red-600" />
             </div>
@@ -142,10 +147,12 @@ export default function ExpiredPage() {
                 Pantau masa berlaku seluruh batch barang di gudang
               </p>
             </div>
+
           </div>
         </div>
 
         <button
+          type="button"
           onClick={load}
           disabled={loading}
           className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -162,9 +169,11 @@ export default function ExpiredPage() {
       </div>
 
       {/* SUMMARY */}
+
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
 
         {/* TOTAL */}
+
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
 
@@ -186,6 +195,7 @@ export default function ExpiredPage() {
         </div>
 
         {/* EXPIRED */}
+
         <div className="rounded-2xl border border-red-100 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
 
@@ -207,6 +217,7 @@ export default function ExpiredPage() {
         </div>
 
         {/* WARNING */}
+
         <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
 
@@ -228,6 +239,7 @@ export default function ExpiredPage() {
         </div>
 
         {/* AMAN */}
+
         <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
 
@@ -251,11 +263,13 @@ export default function ExpiredPage() {
       </div>
 
       {/* FILTER */}
+
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
 
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_220px]">
 
           {/* SEARCH */}
+
           <div className="relative">
 
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -271,6 +285,7 @@ export default function ExpiredPage() {
           </div>
 
           {/* STATUS */}
+
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
@@ -311,6 +326,7 @@ export default function ExpiredPage() {
 
           {(search || status !== "SEMUA") && (
             <button
+              type="button"
               onClick={() => {
                 setSearch("");
                 setStatus("SEMUA");
@@ -326,6 +342,7 @@ export default function ExpiredPage() {
       </div>
 
       {/* TABLE */}
+
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
         <div className="overflow-x-auto">
@@ -422,43 +439,33 @@ export default function ExpiredPage() {
                   >
 
                     <td className="px-5 py-4">
-
                       <span className="font-mono text-sm font-semibold text-slate-700">
                         {item.kodeBarang}
                       </span>
-
                     </td>
 
                     <td className="px-5 py-4">
-
                       <div className="font-medium text-slate-800">
                         {item.namaBarang}
                       </div>
-
                     </td>
 
                     <td className="px-5 py-4">
-
                       <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
                         {item.batchNumber || "-"}
                       </span>
-
                     </td>
 
                     <td className="px-5 py-4 text-right">
-
                       <span className="font-semibold text-slate-800">
                         {item.qty.toLocaleString("id-ID")}
                       </span>
-
                     </td>
 
                     <td className="px-5 py-4 text-center">
-
                       <span className="text-sm text-slate-700">
                         {formatDate(item.expiredDate)}
                       </span>
-
                     </td>
 
                     <td className="px-5 py-4 text-center">
@@ -487,9 +494,7 @@ export default function ExpiredPage() {
                     </td>
 
                     <td className="px-5 py-4 text-center">
-
                       {renderStatus(item.status)}
-
                     </td>
 
                   </tr>

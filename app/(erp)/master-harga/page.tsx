@@ -70,12 +70,17 @@ export default function MasterHargaPage() {
         row.barang?.barcode ?? ""
       ).toLowerCase();
 
+      const unit = String(
+        row.barang?.unit ?? ""
+      ).toLowerCase();
+
       return (
         po.includes(keyword) ||
         supplier.includes(keyword) ||
         barang.includes(keyword) ||
         kodeBarang.includes(keyword) ||
-        barcode.includes(keyword)
+        barcode.includes(keyword) ||
+        unit.includes(keyword)
       );
     });
   }, [rows, search]);
@@ -172,7 +177,6 @@ export default function MasterHargaPage() {
 
       </div>
 
-
       {/* ================= SUMMARY ================= */}
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -219,7 +223,6 @@ export default function MasterHargaPage() {
 
         </div>
 
-
         {/* NAIK */}
 
         <div className="
@@ -262,7 +265,6 @@ export default function MasterHargaPage() {
 
         </div>
 
-
         {/* TURUN */}
 
         <div className="
@@ -304,7 +306,6 @@ export default function MasterHargaPage() {
           </div>
 
         </div>
-
 
         {/* TETAP */}
 
@@ -350,7 +351,6 @@ export default function MasterHargaPage() {
 
       </div>
 
-
       {/* ================= SEARCH ================= */}
 
       <div className="
@@ -392,7 +392,7 @@ export default function MasterHargaPage() {
               onChange={(e) =>
                 setSearch(e.target.value)
               }
-              placeholder="Cari PO, supplier, kode, barcode, atau nama barang..."
+              placeholder="Cari PO, supplier, kode, barcode, nama barang, atau satuan..."
               className="
                 w-full
                 rounded-xl
@@ -442,7 +442,6 @@ export default function MasterHargaPage() {
 
           </div>
 
-
           <div className="text-sm text-gray-500">
 
             {search ? (
@@ -472,7 +471,6 @@ export default function MasterHargaPage() {
 
       </div>
 
-
       {/* ================= TABLE ================= */}
 
       <div className="
@@ -486,7 +484,7 @@ export default function MasterHargaPage() {
 
         <div className="overflow-x-auto">
 
-          <table className="min-w-[1250px] w-full text-sm">
+          <table className="min-w-[1350px] w-full text-sm">
 
             <thead className="bg-[#F5F8F6]">
 
@@ -506,6 +504,10 @@ export default function MasterHargaPage() {
 
                 <th className="whitespace-nowrap px-5 py-4 text-left font-semibold text-[#35564C]">
                   Barang
+                </th>
+
+                <th className="whitespace-nowrap px-5 py-4 text-center font-semibold text-[#35564C]">
+                  Satuan
                 </th>
 
                 <th className="whitespace-nowrap px-5 py-4 text-right font-semibold text-[#35564C]">
@@ -540,7 +542,6 @@ export default function MasterHargaPage() {
 
             </thead>
 
-
             <tbody>
 
               {/* LOADING */}
@@ -550,7 +551,7 @@ export default function MasterHargaPage() {
                 <tr>
 
                   <td
-                    colSpan={11}
+                    colSpan={12}
                     className="px-5 py-14 text-center"
                   >
 
@@ -579,7 +580,6 @@ export default function MasterHargaPage() {
 
               )}
 
-
               {/* EMPTY */}
 
               {!loading &&
@@ -588,7 +588,7 @@ export default function MasterHargaPage() {
                   <tr>
 
                     <td
-                      colSpan={11}
+                      colSpan={12}
                       className="px-5 py-14 text-center"
                     >
 
@@ -645,7 +645,6 @@ export default function MasterHargaPage() {
 
                 )}
 
-
               {/* DATA */}
 
               {!loading &&
@@ -698,7 +697,6 @@ export default function MasterHargaPage() {
 
                         </td>
 
-
                         {/* PO */}
 
                         <td className="
@@ -713,7 +711,6 @@ export default function MasterHargaPage() {
 
                         </td>
 
-
                         {/* SUPPLIER */}
 
                         <td className="
@@ -725,7 +722,6 @@ export default function MasterHargaPage() {
                           {row.supplier?.name || "-"}
 
                         </td>
-
 
                         {/* BARANG */}
 
@@ -763,6 +759,20 @@ export default function MasterHargaPage() {
 
                         </td>
 
+                        {/* SATUAN */}
+
+                        <td className="
+                          whitespace-nowrap
+                          px-5
+                          py-4
+                          text-center
+                          font-medium
+                          text-[#35564C]
+                        ">
+
+                          {row.barang?.unit || "-"}
+
+                        </td>
 
                         {/* HARGA LAMA */}
 
@@ -778,7 +788,6 @@ export default function MasterHargaPage() {
 
                         </td>
 
-
                         {/* HARGA BARU */}
 
                         <td className="
@@ -793,7 +802,6 @@ export default function MasterHargaPage() {
                           Rp {formatNumber(hargaBaru)}
 
                         </td>
-
 
                         {/* SELISIH */}
 
@@ -820,7 +828,6 @@ export default function MasterHargaPage() {
 
                         </td>
 
-
                         {/* PERSEN */}
 
                         <td className="
@@ -837,7 +844,6 @@ export default function MasterHargaPage() {
                           %
 
                         </td>
-
 
                         {/* STATUS */}
 
@@ -914,7 +920,6 @@ export default function MasterHargaPage() {
 
                         </td>
 
-
                         {/* QTY */}
 
                         <td className="
@@ -928,7 +933,6 @@ export default function MasterHargaPage() {
                           {formatNumber(row.qty)}
 
                         </td>
-
 
                         {/* TOTAL */}
 
