@@ -43,13 +43,18 @@ export default function PurchasePage() {
         setPurchase(json.data || []);
       } else {
         console.error(
-          json.message || "Gagal mengambil data Purchase"
+          json.message ||
+            "Gagal mengambil data Purchase"
         );
 
         setPurchase([]);
       }
     } catch (error) {
-      console.error("PURCHASE ERROR:", error);
+      console.error(
+        "PURCHASE ERROR:",
+        error
+      );
+
       setPurchase([]);
     } finally {
       setLoading(false);
@@ -57,7 +62,9 @@ export default function PurchasePage() {
   }
 
   async function approvePurchase(id: number) {
-    const ok = confirm("Approve Purchase Order ini?");
+    const ok = confirm(
+      "Approve Purchase Order ini?"
+    );
 
     if (!ok) return;
 
@@ -72,19 +79,22 @@ export default function PurchasePage() {
       const json = await res.json();
 
       if (json.success) {
-        alert("Purchase berhasil di-Approve");
-        loadPurchase();
+        alert(
+          "Purchase Order berhasil di-Approve"
+        );
+
+        await loadPurchase();
       } else {
         alert(
           json.message ||
-            "Gagal approve purchase"
+            "Gagal approve Purchase Order"
         );
       }
     } catch (error) {
       console.error(error);
 
       alert(
-        "Terjadi kesalahan saat approve purchase"
+        "Terjadi kesalahan saat approve Purchase Order"
       );
     }
   }
@@ -107,8 +117,11 @@ export default function PurchasePage() {
       const json = await res.json();
 
       if (json.success) {
-        alert("Barang berhasil diterima");
-        loadPurchase();
+        alert(
+          "Barang berhasil diterima"
+        );
+
+        await loadPurchase();
       } else {
         alert(
           json.message ||
@@ -130,14 +143,20 @@ export default function PurchasePage() {
       .trim();
 
     return purchase.filter((item: any) => {
-      const cocokSearch =
-        !keyword ||
+      const nomorPO =
         item.number
           ?.toLowerCase()
-          .includes(keyword) ||
+          .includes(keyword);
+
+      const namaSupplier =
         item.supplier?.name
           ?.toLowerCase()
           .includes(keyword);
+
+      const cocokSearch =
+        !keyword ||
+        nomorPO ||
+        namaSupplier;
 
       const cocokStatus =
         status === "SEMUA" ||
@@ -148,7 +167,11 @@ export default function PurchasePage() {
         cocokStatus
       );
     });
-  }, [purchase, search, status]);
+  }, [
+    purchase,
+    search,
+    status,
+  ]);
 
   const totalPurchase =
     purchase.length;
@@ -171,12 +194,13 @@ export default function PurchasePage() {
         item.status === "RECEIVED"
     ).length;
 
-  const totalValue = purchase.reduce(
-    (total: number, item: any) =>
-      total +
-      Number(item.total || 0),
-    0
-  );
+  const totalValue =
+    purchase.reduce(
+      (total: number, item: any) =>
+        total +
+        Number(item.total || 0),
+      0
+    );
 
   function formatRupiah(value: any) {
     return Number(
@@ -189,7 +213,11 @@ export default function PurchasePage() {
 
     const date = new Date(value);
 
-    if (Number.isNaN(date.getTime())) {
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
       return "-";
     }
 
@@ -210,20 +238,7 @@ export default function PurchasePage() {
   }) {
     if (status === "DRAFT") {
       return (
-        <span
-          className="
-            inline-flex
-            items-center
-            gap-1.5
-            rounded-full
-            bg-amber-50
-            px-3
-            py-1.5
-            text-xs
-            font-semibold
-            text-amber-700
-          "
-        >
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
           Draft
         </span>
@@ -232,20 +247,7 @@ export default function PurchasePage() {
 
     if (status === "APPROVED") {
       return (
-        <span
-          className="
-            inline-flex
-            items-center
-            gap-1.5
-            rounded-full
-            bg-blue-50
-            px-3
-            py-1.5
-            text-xs
-            font-semibold
-            text-blue-700
-          "
-        >
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
           <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
           Approved
         </span>
@@ -254,41 +256,33 @@ export default function PurchasePage() {
 
     if (status === "RECEIVED") {
       return (
-        <span
-          className="
-            inline-flex
-            items-center
-            gap-1.5
-            rounded-full
-            bg-green-50
-            px-3
-            py-1.5
-            text-xs
-            font-semibold
-            text-green-700
-          "
-        >
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">
           <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
           Received
         </span>
       );
     }
 
+    if (status === "COMPLETED") {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700">
+          <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+          Completed
+        </span>
+      );
+    }
+
+    if (status === "CANCELLED") {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700">
+          <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+          Cancelled
+        </span>
+      );
+    }
+
     return (
-      <span
-        className="
-          inline-flex
-          items-center
-          gap-1.5
-          rounded-full
-          bg-gray-100
-          px-3
-          py-1.5
-          text-xs
-          font-semibold
-          text-gray-600
-        "
-      >
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600">
         {status || "Unknown"}
       </span>
     );
@@ -297,81 +291,31 @@ export default function PurchasePage() {
   return (
     <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
 
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
+      {/* HEADER */}
 
-      <div
-        className="
-          mb-7
-          flex
-          flex-col
-          gap-4
-          md:flex-row
-          md:items-center
-          md:justify-between
-        "
-      >
+      <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
         <div className="flex items-center gap-3">
 
-          <div
-            className="
-              flex
-              h-12
-              w-12
-              items-center
-              justify-center
-              rounded-xl
-              bg-[#497F70]
-              text-white
-              shadow-sm
-            "
-          >
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#497F70] text-white shadow-sm">
             <ShoppingCart size={23} />
           </div>
 
           <div>
-
-            <h1
-              className="
-                text-2xl
-                font-bold
-                tracking-tight
-                text-[#18352D]
-                md:text-3xl
-              "
-            >
+            <h1 className="text-2xl font-bold tracking-tight text-[#18352D] md:text-3xl">
               Purchase Order
             </h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              Kelola Purchase Order dan
-              penerimaan barang
+              Kelola Purchase Order dan penerimaan barang
             </p>
-
           </div>
 
         </div>
 
         <Link
           href="/purchase/new"
-          className="
-            inline-flex
-            items-center
-            justify-center
-            gap-2
-            rounded-xl
-            bg-[#497F70]
-            px-5
-            py-3
-            text-sm
-            font-semibold
-            text-white
-            shadow-sm
-            transition
-            hover:bg-[#3D6D60]
-          "
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#497F70] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3D6D60]"
         >
           <Plus size={18} />
           Purchase Baru
@@ -379,91 +323,31 @@ export default function PurchasePage() {
 
       </div>
 
-      {/* =====================================================
-          SUMMARY
-      ===================================================== */}
+      {/* SUMMARY */}
 
-      <div
-        className="
-          mb-6
-          grid
-          grid-cols-1
-          gap-4
-          sm:grid-cols-2
-          xl:grid-cols-4
-        "
-      >
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
 
-        {/* TOTAL */}
-
-        <div
-          className="
-            rounded-2xl
-            border
-            border-[#DDE9E4]
-            bg-white
-            p-5
-            shadow-sm
-          "
-        >
-
+        <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
-
             <div>
-
               <p className="text-sm text-gray-500">
                 Total Purchase
               </p>
 
-              <p
-                className="
-                  mt-1
-                  text-2xl
-                  font-bold
-                  text-[#18352D]
-                "
-              >
+              <p className="mt-1 text-2xl font-bold text-[#18352D]">
                 {totalPurchase}
               </p>
-
             </div>
 
-            <div
-              className="
-                flex
-                h-11
-                w-11
-                items-center
-                justify-center
-                rounded-xl
-                bg-[#EAF3EF]
-                text-[#497F70]
-              "
-            >
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
               <FileText size={21} />
             </div>
-
           </div>
-
         </div>
 
-        {/* DRAFT */}
-
-        <div
-          className="
-            rounded-2xl
-            border
-            border-[#DDE9E4]
-            bg-white
-            p-5
-            shadow-sm
-          "
-        >
-
+        <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
-
             <div>
-
               <p className="text-sm text-gray-500">
                 Draft
               </p>
@@ -471,45 +355,17 @@ export default function PurchasePage() {
               <p className="mt-1 text-2xl font-bold text-amber-600">
                 {totalDraft}
               </p>
-
             </div>
 
-            <div
-              className="
-                flex
-                h-11
-                w-11
-                items-center
-                justify-center
-                rounded-xl
-                bg-amber-50
-                text-amber-600
-              "
-            >
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
               <Clock3 size={21} />
             </div>
-
           </div>
-
         </div>
 
-        {/* APPROVED */}
-
-        <div
-          className="
-            rounded-2xl
-            border
-            border-[#DDE9E4]
-            bg-white
-            p-5
-            shadow-sm
-          "
-        >
-
+        <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
-
             <div>
-
               <p className="text-sm text-gray-500">
                 Approved
               </p>
@@ -517,45 +373,17 @@ export default function PurchasePage() {
               <p className="mt-1 text-2xl font-bold text-blue-600">
                 {totalApproved}
               </p>
-
             </div>
 
-            <div
-              className="
-                flex
-                h-11
-                w-11
-                items-center
-                justify-center
-                rounded-xl
-                bg-blue-50
-                text-blue-600
-              "
-            >
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <CheckCircle2 size={21} />
             </div>
-
           </div>
-
         </div>
 
-        {/* RECEIVED */}
-
-        <div
-          className="
-            rounded-2xl
-            border
-            border-[#DDE9E4]
-            bg-white
-            p-5
-            shadow-sm
-          "
-        >
-
+        <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
-
             <div>
-
               <p className="text-sm text-gray-500">
                 Barang Diterima
               </p>
@@ -563,66 +391,30 @@ export default function PurchasePage() {
               <p className="mt-1 text-2xl font-bold text-green-600">
                 {totalReceived}
               </p>
-
             </div>
 
-            <div
-              className="
-                flex
-                h-11
-                w-11
-                items-center
-                justify-center
-                rounded-xl
-                bg-green-50
-                text-green-600
-              "
-            >
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-50 text-green-600">
               <PackageCheck size={21} />
             </div>
-
           </div>
-
         </div>
 
       </div>
 
-      {/* =====================================================
-          TOTAL VALUE
-      ===================================================== */}
+      {/* TOTAL VALUE */}
 
-      <div
-        className="
-          mb-6
-          rounded-2xl
-          border
-          border-[#DDE9E4]
-          bg-white
-          px-5
-          py-4
-          shadow-sm
-        "
-      >
+      <div className="mb-6 rounded-2xl border border-[#DDE9E4] bg-white px-5 py-4 shadow-sm">
 
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
 
           <div>
-
             <p className="text-sm text-gray-500">
               Total Nilai Purchase Order
             </p>
 
-            <p
-              className="
-                mt-1
-                text-xl
-                font-bold
-                text-[#18352D]
-              "
-            >
+            <p className="mt-1 text-xl font-bold text-[#18352D]">
               Rp {formatRupiah(totalValue)}
             </p>
-
           </div>
 
           <div className="text-sm text-gray-400">
@@ -633,56 +425,21 @@ export default function PurchasePage() {
 
       </div>
 
-      {/* =====================================================
-          MAIN CONTENT
-      ===================================================== */}
+      {/* MAIN */}
 
-      <div
-        className="
-          overflow-hidden
-          rounded-2xl
-          border
-          border-[#DDE9E4]
-          bg-white
-          shadow-sm
-        "
-      >
+      <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
         {/* TOOLBAR */}
 
-        <div
-          className="
-            border-b
-            border-[#E5ECE9]
-            p-4
-            md:p-5
-          "
-        >
+        <div className="border-b border-[#E5ECE9] p-4 md:p-5">
 
-          <div
-            className="
-              flex
-              flex-col
-              gap-3
-              lg:flex-row
-              lg:items-center
-              lg:justify-between
-            "
-          >
-
-            {/* SEARCH */}
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 
             <div className="relative w-full lg:max-w-md">
 
               <Search
                 size={18}
-                className="
-                  absolute
-                  left-3
-                  top-1/2
-                  -translate-y-1/2
-                  text-gray-400
-                "
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
               />
 
               <input
@@ -692,27 +449,10 @@ export default function PurchasePage() {
                   setSearch(e.target.value)
                 }
                 placeholder="Cari No PO atau supplier..."
-                className="
-                  w-full
-                  rounded-xl
-                  border
-                  border-[#D5E5DC]
-                  bg-[#FAFCFB]
-                  py-2.5
-                  pl-10
-                  pr-4
-                  text-sm
-                  outline-none
-                  transition
-                  focus:border-[#497F70]
-                  focus:ring-2
-                  focus:ring-[#497F70]/10
-                "
+                className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
               />
 
             </div>
-
-            {/* FILTER */}
 
             <div className="flex gap-2">
 
@@ -721,19 +461,8 @@ export default function PurchasePage() {
                 onChange={(e) =>
                   setStatus(e.target.value)
                 }
-                className="
-                  rounded-xl
-                  border
-                  border-[#D5E5DC]
-                  bg-[#FAFCFB]
-                  px-4
-                  py-2.5
-                  text-sm
-                  outline-none
-                  focus:border-[#497F70]
-                "
+                className="rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-2.5 text-sm outline-none focus:border-[#497F70]"
               >
-
                 <option value="SEMUA">
                   Semua Status
                 </option>
@@ -750,32 +479,20 @@ export default function PurchasePage() {
                   Received
                 </option>
 
+                <option value="COMPLETED">
+                  Completed
+                </option>
+
+                <option value="CANCELLED">
+                  Cancelled
+                </option>
               </select>
 
               <button
                 onClick={loadPurchase}
                 disabled={loading}
-                className="
-                  inline-flex
-                  items-center
-                  justify-center
-                  gap-2
-                  rounded-xl
-                  border
-                  border-[#D5E5DC]
-                  bg-white
-                  px-4
-                  py-2.5
-                  text-sm
-                  font-medium
-                  text-gray-700
-                  transition
-                  hover:bg-[#F5F8F6]
-                  disabled:cursor-not-allowed
-                  disabled:opacity-50
-                "
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D5E5DC] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#F5F8F6] disabled:cursor-not-allowed disabled:opacity-50"
               >
-
                 <RefreshCw
                   size={16}
                   className={
@@ -786,7 +503,6 @@ export default function PurchasePage() {
                 />
 
                 Refresh
-
               </button>
 
             </div>
@@ -794,28 +510,20 @@ export default function PurchasePage() {
           </div>
 
           <div className="mt-4 text-sm text-gray-500">
-
             Menampilkan{" "}
-
             <span className="font-semibold text-[#18352D]">
               {filteredPurchase.length}
-            </span>
-
-            {" "}dari{" "}
-
+            </span>{" "}
+            dari{" "}
             <span className="font-semibold text-[#18352D]">
               {purchase.length}
-            </span>
-
-            {" "}Purchase Order
-
+            </span>{" "}
+            Purchase Order
           </div>
 
         </div>
 
-        {/* =====================================================
-            TABLE
-        ===================================================== */}
+        {/* TABLE */}
 
         <div className="overflow-x-auto">
 
@@ -859,25 +567,17 @@ export default function PurchasePage() {
 
             <tbody>
 
-              {/* LOADING */}
-
               {loading ? (
-
                 <tr>
-
                   <td
                     colSpan={7}
                     className="px-5 py-14 text-center"
                   >
-
                     <div className="flex flex-col items-center gap-3 text-gray-500">
 
                       <RefreshCw
                         size={25}
-                        className="
-                          animate-spin
-                          text-[#497F70]
-                        "
+                        className="animate-spin text-[#497F70]"
                       />
 
                       <span>
@@ -885,37 +585,17 @@ export default function PurchasePage() {
                       </span>
 
                     </div>
-
                   </td>
-
                 </tr>
-
               ) : filteredPurchase.length === 0 ? (
-
-                /* EMPTY */
-
                 <tr>
-
                   <td
                     colSpan={7}
                     className="px-5 py-14 text-center"
                   >
-
                     <div className="flex flex-col items-center">
 
-                      <div
-                        className="
-                          mb-3
-                          flex
-                          h-14
-                          w-14
-                          items-center
-                          justify-center
-                          rounded-full
-                          bg-[#EAF3EF]
-                          text-[#497F70]
-                        "
-                      >
+                      <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#EAF3EF] text-[#497F70]">
                         <ShoppingCart size={25} />
                       </div>
 
@@ -928,79 +608,45 @@ export default function PurchasePage() {
                       </p>
 
                     </div>
-
                   </td>
-
                 </tr>
-
               ) : (
-
                 filteredPurchase.map(
-                  (item: any, index: number) => (
-
+                  (
+                    item: any,
+                    index: number
+                  ) => (
                     <tr
                       key={item.id}
-                      className="
-                        border-b
-                        border-[#EDF2EF]
-                        transition
-                        hover:bg-[#FAFCFB]
-                      "
+                      className="border-b border-[#EDF2EF] transition hover:bg-[#FAFCFB]"
                     >
-
-                      {/* NO */}
 
                       <td className="px-5 py-4 text-gray-500">
                         {index + 1}
                       </td>
 
-                      {/* NO PO */}
-
                       <td className="px-5 py-4">
 
                         <Link
                           href={`/purchase/${item.id}`}
-                          className="
-                            font-semibold
-                            text-[#18352D]
-                            transition
-                            hover:text-[#497F70]
-                          "
+                          className="font-semibold text-[#18352D] transition hover:text-[#497F70]"
                         >
                           {item.number || "-"}
                         </Link>
 
                       </td>
 
-                      {/* TANGGAL */}
-
                       <td className="px-5 py-4 text-gray-600">
-
                         {formatDate(
                           item.purchaseDate
                         )}
-
                       </td>
-
-                      {/* SUPPLIER */}
 
                       <td className="px-5 py-4">
 
                         <div className="flex items-center gap-3">
 
-                          <div
-                            className="
-                              flex
-                              h-9
-                              w-9
-                              shrink-0
-                              items-center
-                              justify-center
-                              rounded-lg
-                              bg-[#EAF3EF]
-                              text-[#497F70]
-                            "
-                          >
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
                             <Truck size={17} />
                           </div>
 
@@ -1013,82 +659,36 @@ export default function PurchasePage() {
 
                       </td>
 
-                      {/* TOTAL */}
-
-                      <td
-                        className="
-                          px-5
-                          py-4
-                          text-right
-                          font-semibold
-                          text-[#18352D]
-                        "
-                      >
-
+                      <td className="px-5 py-4 text-right font-semibold text-[#18352D]">
                         Rp{" "}
                         {formatRupiah(
                           item.total
                         )}
-
                       </td>
 
-                      {/* STATUS */}
-
                       <td className="px-5 py-4 text-center">
-
                         <StatusBadge
                           status={
                             item.status
                           }
                         />
-
                       </td>
-
-                      {/* AKSI */}
 
                       <td className="px-5 py-4">
 
-                        <div
-                          className="
-                            flex
-                            flex-wrap
-                            justify-center
-                            gap-2
-                          "
-                        >
-
-                          {/* DETAIL */}
+                        <div className="flex flex-wrap justify-center gap-2">
 
                           <Link
                             href={`/purchase/${item.id}`}
                             title="Detail Purchase"
-                            className="
-                              inline-flex
-                              items-center
-                              gap-1.5
-                              rounded-lg
-                              bg-[#EAF3EF]
-                              px-3
-                              py-2
-                              text-xs
-                              font-semibold
-                              text-[#497F70]
-                              transition
-                              hover:bg-[#DDEDE6]
-                            "
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-[#EAF3EF] px-3 py-2 text-xs font-semibold text-[#497F70] transition hover:bg-[#DDEDE6]"
                           >
-
                             <Eye size={14} />
-
                             Detail
-
                           </Link>
-
-                          {/* APPROVE */}
 
                           {item.status ===
                             "DRAFT" && (
-
                             <button
                               onClick={() =>
                                 approvePurchase(
@@ -1096,37 +696,15 @@ export default function PurchasePage() {
                                 )
                               }
                               title="Approve Purchase"
-                              className="
-                                inline-flex
-                                items-center
-                                gap-1.5
-                                rounded-lg
-                                bg-amber-500
-                                px-3
-                                py-2
-                                text-xs
-                                font-semibold
-                                text-white
-                                transition
-                                hover:bg-amber-600
-                              "
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-600"
                             >
-
-                              <Check
-                                size={14}
-                              />
-
+                              <Check size={14} />
                               Approve
-
                             </button>
-
                           )}
-
-                          {/* RECEIVE */}
 
                           {item.status ===
                             "APPROVED" && (
-
                             <button
                               onClick={() =>
                                 receivePurchase(
@@ -1134,63 +712,22 @@ export default function PurchasePage() {
                                 )
                               }
                               title="Terima Barang"
-                              className="
-                                inline-flex
-                                items-center
-                                gap-1.5
-                                rounded-lg
-                                bg-green-600
-                                px-3
-                                py-2
-                                text-xs
-                                font-semibold
-                                text-white
-                                transition
-                                hover:bg-green-700
-                              "
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-green-700"
                             >
-
-                              <PackageCheck
-                                size={14}
-                              />
-
+                              <PackageCheck size={14} />
                               Receive
-
                             </button>
-
                           )}
-
-                          {/* PRINT */}
 
                           <a
                             href={`/purchase/print?id=${item.id}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             title="Print Purchase Order"
-                            className="
-                              inline-flex
-                              items-center
-                              gap-1.5
-                              rounded-lg
-                              border
-                              border-[#D5E5DC]
-                              bg-white
-                              px-3
-                              py-2
-                              text-xs
-                              font-semibold
-                              text-gray-600
-                              transition
-                              hover:bg-[#F5F8F6]
-                            "
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#D5E5DC] bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition hover:bg-[#F5F8F6]"
                           >
-
-                            <Printer
-                              size={14}
-                            />
-
+                            <Printer size={14} />
                             Print
-
                           </a>
 
                         </div>
@@ -1198,10 +735,8 @@ export default function PurchasePage() {
                       </td>
 
                     </tr>
-
                   )
                 )
-
               )}
 
             </tbody>

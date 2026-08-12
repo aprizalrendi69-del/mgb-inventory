@@ -11,6 +11,10 @@ export async function POST(req: NextRequest) {
       items,
     } = body;
 
+    // =====================================================
+    // VALIDASI
+    // =====================================================
+
     if (
       !customerId ||
       !items ||
@@ -28,10 +32,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // =====================================================
+    // TRANSACTION
+    // =====================================================
+
     const result = await prisma.$transaction(async (tx) => {
-      // =====================================================
+      // ===================================================
       // NOMOR DELIVERY
-      // =====================================================
+      // ===================================================
 
       const count = await tx.delivery.count();
 
@@ -40,23 +48,28 @@ export async function POST(req: NextRequest) {
 
       let totalQty = 0;
 
-      // =====================================================
+      // ===================================================
       // CREATE DELIVERY
-      // =====================================================
+      // ===================================================
 
       const delivery = await tx.delivery.create({
         data: {
           number,
           customerId: Number(customerId),
-          status: "DELIVERED",
-          remarks: note,
+
+          // PENTING:
+          // Saat pertama disimpan masih DRAFT.
+          // Belum ada transaksi stock.
+          status: "DRAFT",
+
+          remarks: note || null,
           totalQty: 0,
         },
       });
 
-      // =====================================================
+      // ===================================================
       // PROCESS ITEMS
-      // =====================================================
+      // ===================================================
 
       for (const item of items) {
         const barangId = Number(item.barangId);
@@ -73,7 +86,7 @@ export async function POST(req: NextRequest) {
         }
 
         // =================================================
-        // BARANG
+        // AMBIL BARANG
         // =================================================
 
         const barang = await tx.barang.findUnique({
@@ -84,114 +97,47 @@ export async function POST(req: NextRequest) {
 
         if (!barang) {
           throw new Error(
-            "Barang tidak ditemukan"
+            `Barang dengan ID ${barangId} tidak ditemukan`
           );
         }
 
         // =================================================
-        // CEK STOCK TOTAL
+        // VALIDASI STOCK
+        //
+        // HANYA CEK.
+        // TIDAK MENGURANGI STOCK.
         // =================================================
 
-        if (barang.stock < keluarQty) {
+        if (Number(barang.stock) < keluarQty) {
           throw new Error(
-            `Stock ${barang.name} tidak cukup`
+            `Stock ${barang.name} tidak cukup. Stock tersedia: ${barang.stock}`
           );
         }
 
-        const before = barang.stock;
-        const after = before - keluarQty;
-
         // =================================================
-        // FEFO
-        // =================================================
-
-        if (barang.hasExpired) {
-          const batches = await tx.batchStock.findMany({
-            where: {
-              barangId,
-              qty: {
-                gt: 0,
-              },
-            },
-            orderBy: [
-              {
-                expiredDate: "asc",
-              },
-              {
-                id: "asc",
-              },
-            ],
-          });
-
-          if (batches.length === 0) {
-            throw new Error(
-              `Batch ${barang.name} tidak ditemukan`
-            );
-          }
-
-          const totalBatchStock = batches.reduce(
-            (total, batch) =>
-              total + Number(batch.qty),
-            0
-          );
-
-          if (totalBatchStock < keluarQty) {
-            throw new Error(
-              `Stock batch ${barang.name} tidak cukup`
-            );
-          }
-
-          let remainingQty = keluarQty;
-
-          for (const batch of batches) {
-            if (remainingQty <= 0) {
-              break;
-            }
-
-            const batchQty = Number(batch.qty);
-
-            const usedQty = Math.min(
-              batchQty,
-              remainingQty
-            );
-
-            const newBatchQty =
-              batchQty - usedQty;
-
-            await tx.batchStock.update({
-              where: {
-                id: batch.id,
-              },
-              data: {
-                qty: newBatchQty,
-              },
-            });
-
-            remainingQty -= usedQty;
-          }
-
-          if (remainingQty > 0) {
-            throw new Error(
-              `Gagal menjalankan FEFO untuk ${barang.name}`
-            );
-          }
-        }
-
-        // =================================================
-        // KURANGI STOCK BARANG
+        // HARGA TRANSAKSI
+        //
+        // Harga disimpan di DeliveryItem supaya:
+        // - tetap tersedia saat print Surat Jalan
+        // - tidak berubah kalau harga master berubah
         // =================================================
 
-        await tx.barang.update({
-          where: {
-            id: barang.id,
-          },
-          data: {
-            stock: after,
-          },
-        });
+        const price = Number(barang.sellingPrice ?? 0);
+
+        const subtotal = price * keluarQty;
 
         // =================================================
-        // DELIVERY ITEM
+        // CREATE DELIVERY ITEM
+        //
+        // HANYA MENYIMPAN DATA TRANSAKSI.
+        //
+        // TIDAK:
+        // - FEFO
+        // - Kurangi BatchStock
+        // - Kurangi Barang.stock
+        // - Inventory
+        // - StockCard
+        // - StockMutation
         // =================================================
 
         await tx.deliveryItem.create({
@@ -199,74 +145,17 @@ export async function POST(req: NextRequest) {
             deliveryId: delivery.id,
             barangId: barang.id,
             qty: keluarQty,
-            price: barang.sellingPrice,
-            subtotal:
-              barang.sellingPrice * keluarQty,
-          },
-        });
-
-        // =================================================
-        // INVENTORY
-        // =================================================
-
-        await tx.inventory.upsert({
-          where: {
-            barangId: barang.id,
-          },
-          update: {
-            stock: after,
-            availableStock: after,
-          },
-          create: {
-            barangId: barang.id,
-            stock: after,
-            availableStock: after,
-            minimumStock: barang.minimumStock,
-          },
-        });
-
-        // =================================================
-        // STOCK CARD
-        // =================================================
-
-        await tx.stockCard.create({
-          data: {
-            barangId: barang.id,
-            trxType: "OUT",
-            trxNumber: number,
-            qtyIn: 0,
-            qtyOut: keluarQty,
-            balance: after,
-            unitPrice: barang.sellingPrice,
-            totalValue:
-              barang.sellingPrice * keluarQty,
-            note:
-              note || "Barang Keluar",
-          },
-        });
-
-        // =================================================
-        // STOCK MUTATION
-        // =================================================
-
-        await tx.stockMutation.create({
-          data: {
-            barangId: barang.id,
-            type: "OUT",
-            qty: keluarQty,
-            stockBefore: before,
-            stockAfter: after,
-            reference: number,
-            description: "Barang Keluar",
+            price,
+            subtotal,
           },
         });
 
         totalQty += keluarQty;
       }
 
-      // =====================================================
+      // ===================================================
       // UPDATE TOTAL DELIVERY
-      // =====================================================
+      // ===================================================
 
       await tx.delivery.update({
         where: {
@@ -277,30 +166,35 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // =====================================================
-      // HISTORY
-      // =====================================================
+      // ===================================================
+      // JANGAN BUAT STOCK HISTORY DI SINI
+      //
+      // History transaksi stock baru dibuat saat RELEASE.
+      // ===================================================
 
-      await tx.history.create({
-        data: {
-          transactionType: "DELIVERY",
-          referenceNumber: number,
-          description:
-            `Barang keluar ${number}`,
+      return await tx.delivery.findUnique({
+        where: {
+          id: delivery.id,
+        },
+        include: {
+          customer: true,
+          items: {
+            include: {
+              barang: true,
+            },
+          },
         },
       });
-
-      return delivery;
     });
 
     return NextResponse.json({
       success: true,
-      message: "Barang keluar berhasil",
+      message: "Barang keluar berhasil disimpan sebagai DRAFT",
       data: result,
     });
   } catch (error: any) {
     console.error(
-      "BARANG KELUAR ERROR:",
+      "BARANG KELUAR DRAFT ERROR:",
       error
     );
 
@@ -308,8 +202,8 @@ export async function POST(req: NextRequest) {
       {
         success: false,
         message:
-          error.message ||
-          "Server error",
+          error?.message ||
+          "Gagal menyimpan barang keluar",
       },
       {
         status: 500,

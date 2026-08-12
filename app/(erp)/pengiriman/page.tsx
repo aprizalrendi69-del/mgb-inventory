@@ -7,7 +7,11 @@ import {
   Truck,
   Users,
   Boxes,
+  Pencil,
+  Trash2,
+  Send,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function PengirimanPage() {
   const [delivery, setDelivery] = useState<any[]>([]);
@@ -44,8 +48,29 @@ export default function PengirimanPage() {
     }
   }
 
+  // =====================================================
+  // RELEASE
+  // =====================================================
+
   async function approve(id: number) {
-    if (!confirm("Release Delivery Order ini?")) {
+    const target = delivery.find(
+      (item) => item.id === id
+    );
+
+    if (!target) return;
+
+    const confirmRelease = confirm(
+      `Release Delivery Order ${target.number}?\n\n` +
+      `Setelah di-release:\n` +
+      `- Stock akan berkurang\n` +
+      `- Batch akan diproses FEFO\n` +
+      `- Inventory akan diperbarui\n` +
+      `- Stock Card akan dibuat\n` +
+      `- Stock Mutation akan dibuat\n\n` +
+      `Delivery Order yang sudah RELEASED tidak dapat diedit atau dihapus.`
+    );
+
+    if (!confirmRelease) {
       return;
     }
 
@@ -82,6 +107,81 @@ export default function PengirimanPage() {
 
       alert(
         "Terjadi kesalahan saat release Delivery Order"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // =====================================================
+  // EDIT
+  // =====================================================
+
+  function editDelivery(id: number) {
+    window.location.href =
+      `/barang-keluar/${id}`;
+  }
+
+  // =====================================================
+  // DELETE DRAFT
+  // =====================================================
+
+  async function deleteDelivery(id: number) {
+    const target = delivery.find(
+      (item) => item.id === id
+    );
+
+    if (!target) return;
+
+    if (target.status !== "DRAFT") {
+      alert(
+        "Delivery Order yang sudah RELEASED tidak dapat dihapus."
+      );
+      return;
+    }
+
+    const confirmed = confirm(
+      `Hapus Delivery Order ${target.number}?\n\n` +
+      `Data draft dan detail barang akan dihapus.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const res = await fetch(
+        `/api/delivery-order/${id}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const json = await res.json();
+
+      if (json.success) {
+        alert(
+          json.message ||
+            "Delivery Order berhasil dihapus"
+        );
+
+        await loadData();
+      } else {
+        alert(
+          json.message ||
+            "Gagal menghapus Delivery Order"
+        );
+      }
+    } catch (error) {
+      console.error(
+        "DELETE DELIVERY ERROR:",
+        error
+      );
+
+      alert(
+        "Terjadi kesalahan saat menghapus Delivery Order"
       );
     } finally {
       setLoading(false);
@@ -172,6 +272,7 @@ export default function PengirimanPage() {
     <div className="min-h-full bg-slate-50 p-4 md:p-6">
 
       {/* HEADER */}
+
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
         <div>
@@ -197,8 +298,6 @@ export default function PengirimanPage() {
           </div>
         </div>
 
-
-        {/* REFRESH */}
         <button
           type="button"
           onClick={loadData}
@@ -224,7 +323,6 @@ export default function PengirimanPage() {
             disabled:opacity-50
           "
         >
-
           <RefreshCw
             size={17}
             className={
@@ -235,18 +333,15 @@ export default function PengirimanPage() {
           />
 
           Refresh
-
         </button>
 
       </div>
 
-
       {/* SUMMARY */}
+
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
-        {/* TOTAL */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
           <div className="flex items-center justify-between">
 
             <div>
@@ -267,13 +362,9 @@ export default function PengirimanPage() {
             </div>
 
           </div>
-
         </div>
 
-
-        {/* DRAFT */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
           <div className="flex items-center justify-between">
 
             <div>
@@ -294,13 +385,9 @@ export default function PengirimanPage() {
             </div>
 
           </div>
-
         </div>
 
-
-        {/* RELEASED */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
           <div className="flex items-center justify-between">
 
             <div>
@@ -321,13 +408,9 @@ export default function PengirimanPage() {
             </div>
 
           </div>
-
         </div>
 
-
-        {/* TOTAL QTY */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
           <div className="flex items-center justify-between">
 
             <div>
@@ -350,28 +433,24 @@ export default function PengirimanPage() {
             </div>
 
           </div>
-
         </div>
 
       </div>
 
+      {/* TABLE */}
 
-      {/* TABLE CARD */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
-        {/* TABLE HEADER */}
         <div className="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
 
           <div>
-
             <h2 className="font-semibold text-slate-800">
               Daftar Delivery Order
             </h2>
 
             <p className="mt-0.5 text-xs text-slate-500">
-              Daftar pengiriman barang yang tersedia
+              Draft dapat diedit, dihapus, atau di-release
             </p>
-
           </div>
 
           <div className="text-xs text-slate-500">
@@ -380,11 +459,9 @@ export default function PengirimanPage() {
 
         </div>
 
-
-        {/* TABLE */}
         <div className="overflow-x-auto">
 
-          <table className="w-full min-w-[900px]">
+          <table className="w-full min-w-[1100px]">
 
             <thead>
 
@@ -418,56 +495,45 @@ export default function PengirimanPage() {
 
             </thead>
 
-
             <tbody>
 
-              {/* LOADING */}
-              {loading && delivery.length === 0 && (
-                <tr>
-
-                  <td
-                    colSpan={6}
-                    className="px-4 py-12 text-center"
-                  >
-
-                    <div className="flex flex-col items-center justify-center">
-
-                      <RefreshCw
-                        size={25}
-                        className="animate-spin text-blue-600"
-                      />
-
-                      <p className="mt-3 text-sm text-slate-500">
-                        Memuat Delivery Order...
-                      </p>
-
-                    </div>
-
-                  </td>
-
-                </tr>
-              )}
-
-
-              {/* EMPTY */}
-              {!loading &&
+              {loading &&
                 delivery.length === 0 && (
                   <tr>
-
                     <td
                       colSpan={6}
                       className="px-4 py-12 text-center"
                     >
+                      <div className="flex flex-col items-center justify-center">
 
+                        <RefreshCw
+                          size={25}
+                          className="animate-spin text-blue-600"
+                        />
+
+                        <p className="mt-3 text-sm text-slate-500">
+                          Memuat Delivery Order...
+                        </p>
+
+                      </div>
+                    </td>
+                  </tr>
+                )}
+
+              {!loading &&
+                delivery.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-4 py-12 text-center"
+                    >
                       <div className="mx-auto flex max-w-md flex-col items-center">
 
                         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
-
                           <Truck
                             size={28}
                             className="text-slate-400"
                           />
-
                         </div>
 
                         <h3 className="mt-4 font-semibold text-slate-700">
@@ -479,18 +545,13 @@ export default function PengirimanPage() {
                         </p>
 
                       </div>
-
                     </td>
-
                   </tr>
                 )}
 
-
-              {/* DATA */}
               {!loading &&
                 delivery.map(
                   (d: any) => (
-
                     <tr
                       key={d.id}
                       className="
@@ -502,6 +563,7 @@ export default function PengirimanPage() {
                     >
 
                       {/* NOMOR */}
+
                       <td className="px-4 py-4">
 
                         <div className="font-semibold text-slate-800">
@@ -510,29 +572,25 @@ export default function PengirimanPage() {
 
                       </td>
 
-
                       {/* TANGGAL */}
-                      <td className="px-4 py-4 text-sm text-slate-600">
 
+                      <td className="px-4 py-4 text-sm text-slate-600">
                         {formatDate(
                           d.deliveryDate
                         )}
-
                       </td>
 
-
                       {/* CUSTOMER */}
+
                       <td className="px-4 py-4">
 
                         <div className="flex items-center gap-3">
 
                           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
-
                             <Users
                               size={17}
                               className="text-slate-500"
                             />
-
                           </div>
 
                           <div>
@@ -554,8 +612,8 @@ export default function PengirimanPage() {
 
                       </td>
 
-
                       {/* QTY */}
+
                       <td className="px-4 py-4 text-right">
 
                         <span className="font-semibold text-slate-700">
@@ -568,8 +626,8 @@ export default function PengirimanPage() {
 
                       </td>
 
-
                       {/* STATUS */}
+
                       <td className="px-4 py-4 text-center">
 
                         <StatusBadge
@@ -580,54 +638,139 @@ export default function PengirimanPage() {
 
                       </td>
 
-
                       {/* ACTION */}
-                      <td className="px-4 py-4 text-center">
+
+                      <td className="px-4 py-4">
 
                         {d.status ===
                         "DRAFT" ? (
 
-                          <button
-                            type="button"
-                            disabled={loading}
-                            onClick={() =>
-                              approve(
-                                d.id
-                              )
-                            }
-                            className="
-                              inline-flex
-                              items-center
-                              justify-center
-                              rounded-lg
-                              bg-blue-600
-                              px-4
-                              py-2
-                              text-xs
-                              font-semibold
-                              text-white
-                              shadow-sm
-                              transition
-                              hover:bg-blue-700
-                              disabled:cursor-not-allowed
-                              disabled:opacity-50
-                            "
-                          >
-                            Release
-                          </button>
+                          <div className="flex items-center justify-center gap-2">
+
+                            {/* EDIT */}
+
+                            <button
+                              type="button"
+                              disabled={loading}
+                              onClick={() =>
+                                editDelivery(
+                                  d.id
+                                )
+                              }
+                              title="Edit Draft"
+                              className="
+                                inline-flex
+                                h-9
+                                w-9
+                                items-center
+                                justify-center
+                                rounded-lg
+                                border
+                                border-blue-200
+                                bg-blue-50
+                                text-blue-600
+                                transition
+                                hover:bg-blue-100
+                                disabled:cursor-not-allowed
+                                disabled:opacity-50
+                              "
+                            >
+                              <Pencil
+                                size={16}
+                              />
+                            </button>
+
+                            {/* DELETE */}
+
+                            <button
+                              type="button"
+                              disabled={loading}
+                              onClick={() =>
+                                deleteDelivery(
+                                  d.id
+                                )
+                              }
+                              title="Hapus Draft"
+                              className="
+                                inline-flex
+                                h-9
+                                w-9
+                                items-center
+                                justify-center
+                                rounded-lg
+                                border
+                                border-red-200
+                                bg-red-50
+                                text-red-600
+                                transition
+                                hover:bg-red-100
+                                disabled:cursor-not-allowed
+                                disabled:opacity-50
+                              "
+                            >
+                              <Trash2
+                                size={16}
+                              />
+                            </button>
+
+                            {/* RELEASE */}
+
+                            <button
+                              type="button"
+                              disabled={loading}
+                              onClick={() =>
+                                approve(
+                                  d.id
+                                )
+                              }
+                              title="Release Delivery Order"
+                              className="
+                                inline-flex
+                                items-center
+                                justify-center
+                                gap-1.5
+                                rounded-lg
+                                bg-emerald-600
+                                px-3
+                                py-2
+                                text-xs
+                                font-semibold
+                                text-white
+                                shadow-sm
+                                transition
+                                hover:bg-emerald-700
+                                disabled:cursor-not-allowed
+                                disabled:opacity-50
+                              "
+                            >
+                              <Send
+                                size={14}
+                              />
+
+                              Release
+                            </button>
+
+                          </div>
 
                         ) : (
 
-                          <span className="text-xs text-slate-400">
-                            -
-                          </span>
+                          <div className="flex items-center justify-center">
+
+                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+                              <PackageCheck
+                                size={14}
+                              />
+
+                              Sudah Released
+                            </span>
+
+                          </div>
 
                         )}
 
                       </td>
 
                     </tr>
-
                   )
                 )}
 

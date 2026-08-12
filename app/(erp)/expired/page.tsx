@@ -10,6 +10,9 @@ import {
   CheckCircle2,
   XCircle,
   Clock3,
+  Pencil,
+  Trash2,
+  X,
 } from "lucide-react";
 
 type ExpiredItem = {
@@ -28,6 +31,24 @@ export default function ExpiredPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("SEMUA");
   const [loading, setLoading] = useState(true);
+
+  // =========================
+  // EDIT STATE
+  // =========================
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+
+  const [editData, setEditData] = useState({
+    id: 0,
+    batchNumber: "",
+    qty: "",
+    expiredDate: "",
+  });
+
+  // =========================
+  // LOAD DATA
+  // =========================
 
   async function load() {
     try {
@@ -56,6 +77,10 @@ export default function ExpiredPage() {
     load();
   }, []);
 
+  // =========================
+  // FILTER
+  // =========================
+
   const filtered = useMemo(() => {
     const keyword = search.toLowerCase().trim();
 
@@ -73,6 +98,10 @@ export default function ExpiredPage() {
     });
   }, [data, search, status]);
 
+  // =========================
+  // SUMMARY
+  // =========================
+
   const total = data.length;
 
   const totalExpired = data.filter(
@@ -87,6 +116,10 @@ export default function ExpiredPage() {
     (item) => item.status === "AMAN"
   ).length;
 
+  // =========================
+  // DATE FORMAT
+  // =========================
+
   function formatDate(date: string) {
     if (!date) return "-";
 
@@ -96,6 +129,10 @@ export default function ExpiredPage() {
       year: "numeric",
     });
   }
+
+  // =========================
+  // STATUS
+  // =========================
 
   function renderStatus(status: ExpiredItem["status"]) {
     if (status === "EXPIRED") {
@@ -124,10 +161,131 @@ export default function ExpiredPage() {
     );
   }
 
+  // =========================
+  // OPEN EDIT
+  // =========================
+
+  function openEdit(item: ExpiredItem) {
+    setEditData({
+      id: item.id,
+      batchNumber: item.batchNumber ?? "",
+      qty: String(item.qty ?? ""),
+      expiredDate: item.expiredDate
+        ? new Date(item.expiredDate)
+            .toISOString()
+            .split("T")[0]
+        : "",
+    });
+
+    setEditOpen(true);
+  }
+
+  // =========================
+  // UPDATE
+  // =========================
+
+  async function handleUpdate() {
+    if (!editData.id) return;
+
+    if (!editData.qty || Number(editData.qty) < 0) {
+      alert("Qty tidak valid.");
+      return;
+    }
+
+    if (!editData.expiredDate) {
+      alert("Tanggal expired wajib diisi.");
+      return;
+    }
+
+    try {
+      setEditLoading(true);
+
+      const res = await fetch(
+        `/api/barang-batch/${editData.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            batchNumber: editData.batchNumber,
+            qty: Number(editData.qty),
+            expiredDate: editData.expiredDate,
+          }),
+        }
+      );
+
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(
+          json.message || "Gagal mengubah data batch."
+        );
+      }
+
+      alert("Data batch berhasil diperbarui.");
+
+      setEditOpen(false);
+
+      await load();
+    } catch (error: any) {
+      console.error("Gagal update batch:", error);
+
+      alert(
+        error?.message ||
+          "Terjadi kesalahan saat mengubah data."
+      );
+    } finally {
+      setEditLoading(false);
+    }
+  }
+
+  // =========================
+  // DELETE
+  // =========================
+
+  async function handleDelete(item: ExpiredItem) {
+    const yakin = window.confirm(
+      `Hapus batch "${item.batchNumber || "-"}" dari barang "${item.namaBarang}"?\n\nData yang dihapus tidak dapat dikembalikan.`
+    );
+
+    if (!yakin) return;
+
+    try {
+      const res = await fetch(
+        `/api/barang-batch/${item.id}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(
+          json.message || "Gagal menghapus batch."
+        );
+      }
+
+      alert("Batch berhasil dihapus.");
+
+      await load();
+    } catch (error: any) {
+      console.error("Gagal menghapus batch:", error);
+
+      alert(
+        error?.message ||
+          "Terjadi kesalahan saat menghapus batch."
+      );
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
 
-      {/* HEADER */}
+      {/* =========================
+          HEADER
+      ========================= */}
 
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
@@ -168,7 +326,9 @@ export default function ExpiredPage() {
 
       </div>
 
-      {/* SUMMARY */}
+      {/* =========================
+          SUMMARY
+      ========================= */}
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
 
@@ -262,7 +422,9 @@ export default function ExpiredPage() {
 
       </div>
 
-      {/* FILTER */}
+      {/* =========================
+          FILTER
+      ========================= */}
 
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
 
@@ -341,13 +503,15 @@ export default function ExpiredPage() {
 
       </div>
 
-      {/* TABLE */}
+      {/* =========================
+          TABLE
+      ========================= */}
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
         <div className="overflow-x-auto">
 
-          <table className="min-w-[950px] w-full">
+          <table className="min-w-[1100px] w-full">
 
             <thead className="border-b border-slate-200 bg-slate-50">
 
@@ -381,6 +545,10 @@ export default function ExpiredPage() {
                   Status
                 </th>
 
+                <th className="px-5 py-4 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Aksi
+                </th>
+
               </tr>
 
             </thead>
@@ -391,7 +559,7 @@ export default function ExpiredPage() {
 
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-5 py-12 text-center"
                   >
                     <div className="flex flex-col items-center gap-3">
@@ -410,7 +578,7 @@ export default function ExpiredPage() {
 
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-5 py-12 text-center"
                   >
                     <div className="flex flex-col items-center">
@@ -438,11 +606,15 @@ export default function ExpiredPage() {
                     className="transition hover:bg-slate-50"
                   >
 
+                    {/* KODE */}
+
                     <td className="px-5 py-4">
                       <span className="font-mono text-sm font-semibold text-slate-700">
                         {item.kodeBarang}
                       </span>
                     </td>
+
+                    {/* BARANG */}
 
                     <td className="px-5 py-4">
                       <div className="font-medium text-slate-800">
@@ -450,11 +622,15 @@ export default function ExpiredPage() {
                       </div>
                     </td>
 
+                    {/* BATCH */}
+
                     <td className="px-5 py-4">
                       <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
                         {item.batchNumber || "-"}
                       </span>
                     </td>
+
+                    {/* QTY */}
 
                     <td className="px-5 py-4 text-right">
                       <span className="font-semibold text-slate-800">
@@ -462,19 +638,26 @@ export default function ExpiredPage() {
                       </span>
                     </td>
 
+                    {/* EXPIRED DATE */}
+
                     <td className="px-5 py-4 text-center">
                       <span className="text-sm text-slate-700">
                         {formatDate(item.expiredDate)}
                       </span>
                     </td>
 
+                    {/* SISA */}
+
                     <td className="px-5 py-4 text-center">
 
                       {item.status === "EXPIRED" ? (
 
                         <div className="inline-flex items-center gap-1.5 font-semibold text-red-600">
+
                           <Clock3 className="h-4 w-4" />
+
                           {Math.abs(item.sisaHari)} hari lewat
+
                         </div>
 
                       ) : (
@@ -493,8 +676,38 @@ export default function ExpiredPage() {
 
                     </td>
 
+                    {/* STATUS */}
+
                     <td className="px-5 py-4 text-center">
                       {renderStatus(item.status)}
+                    </td>
+
+                    {/* AKSI */}
+
+                    <td className="px-5 py-4">
+
+                      <div className="flex items-center justify-center gap-2">
+
+                        <button
+                          type="button"
+                          onClick={() => openEdit(item)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(item)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Hapus
+                        </button>
+
+                      </div>
+
                     </td>
 
                   </tr>
@@ -510,6 +723,154 @@ export default function ExpiredPage() {
         </div>
 
       </div>
+
+      {/* =========================
+          EDIT MODAL
+      ========================= */}
+
+      {editOpen && (
+
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+
+            {/* MODAL HEADER */}
+
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+
+              <div>
+
+                <h2 className="text-lg font-bold text-slate-900">
+                  Edit Batch Barang
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Ubah informasi batch dan tanggal expired
+                </p>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setEditOpen(false)}
+                disabled={editLoading}
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+            </div>
+
+            {/* MODAL BODY */}
+
+            <div className="space-y-4 px-6 py-6">
+
+              {/* BATCH */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                  Nomor Batch
+                </label>
+
+                <input
+                  type="text"
+                  value={editData.batchNumber}
+                  onChange={(e) =>
+                    setEditData((prev) => ({
+                      ...prev,
+                      batchNumber: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  placeholder="Nomor batch"
+                />
+
+              </div>
+
+              {/* QTY */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                  Qty
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  value={editData.qty}
+                  onChange={(e) =>
+                    setEditData((prev) => ({
+                      ...prev,
+                      qty: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  placeholder="Qty"
+                />
+
+              </div>
+
+              {/* EXPIRED DATE */}
+
+              <div>
+
+                <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                  Tanggal Expired
+                </label>
+
+                <input
+                  type="date"
+                  value={editData.expiredDate}
+                  onChange={(e) =>
+                    setEditData((prev) => ({
+                      ...prev,
+                      expiredDate: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
+
+              </div>
+
+            </div>
+
+            {/* MODAL FOOTER */}
+
+            <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+
+              <button
+                type="button"
+                onClick={() => setEditOpen(false)}
+                disabled={editLoading}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Batal
+              </button>
+
+              <button
+                type="button"
+                onClick={handleUpdate}
+                disabled={editLoading}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+
+                {editLoading && (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                )}
+
+                {editLoading ? "Menyimpan..." : "Simpan Perubahan"}
+
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
 
     </div>
   );
