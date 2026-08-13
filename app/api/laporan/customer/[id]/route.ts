@@ -10,11 +10,11 @@ export async function GET(
 
     const customerId = Number(id);
 
-    if (!customerId) {
+    if (!Number.isInteger(customerId) || customerId <= 0) {
       return NextResponse.json(
         {
           success: false,
-          message: "ID customer tidak ditemukan",
+          message: "ID customer tidak valid",
         },
         {
           status: 400,
@@ -24,47 +24,156 @@ export async function GET(
 
     const { searchParams } = new URL(req.url);
 
-    const start = searchParams.get("start");
-    const end = searchParams.get("end");
+    /*
+     * =====================================================
+     * FILTER
+     * =====================================================
+     *
+     * Frontend mengirim:
+     *
+     * from
+     * to
+     * searchDO
+     *
+     * Tetap dukung start/end supaya tidak merusak
+     * pemanggilan API lama.
+     */
+
+    const from =
+      searchParams.get("from") ??
+      searchParams.get("start");
+
+    const to =
+      searchParams.get("to") ??
+      searchParams.get("end");
+
+    const searchDO =
+      searchParams.get("searchDO")?.trim() ?? "";
+
+    /*
+     * =====================================================
+     * WHERE DELIVERY
+     * =====================================================
+     */
 
     const where: any = {
       customerId,
     };
 
-    if (start && end) {
-      where.deliveryDate = {
-        gte: new Date(`${start}T00:00:00`),
-        lte: new Date(`${end}T23:59:59`),
+    /*
+     * FILTER TANGGAL
+     */
+
+    if (from || to) {
+      where.deliveryDate = {};
+
+      if (from) {
+        where.deliveryDate.gte =
+          new Date(`${from}T00:00:00`);
+      }
+
+      if (to) {
+        where.deliveryDate.lte =
+          new Date(`${to}T23:59:59`);
+      }
+    }
+
+    /*
+     * =====================================================
+     * FILTER NOMOR DELIVERY ORDER
+     * =====================================================
+     *
+     * Pencarian dilakukan pada nomor DO.
+     *
+     * contains = bisa mencari sebagian nomor.
+     *
+     * Contoh:
+     *
+     * DO-001
+     *
+     * pencarian:
+     * 001
+     *
+     * tetap menemukan DO-001.
+     */
+
+    if (searchDO) {
+      where.number = {
+        contains: searchDO,
       };
     }
 
-    const deliveries = await prisma.delivery.findMany({
-      where,
+    /*
+     * =====================================================
+     * AMBIL DELIVERY
+     * =====================================================
+     */
 
-      include: {
-        customer: true,
+    const deliveries =
+      await prisma.delivery.findMany({
+        where,
 
-        items: {
-          include: {
-            barang: true,
+        include: {
+          customer: true,
+
+          items: {
+            include: {
+              barang: true,
+            },
+
+            orderBy: {
+              id: "asc",
+            },
           },
         },
-      },
 
-      orderBy: {
-        deliveryDate: "desc",
-      },
-    });
+        orderBy: {
+          deliveryDate: "desc",
+        },
+      });
 
     /*
-     * Kalau tidak ada transaksi
+     * =====================================================
+     * CUSTOMER
+     * =====================================================
+     *
+     * Jangan membuat customer null hanya karena
+     * hasil filter searchDO kosong.
+     *
+     * Customer tetap diambil berdasarkan customerId.
      */
+
+    const customer =
+      await prisma.customer.findUnique({
+        where: {
+          id: customerId,
+        },
+      });
+
+    if (!customer) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Customer tidak ditemukan",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    /*
+     * =====================================================
+     * TIDAK ADA DELIVERY
+     * =====================================================
+     */
+
     if (deliveries.length === 0) {
       return NextResponse.json({
         success: true,
 
         data: {
-          customer: null,
+          customer,
 
           deliveries: [],
 
@@ -78,8 +187,11 @@ export async function GET(
     }
 
     /*
-     * Ambil semua barangId
+     * =====================================================
+     * AMBIL BARANG ID
+     * =====================================================
      */
+
     const barangIds = [
       ...new Set(
         deliveries.flatMap((delivery) =>
@@ -91,26 +203,35 @@ export async function GET(
     ];
 
     /*
-     * Ambil PriceSummary
+     * =====================================================
+     * PRICE SUMMARY
+     * =====================================================
      */
-    const priceSummaries =
-      await prisma.priceSummary.findMany({
-        where: {
-          barangId: {
-            in: barangIds,
-          },
-        },
 
-        select: {
-          barangId: true,
-          lastPrice: true,
-        },
-      });
+    const priceSummaries =
+      barangIds.length > 0
+        ? await prisma.priceSummary.findMany({
+            where: {
+              barangId: {
+                in: barangIds,
+              },
+            },
+
+            select: {
+              barangId: true,
+              lastPrice: true,
+            },
+          })
+        : [];
 
     /*
-     * Map harga
+     * =====================================================
+     * PRICE MAP
+     * =====================================================
      */
-    const priceMap = new Map<number, number>();
+
+    const priceMap =
+      new Map<number, number>();
 
     priceSummaries.forEach((item) => {
       priceMap.set(
@@ -119,55 +240,108 @@ export async function GET(
       );
     });
 
+    /*
+     * =====================================================
+     * TOTAL
+     * =====================================================
+     */
+
     let totalQty = 0;
     let totalNominal = 0;
 
     /*
-     * Bentuk ulang data delivery
+     * =====================================================
+     * NORMALISASI DELIVERY
+     * =====================================================
      */
-    const resultDeliveries = deliveries.map(
-      (delivery) => {
-        const items = delivery.items.map(
-          (item) => {
-            const qty = Number(item.qty ?? 0);
 
-            const deliveryPrice = Number(
-              item.price ?? 0
-            );
-
-            const summaryPrice = Number(
-              priceMap.get(item.barangId) ?? 0
-            );
-
-            const sellingPrice = Number(
-              item.barang?.sellingPrice ?? 0
+    const resultDeliveries =
+      deliveries.map((delivery) => {
+        const items =
+          delivery.items.map((item) => {
+            const qty = Number(
+              item.qty ?? 0
             );
 
             /*
-             * Prioritas harga:
-             *
-             * DeliveryItem.price
-             * ↓
-             * PriceSummary.lastPrice
-             * ↓
-             * Barang.sellingPrice
+             * Harga yang tersimpan di DeliveryItem
              */
-            const harga =
-              deliveryPrice > 0
-                ? deliveryPrice
-                : summaryPrice > 0
-                ? summaryPrice
-                : sellingPrice;
 
-            const originalSubtotal = Number(
-              item.subtotal ?? 0
-            );
+            const deliveryPrice =
+              Number(item.price ?? 0);
 
-            const subtotal =
+            /*
+             * Harga terakhir dari PriceSummary
+             */
+
+            const summaryPrice =
+              Number(
+                priceMap.get(
+                  item.barangId
+                ) ?? 0
+              );
+
+            /*
+             * Harga jual barang
+             */
+
+            const sellingPrice =
+              Number(
+                item.barang?.sellingPrice ?? 0
+              );
+
+            /*
+             * =================================================
+             * PRIORITAS HARGA
+             * =================================================
+             *
+             * 1. DeliveryItem.price
+             * 2. PriceSummary.lastPrice
+             * 3. Barang.sellingPrice
+             */
+
+            let harga = 0;
+
+            if (deliveryPrice > 0) {
+              harga = deliveryPrice;
+            } else if (
+              summaryPrice > 0
+            ) {
+              harga = summaryPrice;
+            } else if (
+              sellingPrice > 0
+            ) {
+              harga = sellingPrice;
+            }
+
+            /*
+             * =================================================
+             * SUBTOTAL
+             * =================================================
+             */
+
+            const originalSubtotal =
+              Number(
+                item.subtotal ?? 0
+              );
+
+            let subtotal = 0;
+
+            /*
+             * Kalau DeliveryItem sudah punya
+             * harga + subtotal valid, pertahankan.
+             */
+
+            if (
               deliveryPrice > 0 &&
               originalSubtotal > 0
-                ? originalSubtotal
-                : qty * harga;
+            ) {
+              subtotal =
+                originalSubtotal;
+            } else {
+              subtotal =
+                qty * harga;
+            }
 
             totalQty += qty;
 
@@ -176,19 +350,24 @@ export async function GET(
             return {
               id: item.id,
 
-              barangId: item.barangId,
+              barangId:
+                item.barangId,
 
               barang: {
-                id: item.barang?.id,
+                id:
+                  item.barang?.id,
 
                 code:
-                  item.barang?.code ?? "-",
+                  item.barang?.code ??
+                  "-",
 
                 name:
-                  item.barang?.name ?? "-",
+                  item.barang?.name ??
+                  "-",
 
                 unit:
-                  item.barang?.unit ?? "-",
+                  item.barang?.unit ??
+                  "-",
               },
 
               qty,
@@ -197,8 +376,7 @@ export async function GET(
 
               subtotal,
             };
-          }
-        );
+          });
 
         return {
           id: delivery.id,
@@ -208,18 +386,18 @@ export async function GET(
           deliveryDate:
             delivery.deliveryDate,
 
-          status: delivery.status,
+          status:
+            delivery.status,
 
           items,
         };
-      }
-    );
+      });
 
     /*
-     * Customer ambil dari delivery pertama
+     * =====================================================
+     * RESPONSE
+     * =====================================================
      */
-    const customer =
-      deliveries[0]?.customer ?? null;
 
     return NextResponse.json({
       success: true,
@@ -227,14 +405,17 @@ export async function GET(
       data: {
         customer,
 
-        deliveries: resultDeliveries,
+        deliveries:
+          resultDeliveries,
 
         summary: {
-          transaksi: deliveries.length,
+          transaksi:
+            deliveries.length,
 
           qty: totalQty,
 
-          nominal: totalNominal,
+          nominal:
+            totalNominal,
         },
       },
     });

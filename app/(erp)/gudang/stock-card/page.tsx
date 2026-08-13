@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   ArrowDownToLine,
@@ -8,6 +8,9 @@ import {
   Boxes,
   Package,
   RefreshCw,
+  Search,
+  X,
+  ChevronDown,
 } from "lucide-react";
 
 export default function StockCardPage() {
@@ -17,6 +20,17 @@ export default function StockCardPage() {
 
   const [loadingBarang, setLoadingBarang] = useState(true);
   const [loading, setLoading] = useState(false);
+
+  // ==========================================
+  // SEARCH DROPDOWN
+  // ==========================================
+
+  const [barangSearch, setBarangSearch] = useState("");
+  const [showBarangDropdown, setShowBarangDropdown] =
+    useState(false);
+
+  const barangDropdownRef =
+    useRef<HTMLDivElement>(null);
 
   // ==========================================
   // LOAD BARANG
@@ -111,6 +125,114 @@ export default function StockCardPage() {
   useEffect(() => {
     loadBarang();
   }, []);
+
+  // ==========================================
+  // CLICK OUTSIDE DROPDOWN
+  // ==========================================
+
+  useEffect(() => {
+    function handleClickOutside(
+      event: MouseEvent
+    ) {
+      if (
+        barangDropdownRef.current &&
+        !barangDropdownRef.current.contains(
+          event.target as Node
+        )
+      ) {
+        setShowBarangDropdown(false);
+      }
+    }
+
+    document.addEventListener(
+      "mousedown",
+      handleClickOutside
+    );
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleClickOutside
+      );
+    };
+  }, []);
+
+  // ==========================================
+  // SELECTED BARANG
+  // ==========================================
+
+  const selectedBarangOption =
+    barang.find(
+      (item: any) =>
+        String(item.id) === String(selected)
+    );
+
+  // ==========================================
+  // FILTER BARANG
+  // ==========================================
+
+  const filteredBarang =
+    barang.filter((item: any) => {
+      const keyword =
+        barangSearch
+          .trim()
+          .toLowerCase();
+
+      if (!keyword) {
+        return true;
+      }
+
+      const code = String(
+        item.code ?? ""
+      ).toLowerCase();
+
+      const name = String(
+        item.name ?? ""
+      ).toLowerCase();
+
+      const barcode = String(
+        item.barcode ?? ""
+      ).toLowerCase();
+
+      const unit = String(
+        item.unit ?? ""
+      ).toLowerCase();
+
+      return (
+        code.includes(keyword) ||
+        name.includes(keyword) ||
+        barcode.includes(keyword) ||
+        unit.includes(keyword)
+      );
+    });
+
+  // ==========================================
+  // SELECT BARANG
+  // ==========================================
+
+  function selectBarang(item: any) {
+    setSelected(String(item.id));
+
+    setBarangSearch("");
+
+    setShowBarangDropdown(false);
+
+    setData(null);
+  }
+
+  // ==========================================
+  // CLEAR BARANG
+  // ==========================================
+
+  function clearSelectedBarang() {
+    setSelected("");
+
+    setBarangSearch("");
+
+    setShowBarangDropdown(false);
+
+    setData(null);
+  }
 
   // ==========================================
   // FORMAT
@@ -577,6 +699,7 @@ export default function StockCardPage() {
 
         </div>
 
+
         <div className="
           flex
           flex-col
@@ -585,55 +708,368 @@ export default function StockCardPage() {
           md:items-center
         ">
 
-          <select
+          {/* ==================================
+              SEARCHABLE DROPDOWN
+          ================================== */}
+
+          <div
+            ref={barangDropdownRef}
             className="
+              relative
               w-full
-              rounded-xl
-              border
-              border-[#D5E5DC]
-              bg-[#FAFCFB]
-              px-4
-              py-3
-              text-sm
-              text-gray-700
-              outline-none
-              transition
-              focus:border-[#497F70]
-              focus:bg-white
-              focus:ring-2
-              focus:ring-[#497F70]/10
               md:flex-1
             "
-            value={selected}
-            onChange={(e) => {
-              setSelected(
-                e.target.value
-              );
-
-              setData(null);
-            }}
-            disabled={loadingBarang}
           >
 
-            <option value="">
-              {loadingBarang
-                ? "Memuat barang..."
-                : "-- Pilih Barang --"}
-            </option>
+            <div className="relative">
 
-            {barang.map(
-              (b: any) => (
-                <option
-                  key={b.id}
-                  value={b.id}
+              <Search
+                size={18}
+                className="
+                  pointer-events-none
+                  absolute
+                  left-3
+                  top-1/2
+                  -translate-y-1/2
+                  text-gray-400
+                "
+              />
+
+              <input
+                type="text"
+                value={
+                  showBarangDropdown
+                    ? barangSearch
+                    : selectedBarangOption
+                    ? `${selectedBarangOption.code ?? ""} - ${selectedBarangOption.name ?? ""}`
+                    : barangSearch
+                }
+                onFocus={() => {
+                  setShowBarangDropdown(true);
+
+                  if (selectedBarangOption) {
+                    setBarangSearch("");
+                  }
+                }}
+                onChange={(e) => {
+                  setBarangSearch(
+                    e.target.value
+                  );
+
+                  setShowBarangDropdown(
+                    true
+                  );
+
+                  if (selected) {
+                    setSelected("");
+                    setData(null);
+                  }
+                }}
+                disabled={loadingBarang}
+                placeholder={
+                  loadingBarang
+                    ? "Memuat barang..."
+                    : "Ketik nama, kode, atau barcode barang..."
+                }
+                className="
+                  w-full
+                  rounded-xl
+                  border
+                  border-[#D5E5DC]
+                  bg-[#FAFCFB]
+                  py-3
+                  pl-10
+                  pr-20
+                  text-sm
+                  text-gray-700
+                  outline-none
+                  transition
+                  placeholder:text-gray-400
+                  focus:border-[#497F70]
+                  focus:bg-white
+                  focus:ring-2
+                  focus:ring-[#497F70]/10
+                "
+              />
+
+
+              <div className="
+                absolute
+                right-2
+                top-1/2
+                flex
+                -translate-y-1/2
+                items-center
+                gap-1
+              ">
+
+                {(selected ||
+                  barangSearch) && (
+
+                  <button
+                    type="button"
+                    onClick={
+                      clearSelectedBarang
+                    }
+                    className="
+                      rounded-lg
+                      p-1.5
+                      text-gray-400
+                      transition
+                      hover:bg-gray-100
+                      hover:text-gray-600
+                    "
+                    title="Hapus pilihan"
+                  >
+
+                    <X size={17} />
+
+                  </button>
+
+                )}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowBarangDropdown(
+                      (prev) => !prev
+                    )
+                  }
+                  className="
+                    rounded-lg
+                    p-1.5
+                    text-gray-400
+                    transition
+                    hover:bg-gray-100
+                    hover:text-gray-600
+                  "
+                  title="Tampilkan barang"
                 >
-                  {b.code} - {b.name}
-                </option>
-              )
+
+                  <ChevronDown
+                    size={17}
+                  />
+
+                </button>
+
+              </div>
+
+            </div>
+
+
+            {/* ==================================
+                DROPDOWN RESULT
+            ================================== */}
+
+            {showBarangDropdown && (
+              <div className="
+                absolute
+                left-0
+                right-0
+                z-50
+                mt-2
+                max-h-80
+                overflow-y-auto
+                rounded-xl
+                border
+                border-[#D5E5DC]
+                bg-white
+                shadow-lg
+              ">
+
+                {/* HASIL */}
+
+                {filteredBarang.length > 0 ? (
+
+                  <div className="py-1">
+
+                    {filteredBarang.map(
+                      (item: any) => {
+
+                        const isSelected =
+                          String(item.id) ===
+                          String(selected);
+
+                        return (
+
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() =>
+                              selectBarang(
+                                item
+                              )
+                            }
+                            className={`
+                              w-full
+                              px-4
+                              py-3
+                              text-left
+                              transition
+                              hover:bg-[#F5F8F6]
+                              ${
+                                isSelected
+                                  ? "bg-[#EAF3EF]"
+                                  : ""
+                              }
+                            `}
+                          >
+
+                            <div className="
+                              flex
+                              items-start
+                              justify-between
+                              gap-3
+                            ">
+
+                              <div className="
+                                min-w-0
+                              ">
+
+                                <div className="
+                                  truncate
+                                  text-sm
+                                  font-semibold
+                                  text-[#18352D]
+                                ">
+
+                                  {item.name ||
+                                    "-"}
+
+                                </div>
+
+                                <div className="
+                                  mt-1
+                                  flex
+                                  flex-wrap
+                                  gap-x-2
+                                  gap-y-1
+                                  text-xs
+                                  text-gray-400
+                                ">
+
+                                  {item.code && (
+                                    <span>
+                                      Kode:{" "}
+                                      {item.code}
+                                    </span>
+                                  )}
+
+                                  {item.barcode && (
+                                    <>
+                                      <span>
+                                        •
+                                      </span>
+
+                                      <span>
+                                        Barcode:{" "}
+                                        {
+                                          item.barcode
+                                        }
+                                      </span>
+                                    </>
+                                  )}
+
+                                  {item.unit && (
+                                    <>
+                                      <span>
+                                        •
+                                      </span>
+
+                                      <span>
+                                        Satuan:{" "}
+                                        {item.unit}
+                                      </span>
+                                    </>
+                                  )}
+
+                                </div>
+
+                              </div>
+
+
+                              {isSelected && (
+                                <span className="
+                                  shrink-0
+                                  rounded-full
+                                  bg-[#497F70]
+                                  px-2
+                                  py-1
+                                  text-[10px]
+                                  font-semibold
+                                  text-white
+                                ">
+                                  Dipilih
+                                </span>
+                              )}
+
+                            </div>
+
+                          </button>
+
+                        );
+                      }
+                    )}
+
+                  </div>
+
+                ) : (
+
+                  /* TIDAK ADA HASIL */
+
+                  <div className="
+                    px-4
+                    py-8
+                    text-center
+                  ">
+
+                    <div className="
+                      mx-auto
+                      flex
+                      h-11
+                      w-11
+                      items-center
+                      justify-center
+                      rounded-xl
+                      bg-gray-100
+                      text-gray-400
+                    ">
+
+                      <Search size={20} />
+
+                    </div>
+
+                    <p className="
+                      mt-3
+                      text-sm
+                      font-semibold
+                      text-gray-600
+                    ">
+                      Barang tidak ditemukan
+                    </p>
+
+                    <p className="
+                      mt-1
+                      text-xs
+                      text-gray-400
+                    ">
+                      Coba cari dengan nama,
+                      kode, atau barcode.
+                    </p>
+
+                  </div>
+
+                )}
+
+              </div>
             )}
 
-          </select>
+          </div>
 
+
+          {/* ==================================
+              BUTTON TAMPILKAN
+          ================================== */}
 
           <button
             type="button"
@@ -665,18 +1101,22 @@ export default function StockCardPage() {
 
             {loading ? (
               <>
+
                 <RefreshCw
                   size={17}
                   className="animate-spin"
                 />
 
                 Memuat...
+
               </>
             ) : (
               <>
+
                 <Boxes size={17} />
 
                 Tampilkan
+
               </>
             )}
 

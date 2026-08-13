@@ -1,6 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  Boxes,
+  FileDown,
+  FileSpreadsheet,
+  Printer,
+  RefreshCw,
+  Search,
+  Truck,
+  X,
+} from "lucide-react";
 
 import { exportReportPdf } from "@/lib/exportReportPdf";
 import { exportReportExcel } from "@/lib/exportReportExcel";
@@ -72,12 +82,18 @@ export default function LaporanBarangKeluar() {
         url += `?${params.toString()}`;
       }
 
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        cache: "no-store",
+      });
 
       const result = await res.json();
 
       if (result.success) {
-        setData(result.data ?? []);
+        setData(
+          Array.isArray(result.data)
+            ? result.data
+            : []
+        );
       } else {
         setData([]);
       }
@@ -94,21 +110,11 @@ export default function LaporanBarangKeluar() {
   }
 
   /*
-   * Ubah data delivery menjadi
-   * data per barang.
-   *
-   * API mengembalikan item dengan struktur:
-   *
-   * {
-   *   barangId,
-   *   code,
-   *   name,
-   *   unit,
-   *   qty,
-   *   price,
-   *   subtotal
-   * }
+   * =====================================================
+   * FLATTEN DATA
+   * =====================================================
    */
+
   const rowsData = useMemo<ReportRow[]>(() => {
     const result: ReportRow[] = [];
 
@@ -128,12 +134,10 @@ export default function LaporanBarangKeluar() {
           no: nomor++,
           tanggal: delivery.deliveryDate,
           noDelivery: delivery.number ?? "-",
-          customer: delivery.customer?.name ?? "-",
-
-          // Sesuai struktur response API
+          customer:
+            delivery.customer?.name ?? "-",
           kodeBarang: item.code ?? "-",
           barang: item.name ?? "-",
-
           qty,
           harga,
           subtotal,
@@ -145,10 +149,15 @@ export default function LaporanBarangKeluar() {
   }, [data]);
 
   /*
-   * Filter pencarian
+   * =====================================================
+   * SEARCH
+   * =====================================================
    */
+
   const filteredRows = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = search
+      .trim()
+      .toLowerCase();
 
     return rowsData.filter((row) => {
       if (!keyword) {
@@ -173,8 +182,19 @@ export default function LaporanBarangKeluar() {
   }, [rowsData, search]);
 
   /*
-   * Total Qty
+   * =====================================================
+   * SUMMARY
+   * =====================================================
    */
+
+  const totalDelivery = useMemo(() => {
+    return new Set(
+      filteredRows.map(
+        (row) => row.noDelivery
+      )
+    ).size;
+  }, [filteredRows]);
+
   const totalQty = useMemo(() => {
     return filteredRows.reduce(
       (sum, row) => sum + row.qty,
@@ -182,9 +202,6 @@ export default function LaporanBarangKeluar() {
     );
   }, [filteredRows]);
 
-  /*
-   * Total nominal
-   */
   const totalNominal = useMemo(() => {
     return filteredRows.reduce(
       (sum, row) => sum + row.subtotal,
@@ -193,16 +210,18 @@ export default function LaporanBarangKeluar() {
   }, [filteredRows]);
 
   /*
-   * Jumlah Delivery Order unik
+   * =====================================================
+   * FORMAT
+   * =====================================================
    */
-  const totalDelivery = useMemo(() => {
-    return new Set(
-      filteredRows.map((row) => row.noDelivery)
-    ).size;
-  }, [filteredRows]);
 
   function formatRupiah(value: number) {
-    return "Rp " + value.toLocaleString("id-ID");
+    return (
+      "Rp " +
+      Number(value || 0).toLocaleString(
+        "id-ID"
+      )
+    );
   }
 
   function formatTanggal(value: string) {
@@ -210,19 +229,21 @@ export default function LaporanBarangKeluar() {
       return "-";
     }
 
-    return new Date(value).toLocaleDateString(
-      "id-ID",
-      {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      }
-    );
+    return new Date(
+      value
+    ).toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
   }
 
   /*
-   * Data export
+   * =====================================================
+   * EXPORT
+   * =====================================================
    */
+
   const columns = [
     "No",
     "Tanggal",
@@ -235,19 +256,25 @@ export default function LaporanBarangKeluar() {
     "Subtotal",
   ];
 
-  const rows = filteredRows.map((row) => [
-    row.no,
-    formatTanggal(row.tanggal),
-    row.noDelivery,
-    row.customer,
-    row.kodeBarang,
-    row.barang,
-    row.qty,
-    formatRupiah(row.harga),
-    formatRupiah(row.subtotal),
-  ]);
+  const rows = filteredRows.map(
+    (row) => [
+      row.no,
+      formatTanggal(row.tanggal),
+      row.noDelivery,
+      row.customer,
+      row.kodeBarang,
+      row.barang,
+      row.qty,
+      formatRupiah(row.harga),
+      formatRupiah(row.subtotal),
+    ]
+  );
 
   function handleExportPDF() {
+    if (filteredRows.length === 0) {
+      return;
+    }
+
     exportReportPdf(
       "Laporan Barang Keluar",
       columns,
@@ -256,6 +283,10 @@ export default function LaporanBarangKeluar() {
   }
 
   function handleExportExcel() {
+    if (filteredRows.length === 0) {
+      return;
+    }
+
     exportReportExcel(
       "Laporan Barang Keluar",
       columns,
@@ -264,8 +295,18 @@ export default function LaporanBarangKeluar() {
   }
 
   function handlePrint() {
+    if (filteredRows.length === 0) {
+      return;
+    }
+
     printTable(columns, rows);
   }
+
+  /*
+   * =====================================================
+   * FILTER
+   * =====================================================
+   */
 
   function resetFilter() {
     setSearch("");
@@ -277,118 +318,272 @@ export default function LaporanBarangKeluar() {
     }, 0);
   }
 
-  return (
-    <div>
-      {/* HEADER */}
-      <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-800">
-          Laporan Barang Keluar
-        </h1>
+  const hasFilter =
+    search.trim() !== "" ||
+    start !== "" ||
+    end !== "";
 
-        <p className="mt-1 text-sm text-slate-500">
-          Riwayat barang yang keluar melalui pengiriman
-        </p>
+  /*
+   * =====================================================
+   * RENDER
+   * =====================================================
+   */
+
+  return (
+    <div className="min-h-full bg-slate-50 p-4 md:p-6 lg:p-8">
+
+      {/* =================================================
+          HEADER
+      ================================================= */}
+
+      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
+        <div className="flex items-center gap-3">
+
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100">
+            <Truck
+              size={22}
+              className="text-blue-600"
+            />
+          </div>
+
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              Laporan Barang Keluar
+            </h1>
+
+            <p className="mt-0.5 text-sm text-slate-500">
+              Riwayat barang yang keluar melalui pengiriman
+            </p>
+          </div>
+
+        </div>
+
+        <button
+          type="button"
+          onClick={loadData}
+          disabled={loading}
+          className="
+            inline-flex
+            items-center
+            justify-center
+            gap-2
+            rounded-xl
+            border
+            border-slate-200
+            bg-white
+            px-4
+            py-2.5
+            text-sm
+            font-semibold
+            text-slate-700
+            shadow-sm
+            transition
+            hover:bg-slate-50
+            disabled:cursor-not-allowed
+            disabled:opacity-50
+          "
+        >
+          <RefreshCw
+            size={17}
+            className={
+              loading
+                ? "animate-spin"
+                : ""
+            }
+          />
+
+          Refresh
+        </button>
+
       </div>
 
-      {/* SUMMARY */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      {/* =================================================
+          SUMMARY
+      ================================================= */}
+
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 
         {/* TOTAL DELIVERY */}
+
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">
-            Total Delivery
-          </p>
 
-          <p className="mt-2 text-2xl font-bold text-slate-800">
-            {totalDelivery.toLocaleString("id-ID")}
-          </p>
+          <div className="flex items-center justify-between">
 
-          <p className="mt-1 text-xs text-slate-400">
-            Nomor pengiriman
-          </p>
+            <div>
+              <p className="text-sm text-slate-500">
+                Total Delivery
+              </p>
+
+              <p className="mt-1 text-2xl font-bold text-slate-900">
+                {totalDelivery.toLocaleString(
+                  "id-ID"
+                )}
+              </p>
+
+              <p className="mt-1 text-xs text-slate-400">
+                Nomor pengiriman
+              </p>
+            </div>
+
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100">
+              <Truck
+                size={21}
+                className="text-blue-600"
+              />
+            </div>
+
+          </div>
+
         </div>
 
         {/* TOTAL QTY */}
+
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">
-            Total Qty Keluar
-          </p>
 
-          <p className="mt-2 text-2xl font-bold text-slate-800">
-            {totalQty.toLocaleString("id-ID")}
-          </p>
+          <div className="flex items-center justify-between">
 
-          <p className="mt-1 text-xs text-slate-400">
-            Seluruh barang keluar
-          </p>
+            <div>
+              <p className="text-sm text-slate-500">
+                Total Qty Keluar
+              </p>
+
+              <p className="mt-1 text-2xl font-bold text-slate-900">
+                {totalQty.toLocaleString(
+                  "id-ID"
+                )}
+              </p>
+
+              <p className="mt-1 text-xs text-slate-400">
+                Seluruh barang keluar
+              </p>
+            </div>
+
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100">
+              <Boxes
+                size={21}
+                className="text-emerald-600"
+              />
+            </div>
+
+          </div>
+
         </div>
 
-        {/* TOTAL NOMINAL */}
+        {/* TOTAL NILAI */}
+
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">
-            Total Nilai
-          </p>
 
-          <p className="mt-2 text-2xl font-bold text-slate-800">
-            {formatRupiah(totalNominal)}
-          </p>
+          <div className="flex items-center justify-between">
 
-          <p className="mt-1 text-xs text-slate-400">
-            Berdasarkan harga barang
-          </p>
+            <div>
+              <p className="text-sm text-slate-500">
+                Total Nilai
+              </p>
+
+              <p className="mt-1 text-2xl font-bold text-slate-900">
+                {formatRupiah(
+                  totalNominal
+                )}
+              </p>
+
+              <p className="mt-1 text-xs text-slate-400">
+                Berdasarkan harga barang
+              </p>
+            </div>
+
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-100">
+              <Boxes
+                size={21}
+                className="text-amber-600"
+              />
+            </div>
+
+          </div>
+
         </div>
 
       </div>
 
-      {/* FILTER */}
+      {/* =================================================
+          FILTER
+      ================================================= */}
+
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 
         <div className="mb-4">
+
           <h2 className="font-semibold text-slate-800">
             Filter Laporan
           </h2>
 
-          <p className="text-sm text-slate-500">
-            Cari barang, customer atau nomor delivery
+          <p className="mt-0.5 text-sm text-slate-500">
+            Cari berdasarkan nomor delivery, customer,
+            kode atau nama barang
           </p>
+
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
 
           {/* SEARCH */}
+
           <div className="lg:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-slate-600">
+
+            <label className="mb-1.5 block text-sm font-medium text-slate-600">
               Pencarian
             </label>
 
-            <input
-              type="text"
-              value={search}
-              onChange={(e) =>
-                setSearch(e.target.value)
-              }
-              placeholder="Cari No Delivery, customer, kode atau nama barang..."
-              className="
-                w-full
-                rounded-xl
-                border
-                border-slate-300
-                bg-white
-                px-4
-                py-3
-                text-sm
-                outline-none
-                transition
-                focus:border-slate-500
-                focus:ring-2
-                focus:ring-slate-100
-              "
-            />
+            <div className="relative">
+
+              <Search
+                size={17}
+                className="
+                  pointer-events-none
+                  absolute
+                  left-3.5
+                  top-1/2
+                  -translate-y-1/2
+                  text-slate-400
+                "
+              />
+
+              <input
+                type="text"
+                value={search}
+                onChange={(e) =>
+                  setSearch(e.target.value)
+                }
+                placeholder="Cari No Delivery, customer, kode atau nama barang..."
+                className="
+                  w-full
+                  rounded-xl
+                  border
+                  border-slate-300
+                  bg-white
+                  py-3
+                  pl-10
+                  pr-4
+                  text-sm
+                  text-slate-700
+                  outline-none
+                  transition
+                  placeholder:text-slate-400
+                  focus:border-blue-400
+                  focus:ring-2
+                  focus:ring-blue-100
+                "
+              />
+
+            </div>
+
           </div>
 
           {/* START */}
+
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">
+
+            <label className="mb-1.5 block text-sm font-medium text-slate-600">
               Dari Tanggal
             </label>
 
@@ -407,17 +602,22 @@ export default function LaporanBarangKeluar() {
                 px-4
                 py-3
                 text-sm
+                text-slate-700
                 outline-none
-                focus:border-slate-500
+                transition
+                focus:border-blue-400
                 focus:ring-2
-                focus:ring-slate-100
+                focus:ring-blue-100
               "
             />
+
           </div>
 
           {/* END */}
+
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">
+
+            <label className="mb-1.5 block text-sm font-medium text-slate-600">
               Sampai Tanggal
             </label>
 
@@ -436,210 +636,365 @@ export default function LaporanBarangKeluar() {
                 px-4
                 py-3
                 text-sm
+                text-slate-700
                 outline-none
-                focus:border-slate-500
+                transition
+                focus:border-blue-400
                 focus:ring-2
-                focus:ring-slate-100
+                focus:ring-blue-100
               "
             />
+
           </div>
 
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-3">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
 
           <button
+            type="button"
             onClick={loadData}
+            disabled={loading}
             className="
+              inline-flex
+              items-center
+              justify-center
+              gap-2
               rounded-xl
               bg-slate-800
-              px-5
+              px-4
               py-2.5
               text-sm
-              font-medium
+              font-semibold
               text-white
+              shadow-sm
+              transition
               hover:bg-slate-900
+              disabled:cursor-not-allowed
+              disabled:opacity-50
             "
           >
+            <Search size={16} />
+
             Terapkan Filter
           </button>
 
           <button
+            type="button"
             onClick={resetFilter}
+            disabled={!hasFilter}
             className="
+              inline-flex
+              items-center
+              justify-center
+              gap-2
               rounded-xl
               border
-              border-slate-300
+              border-slate-200
               bg-white
-              px-5
+              px-4
               py-2.5
               text-sm
-              font-medium
+              font-semibold
               text-slate-700
+              shadow-sm
+              transition
               hover:bg-slate-50
+              disabled:cursor-not-allowed
+              disabled:opacity-40
             "
           >
+            <X size={16} />
+
             Reset
           </button>
 
         </div>
+
       </div>
 
-      {/* ACTION BAR */}
+      {/* =================================================
+          ACTION BAR
+      ================================================= */}
+
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 
         <div className="text-sm text-slate-500">
+
           Menampilkan{" "}
+
           <span className="font-semibold text-slate-800">
             {filteredRows.length}
-          </span>{" "}
-          baris data
+          </span>
+
+          {" "}baris data
+
         </div>
 
         <div className="flex flex-wrap gap-2">
 
+          {/* PDF */}
+
           <button
+            type="button"
             onClick={handleExportPDF}
-            disabled={filteredRows.length === 0}
+            disabled={
+              filteredRows.length === 0
+            }
             className="
+              inline-flex
+              items-center
+              justify-center
+              gap-2
               rounded-xl
               bg-red-600
               px-4
               py-2.5
               text-sm
-              font-medium
+              font-semibold
               text-white
+              shadow-sm
+              transition
               hover:bg-red-700
               disabled:cursor-not-allowed
-              disabled:opacity-50
+              disabled:opacity-40
             "
           >
+            <FileDown size={16} />
+
             Export PDF
           </button>
 
+          {/* EXCEL */}
+
           <button
+            type="button"
             onClick={handleExportExcel}
-            disabled={filteredRows.length === 0}
+            disabled={
+              filteredRows.length === 0
+            }
             className="
+              inline-flex
+              items-center
+              justify-center
+              gap-2
               rounded-xl
-              bg-green-600
+              bg-emerald-600
               px-4
               py-2.5
               text-sm
-              font-medium
+              font-semibold
               text-white
-              hover:bg-green-700
+              shadow-sm
+              transition
+              hover:bg-emerald-700
               disabled:cursor-not-allowed
-              disabled:opacity-50
+              disabled:opacity-40
             "
           >
+            <FileSpreadsheet size={16} />
+
             Export Excel
           </button>
 
+          {/* PRINT */}
+
           <button
+            type="button"
             onClick={handlePrint}
-            disabled={filteredRows.length === 0}
+            disabled={
+              filteredRows.length === 0
+            }
             className="
+              inline-flex
+              items-center
+              justify-center
+              gap-2
               rounded-xl
               bg-blue-600
               px-4
               py-2.5
               text-sm
-              font-medium
+              font-semibold
               text-white
+              shadow-sm
+              transition
               hover:bg-blue-700
               disabled:cursor-not-allowed
-              disabled:opacity-50
+              disabled:opacity-40
             "
           >
+            <Printer size={16} />
+
             Print
           </button>
 
         </div>
+
       </div>
 
-      {/* TABLE */}
+      {/* =================================================
+          TABLE
+      ================================================= */}
+
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+        <div className="border-b border-slate-200 px-5 py-4">
+
+          <div className="flex items-center justify-between gap-3">
+
+            <div>
+
+              <h2 className="font-semibold text-slate-800">
+                Detail Barang Keluar
+              </h2>
+
+              <p className="mt-0.5 text-xs text-slate-500">
+                Daftar barang berdasarkan Delivery Order
+              </p>
+
+            </div>
+
+            <div className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">
+              {filteredRows.length} baris
+            </div>
+
+          </div>
+
+        </div>
 
         <div className="overflow-x-auto">
 
-          <table className="min-w-[1100px] w-full text-sm">
+          <table className="w-full min-w-[1100px] text-sm">
 
-            <thead className="bg-slate-100">
-              <tr>
+            <thead>
 
-                <th className="px-4 py-3 text-center font-semibold text-slate-600">
+              <tr className="border-b border-slate-200 bg-slate-50">
+
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
                   No
                 </th>
 
-                <th className="px-4 py-3 text-left font-semibold text-slate-600">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Tanggal
                 </th>
 
-                <th className="px-4 py-3 text-left font-semibold text-slate-600">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   No Delivery
                 </th>
 
-                <th className="px-4 py-3 text-left font-semibold text-slate-600">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Customer
                 </th>
 
-                <th className="px-4 py-3 text-left font-semibold text-slate-600">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Kode Barang
                 </th>
 
-                <th className="px-4 py-3 text-left font-semibold text-slate-600">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Nama Barang
                 </th>
 
-                <th className="px-4 py-3 text-right font-semibold text-slate-600">
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Qty
                 </th>
 
-                <th className="px-4 py-3 text-right font-semibold text-slate-600">
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Harga
                 </th>
 
-                <th className="px-4 py-3 text-right font-semibold text-slate-600">
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Subtotal
                 </th>
 
               </tr>
+
             </thead>
 
             <tbody>
 
-              {loading ? (
+              {/* LOADING */}
+
+              {loading && (
 
                 <tr>
+
                   <td
                     colSpan={9}
-                    className="px-4 py-12 text-center text-slate-500"
+                    className="px-4 py-14 text-center"
                   >
-                    Memuat laporan barang keluar...
+
+                    <div className="flex flex-col items-center justify-center">
+
+                      <RefreshCw
+                        size={25}
+                        className="animate-spin text-blue-600"
+                      />
+
+                      <p className="mt-3 text-sm text-slate-500">
+                        Memuat laporan barang keluar...
+                      </p>
+
+                    </div>
+
                   </td>
+
                 </tr>
 
-              ) : filteredRows.length === 0 ? (
+              )}
 
-                <tr>
-                  <td
-                    colSpan={9}
-                    className="px-4 py-12 text-center text-slate-500"
-                  >
-                    Tidak ada data barang keluar
-                  </td>
-                </tr>
+              {/* EMPTY */}
 
-              ) : (
+              {!loading &&
+                filteredRows.length === 0 && (
 
+                  <tr>
+
+                    <td
+                      colSpan={9}
+                      className="px-4 py-14 text-center"
+                    >
+
+                      <div className="mx-auto flex max-w-md flex-col items-center">
+
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
+
+                          <Truck
+                            size={27}
+                            className="text-slate-400"
+                          />
+
+                        </div>
+
+                        <h3 className="mt-4 font-semibold text-slate-700">
+                          Tidak ada data barang keluar
+                        </h3>
+
+                        <p className="mt-1 text-sm text-slate-400">
+                          Coba ubah kata pencarian atau
+                          rentang tanggal.
+                        </p>
+
+                      </div>
+
+                    </td>
+
+                  </tr>
+
+                )}
+
+              {/* DATA */}
+
+              {!loading &&
+                filteredRows.length > 0 &&
                 filteredRows.map((row) => (
 
                   <tr
                     key={`${row.noDelivery}-${row.kodeBarang}-${row.no}`}
                     className="
-                      border-t
+                      border-b
                       border-slate-100
+                      transition
                       hover:bg-slate-50
                     "
                   >
@@ -648,11 +1003,13 @@ export default function LaporanBarangKeluar() {
                       {row.no}
                     </td>
 
-                    <td className="px-4 py-3 text-slate-600">
-                      {formatTanggal(row.tanggal)}
+                    <td className="px-4 py-3 whitespace-nowrap text-slate-600">
+                      {formatTanggal(
+                        row.tanggal
+                      )}
                     </td>
 
-                    <td className="px-4 py-3 font-medium text-slate-800">
+                    <td className="px-4 py-3 whitespace-nowrap font-semibold text-slate-800">
                       {row.noDelivery}
                     </td>
 
@@ -660,7 +1017,7 @@ export default function LaporanBarangKeluar() {
                       {row.customer}
                     </td>
 
-                    <td className="px-4 py-3 font-mono text-slate-600">
+                    <td className="px-4 py-3 font-mono text-xs text-slate-600">
                       {row.kodeBarang}
                     </td>
 
@@ -668,23 +1025,27 @@ export default function LaporanBarangKeluar() {
                       {row.barang}
                     </td>
 
-                    <td className="px-4 py-3 text-right font-medium text-slate-700">
-                      {row.qty.toLocaleString("id-ID")}
+                    <td className="px-4 py-3 text-right font-semibold text-slate-700">
+                      {row.qty.toLocaleString(
+                        "id-ID"
+                      )}
                     </td>
 
                     <td className="px-4 py-3 text-right text-slate-600">
-                      {formatRupiah(row.harga)}
+                      {formatRupiah(
+                        row.harga
+                      )}
                     </td>
 
                     <td className="px-4 py-3 text-right font-semibold text-slate-800">
-                      {formatRupiah(row.subtotal)}
+                      {formatRupiah(
+                        row.subtotal
+                      )}
                     </td>
 
                   </tr>
 
-                ))
-
-              )}
+                ))}
 
             </tbody>
 
@@ -693,6 +1054,7 @@ export default function LaporanBarangKeluar() {
         </div>
 
       </div>
+
     </div>
   );
 }

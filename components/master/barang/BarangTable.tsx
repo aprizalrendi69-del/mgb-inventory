@@ -2,6 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import {
+  Barcode,
+  Pencil,
+  Trash2,
+  Printer,
+} from "lucide-react";
 
 export default function BarangTable({
   data,
@@ -10,560 +16,574 @@ export default function BarangTable({
   data: any[];
   reload: () => void;
 }) {
-
   const [selected, setSelected] = useState<number[]>([]);
 
-
-  function toggle(id:number){
-
-    setSelected((old)=>
+  function toggle(id: number) {
+    setSelected((old) =>
       old.includes(id)
-        ? old.filter(x => x !== id)
+        ? old.filter((x) => x !== id)
         : [...old, id]
     );
-
   }
 
-
-
-  function toggleAll(){
-
-    if(selected.length === data.length){
-
+  function toggleAll() {
+    if (selected.length === data.length) {
       setSelected([]);
-
-    }else{
-
-      setSelected(
-        data.map(item => item.id)
-      );
-
+    } else {
+      setSelected(data.map((item) => item.id));
     }
-
   }
 
-
-
-  function cetakBarcode(){
-
-    if(selected.length === 0){
-
+  function cetakBarcode() {
+    if (selected.length === 0) {
       alert("Pilih minimal satu barang");
       return;
-
     }
 
-
     const ids = selected.join(",");
-
 
     window.open(
       `/master-barang/barcode?ids=${ids}`,
       "_blank"
     );
-
   }
 
+  async function hapus(id: number) {
+    const ok = confirm("Hapus barang ini?");
 
+    if (!ok) return;
 
-
-
-  async function hapus(id:number){
-
-    const ok = confirm(
-      "Hapus barang ini?"
-    );
-
-
-    if(!ok) return;
-
-
-
-    try{
-
+    try {
       const res = await fetch(
         `/api/master/barang/${id}`,
         {
-          method:"DELETE"
+          method: "DELETE",
         }
       );
 
-
       const json = await res.json();
 
-
-
-      if(json.success){
-
+      if (json.success) {
         reload();
 
-      }else{
-
-        alert(
-          json.message || "Gagal menghapus barang"
+        setSelected((old) =>
+          old.filter((x) => x !== id)
         );
-
+      } else {
+        alert(
+          json.message ||
+            "Gagal menghapus barang"
+        );
       }
-
-
-    }catch(error){
-
+    } catch (error) {
       console.error(error);
 
-      alert(
-        "Gagal menghapus barang"
-      );
-
+      alert("Gagal menghapus barang");
     }
-
   }
 
-
-
-
-
   return (
-
-    <>
-
+    <div>
+      {/* =========================================
+          TOOLBAR
+      ========================================= */}
 
       <div className="
         flex
-        justify-between
-        items-center
-        mb-4
+        flex-col
+        gap-3
+        px-5
+        py-4
+        md:flex-row
+        md:items-center
+        md:justify-between
       ">
 
-
-        <div className="text-sm text-gray-600">
-
-          Total Barang :
-
-          <b className="ml-1">
+        <div className="
+          text-sm
+          text-gray-500
+        ">
+          Total Barang{" "}
+          <span className="
+            font-semibold
+            text-[#18352D]
+          ">
             {data.length}
-          </b>
-
+          </span>
         </div>
 
-
-
         <button
-
+          type="button"
           onClick={cetakBarcode}
-
           disabled={selected.length === 0}
-
-          className={`
+          className="
+            inline-flex
+            items-center
+            justify-center
+            gap-2
+            rounded-xl
+            border
+            border-[#D5E5DC]
+            bg-white
             px-4
-            py-2
-            rounded-lg
-            text-white
-
-            ${
-              selected.length === 0
-
-              ?
-
-              "bg-gray-400 cursor-not-allowed"
-
-              :
-
-              "bg-blue-600 hover:bg-blue-700"
-            }
-
-          `}
-
+            py-2.5
+            text-sm
+            font-semibold
+            text-[#497F70]
+            shadow-sm
+            transition
+            hover:bg-[#F5F8F6]
+            hover:border-[#497F70]
+            disabled:cursor-not-allowed
+            disabled:opacity-40
+          "
         >
+          <Printer size={16} />
 
-          🏷 Cetak Barcode ({selected.length})
+          Cetak Barcode
 
+          {selected.length > 0 && (
+            <span className="
+              rounded-full
+              bg-[#EAF3EF]
+              px-2
+              py-0.5
+              text-xs
+              text-[#497F70]
+            ">
+              {selected.length}
+            </span>
+          )}
         </button>
-
 
       </div>
 
 
+      {/* =========================================
+          TABLE
+      ========================================= */}
+
+      <div className="overflow-x-auto">
+
+        <table className="
+          min-w-[1100px]
+          w-full
+          text-sm
+        ">
+
+          <thead className="
+            bg-[#F5F8F6]
+          ">
+
+            <tr className="
+              border-b
+              border-[#E5ECE9]
+            ">
+
+              <th className="
+                px-5
+                py-4
+                text-center
+                font-semibold
+                text-[#35564C]
+              ">
+                <input
+                  type="checkbox"
+                  checked={
+                    data.length > 0 &&
+                    selected.length === data.length
+                  }
+                  onChange={toggleAll}
+                  className="
+                    h-4
+                    w-4
+                    accent-[#497F70]
+                  "
+                />
+              </th>
+
+              <th className="
+                px-5
+                py-4
+                text-left
+                font-semibold
+                text-[#35564C]
+              ">
+                Kode
+              </th>
+
+              <th className="
+                px-5
+                py-4
+                text-left
+                font-semibold
+                text-[#35564C]
+              ">
+                Barcode
+              </th>
+
+              <th className="
+                px-5
+                py-4
+                text-left
+                font-semibold
+                text-[#35564C]
+              ">
+                Nama
+              </th>
+
+              <th className="
+                px-5
+                py-4
+                text-left
+                font-semibold
+                text-[#35564C]
+              ">
+                Kategori
+              </th>
+
+              <th className="
+                px-5
+                py-4
+                text-left
+                font-semibold
+                text-[#35564C]
+              ">
+                Satuan
+              </th>
+
+              <th className="
+                px-5
+                py-4
+                text-right
+                font-semibold
+                text-[#35564C]
+              ">
+                Stock
+              </th>
+
+              <th className="
+                px-5
+                py-4
+                text-right
+                font-semibold
+                text-[#35564C]
+              ">
+                Harga Beli
+              </th>
+
+              <th className="
+                px-5
+                py-4
+                text-right
+                font-semibold
+                text-[#35564C]
+              ">
+                Harga Jual
+              </th>
+
+              <th className="
+                px-5
+                py-4
+                text-center
+                font-semibold
+                text-[#35564C]
+              ">
+                Aksi
+              </th>
+
+            </tr>
+
+          </thead>
 
 
+          <tbody>
 
-      <table className="w-full border mt-5">
-
-
-        <thead className="bg-slate-100">
-
-          <tr>
-
-
-            <th className="border p-2">
-
-              <input
-
-                type="checkbox"
-
-                checked={
-                  data.length > 0 &&
-                  selected.length === data.length
-                }
-
-                onChange={toggleAll}
-
-              />
-
-            </th>
+            {data.length === 0 && (
+              <tr>
+                <td
+                  colSpan={10}
+                  className="
+                    px-5
+                    py-14
+                    text-center
+                    text-gray-400
+                  "
+                >
+                  Tidak ada data barang
+                </td>
+              </tr>
+            )}
 
 
-            <th className="border p-2">
-              Kode
-            </th>
+            {data.map((item) => (
+              <tr
+                key={item.id}
+                className={`
+                  border-b
+                  border-[#EDF2EF]
+                  transition
+                  hover:bg-[#FAFCFB]
 
-
-            <th className="border p-2">
-              Barcode
-            </th>
-
-
-            <th className="border p-2">
-              Nama
-            </th>
-
-
-            <th className="border p-2">
-              Kategori
-            </th>
-
-
-            <th className="border p-2">
-              Satuan
-            </th>
-
-
-            <th className="border p-2">
-              Stock
-            </th>
-
-
-            <th className="border p-2">
-              Harga Beli
-            </th>
-
-
-            <th className="border p-2">
-              Harga Jual
-            </th>
-
-
-            <th className="border p-2">
-              Aksi
-            </th>
-
-
-          </tr>
-
-
-        </thead>
-
-
-
-
-
-        <tbody>
-
-
-        {
-          data.length === 0 && (
-
-            <tr>
-
-              <td
-                colSpan={10}
-                className="
-                  border
-                  p-6
-                  text-center
-                  text-gray-500
-                "
+                  ${
+                    selected.includes(item.id)
+                      ? "bg-[#F0F7F3]"
+                      : ""
+                  }
+                `}
               >
 
-                Tidak ada data barang
-
-              </td>
-
-            </tr>
-
-          )
-        }
-
-
-
-
-
-
-        {
-          data.map((item)=>(
-
-
-            <tr
-
-              key={item.id}
-
-              className={
-                selected.includes(item.id)
-                ? "bg-blue-50"
-                : ""
-              }
-
-            >
-
-
-
-              <td className="
-                border
-                p-2
-                text-center
-              ">
-
-
-                <input
-
-                  type="checkbox"
-
-                  checked={
-                    selected.includes(item.id)
-                  }
-
-                  onChange={() =>
-                    toggle(item.id)
-                  }
-
-                />
-
-
-              </td>
-
-
-
-
-
-
-              <td className="border p-2">
-
-                {item.code}
-
-              </td>
-
-
-
-
-
-              <td className="border p-2">
-
-                {item.barcode || "-"}
-
-              </td>
-
-
-
-
-
-              <td className="border p-2">
-
-                {item.name}
-
-              </td>
-
-
-
-
-
-              <td className="border p-2">
-
-                {
-                  typeof item.category === "object"
-
-                  ?
-
-                  item.category?.name
-
-                  :
-
-                  item.category || "-"
-                }
-
-              </td>
-
-
-
-
-
-              <td className="border p-2">
-
-                {
-                  typeof item.unit === "object"
-
-                  ?
-
-                  item.unit?.name
-
-                  :
-
-                  item.unit || "-"
-                }
-
-              </td>
-
-
-
-
-
-
-              <td className="border p-2 text-center">
-
-                {item.stock ?? 0}
-
-              </td>
-
-
-
-
-
-
-              <td className="border p-2">
-
-                {Number(
-                  item.purchasePrice ?? 0
-                ).toLocaleString("id-ID")}
-
-              </td>
-
-
-
-
-
-
-              <td className="border p-2">
-
-                {Number(
-                  item.sellingPrice ?? 0
-                ).toLocaleString("id-ID")}
-
-              </td>
-
-
-
-
-
-
-
-              <td className="border p-2">
-
-
-                <div className="
-                  flex
-                  gap-2
-                  flex-wrap
+                {/* CHECKBOX */}
+
+                <td className="
+                  px-5
+                  py-4
+                  text-center
+                ">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(
+                      item.id
+                    )}
+                    onChange={() =>
+                      toggle(item.id)
+                    }
+                    className="
+                      h-4
+                      w-4
+                      accent-[#497F70]
+                    "
+                  />
+                </td>
+
+
+                {/* KODE */}
+
+                <td className="
+                  px-5
+                  py-4
+                  font-medium
+                  text-[#18352D]
+                ">
+                  {item.code}
+                </td>
+
+
+                {/* BARCODE */}
+
+                <td className="
+                  px-5
+                  py-4
+                  text-gray-500
+                ">
+                  {item.barcode || "-"}
+                </td>
+
+
+                {/* NAMA */}
+
+                <td className="
+                  px-5
+                  py-4
+                ">
+                  <div className="
+                    font-semibold
+                    text-[#18352D]
+                  ">
+                    {item.name}
+                  </div>
+                </td>
+
+
+                {/* KATEGORI */}
+
+                <td className="
+                  px-5
+                  py-4
+                  text-gray-600
+                ">
+                  {typeof item.category === "object"
+                    ? item.category?.name
+                    : item.category || "-"}
+                </td>
+
+
+                {/* SATUAN */}
+
+                <td className="
+                  px-5
+                  py-4
+                  text-gray-600
+                ">
+                  {typeof item.unit === "object"
+                    ? item.unit?.name
+                    : item.unit || "-"}
+                </td>
+
+
+                {/* STOCK */}
+
+                <td className="
+                  px-5
+                  py-4
+                  text-right
+                ">
+                  <span className="
+                    inline-flex
+                    min-w-[60px]
+                    justify-center
+                    rounded-lg
+                    bg-[#EAF3EF]
+                    px-2.5
+                    py-1
+                    font-semibold
+                    text-[#35564C]
+                  ">
+                    {item.stock ?? 0}
+                  </span>
+                </td>
+
+
+                {/* HARGA BELI */}
+
+                <td className="
+                  px-5
+                  py-4
+                  text-right
+                  text-gray-600
+                ">
+                  Rp{" "}
+                  {Number(
+                    item.purchasePrice ?? 0
+                  ).toLocaleString("id-ID")}
+                </td>
+
+
+                {/* HARGA JUAL */}
+
+                <td className="
+                  px-5
+                  py-4
+                  text-right
+                  text-gray-600
+                ">
+                  Rp{" "}
+                  {Number(
+                    item.sellingPrice ?? 0
+                  ).toLocaleString("id-ID")}
+                </td>
+
+
+                {/* AKSI */}
+
+                <td className="
+                  px-5
+                  py-4
                 ">
 
+                  <div className="
+                    flex
+                    items-center
+                    justify-center
+                    gap-2
+                  ">
+
+                    {/* BARCODE */}
+
+                    <button
+                      type="button"
+                      title="Cetak Barcode"
+                      onClick={() => {
+                        window.open(
+                          `/master-barang/barcode?ids=${item.id}`,
+                          "_blank"
+                        );
+                      }}
+                      className="
+                        inline-flex
+                        h-9
+                        w-9
+                        items-center
+                        justify-center
+                        rounded-lg
+                        border
+                        border-[#D5E5DC]
+                        bg-white
+                        text-[#497F70]
+                        transition
+                        hover:bg-[#EAF3EF]
+                        hover:border-[#497F70]
+                      "
+                    >
+                      <Barcode size={17} />
+                    </button>
 
 
+                    {/* EDIT */}
+
+                    <Link
+                      href={`/master-barang/${item.id}/edit`}
+                      title="Edit Barang"
+                      className="
+                        inline-flex
+                        h-9
+                        w-9
+                        items-center
+                        justify-center
+                        rounded-lg
+                        border
+                        border-[#D5E5DC]
+                        bg-white
+                        text-[#497F70]
+                        transition
+                        hover:bg-[#EAF3EF]
+                        hover:border-[#497F70]
+                      "
+                    >
+                      <Pencil size={16} />
+                    </Link>
 
 
-                  <button
+                    {/* HAPUS */}
 
-                    onClick={()=>{
+                    <button
+                      type="button"
+                      title="Hapus Barang"
+                      onClick={() =>
+                        hapus(item.id)
+                      }
+                      className="
+                        inline-flex
+                        h-9
+                        w-9
+                        items-center
+                        justify-center
+                        rounded-lg
+                        border
+                        border-red-100
+                        bg-white
+                        text-red-500
+                        transition
+                        hover:bg-red-50
+                        hover:border-red-200
+                      "
+                    >
+                      <Trash2 size={16} />
+                    </button>
 
-                      window.open(
-                        `/master-barang/barcode?ids=${item.id}`,
-                        "_blank"
-                      );
+                  </div>
 
-                    }}
+                </td>
 
-                    className="
-                      bg-green-600
-                      hover:bg-green-700
-                      text-white
-                      px-3
-                      py-1
-                      rounded
-                    "
+              </tr>
+            ))}
 
-                  >
+          </tbody>
 
-                    Barcode
+        </table>
 
-                  </button>
+      </div>
 
-
-
-
-
-
-
-                  <Link
-  href={`/master-barang/${item.id}/edit?test=123`}
-  className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded"
->
-  EDIT
-</Link>
-
-
-
-
-
-
-
-                  <button
-
-                    onClick={() =>
-                      hapus(item.id)
-                    }
-
-                    className="
-                      bg-red-600
-                      hover:bg-red-700
-                      text-white
-                      px-3
-                      py-1
-                      rounded
-                    "
-
-                  >
-
-                    Hapus
-
-                  </button>
-
-
-
-
-
-                </div>
-
-
-              </td>
-
-
-
-
-
-            </tr>
-
-
-          ))
-
-        }
-
-
-
-        </tbody>
-
-
-      </table>
-
-
-    </>
-
+    </div>
   );
-
-
 }

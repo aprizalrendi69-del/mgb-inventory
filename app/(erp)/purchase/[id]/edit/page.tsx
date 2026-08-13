@@ -24,23 +24,194 @@ type PurchaseItem = {
   barang?: Barang;
 };
 
+// =====================================================
+// FORMAT NUMBER
+// =====================================================
+
+function formatNumber(value: number | string) {
+  const number = Number(value || 0);
+
+  return number.toLocaleString("id-ID", {
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatRupiah(value: number | string) {
+  const number = Number(value || 0);
+
+  return number.toLocaleString("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+// =====================================================
+// DECIMAL INPUT
+// =====================================================
+
+type DecimalInputProps = {
+  value: number;
+  onChange: (value: number) => void;
+  className?: string;
+  min?: number;
+};
+
+function DecimalInput({
+  value,
+  onChange,
+  className = "",
+  min,
+}: DecimalInputProps) {
+  const [focused, setFocused] = useState(false);
+  const [text, setText] = useState(
+    value === 0 ? "" : String(value)
+  );
+
+  useEffect(() => {
+    if (!focused) {
+      setText(value === 0 ? "" : String(value));
+    }
+  }, [value, focused]);
+
+  function handleFocus() {
+    setFocused(true);
+
+    setText(
+      value === 0
+        ? ""
+        : String(value)
+    );
+  }
+
+  function handleChange(
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    let input = e.target.value;
+
+    // Izinkan koma Indonesia
+    input = input.replace(",", ".");
+
+    // Hanya angka dan satu titik desimal
+    input = input.replace(
+      /[^0-9.]/g,
+      ""
+    );
+
+    const parts = input.split(".");
+
+    if (parts.length > 2) {
+      input =
+        parts[0] +
+        "." +
+        parts.slice(1).join("");
+    }
+
+    setText(input);
+
+    if (input === "" || input === ".") {
+      onChange(0);
+      return;
+    }
+
+    const numericValue = Number(input);
+
+    if (Number.isNaN(numericValue)) {
+      return;
+    }
+
+    onChange(numericValue);
+  }
+
+  function handleBlur() {
+    setFocused(false);
+
+    const numericValue = Number(text);
+
+    if (
+      Number.isNaN(numericValue) ||
+      numericValue < 0
+    ) {
+      setText("");
+      onChange(0);
+      return;
+    }
+
+    if (
+      min !== undefined &&
+      numericValue < min
+    ) {
+      setText(String(min));
+      onChange(min);
+      return;
+    }
+
+    onChange(numericValue);
+
+    setText(
+      numericValue === 0
+        ? ""
+        : String(numericValue)
+    );
+  }
+
+  const displayValue = focused
+    ? text
+    : value === 0
+      ? ""
+      : formatNumber(value);
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={displayValue}
+      onFocus={handleFocus}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      className={className}
+    />
+  );
+}
+
+// =====================================================
+// PAGE
+// =====================================================
+
 export default function EditPurchasePage() {
   const params = useParams();
   const router = useRouter();
 
   const id = params.id;
 
-  const [purchase, setPurchase] = useState<any>(null);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [barangs, setBarangs] = useState<Barang[]>([]);
+  const [purchase, setPurchase] =
+    useState<any>(null);
 
-  const [supplierId, setSupplierId] = useState("");
-  const [remarks, setRemarks] = useState("");
+  const [suppliers, setSuppliers] =
+    useState<Supplier[]>([]);
 
-  const [items, setItems] = useState<PurchaseItem[]>([]);
+  const [barangs, setBarangs] =
+    useState<Barang[]>([]);
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [supplierId, setSupplierId] =
+    useState("");
+
+  const [remarks, setRemarks] =
+    useState("");
+
+  const [items, setItems] =
+    useState<PurchaseItem[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  // =====================================================
+  // LOAD DATA
+  // =====================================================
 
   useEffect(() => {
     loadData();
@@ -50,24 +221,32 @@ export default function EditPurchasePage() {
     try {
       setLoading(true);
 
-      const [purchaseRes, supplierRes, barangRes] =
-        await Promise.all([
-          fetch(`/api/purchase/${id}`, {
-            cache: "no-store",
-          }),
+      const [
+        purchaseRes,
+        supplierRes,
+        barangRes,
+      ] = await Promise.all([
+        fetch(`/api/purchase/${id}`, {
+          cache: "no-store",
+        }),
 
-          fetch("/api/master/supplier", {
-            cache: "no-store",
-          }),
+        fetch("/api/master/supplier", {
+          cache: "no-store",
+        }),
 
-          fetch("/api/master/barang", {
-            cache: "no-store",
-          }),
-        ]);
+        fetch("/api/master/barang", {
+          cache: "no-store",
+        }),
+      ]);
 
-      const purchaseJson = await purchaseRes.json();
-      const supplierJson = await supplierRes.json();
-      const barangJson = await barangRes.json();
+      const purchaseJson =
+        await purchaseRes.json();
+
+      const supplierJson =
+        await supplierRes.json();
+
+      const barangJson =
+        await barangRes.json();
 
       if (!purchaseJson.success) {
         alert(
@@ -79,24 +258,39 @@ export default function EditPurchasePage() {
         return;
       }
 
-      const data = purchaseJson.data;
+      const data =
+        purchaseJson.data;
 
       setPurchase(data);
 
       setSupplierId(
-        String(data.supplierId ?? "")
+        String(
+          data.supplierId ?? ""
+        )
       );
 
-      setRemarks(data.remarks ?? "");
+      setRemarks(
+        data.remarks ?? ""
+      );
 
       setItems(
-        (data.items || []).map((item: any) => ({
-          id: item.id,
-          barangId: item.barangId,
-          qty: Number(item.qty),
-          price: Number(item.price),
-          barang: item.barang,
-        }))
+        (data.items || []).map(
+          (item: any) => ({
+            id: item.id,
+
+            barangId:
+              Number(item.barangId),
+
+            qty:
+              Number(item.qty ?? 0),
+
+            price:
+              Number(item.price ?? 0),
+
+            barang:
+              item.barang,
+          })
+        )
       );
 
       if (supplierJson.success) {
@@ -115,7 +309,10 @@ export default function EditPurchasePage() {
         );
       }
     } catch (error) {
-      console.error(error);
+      console.error(
+        "LOAD PURCHASE ERROR:",
+        error
+      );
 
       alert(
         "Gagal mengambil data Purchase Order"
@@ -124,6 +321,10 @@ export default function EditPurchasePage() {
       setLoading(false);
     }
   }
+
+  // =====================================================
+  // ADD ITEM
+  // =====================================================
 
   function addItem() {
     setItems([
@@ -136,18 +337,29 @@ export default function EditPurchasePage() {
     ]);
   }
 
+  // =====================================================
+  // REMOVE ITEM
+  // =====================================================
+
   function removeItem(index: number) {
     if (items.length === 1) {
       alert(
         "Purchase Order harus memiliki minimal 1 barang."
       );
+
       return;
     }
 
     setItems(
-      items.filter((_, i) => i !== index)
+      items.filter(
+        (_, i) => i !== index
+      )
     );
   }
+
+  // =====================================================
+  // UPDATE ITEM
+  // =====================================================
 
   function updateItem(
     index: number,
@@ -164,11 +376,9 @@ export default function EditPurchasePage() {
     setItems(updated);
   }
 
-  function formatRupiah(value: number) {
-    return Number(value || 0).toLocaleString(
-      "id-ID"
-    );
-  }
+  // =====================================================
+  // TOTAL
+  // =====================================================
 
   const total = items.reduce(
     (sum, item) =>
@@ -178,30 +388,63 @@ export default function EditPurchasePage() {
     0
   );
 
+  // =====================================================
+  // SUBMIT
+  // =====================================================
+
   async function handleSubmit(
     e: React.FormEvent
   ) {
     e.preventDefault();
 
     if (!supplierId) {
-      alert("Supplier wajib dipilih");
+      alert(
+        "Supplier wajib dipilih"
+      );
+
       return;
     }
 
     if (items.length === 0) {
-      alert("Barang belum dipilih");
+      alert(
+        "Barang belum dipilih"
+      );
+
       return;
     }
 
     for (const item of items) {
+      if (!item.barangId) {
+        alert(
+          "Semua barang harus dipilih."
+        );
+
+        return;
+      }
+
       if (
-        !item.barangId ||
-        Number(item.qty) <= 0 ||
+        Number(item.qty) <= 0
+      ) {
+        alert(
+          `Qty ${
+            item.barang?.name ||
+            "barang"
+          } harus lebih dari 0.`
+        );
+
+        return;
+      }
+
+      if (
         Number(item.price) <= 0
       ) {
         alert(
-          "Pastikan semua barang, qty, dan harga sudah benar."
+          `Harga ${
+            item.barang?.name ||
+            "barang"
+          } harus lebih dari 0.`
         );
+
         return;
       }
     }
@@ -213,30 +456,52 @@ export default function EditPurchasePage() {
         `/api/purchase/${id}`,
         {
           method: "PUT",
+
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
+
           body: JSON.stringify({
-            supplierId: Number(supplierId),
+            supplierId:
+              Number(supplierId),
+
             remarks,
-            items: items.map((item) => ({
-              barangId: Number(
-                item.barangId
-              ),
-              qty: Number(item.qty),
-              price: Number(item.price),
-            })),
+
+            items: items.map(
+              (item) => ({
+                barangId:
+                  Number(
+                    item.barangId
+                  ),
+
+                qty:
+                  Number(
+                    item.qty
+                  ),
+
+                price:
+                  Number(
+                    item.price
+                  ),
+              })
+            ),
           }),
         }
       );
 
-      const json = await res.json();
+      const json =
+        await res.json();
 
-      if (!res.ok || !json.success) {
+      if (
+        !res.ok ||
+        !json.success
+      ) {
         alert(
           json.message ||
             "Gagal mengubah Purchase Order"
         );
+
         return;
       }
 
@@ -244,10 +509,16 @@ export default function EditPurchasePage() {
         "Purchase Order berhasil diubah"
       );
 
-      router.push(`/purchase/${id}`);
+      router.push(
+        `/purchase/${id}`
+      );
+
       router.refresh();
     } catch (error) {
-      console.error(error);
+      console.error(
+        "SAVE PURCHASE ERROR:",
+        error
+      );
 
       alert(
         "Terjadi kesalahan saat mengubah Purchase Order"
@@ -256,6 +527,10 @@ export default function EditPurchasePage() {
       setSaving(false);
     }
   }
+
+  // =====================================================
+  // LOADING
+  // =====================================================
 
   if (loading) {
     return (
@@ -267,6 +542,10 @@ export default function EditPurchasePage() {
     );
   }
 
+  // =====================================================
+  // NOT FOUND
+  // =====================================================
+
   if (!purchase) {
     return (
       <div className="min-h-full bg-[#F6F8F7] p-8">
@@ -275,12 +554,19 @@ export default function EditPurchasePage() {
     );
   }
 
-  if (purchase.status !== "DRAFT") {
+  // =====================================================
+  // LOCKED
+  // =====================================================
+
+  if (
+    purchase.status !== "DRAFT"
+  ) {
     return (
       <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
         <div className="mx-auto max-w-5xl">
 
           <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
+
             <h1 className="text-xl font-bold text-red-700">
               Purchase Order tidak dapat diedit
             </h1>
@@ -303,12 +589,17 @@ export default function EditPurchasePage() {
             >
               Kembali ke Detail
             </Link>
+
           </div>
 
         </div>
       </div>
     );
   }
+
+  // =====================================================
+  // UI
+  // =====================================================
 
   return (
     <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
@@ -320,6 +611,7 @@ export default function EditPurchasePage() {
         <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
           <div>
+
             <p className="text-sm font-medium text-[#497F70]">
               Purchase Order
             </p>
@@ -331,6 +623,7 @@ export default function EditPurchasePage() {
             <p className="mt-1 text-sm text-gray-500">
               {purchase.number}
             </p>
+
           </div>
 
           <Link
@@ -342,33 +635,49 @@ export default function EditPurchasePage() {
 
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form
+          onSubmit={handleSubmit}
+        >
 
+          {/* ================================================= */}
           {/* INFORMASI PO */}
+          {/* ================================================= */}
 
           <div className="mb-6 rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
             <div className="border-b border-[#E5ECE9] px-5 py-4">
+
               <h2 className="font-bold text-[#18352D]">
                 Informasi Purchase Order
               </h2>
+
             </div>
 
             <div className="grid gap-5 p-5 md:grid-cols-2">
 
+              {/* NO PO */}
+
               <div>
+
                 <label className="mb-2 block text-sm font-semibold text-gray-700">
                   No. PO
                 </label>
 
                 <input
-                  value={purchase.number || ""}
+                  value={
+                    purchase.number ||
+                    ""
+                  }
                   disabled
                   className="w-full rounded-xl border border-[#D5E5DC] bg-gray-100 px-4 py-3 text-sm text-gray-500"
                 />
+
               </div>
 
+              {/* SUPPLIER */}
+
               <div>
+
                 <label className="mb-2 block text-sm font-semibold text-gray-700">
                   Supplier
                 </label>
@@ -382,6 +691,7 @@ export default function EditPurchasePage() {
                   }
                   className="w-full rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
                 >
+
                   <option value="">
                     Pilih Supplier
                   </option>
@@ -389,17 +699,28 @@ export default function EditPurchasePage() {
                   {suppliers.map(
                     (supplier) => (
                       <option
-                        key={supplier.id}
-                        value={supplier.id}
+                        key={
+                          supplier.id
+                        }
+                        value={
+                          supplier.id
+                        }
                       >
-                        {supplier.name}
+                        {
+                          supplier.name
+                        }
                       </option>
                     )
                   )}
+
                 </select>
+
               </div>
 
+              {/* KETERANGAN */}
+
               <div className="md:col-span-2">
+
                 <label className="mb-2 block text-sm font-semibold text-gray-700">
                   Keterangan
                 </label>
@@ -415,18 +736,23 @@ export default function EditPurchasePage() {
                   placeholder="Keterangan Purchase Order..."
                   className="w-full rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
                 />
+
               </div>
 
             </div>
+
           </div>
 
+          {/* ================================================= */}
           {/* BARANG */}
+          {/* ================================================= */}
 
           <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
             <div className="flex flex-col gap-3 border-b border-[#E5ECE9] px-5 py-4 md:flex-row md:items-center md:justify-between">
 
               <div>
+
                 <h2 className="font-bold text-[#18352D]">
                   Detail Barang
                 </h2>
@@ -434,6 +760,7 @@ export default function EditPurchasePage() {
                 <p className="mt-1 text-xs text-gray-500">
                   Ubah barang, qty, dan harga Purchase Order.
                 </p>
+
               </div>
 
               <button
@@ -485,7 +812,10 @@ export default function EditPurchasePage() {
                 <tbody>
 
                   {items.map(
-                    (item, index) => {
+                    (
+                      item,
+                      index
+                    ) => {
 
                       const subtotal =
                         Number(
@@ -504,9 +834,13 @@ export default function EditPurchasePage() {
                           className="border-b border-[#EDF2EF]"
                         >
 
+                          {/* NO */}
+
                           <td className="px-4 py-4 text-gray-500">
                             {index + 1}
                           </td>
+
+                          {/* BARANG */}
 
                           <td className="px-4 py-4">
 
@@ -535,7 +869,9 @@ export default function EditPurchasePage() {
                               </option>
 
                               {barangs.map(
-                                (barang) => (
+                                (
+                                  barang
+                                ) => (
                                   <option
                                     key={
                                       barang.id
@@ -544,8 +880,13 @@ export default function EditPurchasePage() {
                                       barang.id
                                     }
                                   >
-                                    {barang.code} -{" "}
-                                    {barang.name}
+                                    {
+                                      barang.code
+                                    }{" "}
+                                    -{" "}
+                                    {
+                                      barang.name
+                                    }
                                   </option>
                                 )
                               )}
@@ -554,56 +895,67 @@ export default function EditPurchasePage() {
 
                           </td>
 
+                          {/* QTY */}
+
                           <td className="px-4 py-4">
 
-                            <input
-                              type="number"
-                              min="1"
+                            <DecimalInput
                               value={
-                                item.qty
+                                Number(
+                                  item.qty || 0
+                                )
                               }
-                              onChange={(e) =>
+                              min={1}
+                              onChange={(
+                                value
+                              ) =>
                                 updateItem(
                                   index,
                                   "qty",
-                                  Number(
-                                    e.target.value
-                                  )
+                                  value
                                 )
                               }
-                              className="w-24 rounded-xl border border-[#D5E5DC] px-3 py-2.5 text-center outline-none focus:border-[#497F70]"
+                              className="w-28 rounded-xl border border-[#D5E5DC] bg-white px-3 py-2.5 text-right outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
                             />
 
                           </td>
+
+                          {/* HARGA */}
 
                           <td className="px-4 py-4">
 
-                            <input
-                              type="number"
-                              min="1"
+                            <DecimalInput
                               value={
-                                item.price
+                                Number(
+                                  item.price || 0
+                                )
                               }
-                              onChange={(e) =>
+                              min={1}
+                              onChange={(
+                                value
+                              ) =>
                                 updateItem(
                                   index,
                                   "price",
-                                  Number(
-                                    e.target.value
-                                  )
+                                  value
                                 )
                               }
-                              className="w-36 rounded-xl border border-[#D5E5DC] px-3 py-2.5 text-right outline-none focus:border-[#497F70]"
+                              className="w-40 rounded-xl border border-[#D5E5DC] bg-white px-3 py-2.5 text-right outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
                             />
 
                           </td>
 
-                          <td className="px-4 py-4 text-right font-semibold text-[#18352D]">
-                            Rp{" "}
+                          {/* SUBTOTAL */}
+
+                          <td className="px-4 py-4 text-right font-semibold text-[#18352D] whitespace-nowrap">
+
                             {formatRupiah(
                               subtotal
                             )}
+
                           </td>
+
+                          {/* HAPUS */}
 
                           <td className="px-4 py-4 text-center">
 
@@ -632,21 +984,24 @@ export default function EditPurchasePage() {
 
             </div>
 
+            {/* ================================================= */}
             {/* TOTAL */}
+            {/* ================================================= */}
 
             <div className="flex justify-end border-t border-[#E5ECE9] bg-[#FAFCFB] px-5 py-5">
 
               <div className="w-full max-w-sm">
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-5">
 
                   <span className="text-sm font-semibold text-gray-600">
                     Total Purchase
                   </span>
 
-                  <span className="text-xl font-bold text-[#18352D]">
-                    Rp{" "}
-                    {formatRupiah(total)}
+                  <span className="text-xl font-bold text-[#18352D] whitespace-nowrap">
+                    {formatRupiah(
+                      total
+                    )}
                   </span>
 
                 </div>
@@ -657,7 +1012,9 @@ export default function EditPurchasePage() {
 
           </div>
 
+          {/* ================================================= */}
           {/* FOOTER */}
+          {/* ================================================= */}
 
           <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
 
