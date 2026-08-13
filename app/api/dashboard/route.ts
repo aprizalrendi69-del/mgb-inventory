@@ -1,8 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    /* =====================================================
+       PERIOD GRAFIK
+    ===================================================== */
+
+    const { searchParams } = new URL(req.url);
+
+    const periodParam = searchParams.get("period");
+
+    const period =
+      periodParam === "30" || periodParam === "90"
+        ? Number(periodParam)
+        : 7;
+
     /* =====================================================
        1. MASTER DATA
     ===================================================== */
@@ -52,11 +65,6 @@ export async function GET() {
 
     /* =====================================================
        3. STOCK ALERT
-       
-       LEVEL:
-       - OUT_OF_STOCK = stock 0
-       - CRITICAL     = <= 50% minimum stock
-       - LOW          = <= minimum stock
     ===================================================== */
 
     const stockData = await prisma.barang.findMany({
@@ -135,12 +143,10 @@ export async function GET() {
           priority,
         };
       })
-
       .filter(
         (item) =>
           item.stock <= item.minimumStock
       )
-
       .sort((a, b) => {
         if (a.priority !== b.priority) {
           return a.priority - b.priority;
@@ -148,7 +154,6 @@ export async function GET() {
 
         return a.stock - b.stock;
       })
-
       .slice(0, 20);
 
     /* =====================================================
@@ -295,19 +300,16 @@ export async function GET() {
           expiredWarning: warningDays,
         };
       })
-
       .filter(
         (item) =>
           item.status === "EXPIRED" ||
           item.status === "WARNING"
       )
-
       .sort(
         (a, b) =>
           a.sisaHari -
           b.sisaHari
       )
-
       .slice(0, 10);
 
     /* =====================================================
@@ -385,21 +387,39 @@ export async function GET() {
     ]
       .sort(
         (a, b) =>
-          new Date(
-            b.createdAt
-          ).getTime() -
-          new Date(
-            a.createdAt
-          ).getTime()
+          new Date(b.createdAt).getTime() -
+          new Date(a.createdAt).getTime()
       )
       .slice(0, 10);
 
     /* =====================================================
        8. GRAFIK INVENTORY
+       
+       7 / 30 / 90 HARI
     ===================================================== */
+
+    const startDate = new Date();
+
+    startDate.setHours(
+      0,
+      0,
+      0,
+      0
+    );
+
+    startDate.setDate(
+      startDate.getDate() -
+        (period - 1)
+    );
 
     const stockCards =
       await prisma.stockCard.findMany({
+        where: {
+          trxDate: {
+            gte: startDate,
+          },
+        },
+
         select: {
           trxDate: true,
           qtyIn: true,
@@ -407,11 +427,15 @@ export async function GET() {
         },
 
         orderBy: {
-          trxDate: "desc",
+          trxDate: "asc",
         },
-
-        take: 500,
       });
+
+    /* =====================================================
+       SIAPKAN SEMUA TANGGAL
+       
+       Tanggal tanpa transaksi tetap muncul.
+    ===================================================== */
 
     const chartMap = new Map<
       string,
@@ -421,6 +445,31 @@ export async function GET() {
         date: Date;
       }
     >();
+
+    for (let i = 0; i < period; i++) {
+      const date = new Date(startDate);
+
+      date.setDate(
+        startDate.getDate() + i
+      );
+
+      const key =
+        `${date.getFullYear()}-${String(
+          date.getMonth() + 1
+        ).padStart(2, "0")}-${String(
+          date.getDate()
+        ).padStart(2, "0")}`;
+
+      chartMap.set(key, {
+        masuk: 0,
+        keluar: 0,
+        date,
+      });
+    }
+
+    /* =====================================================
+       MASUKKAN DATA STOCK CARD
+    ===================================================== */
 
     for (const card of stockCards) {
       const date =
@@ -441,16 +490,12 @@ export async function GET() {
           date.getDate()
         ).padStart(2, "0")}`;
 
-      if (!chartMap.has(key)) {
-        chartMap.set(key, {
-          masuk: 0,
-          keluar: 0,
-          date,
-        });
-      }
-
       const current =
-        chartMap.get(key)!;
+        chartMap.get(key);
+
+      if (!current) {
+        continue;
+      }
 
       current.masuk += Number(
         card.qtyIn || 0
@@ -461,21 +506,33 @@ export async function GET() {
       );
     }
 
-    const chart = Array.from(
-      chartMap.entries()
-    )
-      .sort(
-        ([, a], [, b]) =>
-          a.date.getTime() -
-          b.date.getTime()
-      )
-      .slice(-7)
-      .map(
-        ([, value]) => ({
+    /* =====================================================
+       FORMAT CHART
+       
+       id dibuat unik berdasarkan tanggal lengkap.
+       Frontend bisa menggunakan item.id sebagai React key.
+    ===================================================== */
+
+    const chart =
+      Array.from(
+        chartMap.entries()
+      ).map(
+        ([dateKey, value]) => ({
+          id: dateKey,
+
+          date: dateKey,
+
           label:
-            String(
-              value.date.getDate()
-            ).padStart(2, "0"),
+            value.date.toLocaleDateString(
+              "id-ID",
+              {
+                day: "2-digit",
+                month:
+                  period <= 7
+                    ? "short"
+                    : undefined,
+              }
+            ),
 
           masuk: value.masuk,
 
@@ -566,7 +623,6 @@ export async function GET() {
             ? error.message
             : "Unknown error",
       },
-
       {
         status: 500,
       }

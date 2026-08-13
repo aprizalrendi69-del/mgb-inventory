@@ -22,7 +22,18 @@ import {
   CalendarDays,
   Send,
   AlertCircle,
+  ArrowDownRight,
 } from "lucide-react";
+
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 type StockAlert = {
   id: number;
@@ -75,20 +86,123 @@ type DashboardData = {
 
 type Period = "7" | "30" | "90";
 
+function formatNumber(value: number) {
+  return Number(value || 0).toLocaleString("id-ID");
+}
+
+function formatCurrency(value: number) {
+  return `Rp ${Number(value || 0).toLocaleString("id-ID")}`;
+}
+
+function formatCompactCurrency(value: number) {
+  const number = Number(value || 0);
+
+  if (number >= 1_000_000_000_000) {
+    return `Rp ${(number / 1_000_000_000_000)
+      .toFixed(2)
+      .replace(".", ",")} T`;
+  }
+
+  if (number >= 1_000_000_000) {
+    return `Rp ${(number / 1_000_000_000)
+      .toFixed(2)
+      .replace(".", ",")} M`;
+  }
+
+  if (number >= 1_000_000) {
+    return `Rp ${(number / 1_000_000)
+      .toFixed(2)
+      .replace(".", ",")} jt`;
+  }
+
+  if (number >= 1_000) {
+    return `Rp ${(number / 1_000)
+      .toFixed(1)
+      .replace(".", ",")} rb`;
+  }
+
+  return formatCurrency(number);
+}
+
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const masuk = Number(
+    payload.find((item: any) => item.dataKey === "masuk")?.value || 0
+  );
+
+  const keluar = Number(
+    payload.find((item: any) => item.dataKey === "keluar")?.value || 0
+  );
+
+  return (
+    <div className="min-w-[220px] rounded-2xl border border-slate-100 bg-white/95 p-4 shadow-[0_20px_50px_rgba(15,23,42,0.14)] backdrop-blur">
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <p className="text-xs font-bold text-slate-700">{label}</p>
+
+        <span className="rounded-lg bg-slate-50 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+          Aktivitas
+        </span>
+      </div>
+
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between gap-5">
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.10)]" />
+
+            <span className="text-xs text-slate-500">
+              Barang Masuk
+            </span>
+          </div>
+
+          <span className="text-xs font-bold text-emerald-600">
+            {formatNumber(masuk)}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between gap-5">
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-slate-400 shadow-[0_0_0_4px_rgba(148,163,184,0.10)]" />
+
+            <span className="text-xs text-slate-500">
+              Barang Keluar
+            </span>
+          </div>
+
+          <span className="text-xs font-bold text-slate-600">
+            {formatNumber(keluar)}
+          </span>
+        </div>
+
+        <div className="my-3 border-t border-slate-100" />
+
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            Total Aktivitas
+          </span>
+
+          <span className="text-xs font-bold text-slate-700">
+            {formatNumber(masuk + keluar)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
-  const [data, setData] =
-    useState<DashboardData | null>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
 
-  const [period, setPeriod] =
-    useState<Period>("7");
+  const [period, setPeriod] = useState<Period>("7");
 
-  const [refreshing, setRefreshing] =
-    useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   async function loadDashboard(
+    selectedPeriod: Period = period,
     showRefresh = false
   ) {
     try {
@@ -97,29 +211,23 @@ export default function Dashboard() {
       }
 
       const res = await fetch(
-        "/api/dashboard",
+        `/api/dashboard?period=${selectedPeriod}`,
         {
           cache: "no-store",
         }
       );
 
       if (!res.ok) {
-        throw new Error(
-          "Dashboard gagal dimuat"
-        );
+        throw new Error("Dashboard gagal dimuat");
       }
 
-      const json =
-        await res.json();
+      const json = await res.json();
 
       if (json.success) {
         setData(json.data);
       }
     } catch (error) {
-      console.error(
-        "DASHBOARD ERROR",
-        error
-      );
+      console.error("DASHBOARD ERROR", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -127,49 +235,43 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    loadDashboard();
+    loadDashboard("7");
   }, []);
 
-  const chartData =
-    useMemo(() => {
-      if (!data?.chart?.length) {
-        return [];
+  const handlePeriodChange = (newPeriod: Period) => {
+    setPeriod(newPeriod);
+    loadDashboard(newPeriod);
+  };
+
+  const chartData = useMemo(() => {
+    if (!data?.chart?.length) {
+      return [];
+    }
+
+    return data.chart.map((item) => ({
+      label: item.label,
+      masuk: Number(item.masuk || 0),
+      keluar: Number(item.keluar || 0),
+    }));
+  }, [data]);
+
+  const chartSummary = useMemo(() => {
+    return chartData.reduce(
+      (summary, item) => {
+        summary.masuk += item.masuk;
+        summary.keluar += item.keluar;
+
+        return summary;
+      },
+      {
+        masuk: 0,
+        keluar: 0,
       }
-
-      return data.chart.map(
-        (item) => ({
-          label: item.label,
-
-          masuk: Number(
-            item.masuk || 0
-          ),
-
-          keluar: Number(
-            item.keluar || 0
-          ),
-
-          value:
-            Number(
-              item.masuk || 0
-            ) +
-            Number(
-              item.keluar || 0
-            ),
-        })
-      );
-    }, [data]);
-
-  const maxChartValue =
-    Math.max(
-      ...chartData.map(
-        (item) => item.value
-      ),
-      1
     );
+  }, [chartData]);
 
-  /* =====================================================
-     STOCK ALERT SUMMARY
-  ===================================================== */
+  const totalActivity =
+    chartSummary.masuk + chartSummary.keluar;
 
   const stockAlertCount =
     data?.stats.stockAlertCount ??
@@ -180,141 +282,89 @@ export default function Dashboard() {
     data?.stats.stockOutCount ?? 0;
 
   const stockCriticalCount =
-    data?.stats.stockCriticalCount ??
-    0;
+    data?.stats.stockCriticalCount ?? 0;
 
   const stockLowCount =
     data?.stats.stockLowCount ?? 0;
 
-  /* =====================================================
-     STATISTIC CARDS
-  ===================================================== */
+  const inventoryValue =
+    Number(data?.stats.nilaiPersediaan || 0);
 
   const cards = [
     {
       title: "Total Barang",
-
       value:
         data?.stats.totalBarang?.toLocaleString(
           "id-ID"
         ) ?? "0",
-
       icon: Package,
-
       iconBg: "bg-blue-50",
-
       iconColor: "text-blue-500",
-
       accent: "bg-blue-400",
     },
-
     {
       title: "Total Supplier",
-
       value:
         data?.stats.totalSupplier?.toLocaleString(
           "id-ID"
         ) ?? "0",
-
       icon: Users,
-
       iconBg: "bg-violet-50",
-
       iconColor: "text-violet-500",
-
       accent: "bg-violet-400",
     },
-
     {
       title: "Total Customer",
-
       value:
         data?.stats.totalCustomer?.toLocaleString(
           "id-ID"
         ) ?? "0",
-
       icon: Truck,
-
       iconBg: "bg-sky-50",
-
       iconColor: "text-sky-500",
-
       accent: "bg-sky-400",
     },
-
     {
       title: "Purchase",
-
       value:
         data?.stats.totalPurchase?.toLocaleString(
           "id-ID"
         ) ?? "0",
-
       icon: ShoppingCart,
-
       iconBg: "bg-amber-50",
-
       iconColor: "text-amber-500",
-
       accent: "bg-amber-400",
     },
-
     {
       title: "Delivery",
-
       value:
         data?.stats.totalDelivery?.toLocaleString(
           "id-ID"
         ) ?? "0",
-
       icon: Send,
-
       iconBg: "bg-indigo-50",
-
       iconColor: "text-indigo-500",
-
       accent: "bg-indigo-400",
     },
-
     {
       title: "Nilai Persediaan",
-
-      value: `Rp ${
-        data?.stats.nilaiPersediaan?.toLocaleString(
-          "id-ID"
-        ) ?? "0"
-      }`,
-
+      value: formatCompactCurrency(inventoryValue),
+      fullValue: formatCurrency(inventoryValue),
       icon: DollarSign,
-
       iconBg: "bg-emerald-50",
-
       iconColor: "text-emerald-500",
-
       accent: "bg-emerald-400",
     },
-
     {
       title: "Stock Alert",
-
       value:
-        stockAlertCount.toLocaleString(
-          "id-ID"
-        ),
-
+        stockAlertCount.toLocaleString("id-ID"),
       icon: AlertTriangle,
-
       iconBg: "bg-orange-50",
-
       iconColor: "text-orange-500",
-
       accent: "bg-orange-400",
     },
   ];
-
-  /* =====================================================
-     QUICK MENU
-  ===================================================== */
 
   const menus = [
     {
@@ -327,7 +377,6 @@ export default function Dashboard() {
       hover:
         "hover:border-blue-200 hover:bg-blue-50/40",
     },
-
     {
       title: "Supplier",
       description: "Data supplier",
@@ -338,7 +387,6 @@ export default function Dashboard() {
       hover:
         "hover:border-violet-200 hover:bg-violet-50/40",
     },
-
     {
       title: "Customer",
       description: "Data customer",
@@ -349,7 +397,6 @@ export default function Dashboard() {
       hover:
         "hover:border-sky-200 hover:bg-sky-50/40",
     },
-
     {
       title: "Purchase",
       description: "Purchase order",
@@ -360,7 +407,6 @@ export default function Dashboard() {
       hover:
         "hover:border-amber-200 hover:bg-amber-50/40",
     },
-
     {
       title: "Delivery",
       description: "Pengiriman barang",
@@ -371,7 +417,6 @@ export default function Dashboard() {
       hover:
         "hover:border-indigo-200 hover:bg-indigo-50/40",
     },
-
     {
       title: "Inventory",
       description: "Stock inventory",
@@ -382,7 +427,6 @@ export default function Dashboard() {
       hover:
         "hover:border-emerald-200 hover:bg-emerald-50/40",
     },
-
     {
       title: "Laporan",
       description: "Report ERP",
@@ -395,20 +439,15 @@ export default function Dashboard() {
     },
   ];
 
-  const today =
-    new Date().toLocaleDateString(
-      "id-ID",
-      {
-        weekday: "long",
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-      }
-    );
-
-  /* =====================================================
-     STOCK STATUS HELPER
-  ===================================================== */
+  const today = new Date().toLocaleDateString(
+    "id-ID",
+    {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    }
+  );
 
   function getStockStatus(
     status: StockAlert["status"]
@@ -416,41 +455,29 @@ export default function Dashboard() {
     if (status === "OUT_OF_STOCK") {
       return {
         label: "HABIS",
-
         badge:
           "bg-rose-50 text-rose-600 border-rose-100",
-
         bar: "bg-rose-400",
-
-        icon:
-          "bg-rose-50 text-rose-500",
+        icon: "bg-rose-50 text-rose-500",
       };
     }
 
     if (status === "CRITICAL") {
       return {
         label: "KRITIS",
-
         badge:
           "bg-orange-50 text-orange-600 border-orange-100",
-
         bar: "bg-orange-400",
-
-        icon:
-          "bg-orange-50 text-orange-500",
+        icon: "bg-orange-50 text-orange-500",
       };
     }
 
     return {
       label: "RENDAH",
-
       badge:
         "bg-amber-50 text-amber-600 border-amber-100",
-
       bar: "bg-amber-400",
-
-      icon:
-        "bg-amber-50 text-amber-500",
+      icon: "bg-amber-50 text-amber-500",
     };
   }
 
@@ -458,30 +485,24 @@ export default function Dashboard() {
     return (
       <div className="min-h-screen bg-[#F5F8F7] p-4 sm:p-6 lg:p-8">
         <div className="mx-auto max-w-[1600px] space-y-6">
-
           <div className="h-36 animate-pulse rounded-[28px] bg-white shadow-sm" />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-
-            {Array.from({
-              length: 7,
-            }).map((_, i) => (
-              <div
-                key={i}
-                className="h-36 animate-pulse rounded-2xl bg-white shadow-sm"
-              />
-            ))}
-
+            {Array.from({ length: 7 }).map(
+              (_, i) => (
+                <div
+                  key={i}
+                  className="h-36 animate-pulse rounded-2xl bg-white shadow-sm"
+                />
+              )
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-
             <div className="h-96 animate-pulse rounded-[28px] bg-white xl:col-span-2" />
 
             <div className="h-96 animate-pulse rounded-[28px] bg-white" />
-
           </div>
-
         </div>
       </div>
     );
@@ -489,31 +510,23 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#F5F8F7] text-slate-800">
-
       <div className="mx-auto max-w-[1600px] space-y-6 p-4 sm:p-6 lg:p-8">
 
-        {/* =================================================
-            HEADER
-        ================================================= */}
+        {/* HEADER */}
 
         <section className="relative overflow-hidden rounded-[30px] border border-white bg-white p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)] sm:p-8">
-
           <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full bg-emerald-100/50 blur-3xl" />
 
           <div className="absolute -bottom-24 right-48 h-48 w-48 rounded-full bg-teal-100/40 blur-3xl" />
 
           <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-
             <div>
-
               <div className="mb-3 flex items-center gap-2">
-
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_0_5px_rgba(52,211,153,0.10)]" />
 
                 <span className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-600">
                   MGB ERP
                 </span>
-
               </div>
 
               <h1 className="text-2xl font-bold tracking-tight text-slate-800 sm:text-3xl">
@@ -525,19 +538,14 @@ export default function Dashboard() {
                 purchase, delivery, dan kondisi
                 stock di sini ya guys.
               </p>
-
             </div>
 
             <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3">
-
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50">
-
                 <CalendarDays className="h-5 w-5 text-emerald-600" />
-
               </div>
 
               <div>
-
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Hari ini
                 </p>
@@ -545,12 +553,11 @@ export default function Dashboard() {
                 <p className="mt-0.5 text-sm font-semibold text-slate-700">
                   {today}
                 </p>
-
               </div>
 
               <button
                 onClick={() =>
-                  loadDashboard(true)
+                  loadDashboard(period, true)
                 }
                 disabled={refreshing}
                 title="Refresh dashboard"
@@ -558,40 +565,35 @@ export default function Dashboard() {
               >
                 <RefreshCw
                   className={`h-4 w-4 ${
-                    refreshing
-                      ? "animate-spin"
-                      : ""
+                    refreshing ? "animate-spin" : ""
                   }`}
                 />
               </button>
-
             </div>
-
           </div>
-
         </section>
 
-        {/* =================================================
-            STATISTIC CARD
-        ================================================= */}
+        {/* STATISTIC CARD */}
 
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-
           {cards.map((card) => {
             const Icon = card.icon;
 
             return (
               <div
                 key={card.title}
+                title={
+                  "fullValue" in card
+                    ? card.fullValue
+                    : undefined
+                }
                 className="group relative overflow-hidden rounded-2xl border border-white bg-white p-5 shadow-[0_8px_28px_rgba(15,23,42,0.045)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_15px_35px_rgba(15,23,42,0.07)]"
               >
-
                 <div
                   className={`absolute left-0 top-0 h-1 w-full ${card.accent}`}
                 />
 
                 <div className="flex items-start justify-between">
-
                   <div
                     className={`flex h-11 w-11 items-center justify-center rounded-xl ${card.iconBg}`}
                   >
@@ -603,7 +605,6 @@ export default function Dashboard() {
                   <ArrowUpRight
                     className={`h-4 w-4 ${card.iconColor} opacity-40 transition group-hover:opacity-100`}
                   />
-
                 </div>
 
                 <p className="mt-5 text-xs font-medium text-slate-400">
@@ -615,7 +616,6 @@ export default function Dashboard() {
                 </p>
 
                 <div className="mt-3 flex items-center gap-1.5">
-
                   <span
                     className={`h-1.5 w-1.5 rounded-full ${card.accent}`}
                   />
@@ -623,37 +623,26 @@ export default function Dashboard() {
                   <span className="text-[10px] font-medium text-slate-400">
                     Data realtime
                   </span>
-
                 </div>
-
               </div>
             );
           })}
-
         </section>
 
-        {/* =================================================
-            CHART + INFORMATION
-        ================================================= */}
+        {/* CHART + INFORMATION */}
 
         <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
 
           {/* CHART */}
 
           <div className="rounded-[28px] border border-white bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.045)] xl:col-span-2">
-
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-
               <div className="flex items-center gap-3">
-
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
-
                   <Boxes className="h-5 w-5 text-emerald-600" />
-
                 </div>
 
                 <div>
-
                   <h2 className="text-base font-bold text-slate-800">
                     Aktivitas Inventory
                   </h2>
@@ -661,13 +650,10 @@ export default function Dashboard() {
                   <p className="text-xs text-slate-400">
                     Barang masuk dan keluar
                   </p>
-
                 </div>
-
               </div>
 
               <div className="flex rounded-xl bg-slate-100 p-1">
-
                 {[
                   ["7", "7 Hari"],
                   ["30", "30 Hari"],
@@ -676,7 +662,7 @@ export default function Dashboard() {
                   <button
                     key={item[0]}
                     onClick={() =>
-                      setPeriod(
+                      handlePeriodChange(
                         item[0] as Period
                       )
                     }
@@ -689,115 +675,251 @@ export default function Dashboard() {
                     {item[1]}
                   </button>
                 ))}
-
               </div>
-
             </div>
 
-            <div className="mt-8 flex h-64 items-end gap-3 overflow-x-auto border-b border-slate-100 pb-0 sm:gap-5">
+            {/* CHART SUMMARY */}
 
+            <div className="mt-6 grid grid-cols-3 gap-3">
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3">
+                <div className="flex items-center gap-2">
+                  <ArrowDownRight className="h-4 w-4 text-emerald-500" />
+
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">
+                    Masuk
+                  </span>
+                </div>
+
+                <p className="mt-1 text-lg font-bold text-emerald-700">
+                  {formatNumber(chartSummary.masuk)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center gap-2">
+                  <ArrowUpRight className="h-4 w-4 text-slate-500" />
+
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                    Keluar
+                  </span>
+                </div>
+
+                <p className="mt-1 text-lg font-bold text-slate-700">
+                  {formatNumber(chartSummary.keluar)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
+                <div className="flex items-center gap-2">
+                  <Boxes className="h-4 w-4 text-blue-500" />
+
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-blue-600">
+                    Aktivitas
+                  </span>
+                </div>
+
+                <p className="mt-1 text-lg font-bold text-blue-700">
+                  {formatNumber(totalActivity)}
+                </p>
+              </div>
+            </div>
+
+            {/* MODERN CHART */}
+
+            <div className="mt-6">
               {chartData.length ? (
-                chartData.map((item) => {
-
-                  const masukHeight =
-                    Math.max(
-                      (item.masuk /
-                        maxChartValue) *
-                        100,
-
-                      item.masuk > 0
-                        ? 8
-                        : 0
-                    );
-
-                  const keluarHeight =
-                    Math.max(
-                      (item.keluar /
-                        maxChartValue) *
-                        100,
-
-                      item.keluar > 0
-                        ? 8
-                        : 0
-                    );
-
-                  return (
-                    <div
-                      key={item.label}
-                      className="flex min-w-[44px] flex-1 flex-col items-center justify-end"
+                <div className="h-[320px] w-full">
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                  >
+                    <AreaChart
+                      data={chartData}
+                      margin={{
+                        top: 15,
+                        right: 12,
+                        left: -18,
+                        bottom: 5,
+                      }}
                     >
+                      <defs>
+                        <linearGradient
+                          id="dashboardMasukGradient"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="0%"
+                            stopColor="#10B981"
+                            stopOpacity={0.32}
+                          />
 
-                      <div className="mb-3 flex h-52 w-full items-end justify-center gap-1">
+                          <stop
+                            offset="55%"
+                            stopColor="#10B981"
+                            stopOpacity={0.10}
+                          />
 
-                        <div
-                          title={`Masuk: ${item.masuk}`}
-                          className="w-3 rounded-t-md bg-emerald-300 transition-all duration-500 sm:w-4"
-                          style={{
-                            height: `${masukHeight}%`,
-                          }}
-                        />
+                          <stop
+                            offset="100%"
+                            stopColor="#10B981"
+                            stopOpacity={0}
+                          />
+                        </linearGradient>
 
-                        <div
-                          title={`Keluar: ${item.keluar}`}
-                          className="w-3 rounded-t-md bg-slate-300 transition-all duration-500 sm:w-4"
-                          style={{
-                            height: `${keluarHeight}%`,
-                          }}
-                        />
+                        <linearGradient
+                          id="dashboardKeluarGradient"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="0%"
+                            stopColor="#94A3B8"
+                            stopOpacity={0.20}
+                          />
 
-                      </div>
+                          <stop
+                            offset="55%"
+                            stopColor="#94A3B8"
+                            stopOpacity={0.07}
+                          />
 
-                      <span className="mb-3 whitespace-nowrap text-[10px] font-medium text-slate-400">
-                        {item.label}
-                      </span>
+                          <stop
+                            offset="100%"
+                            stopColor="#94A3B8"
+                            stopOpacity={0}
+                          />
+                        </linearGradient>
+                      </defs>
 
-                    </div>
-                  );
-                })
+                      <CartesianGrid
+                        vertical={false}
+                        stroke="#E2E8F0"
+                        strokeDasharray="3 6"
+                      />
+
+                      <XAxis
+                        dataKey="label"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{
+                          fontSize: 10,
+                          fill: "#94A3B8",
+                        }}
+                        tickMargin={12}
+                        minTickGap={25}
+                      />
+
+                      <YAxis
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{
+                          fontSize: 10,
+                          fill: "#94A3B8",
+                        }}
+                        tickFormatter={(value) =>
+                          Number(value).toLocaleString(
+                            "id-ID"
+                          )
+                        }
+                        width={55}
+                      />
+
+                      <Tooltip
+                        content={<ChartTooltip />}
+                        cursor={{
+                          stroke: "#CBD5E1",
+                          strokeWidth: 1,
+                          strokeDasharray: "4 4",
+                        }}
+                      />
+
+                      <Area
+                        type="monotone"
+                        dataKey="masuk"
+                        name="Barang Masuk"
+                        stroke="#10B981"
+                        strokeWidth={3}
+                        fill="url(#dashboardMasukGradient)"
+                        dot={false}
+                        activeDot={{
+                          r: 6,
+                          strokeWidth: 3,
+                          stroke: "#10B981",
+                          fill: "#FFFFFF",
+                        }}
+                      />
+
+                      <Area
+                        type="monotone"
+                        dataKey="keluar"
+                        name="Barang Keluar"
+                        stroke="#94A3B8"
+                        strokeWidth={2.5}
+                        fill="url(#dashboardKeluarGradient)"
+                        dot={false}
+                        activeDot={{
+                          r: 5,
+                          strokeWidth: 2.5,
+                          stroke: "#94A3B8",
+                          fill: "#FFFFFF",
+                        }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
+                <div className="flex h-[320px] items-center justify-center rounded-2xl bg-slate-50/70 text-sm text-slate-400">
                   Belum ada aktivitas inventory
                 </div>
               )}
-
             </div>
 
-            <div className="mt-4 flex items-center gap-5">
+            {/* LEGEND */}
 
+            <div className="mt-5 flex flex-wrap items-center gap-5 border-t border-slate-100 pt-4">
               <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.10)]" />
 
-                <span className="text-xs text-slate-500">
+                <span className="text-xs font-medium text-slate-500">
                   Barang Masuk
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
+                <span className="h-2.5 w-2.5 rounded-full bg-slate-400 shadow-[0_0_0_4px_rgba(148,163,184,0.10)]" />
 
-                <span className="text-xs text-slate-500">
+                <span className="text-xs font-medium text-slate-500">
                   Barang Keluar
                 </span>
               </div>
 
+              <div className="ml-auto text-[10px] text-slate-400">
+                Periode:{" "}
+                <span className="font-semibold text-slate-600">
+                  {period === "7"
+                    ? "7 Hari"
+                    : period === "30"
+                    ? "30 Hari"
+                    : "90 Hari"}
+                </span>
+              </div>
             </div>
-
           </div>
 
           {/* INFORMATION */}
 
           <div className="rounded-[28px] border border-white bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
-
             <div className="flex items-center gap-3">
-
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
-
                 <PackageCheck className="h-5 w-5 text-emerald-600" />
-
               </div>
 
               <div>
-
                 <h2 className="text-base font-bold text-slate-800">
                   Informasi Inventory
                 </h2>
@@ -805,74 +927,66 @@ export default function Dashboard() {
                 <p className="text-xs text-slate-400">
                   Ringkasan sistem
                 </p>
-
               </div>
-
             </div>
 
             <div className="mt-6 space-y-3">
+              <div
+                title={formatCurrency(inventoryValue)}
+                className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-50 via-emerald-50/70 to-teal-50 p-4"
+              >
+                <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-emerald-200/30 blur-2xl" />
 
-              <div className="rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 p-4">
+                <div className="relative">
+                  <p className="text-xs font-medium text-slate-500">
+                    Nilai Persediaan
+                  </p>
 
-                <p className="text-xs text-slate-500">
-                  Nilai Persediaan
-                </p>
+                  <p className="mt-1 truncate text-2xl font-bold tracking-tight text-emerald-600">
+                    {formatCompactCurrency(
+                      inventoryValue
+                    )}
+                  </p>
 
-                <p className="mt-1 text-xl font-bold text-emerald-600">
-                  Rp{" "}
-                  {data?.stats.nilaiPersediaan?.toLocaleString(
-                    "id-ID"
-                  )}
-                </p>
-
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Hover untuk melihat nilai lengkap
+                  </p>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-
                 <div className="rounded-2xl border border-slate-100 bg-blue-50/30 p-4">
-
                   <p className="text-xs text-slate-500">
                     Total Purchase
                   </p>
 
                   <p className="mt-1 text-lg font-bold text-blue-600">
-                    {data?.stats.totalPurchase?.toLocaleString(
-                      "id-ID"
+                    {formatNumber(
+                      data?.stats.totalPurchase ?? 0
                     )}
                   </p>
-
                 </div>
 
                 <div className="rounded-2xl border border-slate-100 bg-indigo-50/30 p-4">
-
                   <p className="text-xs text-slate-500">
                     Total Delivery
                   </p>
 
                   <p className="mt-1 text-lg font-bold text-indigo-600">
-                    {data?.stats.totalDelivery?.toLocaleString(
-                      "id-ID"
+                    {formatNumber(
+                      data?.stats.totalDelivery ?? 0
                     )}
                   </p>
-
                 </div>
-
               </div>
-
             </div>
-
           </div>
-
         </section>
 
-        {/* =================================================
-            QUICK MENU
-        ================================================= */}
+        {/* QUICK MENU */}
 
         <section>
-
           <div className="mb-4">
-
             <h2 className="text-lg font-bold text-slate-800">
               Quick Menu
             </h2>
@@ -880,11 +994,9 @@ export default function Dashboard() {
             <p className="mt-1 text-xs text-slate-400">
               Akses modul ERP
             </p>
-
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-
             {menus.map((menu) => {
               const Icon = menu.icon;
 
@@ -894,9 +1006,7 @@ export default function Dashboard() {
                   href={menu.href}
                   className={`group rounded-2xl border border-white bg-white p-4 shadow-[0_6px_22px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_12px_30px_rgba(15,23,42,0.07)] ${menu.hover}`}
                 >
-
                   <div className="flex items-center justify-between">
-
                     <div
                       className={`flex h-10 w-10 items-center justify-center rounded-xl ${menu.iconBg}`}
                     >
@@ -906,7 +1016,6 @@ export default function Dashboard() {
                     </div>
 
                     <ChevronRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-slate-500" />
-
                   </div>
 
                   <p className="mt-4 text-sm font-bold text-slate-700">
@@ -916,29 +1025,21 @@ export default function Dashboard() {
                   <p className="mt-1 text-[11px] text-slate-400">
                     {menu.description}
                   </p>
-
                 </Link>
               );
             })}
-
           </div>
-
         </section>
 
-        {/* =================================================
-            ACTIVITY + STOCK ALERT
-        ================================================= */}
+        {/* ACTIVITY + STOCK ALERT */}
 
         <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
 
           {/* ACTIVITY */}
 
           <div className="rounded-[28px] border border-white bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
-
             <div className="flex items-center justify-between">
-
               <div>
-
                 <h2 className="text-base font-bold text-slate-800">
                   Aktivitas Terbaru
                 </h2>
@@ -946,87 +1047,62 @@ export default function Dashboard() {
                 <p className="mt-1 text-xs text-slate-400">
                   Aktivitas terakhir ERP
                 </p>
-
               </div>
 
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50">
-
                 <Clock3 className="h-4 w-4 text-emerald-600" />
-
               </div>
-
             </div>
 
             <div className="mt-5 divide-y divide-slate-100">
-
               {data?.activities?.length ? (
                 data.activities
                   .slice(0, 6)
-                  .map(
-                    (item: any) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center gap-3 py-3"
-                      >
-
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50">
-
-                          {item.type ===
-                          "delivery" ? (
-                            <Send className="h-4 w-4 text-indigo-500" />
-                          ) : (
-                            <ShoppingCart className="h-4 w-4 text-emerald-600" />
-                          )}
-
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-
-                          <p className="truncate text-sm font-semibold text-slate-700">
-                            {item.title}
-                          </p>
-
-                          <p className="text-xs text-slate-400">
-                            {item.description}
-                          </p>
-
-                        </div>
-
-                        <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
-
+                  .map((item: any) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-3 py-3"
+                    >
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50">
+                        {item.type === "delivery" ? (
+                          <Send className="h-4 w-4 text-indigo-500" />
+                        ) : (
+                          <ShoppingCart className="h-4 w-4 text-emerald-600" />
+                        )}
                       </div>
-                    )
-                  )
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-700">
+                          {item.title}
+                        </p>
+
+                        <p className="text-xs text-slate-400">
+                          {item.description}
+                        </p>
+                      </div>
+
+                      <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+                    </div>
+                  ))
               ) : (
                 <div className="py-10 text-center text-sm text-slate-400">
                   Belum ada aktivitas
                 </div>
               )}
-
             </div>
-
           </div>
 
-          {/* =================================================
-              STOCK ALERT
-          ================================================= */}
+          {/* STOCK ALERT */}
 
           <div className="rounded-[28px] border border-white bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
-
             <div className="flex items-start justify-between">
-
               <div>
-
                 <div className="flex items-center gap-3">
-
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50">
-
                     <AlertTriangle className="h-5 w-5 text-orange-500" />
-
                   </div>
 
                   <div>
-
                     <h2 className="text-base font-bold text-slate-800">
                       Stock Alert
                     </h2>
@@ -1034,11 +1110,8 @@ export default function Dashboard() {
                     <p className="mt-0.5 text-xs text-slate-400">
                       Barang di bawah batas minimum
                     </p>
-
                   </div>
-
                 </div>
-
               </div>
 
               {stockAlertCount > 0 && (
@@ -1046,16 +1119,11 @@ export default function Dashboard() {
                   {stockAlertCount} Alert
                 </span>
               )}
-
             </div>
-
-            {/* SUMMARY */}
 
             {stockAlertCount > 0 && (
               <div className="mt-5 grid grid-cols-3 gap-2">
-
                 <div className="rounded-2xl border border-rose-100 bg-rose-50/60 p-3">
-
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-400">
                     Habis
                   </p>
@@ -1063,11 +1131,9 @@ export default function Dashboard() {
                   <p className="mt-1 text-lg font-bold text-rose-600">
                     {stockOutCount}
                   </p>
-
                 </div>
 
                 <div className="rounded-2xl border border-orange-100 bg-orange-50/60 p-3">
-
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-400">
                     Kritis
                   </p>
@@ -1075,11 +1141,9 @@ export default function Dashboard() {
                   <p className="mt-1 text-lg font-bold text-orange-600">
                     {stockCriticalCount}
                   </p>
-
                 </div>
 
                 <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-3">
-
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500">
                     Rendah
                   </p>
@@ -1087,186 +1151,132 @@ export default function Dashboard() {
                   <p className="mt-1 text-lg font-bold text-amber-600">
                     {stockLowCount}
                   </p>
-
                 </div>
-
               </div>
             )}
 
-            {/* LIST */}
-
             <div className="mt-5 divide-y divide-slate-100">
-
               {data?.stockAlerts?.length ? (
-
                 data.stockAlerts
                   .slice(0, 6)
-                  .map(
-                    (item) => {
+                  .map((item) => {
+                    const status =
+                      getStockStatus(item.status);
 
-                      const status =
-                        getStockStatus(
-                          item.status
-                        );
-
-                      return (
-                        <div
-                          key={item.id}
-                          className="py-4"
-                        >
-
-                          <div className="flex items-start gap-3">
-
-                            <div
-                              className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${status.icon}`}
-                            >
-
-                              {item.status ===
-                              "OUT_OF_STOCK" ? (
-                                <PackageX className="h-4 w-4" />
-                              ) : (
-                                <AlertCircle className="h-4 w-4" />
-                              )}
-
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-
-                              <div className="flex items-start justify-between gap-3">
-
-                                <div className="min-w-0">
-
-                                  <p className="truncate text-sm font-semibold text-slate-700">
-                                    {item.name}
-                                  </p>
-
-                                  <p className="mt-0.5 text-[11px] text-slate-400">
-                                    {item.code}
-                                  </p>
-
-                                </div>
-
-                                <span
-                                  className={`shrink-0 rounded-lg border px-2 py-1 text-[9px] font-bold tracking-wide ${status.badge}`}
-                                >
-                                  {status.label}
-                                </span>
-
-                              </div>
-
-                              {/* STOCK INFO */}
-
-                              <div className="mt-3 flex items-center justify-between gap-3">
-
-                                <div>
-
-                                  <p className="text-[10px] text-slate-400">
-                                    Stock saat ini
-                                  </p>
-
-                                  <p className="mt-0.5 text-sm font-bold text-slate-700">
-
-                                    {item.stock.toLocaleString(
-                                      "id-ID"
-                                    )}
-
-                                    <span className="ml-1 text-[10px] font-medium text-slate-400">
-                                      {item.unit}
-                                    </span>
-
-                                  </p>
-
-                                </div>
-
-                                <div className="text-right">
-
-                                  <p className="text-[10px] text-slate-400">
-                                    Minimum
-                                  </p>
-
-                                  <p className="mt-0.5 text-sm font-semibold text-slate-600">
-
-                                    {item.minimumStock.toLocaleString(
-                                      "id-ID"
-                                    )}
-
-                                    <span className="ml-1 text-[10px] font-medium text-slate-400">
-                                      {item.unit}
-                                    </span>
-
-                                  </p>
-
-                                </div>
-
-                              </div>
-
-                              {/* PROGRESS */}
-
-                              <div className="mt-2">
-
-                                <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-
-                                  <div
-                                    className={`h-full rounded-full transition-all ${status.bar}`}
-                                    style={{
-                                      width: `${Math.max(
-                                        Math.min(
-                                          item.percentage,
-                                          100
-                                        ),
-                                        item.stock > 0
-                                          ? 4
-                                          : 0
-                                      )}%`,
-                                    }}
-                                  />
-
-                                </div>
-
-                              </div>
-
-                              {/* SHORTAGE */}
-
-                              <div className="mt-2 flex items-center justify-between">
-
-                                <span className="text-[10px] text-slate-400">
-                                  {Math.round(
-                                    item.percentage
-                                  )}
-                                  % dari minimum
-                                </span>
-
-                                <span className="text-[10px] font-semibold text-slate-500">
-
-                                  Kurang{" "}
-
-                                  {item.shortage.toLocaleString(
-                                    "id-ID"
-                                  )}{" "}
-
-                                  {item.unit}
-
-                                </span>
-
-                              </div>
-
-                            </div>
-
+                    return (
+                      <div
+                        key={item.id}
+                        className="py-4"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${status.icon}`}
+                          >
+                            {item.status ===
+                            "OUT_OF_STOCK" ? (
+                              <PackageX className="h-4 w-4" />
+                            ) : (
+                              <AlertCircle className="h-4 w-4" />
+                            )}
                           </div>
 
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-slate-700">
+                                  {item.name}
+                                </p>
+
+                                <p className="mt-0.5 text-[11px] text-slate-400">
+                                  {item.code}
+                                </p>
+                              </div>
+
+                              <span
+                                className={`shrink-0 rounded-lg border px-2 py-1 text-[9px] font-bold tracking-wide ${status.badge}`}
+                              >
+                                {status.label}
+                              </span>
+                            </div>
+
+                            <div className="mt-3 flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[10px] text-slate-400">
+                                  Stock saat ini
+                                </p>
+
+                                <p className="mt-0.5 text-sm font-bold text-slate-700">
+                                  {formatNumber(
+                                    item.stock
+                                  )}
+
+                                  <span className="ml-1 text-[10px] font-medium text-slate-400">
+                                    {item.unit}
+                                  </span>
+                                </p>
+                              </div>
+
+                              <div className="text-right">
+                                <p className="text-[10px] text-slate-400">
+                                  Minimum
+                                </p>
+
+                                <p className="mt-0.5 text-sm font-semibold text-slate-600">
+                                  {formatNumber(
+                                    item.minimumStock
+                                  )}
+
+                                  <span className="ml-1 text-[10px] font-medium text-slate-400">
+                                    {item.unit}
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="mt-2">
+                              <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                <div
+                                  className={`h-full rounded-full transition-all ${status.bar}`}
+                                  style={{
+                                    width: `${Math.max(
+                                      Math.min(
+                                        item.percentage,
+                                        100
+                                      ),
+                                      item.stock > 0
+                                        ? 4
+                                        : 0
+                                    )}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="mt-2 flex items-center justify-between">
+                              <span className="text-[10px] text-slate-400">
+                                {Math.round(
+                                  item.percentage
+                                )}
+                                % dari minimum
+                              </span>
+
+                              <span className="text-[10px] font-semibold text-slate-500">
+                                Kurang{" "}
+                                {formatNumber(
+                                  item.shortage
+                                )}{" "}
+                                {item.unit}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      );
-                    }
-                  )
-
+                      </div>
+                    );
+                  })
               ) : (
-
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50">
-
                     <PackageCheck className="h-6 w-6 text-emerald-500" />
-
                   </div>
 
                   <p className="mt-3 text-sm font-semibold text-emerald-600">
@@ -1276,37 +1286,25 @@ export default function Dashboard() {
                   <p className="mt-1 text-xs text-slate-400">
                     Tidak ada barang di bawah minimum stock.
                   </p>
-
                 </div>
-
               )}
-
             </div>
-
           </div>
-
         </section>
 
-        {/* =================================================
-            PURCHASE / DELIVERY / EXPIRED
-        ================================================= */}
+        {/* PURCHASE / DELIVERY / EXPIRED */}
 
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
 
           {/* PURCHASE */}
 
           <div className="rounded-[28px] border border-white bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
-
             <div className="flex items-center gap-3">
-
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50">
-
                 <ShoppingCart className="h-5 w-5 text-amber-500" />
-
               </div>
 
               <div>
-
                 <h2 className="text-base font-bold text-slate-800">
                   Purchase Pending
                 </h2>
@@ -1314,70 +1312,50 @@ export default function Dashboard() {
                 <p className="text-xs text-slate-400">
                   Purchase order menunggu proses
                 </p>
-
               </div>
-
             </div>
 
             <div className="mt-5 divide-y divide-slate-100">
-
               {data?.purchasePending?.length ? (
-
                 data.purchasePending
                   .slice(0, 6)
-                  .map(
-                    (item: any) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between gap-3 py-3"
-                      >
+                  .map((item: any) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between gap-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-700">
+                          {item.number ?? "-"}
+                        </p>
 
-                        <div className="min-w-0">
-
-                          <p className="truncate text-sm font-semibold text-slate-700">
-                            {item.number ?? "-"}
-                          </p>
-
-                          <p className="truncate text-xs text-slate-400">
-                            {item.supplier?.name ?? "-"}
-                          </p>
-
-                        </div>
-
-                        <span className="shrink-0 rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-600">
-                          {item.status ?? "PENDING"}
-                        </span>
-
+                        <p className="truncate text-xs text-slate-400">
+                          {item.supplier?.name ?? "-"}
+                        </p>
                       </div>
-                    )
-                  )
 
+                      <span className="shrink-0 rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-600">
+                        {item.status ?? "PENDING"}
+                      </span>
+                    </div>
+                  ))
               ) : (
-
                 <div className="py-10 text-center text-sm text-slate-400">
                   Tidak ada PO pending
                 </div>
-
               )}
-
             </div>
-
           </div>
 
           {/* DELIVERY */}
 
           <div className="rounded-[28px] border border-white bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
-
             <div className="flex items-center gap-3">
-
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50">
-
                 <Send className="h-5 w-5 text-indigo-500" />
-
               </div>
 
               <div>
-
                 <h2 className="text-base font-bold text-slate-800">
                   Delivery Pending
                 </h2>
@@ -1385,70 +1363,50 @@ export default function Dashboard() {
                 <p className="text-xs text-slate-400">
                   Pengiriman berjalan
                 </p>
-
               </div>
-
             </div>
 
             <div className="mt-5 divide-y divide-slate-100">
-
               {data?.deliveryPending?.length ? (
-
                 data.deliveryPending
                   .slice(0, 6)
-                  .map(
-                    (item: any) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between gap-3 py-3"
-                      >
+                  .map((item: any) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between gap-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-700">
+                          {item.number ?? "-"}
+                        </p>
 
-                        <div className="min-w-0">
-
-                          <p className="truncate text-sm font-semibold text-slate-700">
-                            {item.number ?? "-"}
-                          </p>
-
-                          <p className="truncate text-xs text-slate-400">
-                            {item.customer?.name ?? "-"}
-                          </p>
-
-                        </div>
-
-                        <span className="shrink-0 rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600">
-                          {item.status ?? "PENDING"}
-                        </span>
-
+                        <p className="truncate text-xs text-slate-400">
+                          {item.customer?.name ?? "-"}
+                        </p>
                       </div>
-                    )
-                  )
 
+                      <span className="shrink-0 rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600">
+                        {item.status ?? "PENDING"}
+                      </span>
+                    </div>
+                  ))
               ) : (
-
                 <div className="py-10 text-center text-sm text-slate-400">
                   Tidak ada delivery pending
                 </div>
-
               )}
-
             </div>
-
           </div>
 
           {/* EXPIRED */}
 
           <div className="rounded-[28px] border border-white bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
-
             <div className="flex items-center gap-3">
-
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50">
-
                 <PackageX className="h-5 w-5 text-rose-500" />
-
               </div>
 
               <div>
-
                 <h2 className="text-base font-bold text-slate-800">
                   Barang Expired
                 </h2>
@@ -1456,105 +1414,75 @@ export default function Dashboard() {
                 <p className="text-xs text-slate-400">
                   Monitoring expired barang
                 </p>
-
               </div>
-
             </div>
 
             <div className="mt-5 divide-y divide-slate-100">
-
               {data?.expiredItems?.length ? (
-
                 data.expiredItems
                   .slice(0, 6)
-                  .map(
-                    (item: any) => (
-                      <div
-                        key={item.id}
-                        className="py-3"
-                      >
+                  .map((item: any) => (
+                    <div
+                      key={item.id}
+                      className="py-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="truncate text-sm font-semibold text-slate-700">
+                          {item.name}
+                        </p>
 
-                        <div className="flex items-center justify-between gap-3">
-
-                          <p className="truncate text-sm font-semibold text-slate-700">
-                            {item.name}
-                          </p>
-
-                          <span
-                            className={`shrink-0 rounded-lg px-2 py-1 text-[10px] font-bold ${
-                              item.status ===
-                              "EXPIRED"
-                                ? "bg-rose-50 text-rose-600"
-                                : "bg-amber-50 text-amber-600"
-                            }`}
-                          >
-                            {item.status ===
-                            "EXPIRED"
-                              ? "EXPIRED"
-                              : "WARNING"}
-                          </span>
-
-                        </div>
-
-                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400">
-
-                          <span>
-                            Batch:{" "}
-                            {item.batch ??
-                              "-"}
-                          </span>
-
-                          <span>
-                            Qty:{" "}
-                            {item.qty ??
-                              0}
-                          </span>
-
-                          <span>
-                            Expired:{" "}
-                            {item.expired
-                              ? new Date(
-                                  item.expired
-                                ).toLocaleDateString(
-                                  "id-ID"
-                                )
-                              : "-"}
-                          </span>
-
-                        </div>
-
+                        <span
+                          className={`shrink-0 rounded-lg px-2 py-1 text-[10px] font-bold ${
+                            item.status === "EXPIRED"
+                              ? "bg-rose-50 text-rose-600"
+                              : "bg-amber-50 text-amber-600"
+                          }`}
+                        >
+                          {item.status === "EXPIRED"
+                            ? "EXPIRED"
+                            : "WARNING"}
+                        </span>
                       </div>
-                    )
-                  )
 
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400">
+                        <span>
+                          Batch: {item.batch ?? "-"}
+                        </span>
+
+                        <span>
+                          Qty: {item.qty ?? 0}
+                        </span>
+
+                        <span>
+                          Expired:{" "}
+                          {item.expired
+                            ? new Date(
+                                item.expired
+                              ).toLocaleDateString(
+                                "id-ID"
+                              )
+                            : "-"}
+                        </span>
+                      </div>
+                    </div>
+                  ))
               ) : (
-
                 <div className="flex items-center justify-center py-10 text-sm text-emerald-600">
                   Tidak ada barang expired
                 </div>
-
               )}
-
             </div>
-
           </div>
-
         </section>
 
-        {/* =================================================
-            FOOTER
-        ================================================= */}
+        {/* FOOTER */}
 
         <footer className="border-t border-slate-200 py-5 text-center">
-
           <p className="text-xs text-slate-400">
             PT. Mitra Garam Bogatama • ERP Inventory System
           </p>
-
         </footer>
-
       </div>
-
     </div>
   );
 }
