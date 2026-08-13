@@ -23,6 +23,10 @@ export default function PengirimanPage() {
     loadData();
   }, []);
 
+  // =====================================================
+  // LOAD DATA
+  // =====================================================
+
   async function loadData() {
     try {
       setLoading(true);
@@ -45,7 +49,7 @@ export default function PengirimanPage() {
   }
 
   // =====================================================
-  // RELEASE
+  // RELEASE DELIVERY ORDER
   // =====================================================
 
   async function approve(id: number) {
@@ -54,6 +58,13 @@ export default function PengirimanPage() {
     );
 
     if (!target) return;
+
+    if (target.status !== "DRAFT") {
+      alert(
+        "Delivery Order ini sudah RELEASED."
+      );
+      return;
+    }
 
     const confirmRelease = confirm(
       `Release Delivery Order ${target.number}?\n\n` +
@@ -71,6 +82,9 @@ export default function PengirimanPage() {
     try {
       setLoading(true);
 
+      // PENTING:
+      // Release menggunakan endpoint approve.
+      // Jangan menggunakan DELETE di sini.
       const res = await fetch(
         `/api/delivery-order/${id}/approve`,
         {
@@ -78,7 +92,26 @@ export default function PengirimanPage() {
         }
       );
 
-      const json = await res.json();
+      const text = await res.text();
+
+      let json: any = {};
+
+      try {
+        json = text ? JSON.parse(text) : {};
+      } catch {
+        console.error(
+          "RELEASE DELIVERY INVALID JSON:",
+          text
+        );
+      }
+
+      if (!res.ok) {
+        alert(
+          json.message ||
+            `Gagal release Delivery Order (${res.status})`
+        );
+        return;
+      }
 
       if (json.success) {
         alert(
@@ -116,7 +149,7 @@ export default function PengirimanPage() {
   }
 
   // =====================================================
-  // DELETE
+  // DELETE DELIVERY ORDER
   // =====================================================
 
   async function deleteDelivery(id: number) {
@@ -126,6 +159,7 @@ export default function PengirimanPage() {
 
     if (!target) return;
 
+    // Hanya DRAFT yang boleh dihapus
     if (target.status !== "DRAFT") {
       alert(
         "Delivery Order yang sudah RELEASED tidak dapat dihapus."
@@ -143,14 +177,43 @@ export default function PengirimanPage() {
     try {
       setLoading(true);
 
+      /*
+       * PENTING:
+       *
+       * Endpoint /api/delivery-order/[id]
+       * saat ini tidak memiliki DELETE sehingga
+       * menghasilkan 405.
+       *
+       * Penghapusan yang sebelumnya sudah berjalan
+       * menggunakan endpoint Barang Keluar.
+       */
       const res = await fetch(
-        `/api/delivery-order/${id}`,
+        `/api/barang-keluar/${id}`,
         {
           method: "DELETE",
         }
       );
 
-      const json = await res.json();
+      const text = await res.text();
+
+      let json: any = {};
+
+      try {
+        json = text ? JSON.parse(text) : {};
+      } catch {
+        console.error(
+          "DELETE DELIVERY INVALID JSON:",
+          text
+        );
+      }
+
+      if (!res.ok) {
+        alert(
+          json.message ||
+            `Gagal menghapus Delivery Order (${res.status})`
+        );
+        return;
+      }
 
       if (json.success) {
         alert(
@@ -180,7 +243,7 @@ export default function PengirimanPage() {
   }
 
   // =====================================================
-  // FORMAT
+  // FORMAT DATE
   // =====================================================
 
   function formatDate(value: any) {
