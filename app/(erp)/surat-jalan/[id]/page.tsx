@@ -1,18 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+
+import {
+  ArrowLeft,
+  CalendarDays,
+  CheckCircle2,
+  FileDown,
+  FileSpreadsheet,
+  Package,
+  Printer,
+  RefreshCw,
+  Truck,
+  User,
+  MapPin,
+  ReceiptText,
+} from "lucide-react";
 
 import { exportSuratJalanPDF } from "@/lib/exportSuratJalanPdf";
 import { exportSuratJalanExcel } from "@/lib/exportSuratJalanExcel";
 
 export default function SuratJalanDetailPage() {
   const params = useParams();
+  const router = useRouter();
 
   const id = String(params.id);
 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
 
   async function load() {
     try {
@@ -49,6 +66,8 @@ export default function SuratJalanDetailPage() {
     }
 
     try {
+      setProcessing(true);
+
       const res = await fetch(
         `/api/delivery-order/${id}/approve`,
         {
@@ -61,38 +80,20 @@ export default function SuratJalanDetailPage() {
       alert(json.message);
 
       if (json.success) {
-        load();
+        await load();
       }
     } catch (error) {
       console.error(error);
       alert("Gagal memproses pengiriman");
+    } finally {
+      setProcessing(false);
     }
   }
 
-  if (loading) {
-    return (
-      <div className="p-8">
-        <div className="bg-white rounded-2xl shadow-sm border p-8">
-          Loading...
-        </div>
-      </div>
-    );
-  }
+  const items = data?.items ?? [];
 
-  if (!data) {
-    return (
-      <div className="p-8">
-        <div className="bg-white rounded-2xl shadow-sm border p-8 text-red-600">
-          Data Surat Jalan tidak ditemukan.
-        </div>
-      </div>
-    );
-  }
-
-  const items = data.items ?? [];
-
-  const total = items.reduce(
-    (sum: number, item: any) => {
+  const total = useMemo(() => {
+    return items.reduce((sum: number, item: any) => {
       const qty = Number(item.qty ?? 0);
       const price = Number(item.price ?? 0);
 
@@ -102,208 +103,432 @@ export default function SuratJalanDetailPage() {
           : qty * price;
 
       return sum + subtotal;
-    },
-    0
-  );
+    }, 0);
+  }, [items]);
 
-  return (
-    <div className="p-6 md:p-8">
-      <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+  function formatNumber(value: any) {
+    return Number(value || 0).toLocaleString("id-ID");
+  }
 
-        {/* HEADER */}
-        <div className="px-6 md:px-8 py-6 border-b bg-gray-50">
+  function formatCurrency(value: any) {
+    return `Rp ${Number(value || 0).toLocaleString("id-ID")}`;
+  }
 
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+  function formatDate(value: any) {
+    if (!value) return "-";
 
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
-                SURAT JALAN
-              </h1>
+    const date = new Date(value);
 
-              <p className="text-gray-500 mt-1">
-                PT. Mitra Garam Bogatama
-              </p>
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
 
-              <p className="text-sm text-gray-400 mt-1">
-                Detail pengiriman barang
-              </p>
-            </div>
+    return date.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
 
-            <div className="flex flex-wrap gap-2">
+  function getStatusStyle(status: string) {
+    switch (status) {
+      case "DRAFT":
+        return "border-amber-100 bg-amber-50 text-amber-600";
 
-              {data.status === "DRAFT" && (
-                <button
-                  onClick={processDelivery}
-                  className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-2.5 rounded-lg font-medium transition"
-                >
-                  Proses Pengiriman
-                </button>
-              )}
+      case "APPROVED":
+        return "border-blue-100 bg-blue-50 text-blue-600";
 
-              <button
-                onClick={() => exportSuratJalanPDF(data)}
-                className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg font-medium transition"
-              >
-                Export PDF
-              </button>
+      case "DELIVERED":
+        return "border-emerald-100 bg-emerald-50 text-emerald-600";
 
-              <button
-                onClick={() => exportSuratJalanExcel(data)}
-                className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg font-medium transition"
-              >
-                Export Excel
-              </button>
+      case "CANCELLED":
+        return "border-rose-100 bg-rose-50 text-rose-600";
 
-              <a
-                href={`/surat-jalan/print?id=${data.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition"
-              >
-                Print
-              </a>
+      default:
+        return "border-slate-100 bg-slate-50 text-slate-600";
+    }
+  }
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F5F8F7] p-4 sm:p-6 lg:p-8">
+        <div className="mx-auto max-w-[1600px]">
+          <div className="rounded-[28px] border border-white bg-white p-8 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
+            <div className="space-y-4">
+              <div className="h-8 w-64 animate-pulse rounded-xl bg-slate-100" />
+              <div className="h-4 w-96 animate-pulse rounded-lg bg-slate-100" />
+
+              <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="h-20 animate-pulse rounded-2xl bg-slate-50"
+                  />
+                ))}
+              </div>
+
+              <div className="mt-8 h-64 animate-pulse rounded-2xl bg-slate-50" />
             </div>
           </div>
         </div>
+      </div>
+    );
+  }
 
-        {/* INFORMASI SURAT JALAN */}
-        <div className="p-6 md:p-8">
+  if (!data) {
+    return (
+      <div className="min-h-screen bg-[#F5F8F7] p-4 sm:p-6 lg:p-8">
+        <div className="mx-auto max-w-[1600px]">
+          <div className="rounded-[28px] border border-white bg-white p-10 text-center shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50">
+              <ReceiptText className="h-7 w-7 text-rose-500" />
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-5 mb-8">
+            <h2 className="mt-4 text-lg font-bold text-slate-800">
+              Data Surat Jalan tidak ditemukan
+            </h2>
 
-            <div>
-              <p className="text-sm text-gray-500">
+            <p className="mt-1 text-sm text-slate-400">
+              Data mungkin sudah dihapus atau tidak tersedia.
+            </p>
+
+            <button
+              onClick={() => router.back()}
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Kembali
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#F5F8F7] text-slate-800">
+      <div className="mx-auto max-w-[1600px] space-y-6 p-4 sm:p-6 lg:p-8">
+
+        {/* HEADER */}
+        <section className="relative overflow-hidden rounded-[30px] border border-white bg-white shadow-[0_10px_40px_rgba(15,23,42,0.05)]">
+          <div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-emerald-100/50 blur-3xl" />
+
+          <div className="absolute -bottom-24 right-56 h-52 w-52 rounded-full bg-teal-100/40 blur-3xl" />
+
+          <div className="relative p-6 sm:p-8">
+
+            <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+
+              {/* TITLE */}
+              <div>
+                <button
+                  onClick={() => router.back()}
+                  className="mb-5 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-500 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-600"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Kembali
+                </button>
+
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_0_5px_rgba(52,211,153,0.10)]" />
+
+                  <span className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-600">
+                    MGB ERP
+                  </span>
+                </div>
+
+                <h1 className="text-2xl font-bold tracking-tight text-slate-800 sm:text-3xl">
+                  Surat Jalan
+                </h1>
+
+                <p className="mt-2 text-sm text-slate-500">
+                  Detail pengiriman barang dan informasi delivery order.
+                </p>
+
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">
+                    {data.suratJalan?.number ?? "-"}
+                  </span>
+
+                  <span className="text-slate-300">•</span>
+
+                  <span className="text-xs font-medium text-slate-500">
+                    Delivery {data.number ?? "-"}
+                  </span>
+                </div>
+              </div>
+
+              {/* ACTIONS */}
+              <div className="flex flex-wrap gap-2">
+
+                {data.status === "DRAFT" && (
+                  <button
+                    onClick={processDelivery}
+                    disabled={processing}
+                    className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Truck className="h-4 w-4" />
+
+                    {processing
+                      ? "Memproses..."
+                      : "Proses Pengiriman"}
+                  </button>
+                )}
+
+                <button
+                  onClick={() => exportSuratJalanPDF(data)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-rose-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-600"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Export PDF
+                </button>
+
+                <button
+                  onClick={() => exportSuratJalanExcel(data)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Excel
+                </button>
+
+                <a
+                  href={`/surat-jalan/print?id=${data.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                >
+                  <Printer className="h-4 w-4" />
+                  Print
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* STATUS + SUMMARY */}
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+          <div className="rounded-2xl border border-white bg-white p-5 shadow-[0_8px_25px_rgba(15,23,42,0.04)]">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50">
+                <Truck className="h-5 w-5 text-emerald-600" />
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Status
+                </p>
+
+                <span
+                  className={`mt-1 inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${getStatusStyle(
+                    data.status
+                  )}`}
+                >
+                  {data.status}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white bg-white p-5 shadow-[0_8px_25px_rgba(15,23,42,0.04)]">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50">
+                <CalendarDays className="h-5 w-5 text-blue-600" />
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Tanggal
+                </p>
+
+                <p className="mt-1 text-sm font-bold text-slate-700">
+                  {formatDate(data.deliveryDate)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white bg-white p-5 shadow-[0_8px_25px_rgba(15,23,42,0.04)]">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50">
+                <User className="h-5 w-5 text-violet-600" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Customer
+                </p>
+
+                <p className="mt-1 truncate text-sm font-bold text-slate-700">
+                  {data.customer?.name ?? "-"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white bg-white p-5 shadow-[0_8px_25px_rgba(15,23,42,0.04)]">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50">
+                <Package className="h-5 w-5 text-amber-600" />
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Total Item
+                </p>
+
+                <p className="mt-1 text-sm font-bold text-slate-700">
+                  {items.length.toLocaleString("id-ID")} barang
+                </p>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        {/* INFORMATION */}
+        <section className="rounded-[28px] border border-white bg-white shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
+
+          <div className="border-b border-slate-100 p-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
+                <ReceiptText className="h-5 w-5 text-emerald-600" />
+              </div>
+
+              <div>
+                <h2 className="text-base font-bold text-slate-800">
+                  Informasi Surat Jalan
+                </h2>
+
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Informasi utama dokumen pengiriman.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 p-6 md:grid-cols-2 lg:grid-cols-3">
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 No Surat Jalan
               </p>
 
-              <p className="font-semibold text-gray-900 mt-1">
+              <p className="mt-2 text-sm font-bold text-slate-700">
                 {data.suratJalan?.number ?? "-"}
               </p>
             </div>
 
-            <div>
-              <p className="text-sm text-gray-500">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 No Delivery
               </p>
 
-              <p className="font-semibold text-gray-900 mt-1">
+              <p className="mt-2 text-sm font-bold text-slate-700">
                 {data.number ?? "-"}
               </p>
             </div>
 
-            <div>
-              <p className="text-sm text-gray-500">
-                Customer
-              </p>
-
-              <p className="font-semibold text-gray-900 mt-1">
-                {data.customer?.name ?? "-"}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-500">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Tanggal
               </p>
 
-              <p className="font-semibold text-gray-900 mt-1">
-                {data.deliveryDate
-                  ? new Date(data.deliveryDate).toLocaleDateString(
-                      "id-ID"
-                    )
-                  : "-"}
+              <p className="mt-2 text-sm font-bold text-slate-700">
+                {formatDate(data.deliveryDate)}
               </p>
             </div>
 
-            <div className="md:col-span-2">
-              <p className="text-sm text-gray-500">
-                Alamat Customer
-              </p>
+            <div className="rounded-2xl bg-slate-50 p-4 md:col-span-2 lg:col-span-3">
+              <div className="flex items-start gap-3">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
 
-              <p className="font-semibold text-gray-900 mt-1">
-                {data.customer?.address ?? "-"}
-              </p>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Alamat Customer
+                  </p>
+
+                  <p className="mt-2 text-sm font-medium leading-6 text-slate-700">
+                    {data.customer?.address ?? "-"}
+                  </p>
+                </div>
+              </div>
             </div>
 
           </div>
+        </section>
 
-          {/* STATUS */}
-          <div className="mb-6">
-            <span className="text-sm text-gray-500 mr-2">
-              Status:
-            </span>
+        {/* ITEMS */}
+        <section className="overflow-hidden rounded-[28px] border border-white bg-white shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
 
-            <span
-              className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
-                data.status === "DRAFT"
-                  ? "bg-yellow-100 text-yellow-700"
-                  : data.status === "APPROVED"
-                  ? "bg-blue-100 text-blue-700"
-                  : data.status === "DELIVERED"
-                  ? "bg-green-100 text-green-700"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              {data.status}
-            </span>
+          <div className="border-b border-slate-100 p-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
+                <Package className="h-5 w-5 text-emerald-600" />
+              </div>
+
+              <div>
+                <h2 className="text-base font-bold text-slate-800">
+                  Detail Barang
+                </h2>
+
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Daftar barang yang dikirim.
+                </p>
+              </div>
+            </div>
           </div>
 
-          {/* TABLE */}
           <div className="overflow-x-auto">
-
-            <table className="w-full border-collapse border border-gray-200">
-
+            <table className="w-full min-w-[850px]">
               <thead>
-                <tr className="bg-gray-100">
+                <tr className="border-b border-slate-100 bg-slate-50/70">
 
-                  <th className="border border-gray-200 px-4 py-3 text-center text-sm font-semibold">
+                  <th className="px-6 py-4 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     No
                   </th>
 
-                  <th className="border border-gray-200 px-4 py-3 text-left text-sm font-semibold">
+                  <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Kode
                   </th>
 
-                  <th className="border border-gray-200 px-4 py-3 text-left text-sm font-semibold">
+                  <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Nama Barang
                   </th>
 
-                  <th className="border border-gray-200 px-4 py-3 text-center text-sm font-semibold">
+                  <th className="px-6 py-4 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Satuan
                   </th>
 
-                  <th className="border border-gray-200 px-4 py-3 text-right text-sm font-semibold">
+                  <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Qty
                   </th>
 
-                  <th className="border border-gray-200 px-4 py-3 text-right text-sm font-semibold">
+                  <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Harga
                   </th>
 
-                  <th className="border border-gray-200 px-4 py-3 text-right text-sm font-semibold">
+                  <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Subtotal
                   </th>
 
                 </tr>
               </thead>
 
-              <tbody>
+              <tbody className="divide-y divide-slate-100">
 
                 {items.length === 0 ? (
                   <tr>
                     <td
                       colSpan={7}
-                      className="border border-gray-200 px-4 py-8 text-center text-gray-500"
+                      className="px-6 py-14 text-center text-sm text-slate-400"
                     >
                       Tidak ada barang.
                     </td>
                   </tr>
                 ) : (
                   items.map((item: any, index: number) => {
-
                     const qty = Number(item.qty ?? 0);
-
                     const price = Number(item.price ?? 0);
 
                     const subtotal =
@@ -315,121 +540,162 @@ export default function SuratJalanDetailPage() {
                     return (
                       <tr
                         key={item.id}
-                        className="hover:bg-gray-50"
+                        className="transition hover:bg-slate-50/70"
                       >
-
-                        <td className="border border-gray-200 px-4 py-3 text-center">
+                        <td className="px-6 py-4 text-center text-sm font-medium text-slate-400">
                           {index + 1}
                         </td>
 
-                        <td className="border border-gray-200 px-4 py-3">
-                          {item.barang?.code ?? "-"}
+                        <td className="px-6 py-4">
+                          <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600">
+                            {item.barang?.code ?? "-"}
+                          </span>
                         </td>
 
-                        <td className="border border-gray-200 px-4 py-3 font-medium">
-                          {item.barang?.name ?? "-"}
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-semibold text-slate-700">
+                            {item.barang?.name ?? "-"}
+                          </p>
                         </td>
 
-                        <td className="border border-gray-200 px-4 py-3 text-center">
+                        <td className="px-6 py-4 text-center text-sm text-slate-500">
                           {item.barang?.unit ?? "-"}
                         </td>
 
-                        <td className="border border-gray-200 px-4 py-3 text-right">
-                          {qty.toLocaleString("id-ID")}
+                        <td className="px-6 py-4 text-right">
+                          <span className="text-sm font-bold text-slate-700">
+                            {formatNumber(qty)}
+                          </span>
                         </td>
 
-                        <td className="border border-gray-200 px-4 py-3 text-right whitespace-nowrap">
-                          Rp{" "}
-                          {price.toLocaleString("id-ID")}
+                        <td className="px-6 py-4 text-right whitespace-nowrap text-sm text-slate-500">
+                          {formatCurrency(price)}
                         </td>
 
-                        <td className="border border-gray-200 px-4 py-3 text-right font-medium whitespace-nowrap">
-                          Rp{" "}
-                          {subtotal.toLocaleString("id-ID")}
+                        <td className="px-6 py-4 text-right whitespace-nowrap">
+                          <span className="text-sm font-bold text-slate-700">
+                            {formatCurrency(subtotal)}
+                          </span>
                         </td>
-
                       </tr>
                     );
                   })
                 )}
 
               </tbody>
-
             </table>
           </div>
 
           {/* TOTAL */}
-          <div className="flex justify-end mt-6">
+          <div className="border-t border-slate-100 bg-slate-50/50 p-6">
+            <div className="flex justify-end">
+              <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 
-            <div className="w-full md:w-auto min-w-[280px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-500">
+                    Total Pengiriman
+                  </span>
 
-              <div className="flex justify-between items-center bg-gray-50 border rounded-xl px-5 py-4">
+                  <span className="text-xl font-bold text-slate-800">
+                    {formatCurrency(total)}
+                  </span>
+                </div>
 
-                <span className="text-lg font-semibold text-gray-700">
-                  TOTAL
-                </span>
+              </div>
+            </div>
+          </div>
+        </section>
 
-                <span className="text-xl font-bold text-gray-900">
-                  Rp {total.toLocaleString("id-ID")}
-                </span>
+        {/* REMARKS */}
+        {data.remarks && (
+          <section className="rounded-[28px] border border-white bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
 
+            <div className="flex items-start gap-3">
+
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50">
+                <ReceiptText className="h-5 w-5 text-amber-600" />
+              </div>
+
+              <div>
+                <h2 className="text-sm font-bold text-slate-700">
+                  Catatan
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  {data.remarks}
+                </p>
               </div>
 
             </div>
+          </section>
+        )}
 
+        {/* SIGNATURE */}
+        <section className="rounded-[28px] border border-white bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
+
+          <div className="mb-6">
+            <h2 className="text-base font-bold text-slate-800">
+              Tanda Tangan
+            </h2>
+
+            <p className="mt-1 text-xs text-slate-400">
+              Konfirmasi dokumen pengiriman.
+            </p>
           </div>
 
-          {/* REMARKS */}
-          {data.remarks && (
-            <div className="mt-6">
-
-              <p className="text-sm text-gray-500">
-                Catatan
-              </p>
-
-              <div className="mt-2 bg-gray-50 border rounded-lg px-4 py-3">
-                {data.remarks}
-              </div>
-
-            </div>
-          )}
-
-          {/* SIGNATURE */}
-          <div className="grid grid-cols-3 text-center mt-24 gap-10">
+          <div className="grid grid-cols-1 gap-12 text-center md:grid-cols-3">
 
             <div>
-              <p className="font-medium">
+              <p className="text-sm font-semibold text-slate-600">
                 Dibuat
               </p>
 
-              <div className="h-24"></div>
+              <div className="h-24" />
 
-              <div className="border-b border-gray-400 max-w-[160px] mx-auto"></div>
+              <div className="mx-auto max-w-[180px] border-b border-slate-300" />
+
+              <p className="mt-2 text-xs text-slate-400">
+                Nama / Tanda Tangan
+              </p>
             </div>
 
             <div>
-              <p className="font-medium">
+              <p className="text-sm font-semibold text-slate-600">
                 Gudang
               </p>
 
-              <div className="h-24"></div>
+              <div className="h-24" />
 
-              <div className="border-b border-gray-400 max-w-[160px] mx-auto"></div>
+              <div className="mx-auto max-w-[180px] border-b border-slate-300" />
+
+              <p className="mt-2 text-xs text-slate-400">
+                Nama / Tanda Tangan
+              </p>
             </div>
 
             <div>
-              <p className="font-medium">
+              <p className="text-sm font-semibold text-slate-600">
                 Penerima
               </p>
 
-              <div className="h-24"></div>
+              <div className="h-24" />
 
-              <div className="border-b border-gray-400 max-w-[160px] mx-auto"></div>
+              <div className="mx-auto max-w-[180px] border-b border-slate-300" />
+
+              <p className="mt-2 text-xs text-slate-400">
+                Nama / Tanda Tangan
+              </p>
             </div>
 
           </div>
+        </section>
 
-        </div>
+        {/* FOOTER */}
+        <footer className="border-t border-slate-200 py-5 text-center">
+          <p className="text-xs text-slate-400">
+            PT. Mitra Garam Bogatama • ERP Inventory System
+          </p>
+        </footer>
 
       </div>
     </div>
