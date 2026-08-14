@@ -8,6 +8,10 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
     const category = searchParams.get("category") || "";
 
+    // =====================================================
+    // GET DATA BARANG
+    // =====================================================
+
     const data = await prisma.barang.findMany({
       where: {
         AND: [
@@ -36,17 +40,135 @@ export async function GET(req: NextRequest) {
         ],
       },
 
+      // =====================================================
+      // RELATION DATA
+      // =====================================================
+
+      include: {
+        // =================================================
+        // HARGA TERAKHIR / SUMMARY HARGA
+        // =================================================
+
+        priceSummary: true,
+
+        // =================================================
+        // BATCH STOCK / EXPIRED
+        // =================================================
+        //
+        // Hanya batch yang masih mempunyai stock
+        // yang dikirim ke frontend.
+        //
+        // Diurutkan berdasarkan expired terdekat.
+        //
+
+        batchStocks: {
+          where: {
+            qty: {
+              gt: 0,
+            },
+          },
+
+          orderBy: {
+            expiredDate: "asc",
+          },
+        },
+
+        // =================================================
+        // SUPPLIER TERAKHIR
+        // =================================================
+        //
+        // Barang
+        //   ↓
+        // PurchaseItem
+        //   ↓
+        // Purchase
+        //   ↓
+        // Supplier
+        //
+        // Ambil PurchaseItem dari purchase terbaru.
+        //
+
+        purchaseItems: {
+          orderBy: {
+            purchase: {
+              purchaseDate: "desc",
+            },
+          },
+
+          take: 1,
+
+          include: {
+            purchase: {
+              include: {
+                supplier: true,
+              },
+            },
+          },
+        },
+      },
+
+      // =====================================================
+      // SORT BARANG
+      // =====================================================
+
       orderBy: {
         id: "desc",
       },
     });
 
+    // =====================================================
+    // FORMAT RESPONSE
+    // =====================================================
+    //
+    // Supplier dibuat langsung menjadi:
+    //
+    // supplier: {
+    //   id,
+    //   code,
+    //   name
+    // }
+    //
+    // Sehingga frontend barcode tidak perlu membaca
+    // PurchaseItem lagi.
+    //
+
+    const result = data.map((item) => {
+      const lastPurchaseItem =
+        item.purchaseItems?.[0];
+
+      const supplier =
+        lastPurchaseItem?.purchase?.supplier;
+
+      return {
+        ...item,
+
+        supplier: supplier
+          ? {
+              id: supplier.id,
+              code: supplier.code,
+              name: supplier.name,
+            }
+          : null,
+
+        // PurchaseItem tidak perlu dikirim
+        // karena supplier sudah diformat di atas.
+        purchaseItems: undefined,
+      };
+    });
+
+    // =====================================================
+    // RESPONSE
+    // =====================================================
+
     return NextResponse.json({
       success: true,
-      data,
+      data: result,
     });
   } catch (error) {
-    console.log(error);
+    console.error(
+      "GET MASTER BARANG ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
@@ -60,27 +182,42 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// =========================================================
+// POST - CREATE BARANG
+// =========================================================
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    if (!body.code)
+    // =====================================================
+    // VALIDASI
+    // =====================================================
+
+    if (!body.code) {
       return NextResponse.json({
         success: false,
         message: "Kode barang wajib diisi",
       });
+    }
 
-    if (!body.name)
+    if (!body.name) {
       return NextResponse.json({
         success: false,
         message: "Nama barang wajib diisi",
       });
+    }
 
-    if (!body.unit)
+    if (!body.unit) {
       return NextResponse.json({
         success: false,
         message: "Satuan wajib diisi",
       });
+    }
+
+    // =====================================================
+    // CEK KODE BARANG
+    // =====================================================
 
     const cekKode = await prisma.barang.findUnique({
       where: {
@@ -95,16 +232,25 @@ export async function POST(req: Request) {
       });
     }
 
+    // =====================================================
+    // BARCODE
+    // =====================================================
+
     const barcode =
       body.barcode && body.barcode !== ""
         ? body.barcode
         : `MGB-${body.code}`;
 
-    const cekBarcode = await prisma.barang.findFirst({
-      where: {
-        barcode,
-      },
-    });
+    // =====================================================
+    // CEK BARCODE
+    // =====================================================
+
+    const cekBarcode =
+      await prisma.barang.findFirst({
+        where: {
+          barcode,
+        },
+      });
 
     if (cekBarcode) {
       return NextResponse.json({
@@ -113,28 +259,43 @@ export async function POST(req: Request) {
       });
     }
 
+    // =====================================================
+    // CREATE BARANG
+    // =====================================================
+
     const barang = await prisma.barang.create({
       data: {
         code: body.code,
+
         barcode,
 
         name: body.name,
 
-        category: body.category || null,
+        category:
+          body.category || null,
 
-        brand: body.brand || null,
+        brand:
+          body.brand || null,
 
         unit: body.unit,
 
-        minimumStock: Number(body.minimumStock || 0),
+        minimumStock: Number(
+          body.minimumStock || 0
+        ),
 
         stock: 0,
 
-        purchasePrice: Number(body.purchasePrice || 0),
+        purchasePrice: Number(
+          body.purchasePrice || 0
+        ),
 
-        sellingPrice: Number(body.sellingPrice || 0),
+        sellingPrice: Number(
+          body.sellingPrice || 0
+        ),
 
-        hasExpired: Boolean(body.hasExpired),
+        hasExpired: Boolean(
+          body.hasExpired
+        ),
 
         active: true,
 
@@ -142,17 +303,26 @@ export async function POST(req: Request) {
       },
     });
 
+    // =====================================================
+    // RESPONSE CREATE
+    // =====================================================
+
     return NextResponse.json({
       success: true,
       data: barang,
     });
   } catch (err: any) {
-    console.log(err);
+    console.error(
+      "POST MASTER BARANG ERROR:",
+      err
+    );
 
     return NextResponse.json(
       {
         success: false,
-        message: err.message,
+        message:
+          err?.message ||
+          "Gagal membuat barang",
       },
       {
         status: 500,

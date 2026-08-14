@@ -9,7 +9,22 @@ import {
   RefreshCw,
   Package,
   Lock,
+  Plus,
+  Search,
+  X,
+  Check,
 } from "lucide-react";
+
+type BarangSearch = {
+  id: number;
+  code: string;
+  name: string;
+  stock: number;
+  sellingPrice?: number | null;
+  priceSummary?: {
+    lastPrice?: number | null;
+  } | null;
+};
 
 type Item = {
   id?: number;
@@ -23,6 +38,9 @@ type Item = {
     name: string;
     stock: number;
     sellingPrice?: number;
+    priceSummary?: {
+      lastPrice?: number;
+    } | null;
   };
 };
 
@@ -48,60 +66,82 @@ export default function BarangKeluarDetailPage() {
   const id = String(params.id);
 
   const [data, setData] = useState<Delivery | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
   const [note, setNote] = useState("");
 
   // =====================================================
-  // LOAD DATA
+  // TAMBAH BARANG
+  // =====================================================
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [searchBarang, setSearchBarang] = useState("");
+  const [barangList, setBarangList] = useState<BarangSearch[]>([]);
+  const [loadingBarang, setLoadingBarang] = useState(false);
+
+  // =====================================================
+  // LOAD DATA DELIVERY
   // =====================================================
 
   async function loadData() {
     try {
       setLoading(true);
 
-      const res = await fetch(`/api/barang-keluar/${id}`, {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        `/api/barang-keluar/${id}`,
+        {
+          cache: "no-store",
+        }
+      );
 
       const json = await res.json();
 
       if (!res.ok || !json.success) {
         throw new Error(
-          json.message || "Gagal mengambil data barang keluar"
+          json.message ||
+            "Gagal mengambil data barang keluar"
         );
       }
 
       const delivery = json.data;
 
-      /*
-       * Kalau harga DeliveryItem kosong/0,
-       * gunakan harga dari Barang.sellingPrice.
-       */
-      const normalizedItems: Item[] = (delivery.items || []).map(
-        (item: any) => {
-          const priceFromItem = Number(item.price ?? 0);
+      const normalizedItems: Item[] = (
+        delivery.items || []
+      ).map((item: any) => {
+        const priceFromItem = Number(
+          item.price ?? 0
+        );
 
-          const priceFromBarang = Number(
-            item.barang?.sellingPrice ?? 0
-          );
+        const priceFromSummary = Number(
+          item.barang?.priceSummary?.lastPrice ?? 0
+        );
 
-          const price =
-            priceFromItem > 0
-              ? priceFromItem
-              : priceFromBarang;
+        const priceFromBarang = Number(
+          item.barang?.sellingPrice ?? 0
+        );
 
-          const qty = Number(item.qty ?? 0);
+        let price = 0;
 
-          return {
-            ...item,
-            qty,
-            price,
-            subtotal: qty * price,
-          };
+        if (priceFromItem > 0) {
+          price = priceFromItem;
+        } else if (priceFromSummary > 0) {
+          price = priceFromSummary;
+        } else if (priceFromBarang > 0) {
+          price = priceFromBarang;
         }
-      );
+
+        const qty = Number(item.qty ?? 0);
+
+        return {
+          ...item,
+          qty,
+          price,
+          subtotal: qty * price,
+        };
+      });
 
       setData({
         ...delivery,
@@ -110,7 +150,10 @@ export default function BarangKeluarDetailPage() {
 
       setNote(delivery?.remarks || "");
     } catch (error: any) {
-      console.error("LOAD BARANG KELUAR ERROR:", error);
+      console.error(
+        "LOAD BARANG KELUAR ERROR:",
+        error
+      );
 
       alert(
         error?.message ||
@@ -130,38 +173,178 @@ export default function BarangKeluarDetailPage() {
   }, [id]);
 
   // =====================================================
-  // UPDATE QTY
+  // LOAD MASTER BARANG
   // =====================================================
 
-  function updateQty(
-    itemId: number | undefined,
-    value: string
-  ) {
-    if (!data || !itemId) return;
+  async function loadBarang() {
+    try {
+      setLoadingBarang(true);
 
-    const qty = Number(value);
+      const keyword =
+        searchBarang.trim();
 
-    setData({
-      ...data,
-      items: data.items.map((item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              qty,
-              subtotal:
-                Number(item.price || 0) * qty,
-            }
-          : item
-      ),
-    });
+      const url = keyword
+        ? `/api/master/barang?search=${encodeURIComponent(
+            keyword
+          )}`
+        : `/api/master/barang`;
+
+      const res = await fetch(url, {
+        cache: "no-store",
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          json.message ||
+            "Gagal mengambil data barang"
+        );
+      }
+
+      /*
+       * API master barang di project bisa
+       * mengembalikan beberapa bentuk response.
+       *
+       * Kita normalisasi di sini supaya
+       * halaman tetap aman.
+       */
+
+      let list: any[] = [];
+
+      if (Array.isArray(json)) {
+        list = json;
+      } else if (Array.isArray(json.data)) {
+        list = json.data;
+      } else if (
+        Array.isArray(json.data?.items)
+      ) {
+        list = json.data.items;
+      } else if (
+        Array.isArray(json.items)
+      ) {
+        list = json.items;
+      }
+
+      const normalized: BarangSearch[] =
+        list.map((barang: any) => ({
+          id: Number(barang.id),
+
+          code:
+            barang.code ??
+            barang.kodeBarang ??
+            barang.kode ??
+            "",
+
+          name:
+            barang.name ??
+            barang.namaBarang ??
+            barang.nama ??
+            "",
+
+          stock: Number(
+            barang.stock ?? 0
+          ),
+
+          sellingPrice:
+            barang.sellingPrice != null
+              ? Number(
+                  barang.sellingPrice
+                )
+              : 0,
+
+          priceSummary:
+            barang.priceSummary
+              ? {
+                  lastPrice:
+                    barang.priceSummary
+                      .lastPrice != null
+                      ? Number(
+                          barang
+                            .priceSummary
+                            .lastPrice
+                        )
+                      : 0,
+                }
+              : null,
+        }));
+
+      setBarangList(normalized);
+    } catch (error: any) {
+      console.error(
+        "LOAD MASTER BARANG ERROR:",
+        error
+      );
+
+      alert(
+        error?.message ||
+          "Gagal mengambil data barang"
+      );
+
+      setBarangList([]);
+    } finally {
+      setLoadingBarang(false);
+    }
   }
 
   // =====================================================
-  // HAPUS ITEM
+  // BUKA MODAL TAMBAH
   // =====================================================
 
-  function removeItem(itemId: number | undefined) {
-    if (!data || !itemId) return;
+  function openAddModal() {
+    if (!data) return;
+
+    if (data.status !== "DRAFT") {
+      alert(
+        "Delivery Order yang sudah RELEASED tidak dapat diubah."
+      );
+      return;
+    }
+
+    setSearchBarang("");
+    setBarangList([]);
+    setShowAddModal(true);
+
+    /*
+     * Load daftar barang ketika modal dibuka.
+     */
+    loadBarang();
+  }
+
+  // =====================================================
+  // CLOSE MODAL
+  // =====================================================
+
+  function closeAddModal() {
+    if (loadingBarang) return;
+
+    setShowAddModal(false);
+    setSearchBarang("");
+    setBarangList([]);
+  }
+
+  // =====================================================
+  // SEARCH BARANG
+  // =====================================================
+
+  useEffect(() => {
+    if (!showAddModal) return;
+
+    const timer = setTimeout(() => {
+      loadBarang();
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [searchBarang, showAddModal]);
+
+  // =====================================================
+  // TAMBAH BARANG KE DELIVERY
+  // =====================================================
+
+  function addBarang(barang: BarangSearch) {
+    if (!data) return;
 
     if (data.status !== "DRAFT") {
       alert(
@@ -171,9 +354,210 @@ export default function BarangKeluarDetailPage() {
     }
 
     /*
-     * Jangan biarkan Delivery Order menjadi
-     * tanpa item sama sekali.
+     * Cek apakah barang sudah ada.
      */
+
+    const alreadyExists =
+      data.items.some(
+        (item) =>
+          Number(item.barangId) ===
+          Number(barang.id)
+      );
+
+    if (alreadyExists) {
+      alert(
+        `${barang.name} sudah ada dalam Delivery Order.`
+      );
+      return;
+    }
+
+    /*
+     * =====================================================
+     * HARGA BARANG BARU
+     * =====================================================
+     *
+     * Prioritas:
+     *
+     * 1. PriceSummary.lastPrice
+     * 2. sellingPrice
+     *
+     * Jangan langsung menggunakan 0.
+     */
+
+    const summaryPrice = Number(
+      barang.priceSummary?.lastPrice ?? 0
+    );
+
+    const sellingPrice = Number(
+      barang.sellingPrice ?? 0
+    );
+
+    let price = 0;
+
+    if (summaryPrice > 0) {
+      price = summaryPrice;
+    } else if (sellingPrice > 0) {
+      price = sellingPrice;
+    }
+
+    /*
+     * Qty default = 1
+     */
+
+    const qty = 1;
+
+    const newItem: Item = {
+      /*
+       * Item baru belum memiliki
+       * DeliveryItem ID.
+       */
+      id: undefined,
+
+      barangId: barang.id,
+
+      qty,
+
+      price,
+
+      subtotal: qty * price,
+
+      barang: {
+        id: barang.id,
+        code: barang.code,
+        name: barang.name,
+        stock: Number(
+          barang.stock ?? 0
+        ),
+        sellingPrice:
+          sellingPrice,
+
+        priceSummary:
+          barang.priceSummary
+            ? {
+                lastPrice:
+                  summaryPrice,
+              }
+            : null,
+      },
+    };
+
+    setData({
+      ...data,
+
+      items: [
+        ...data.items,
+        newItem,
+      ],
+    });
+
+    setShowAddModal(false);
+    setSearchBarang("");
+    setBarangList([]);
+
+    /*
+     * Kalau harga benar-benar tidak ditemukan,
+     * beri informasi supaya user tahu.
+     */
+    if (price <= 0) {
+      alert(
+        `Harga ${barang.name} belum tersedia.\n\n` +
+          `Silakan isi/update harga barang terlebih dahulu.`
+      );
+    }
+  }
+
+  // =====================================================
+  // UPDATE QTY
+  // =====================================================
+
+  function updateQty(
+    itemId: number | undefined,
+    value: string
+  ) {
+    if (!data) return;
+
+    /*
+     * Untuk item baru, ID belum ada.
+     *
+     * Karena itu kita tidak menggunakan
+     * item.id sebagai satu-satunya identifier.
+     *
+     * Fungsi ini dipanggil berdasarkan
+     * index melalui updateQtyByIndex.
+     */
+
+    if (itemId === undefined) return;
+
+    const qty = Number(value);
+
+    setData({
+      ...data,
+
+      items: data.items.map(
+        (item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                qty,
+                subtotal:
+                  Number(
+                    item.price || 0
+                  ) * qty,
+              }
+            : item
+      ),
+    });
+  }
+
+  // =====================================================
+  // UPDATE QTY BERDASARKAN INDEX
+  // =====================================================
+
+  function updateQtyByIndex(
+    index: number,
+    value: string
+  ) {
+    if (!data) return;
+
+    const qty = Number(value);
+
+    setData({
+      ...data,
+
+      items: data.items.map(
+        (item, itemIndex) =>
+          itemIndex === index
+            ? {
+                ...item,
+
+                qty,
+
+                subtotal:
+                  Number(
+                    item.price || 0
+                  ) * qty,
+              }
+            : item
+      ),
+    });
+  }
+
+  // =====================================================
+  // HAPUS ITEM
+  // =====================================================
+
+  function removeItem(
+    index: number
+  ) {
+    if (!data) return;
+
+    if (data.status !== "DRAFT") {
+      alert(
+        "Delivery Order yang sudah RELEASED tidak dapat diubah."
+      );
+      return;
+    }
+
     if (data.items.length <= 1) {
       alert(
         "Minimal harus ada 1 barang dalam Delivery Order."
@@ -181,20 +565,24 @@ export default function BarangKeluarDetailPage() {
       return;
     }
 
-    const item = data.items.find(
-      (item) => item.id === itemId
-    );
+    const item =
+      data.items[index];
 
     if (!item) return;
 
     const namaBarang =
-      item.barang?.name || "barang";
+      item.barang?.name ||
+      "barang";
 
-    const qty = Number(item.qty || 0);
+    const qty = Number(
+      item.qty || 0
+    );
 
     const yakin = confirm(
       `Hapus barang "${namaBarang}" dari Delivery Order?\n\n` +
-        `Qty: ${qty.toLocaleString("id-ID")}\n\n` +
+        `Qty: ${qty.toLocaleString(
+          "id-ID"
+        )}\n\n` +
         `Karena dokumen masih DRAFT, penghapusan ini tidak akan mengubah stock.`
     );
 
@@ -202,8 +590,10 @@ export default function BarangKeluarDetailPage() {
 
     setData({
       ...data,
+
       items: data.items.filter(
-        (item) => item.id !== itemId
+        (_, itemIndex) =>
+          itemIndex !== index
       ),
     });
   }
@@ -222,9 +612,6 @@ export default function BarangKeluarDetailPage() {
       return;
     }
 
-    /*
-     * Pastikan masih ada item.
-     */
     if (data.items.length === 0) {
       alert(
         "Delivery Order harus memiliki minimal 1 barang."
@@ -235,11 +622,16 @@ export default function BarangKeluarDetailPage() {
     /*
      * Validasi setiap item.
      */
+
     for (const item of data.items) {
-      if (!item.qty || Number(item.qty) <= 0) {
+      if (
+        !item.qty ||
+        Number(item.qty) <= 0
+      ) {
         alert(
           `Qty ${
-            item.barang?.name || "barang"
+            item.barang?.name ||
+            "barang"
           } tidak valid.`
         );
         return;
@@ -252,9 +644,40 @@ export default function BarangKeluarDetailPage() {
       ) {
         alert(
           `Harga ${
-            item.barang?.name || "barang"
+            item.barang?.name ||
+            "barang"
           } tidak valid.`
         );
+        return;
+      }
+
+      /*
+       * Validasi stock.
+       */
+
+      const stock = Number(
+        item.barang?.stock ?? 0
+      );
+
+      if (
+        Number(item.qty) >
+        stock
+      ) {
+        alert(
+          `Stock ${
+            item.barang?.name ||
+            "barang"
+          } tidak cukup.\n\n` +
+            `Stock tersedia: ${stock.toLocaleString(
+              "id-ID"
+            )}\n` +
+            `Qty diminta: ${Number(
+              item.qty
+            ).toLocaleString(
+              "id-ID"
+            )}`
+        );
+
         return;
       }
     }
@@ -266,38 +689,54 @@ export default function BarangKeluarDetailPage() {
         `/api/barang-keluar/${id}`,
         {
           method: "PUT",
+
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
+
           body: JSON.stringify({
             customerId:
-              data.customer?.id ?? null,
+              data.customer?.id ??
+              null,
 
             remarks: note,
 
-            /*
-             * Hanya item yang masih ada di state
-             * yang dikirim.
-             *
-             * Item yang tadi dihapus tidak akan
-             * dikirim kembali.
-             */
-            items: data.items.map((item) => ({
-              id: item.id,
-              barangId: item.barangId,
-              qty: Number(item.qty),
-              price: Number(item.price || 0),
-              subtotal:
-                Number(item.qty || 0) *
-                Number(item.price || 0),
-            })),
+            items: data.items.map(
+              (item) => ({
+                id: item.id,
+
+                barangId:
+                  item.barangId,
+
+                qty: Number(
+                  item.qty
+                ),
+
+                price: Number(
+                  item.price || 0
+                ),
+
+                subtotal:
+                  Number(
+                    item.qty || 0
+                  ) *
+                  Number(
+                    item.price || 0
+                  ),
+              })
+            ),
           }),
         }
       );
 
-      const json = await res.json();
+      const json =
+        await res.json();
 
-      if (!res.ok || !json.success) {
+      if (
+        !res.ok ||
+        !json.success
+      ) {
         throw new Error(
           json.message ||
             "Gagal menyimpan perubahan"
@@ -355,9 +794,13 @@ export default function BarangKeluarDetailPage() {
         }
       );
 
-      const json = await res.json();
+      const json =
+        await res.json();
 
-      if (!res.ok || !json.success) {
+      if (
+        !res.ok ||
+        !json.success
+      ) {
         throw new Error(
           json.message ||
             "Gagal menghapus draft"
@@ -368,7 +811,9 @@ export default function BarangKeluarDetailPage() {
         "Draft berhasil dihapus."
       );
 
-      router.push("/pengiriman");
+      router.push(
+        "/pengiriman"
+      );
     } catch (error: any) {
       console.error(
         "DELETE BARANG KELUAR ERROR:",
@@ -392,13 +837,11 @@ export default function BarangKeluarDetailPage() {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-
           <RefreshCw className="h-7 w-7 animate-spin text-emerald-600" />
 
           <p className="text-sm text-slate-500">
             Memuat Delivery Order...
           </p>
-
         </div>
       </div>
     );
@@ -436,7 +879,9 @@ export default function BarangKeluarDetailPage() {
       (total, item) =>
         total +
         Number(item.qty || 0) *
-          Number(item.price || 0),
+          Number(
+            item.price || 0
+          ),
       0
     );
 
@@ -458,7 +903,9 @@ export default function BarangKeluarDetailPage() {
           <button
             type="button"
             onClick={() =>
-              router.push("/pengiriman")
+              router.push(
+                "/pengiriman"
+              )
             }
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
           >
@@ -504,7 +951,9 @@ export default function BarangKeluarDetailPage() {
 
             <button
               type="button"
-              onClick={deleteDraft}
+              onClick={
+                deleteDraft
+              }
               disabled={
                 saving ||
                 deleting
@@ -524,7 +973,9 @@ export default function BarangKeluarDetailPage() {
 
             <button
               type="button"
-              onClick={saveDraft}
+              onClick={
+                saveDraft
+              }
               disabled={
                 saving ||
                 deleting
@@ -568,7 +1019,8 @@ export default function BarangKeluarDetailPage() {
           </p>
 
           <p className="mt-2 font-semibold text-slate-800">
-            {data.customer?.name || "-"}
+            {data.customer?.name ||
+              "-"}
           </p>
 
           {data.customer?.code && (
@@ -648,7 +1100,8 @@ export default function BarangKeluarDetailPage() {
           />
         ) : (
           <p className="mt-2 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            {data.remarks || "-"}
+            {data.remarks ||
+              "-"}
           </p>
         )}
 
@@ -662,23 +1115,47 @@ export default function BarangKeluarDetailPage() {
 
         {/* ITEMS HEADER */}
 
-        <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-4">
+        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
 
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50">
-            <Package className="h-5 w-5 text-emerald-600" />
+          <div className="flex items-center gap-3">
+
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50">
+              <Package className="h-5 w-5 text-emerald-600" />
+            </div>
+
+            <div>
+
+              <h2 className="font-semibold text-slate-800">
+                Detail Barang
+              </h2>
+
+              <p className="text-xs text-slate-500">
+                {data.items.length} item
+              </p>
+
+            </div>
+
           </div>
 
-          <div>
+          {/* TAMBAH BARANG */}
 
-            <h2 className="font-semibold text-slate-800">
-              Detail Barang
-            </h2>
+          {isDraft && (
+            <button
+              type="button"
+              onClick={
+                openAddModal
+              }
+              disabled={
+                saving ||
+                deleting
+              }
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" />
 
-            <p className="text-xs text-slate-500">
-              {data.items.length} item
-            </p>
-
-          </div>
+              Tambah Barang
+            </button>
+          )}
 
         </div>
 
@@ -726,11 +1203,18 @@ export default function BarangKeluarDetailPage() {
 
             <tbody className="divide-y divide-slate-100">
 
-              {data.items.length > 0 ? (
+              {data.items.length >
+              0 ? (
                 data.items.map(
-                  (item) => (
+                  (
+                    item,
+                    index
+                  ) => (
                     <tr
-                      key={item.id}
+                      key={
+                        item.id ??
+                        `new-${item.barangId}-${index}`
+                      }
                       className="transition hover:bg-slate-50"
                     >
 
@@ -739,7 +1223,8 @@ export default function BarangKeluarDetailPage() {
                       <td className="px-5 py-4">
 
                         <span className="font-mono text-sm font-semibold text-slate-700">
-                          {item.barang?.code ||
+                          {item.barang
+                            ?.code ||
                             "-"}
                         </span>
 
@@ -750,7 +1235,8 @@ export default function BarangKeluarDetailPage() {
                       <td className="px-5 py-4">
 
                         <div className="font-medium text-slate-800">
-                          {item.barang?.name ||
+                          {item.barang
+                            ?.name ||
                             "-"}
                         </div>
 
@@ -761,7 +1247,8 @@ export default function BarangKeluarDetailPage() {
                       <td className="px-5 py-4 text-right text-sm text-slate-500">
 
                         {Number(
-                          item.barang?.stock ||
+                          item.barang
+                            ?.stock ||
                             0
                         ).toLocaleString(
                           "id-ID"
@@ -781,9 +1268,11 @@ export default function BarangKeluarDetailPage() {
                             value={
                               item.qty
                             }
-                            onChange={(e) =>
-                              updateQty(
-                                item.id,
+                            onChange={(
+                              e
+                            ) =>
+                              updateQtyByIndex(
+                                index,
                                 e.target
                                   .value
                               )
@@ -853,7 +1342,7 @@ export default function BarangKeluarDetailPage() {
                             type="button"
                             onClick={() =>
                               removeItem(
-                                item.id
+                                index
                               )
                             }
                             disabled={
@@ -891,6 +1380,19 @@ export default function BarangKeluarDetailPage() {
                       <p className="mt-2 text-sm text-slate-400">
                         Tidak ada barang.
                       </p>
+
+                      {isDraft && (
+                        <button
+                          type="button"
+                          onClick={
+                            openAddModal
+                          }
+                          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Tambah Barang
+                        </button>
+                      )}
 
                     </div>
 
@@ -940,7 +1442,9 @@ export default function BarangKeluarDetailPage() {
       {isDraft && (
         <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
 
-          <strong>Draft:</strong>{" "}
+          <strong>
+            Draft:
+          </strong>{" "}
 
           perubahan pada dokumen ini belum
           mengurangi stock, batch expired,
@@ -948,6 +1452,296 @@ export default function BarangKeluarDetailPage() {
           mutation. Semua transaksi stock baru
           dijalankan ketika Delivery Order
           di-Release.
+
+        </div>
+      )}
+
+      {/* ================================================= */}
+      {/* MODAL TAMBAH BARANG */}
+      {/* ================================================= */}
+
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+
+          <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+
+            {/* MODAL HEADER */}
+
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+
+              <div>
+
+                <h2 className="text-lg font-bold text-slate-900">
+                  Tambah Barang
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Pilih barang untuk ditambahkan ke Delivery Order
+                </p>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  closeAddModal
+                }
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+            </div>
+
+            {/* SEARCH */}
+
+            <div className="border-b border-slate-200 p-5">
+
+              <div className="relative">
+
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
+                <input
+                  type="text"
+                  value={
+                    searchBarang
+                  }
+                  onChange={(
+                    e
+                  ) =>
+                    setSearchBarang(
+                      e.target.value
+                    )
+                  }
+                  autoFocus
+                  placeholder="Cari kode atau nama barang..."
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-100"
+                />
+
+              </div>
+
+            </div>
+
+            {/* LIST */}
+
+            <div className="flex-1 overflow-y-auto">
+
+              {loadingBarang ? (
+                <div className="flex min-h-[250px] items-center justify-center">
+
+                  <div className="flex flex-col items-center gap-3">
+
+                    <RefreshCw className="h-6 w-6 animate-spin text-emerald-600" />
+
+                    <p className="text-sm text-slate-500">
+                      Memuat barang...
+                    </p>
+
+                  </div>
+
+                </div>
+              ) : barangList.length >
+                0 ? (
+                <div className="divide-y divide-slate-100">
+
+                  {barangList.map(
+                    (
+                      barang
+                    ) => {
+
+                      const alreadyExists =
+                        data.items.some(
+                          (
+                            item
+                          ) =>
+                            Number(
+                              item.barangId
+                            ) ===
+                            Number(
+                              barang.id
+                            )
+                        );
+
+                      const summaryPrice =
+                        Number(
+                          barang
+                            .priceSummary
+                            ?.lastPrice ??
+                            0
+                        );
+
+                      const sellingPrice =
+                        Number(
+                          barang.sellingPrice ??
+                            0
+                        );
+
+                      const displayPrice =
+                        summaryPrice >
+                        0
+                          ? summaryPrice
+                          : sellingPrice;
+
+                      return (
+                        <button
+                          key={
+                            barang.id
+                          }
+                          type="button"
+                          onClick={() =>
+                            !alreadyExists &&
+                            addBarang(
+                              barang
+                            )
+                          }
+                          disabled={
+                            alreadyExists
+                          }
+                          className={`flex w-full items-center gap-4 px-5 py-4 text-left transition ${
+                            alreadyExists
+                              ? "cursor-not-allowed bg-slate-50 opacity-60"
+                              : "hover:bg-emerald-50"
+                          }`}
+                        >
+
+                          {/* ICON */}
+
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50">
+                            {alreadyExists ? (
+                              <Check className="h-5 w-5 text-emerald-600" />
+                            ) : (
+                              <Package className="h-5 w-5 text-emerald-600" />
+                            )}
+                          </div>
+
+                          {/* INFO */}
+
+                          <div className="min-w-0 flex-1">
+
+                            <div className="flex items-center gap-2">
+
+                              <p className="truncate font-semibold text-slate-800">
+                                {
+                                  barang.name
+                                }
+                              </p>
+
+                              {alreadyExists && (
+                                <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                                  SUDAH DITAMBAHKAN
+                                </span>
+                              )}
+
+                            </div>
+
+                            <p className="mt-1 font-mono text-xs text-slate-400">
+                              {
+                                barang.code
+                              }
+                            </p>
+
+                          </div>
+
+                          {/* STOCK */}
+
+                          <div className="shrink-0 text-right">
+
+                            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                              Stock
+                            </p>
+
+                            <p
+                              className={`mt-1 text-sm font-bold ${
+                                Number(
+                                  barang.stock
+                                ) >
+                                0
+                                  ? "text-slate-700"
+                                  : "text-red-600"
+                              }`}
+                            >
+                              {Number(
+                                barang.stock
+                              ).toLocaleString(
+                                "id-ID"
+                              )}
+                            </p>
+
+                          </div>
+
+                          {/* HARGA */}
+
+                          <div className="w-32 shrink-0 text-right">
+
+                            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                              Harga
+                            </p>
+
+                            <p className="mt-1 text-sm font-semibold text-slate-700">
+                              Rp{" "}
+                              {displayPrice.toLocaleString(
+                                "id-ID"
+                              )}
+                            </p>
+
+                          </div>
+
+                        </button>
+                      );
+                    }
+                  )}
+
+                </div>
+              ) : (
+                <div className="flex min-h-[250px] flex-col items-center justify-center px-5 text-center">
+
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
+
+                    <Package className="h-7 w-7 text-slate-300" />
+
+                  </div>
+
+                  <p className="mt-4 font-semibold text-slate-600">
+                    Barang tidak ditemukan
+                  </p>
+
+                  <p className="mt-1 text-sm text-slate-400">
+                    Coba gunakan kode atau nama barang yang berbeda.
+                  </p>
+
+                </div>
+              )}
+
+            </div>
+
+            {/* MODAL FOOTER */}
+
+            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-4">
+
+              <p className="text-xs text-slate-500">
+                Harga otomatis mengambil{" "}
+                <strong>
+                  Last Price
+                </strong>{" "}
+                terlebih dahulu.
+              </p>
+
+              <button
+                type="button"
+                onClick={
+                  closeAddModal
+                }
+                disabled={
+                  loadingBarang
+                }
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50"
+              >
+                Tutup
+              </button>
+
+            </div>
+
+          </div>
 
         </div>
       )}
