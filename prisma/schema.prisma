@@ -8,20 +8,16 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  username  String   @unique
+  id        Int       @id @default(autoincrement())
+  username  String    @unique
   password  String
   fullname  String
   role      Role
-  outletId  Int?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   histories History[]
   sessions  Session[]
-
-  outlet Outlet? @relation(fields: [outletId], references: [id])
 }
 
 model Session {
@@ -62,20 +58,6 @@ model Customer {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
   deliveries    Delivery[]
-}
-
-model Outlet {
-  id        Int      @id @default(autoincrement())
-  code      String   @unique
-  name      String   @unique
-  address   String?
-  city      String?
-  phone     String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  users User[]
 }
 
 model Barang {
@@ -497,7 +479,6 @@ enum Role {
   MANAGER
   PURCHASING
   GUDANG
-  ADMIN_OUTLET
 }
 
 enum PurchaseStatus {
