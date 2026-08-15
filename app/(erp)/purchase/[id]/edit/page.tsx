@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -65,13 +65,16 @@ function DecimalInput({
   min,
 }: DecimalInputProps) {
   const [focused, setFocused] = useState(false);
+
   const [text, setText] = useState(
     value === 0 ? "" : String(value)
   );
 
   useEffect(() => {
     if (!focused) {
-      setText(value === 0 ? "" : String(value));
+      setText(
+        value === 0 ? "" : String(value)
+      );
     }
   }, [value, focused]);
 
@@ -90,10 +93,8 @@ function DecimalInput({
   ) {
     let input = e.target.value;
 
-    // Izinkan koma Indonesia
     input = input.replace(",", ".");
 
-    // Hanya angka dan satu titik desimal
     input = input.replace(
       /[^0-9.]/g,
       ""
@@ -110,7 +111,10 @@ function DecimalInput({
 
     setText(input);
 
-    if (input === "" || input === ".") {
+    if (
+      input === "" ||
+      input === "."
+    ) {
       onChange(0);
       return;
     }
@@ -172,6 +176,224 @@ function DecimalInput({
       onBlur={handleBlur}
       className={className}
     />
+  );
+}
+
+// =====================================================
+// BARANG SEARCH INPUT
+// =====================================================
+
+type BarangSearchProps = {
+  value: number;
+  barangs: Barang[];
+  selectedBarang?: Barang;
+  onChange: (barangId: number) => void;
+};
+
+function BarangSearch({
+  value,
+  barangs,
+  selectedBarang,
+  onChange,
+}: BarangSearchProps) {
+  const [search, setSearch] = useState("");
+
+  const [open, setOpen] =
+    useState(false);
+
+  const ref =
+    useRef<HTMLDivElement>(null);
+
+  // ===================================================
+  // SET VALUE BARANG SAAT DATA PURCHASE LOADED
+  // ===================================================
+
+  useEffect(() => {
+    if (selectedBarang) {
+      setSearch(
+        `${selectedBarang.code} - ${selectedBarang.name}`
+      );
+    }
+  }, [selectedBarang]);
+
+  // ===================================================
+  // CLICK OUTSIDE
+  // ===================================================
+
+  useEffect(() => {
+    function handleClickOutside(
+      event: MouseEvent
+    ) {
+      if (
+        ref.current &&
+        !ref.current.contains(
+          event.target as Node
+        )
+      ) {
+        setOpen(false);
+
+        if (selectedBarang) {
+          setSearch(
+            `${selectedBarang.code} - ${selectedBarang.name}`
+          );
+        }
+      }
+    }
+
+    document.addEventListener(
+      "mousedown",
+      handleClickOutside
+    );
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleClickOutside
+      );
+    };
+  }, [selectedBarang]);
+
+  // ===================================================
+  // SEARCH
+  // ===================================================
+
+  const keyword =
+    search.trim().toLowerCase();
+
+  const filteredBarangs =
+    keyword === ""
+      ? barangs.slice(0, 20)
+      : barangs
+          .filter((barang) => {
+            const code =
+              barang.code
+                ?.toLowerCase() || "";
+
+            const name =
+              barang.name
+                ?.toLowerCase() || "";
+
+            return (
+              code.includes(keyword) ||
+              name.includes(keyword)
+            );
+          })
+          .slice(0, 30);
+
+  // ===================================================
+  // INPUT CHANGE
+  // ===================================================
+
+  function handleChange(
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const text =
+      e.target.value;
+
+    setSearch(text);
+
+    setOpen(true);
+
+    if (!text.trim()) {
+      onChange(0);
+    }
+  }
+
+  // ===================================================
+  // SELECT BARANG
+  // ===================================================
+
+  function handleSelect(
+    barang: Barang
+  ) {
+    onChange(barang.id);
+
+    setSearch(
+      `${barang.code} - ${barang.name}`
+    );
+
+    setOpen(false);
+  }
+
+  return (
+    <div
+      ref={ref}
+      className="relative min-w-[300px]"
+    >
+
+      {/* INPUT */}
+
+      <input
+        type="text"
+        value={search}
+        onFocus={() => {
+          setOpen(true);
+        }}
+        onChange={handleChange}
+        placeholder="Ketik kode / nama barang..."
+        autoComplete="off"
+        className="w-full rounded-xl border border-[#D5E5DC] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+      />
+
+      {/* DROPDOWN RESULT */}
+
+      {open && (
+        <div className="absolute left-0 top-full z-[100] mt-1 w-full overflow-hidden rounded-xl border border-[#D5E5DC] bg-white shadow-xl">
+
+          <div className="max-h-64 overflow-y-auto">
+
+            {filteredBarangs.length === 0 ? (
+              <div className="px-4 py-5 text-center text-sm text-gray-400">
+                Barang tidak ditemukan
+              </div>
+            ) : (
+              filteredBarangs.map(
+                (barang) => (
+                  <button
+                    key={barang.id}
+                    type="button"
+                    onMouseDown={(e) =>
+                      e.preventDefault()
+                    }
+                    onClick={() =>
+                      handleSelect(
+                        barang
+                      )
+                    }
+                    className={`block w-full border-b border-[#EDF2EF] px-3 py-3 text-left transition hover:bg-[#F5F8F6] ${
+                      barang.id === value
+                        ? "bg-[#E8F3EC]"
+                        : "bg-white"
+                    }`}
+                  >
+
+                    <div className="font-semibold text-[#18352D]">
+                      {barang.code}
+                    </div>
+
+                    <div className="mt-0.5 text-xs text-gray-500">
+                      {barang.name}
+
+                      {barang.unit && (
+                        <span>
+                          {" "}
+                          •{" "}
+                          {barang.unit}
+                        </span>
+                      )}
+                    </div>
+
+                  </button>
+                )
+              )
+            )}
+
+          </div>
+
+        </div>
+      )}
+
+    </div>
   );
 }
 
@@ -341,7 +563,9 @@ export default function EditPurchasePage() {
   // REMOVE ITEM
   // =====================================================
 
-  function removeItem(index: number) {
+  function removeItem(
+    index: number
+  ) {
     if (items.length === 1) {
       alert(
         "Purchase Order harus memiliki minimal 1 barang."
@@ -563,6 +787,7 @@ export default function EditPurchasePage() {
   ) {
     return (
       <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
+
         <div className="mx-auto max-w-5xl">
 
           <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
@@ -593,6 +818,7 @@ export default function EditPurchasePage() {
           </div>
 
         </div>
+
       </div>
     );
   }
@@ -639,9 +865,7 @@ export default function EditPurchasePage() {
           onSubmit={handleSubmit}
         >
 
-          {/* ================================================= */}
           {/* INFORMASI PO */}
-          {/* ================================================= */}
 
           <div className="mb-6 rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
@@ -743,9 +967,7 @@ export default function EditPurchasePage() {
 
           </div>
 
-          {/* ================================================= */}
-          {/* BARANG */}
-          {/* ================================================= */}
+          {/* DETAIL BARANG */}
 
           <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
@@ -825,6 +1047,14 @@ export default function EditPurchasePage() {
                           item.price || 0
                         );
 
+                      const selectedBarang =
+                        item.barang ||
+                        barangs.find(
+                          (barang) =>
+                            barang.id ===
+                            item.barangId
+                        );
+
                       return (
                         <tr
                           key={
@@ -844,54 +1074,26 @@ export default function EditPurchasePage() {
 
                           <td className="px-4 py-4">
 
-                            <select
+                            <BarangSearch
                               value={
                                 item.barangId
-                                  ? String(
-                                      item.barangId
-                                    )
-                                  : ""
                               }
-                              onChange={(e) =>
+                              barangs={
+                                barangs
+                              }
+                              selectedBarang={
+                                selectedBarang
+                              }
+                              onChange={(
+                                barangId
+                              ) =>
                                 updateItem(
                                   index,
                                   "barangId",
-                                  Number(
-                                    e.target.value
-                                  )
+                                  barangId
                                 )
                               }
-                              className="min-w-[280px] rounded-xl border border-[#D5E5DC] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#497F70]"
-                            >
-
-                              <option value="">
-                                Pilih Barang
-                              </option>
-
-                              {barangs.map(
-                                (
-                                  barang
-                                ) => (
-                                  <option
-                                    key={
-                                      barang.id
-                                    }
-                                    value={
-                                      barang.id
-                                    }
-                                  >
-                                    {
-                                      barang.code
-                                    }{" "}
-                                    -{" "}
-                                    {
-                                      barang.name
-                                    }
-                                  </option>
-                                )
-                              )}
-
-                            </select>
+                            />
 
                           </td>
 
@@ -947,7 +1149,7 @@ export default function EditPurchasePage() {
 
                           {/* SUBTOTAL */}
 
-                          <td className="px-4 py-4 text-right font-semibold text-[#18352D] whitespace-nowrap">
+                          <td className="whitespace-nowrap px-4 py-4 text-right font-semibold text-[#18352D]">
 
                             {formatRupiah(
                               subtotal
@@ -984,9 +1186,7 @@ export default function EditPurchasePage() {
 
             </div>
 
-            {/* ================================================= */}
             {/* TOTAL */}
-            {/* ================================================= */}
 
             <div className="flex justify-end border-t border-[#E5ECE9] bg-[#FAFCFB] px-5 py-5">
 
@@ -998,7 +1198,7 @@ export default function EditPurchasePage() {
                     Total Purchase
                   </span>
 
-                  <span className="text-xl font-bold text-[#18352D] whitespace-nowrap">
+                  <span className="whitespace-nowrap text-xl font-bold text-[#18352D]">
                     {formatRupiah(
                       total
                     )}
@@ -1012,9 +1212,7 @@ export default function EditPurchasePage() {
 
           </div>
 
-          {/* ================================================= */}
           {/* FOOTER */}
-          {/* ================================================= */}
 
           <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
 
