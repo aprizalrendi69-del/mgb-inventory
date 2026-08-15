@@ -13,11 +13,29 @@ model User {
   password  String
   fullname  String
   role      Role
+  outletId  Int?
   active    Boolean   @default(true)
   createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  updatedAt DateTime @updatedAt
+
   histories History[]
   sessions  Session[]
+
+  outlet    Outlet?   @relation(fields: [outletId], references: [id])
+}
+
+model Outlet {
+  id         Int      @id @default(autoincrement())
+  code       String   @unique
+  name       String
+  address    String?
+  city       String?
+  phone      String?
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  users      User[]
 }
 
 model Session {
@@ -479,6 +497,7 @@ enum Role {
   MANAGER
   PURCHASING
   GUDANG
+  OUTLET_ADMIN
 }
 
 enum PurchaseStatus {
