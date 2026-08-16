@@ -1,89 +1,225 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
+import { Role } from "@prisma/client";
+import { randomUUID } from "crypto";
+
+/*
+ * =========================================================
+ * CURRENT USER
+ * =========================================================
+ */
+
+async function getCurrentUser() {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("erp-session");
+
+  if (!session) {
+    return null;
+  }
+
+  let sessionData: any;
+
+  try {
+    sessionData = JSON.parse(session.value);
+  } catch {
+    return null;
+  }
+
+  const userId = Number(
+    sessionData?.user?.id ??
+      sessionData?.id
+  );
+
+  if (!userId || !Number.isInteger(userId)) {
+    return null;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+    select: {
+      id: true,
+      fullname: true,
+      role: true,
+      active: true,
+      outletId: true,
+      outlet: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          active: true,
+        },
+      },
+    },
+  });
+
+  if (!user) {
+    return null;
+  }
+
+  if (!user.active) {
+    return null;
+  }
+
+  return user;
+}
+
+/*
+ * =========================================================
+ * ROLE ACCESS
+ * =========================================================
+ *
+ * OUTLET_ADMIN
+ * -> boleh membuat dan melihat PO outlet sendiri
+ *
+ * ADMIN
+ * -> boleh melihat dan membuat PO semua outlet
+ *
+ * PURCHASING
+ * -> boleh melihat dan membuat PO semua outlet
+ *
+ * MANAGER
+ * -> TIDAK memiliki akses endpoint ini
+ *
+ * Role lain
+ * -> TIDAK memiliki akses
+ * =========================================================
+ */
+
+function canAccessOutletPurchase(
+  role: Role
+) {
+  return (
+    role === Role.ADMIN ||
+    role === Role.PURCHASING ||
+    role === Role.OUTLET_ADMIN
+  );
+}
+
+function canCreateOutletPurchase(
+  role: Role
+) {
+  return (
+    role === Role.ADMIN ||
+    role === Role.PURCHASING ||
+    role === Role.OUTLET_ADMIN
+  );
+}
+
+/*
+ * =========================================================
+ * GET OUTLET FILTER
+ * =========================================================
+ */
+
+function getOutletFilter(user: {
+  role: Role;
+  outletId: number | null;
+}) {
+  if (user.role === Role.OUTLET_ADMIN) {
+    return {
+      outletId: user.outletId ?? -1,
+    };
+  }
+
+  return {};
+}
+
+/*
+ * =========================================================
+ * GET
+ * =========================================================
+ *
+ * ADMIN / PURCHASING
+ * -> melihat semua PO outlet
+ *
+ * OUTLET_ADMIN
+ * -> hanya melihat PO outlet sendiri
+ * =========================================================
+ */
 
 export async function GET() {
   try {
-    // =====================================================
-    // 1. CEK SESSION
-    // =====================================================
+    /*
+     * -------------------------------------------------------
+     * SESSION
+     * -------------------------------------------------------
+     */
 
-    const cookieStore = await cookies();
-    const session = cookieStore.get("erp-session");
-
-    if (!session) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Tidak login",
-        },
-        {
-          status: 401,
-        }
-      );
-    }
-
-    let sessionData: any;
-
-    try {
-      sessionData = JSON.parse(session.value);
-    } catch {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Session tidak valid",
-        },
-        {
-          status: 401,
-        }
-      );
-    }
-
-    const user = await prisma.user.findUnique({
-      where: {
-        id: sessionData.id,
-      },
-      select: {
-        id: true,
-        role: true,
-        outletId: true,
-      },
-    });
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message: "User tidak ditemukan",
+          message: "Tidak login atau session tidak valid",
         },
         {
-          status: 404,
+          status: 401,
         }
       );
     }
 
-    // =====================================================
-    // 2. FILTER OUTLET
-    //
-    // ADMIN PUSAT
-    // -> {}
-    // -> melihat semua outlet
-    //
-    // OUTLET_ADMIN
-    // -> { outletId: user.outletId }
-    // -> hanya outlet sendiri
-    // =====================================================
+    /*
+     * -------------------------------------------------------
+     * ROLE
+     * -------------------------------------------------------
+     */
 
-    const outletFilter =
-      user.role === "OUTLET_ADMIN"
-        ? {
-            outletId: user.outletId ?? -1,
-          }
-        : {};
+    if (!canAccessOutletPurchase(user.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Anda tidak memiliki akses Purchase Outlet",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
 
-    // =====================================================
-    // 3. GET PURCHASE OUTLET
-    // =====================================================
+    /*
+     * -------------------------------------------------------
+     * OUTLET ADMIN WAJIB PUNYA OUTLET
+     * -------------------------------------------------------
+     */
+
+    if (
+      user.role === Role.OUTLET_ADMIN &&
+      !user.outletId
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "User Outlet Admin belum terhubung dengan outlet",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    /*
+     * -------------------------------------------------------
+     * FILTER
+     * -------------------------------------------------------
+     */
+
+    const outletFilter = getOutletFilter({
+      role: user.role,
+      outletId: user.outletId,
+    });
+
+    /*
+     * -------------------------------------------------------
+     * DATA
+     * -------------------------------------------------------
+     */
 
     const data =
       await prisma.outletPurchase.findMany({
@@ -129,132 +265,95 @@ export async function GET() {
   }
 }
 
-export async function POST(req: NextRequest) {
+/*
+ * =========================================================
+ * POST
+ * =========================================================
+ *
+ * CREATE PURCHASE OUTLET
+ * =========================================================
+ */
+
+export async function POST(
+  req: NextRequest
+) {
   try {
-    // =====================================================
-    // 1. CEK SESSION
-    // =====================================================
+    /*
+     * -------------------------------------------------------
+     * SESSION
+     * -------------------------------------------------------
+     */
 
-    const cookieStore = await cookies();
-    const session = cookieStore.get("erp-session");
-
-    if (!session) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Tidak login",
-        },
-        {
-          status: 401,
-        }
-      );
-    }
-
-    let sessionData: any;
-
-    try {
-      sessionData = JSON.parse(session.value);
-    } catch {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Session tidak valid",
-        },
-        {
-          status: 401,
-        }
-      );
-    }
-
-    const user = await prisma.user.findUnique({
-      where: {
-        id: sessionData.id,
-      },
-      select: {
-        id: true,
-        role: true,
-        outletId: true,
-      },
-    });
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message: "User tidak ditemukan",
+          message: "Tidak login atau session tidak valid",
         },
         {
-          status: 404,
+          status: 401,
         }
       );
     }
 
-    // =====================================================
-    // 2. AMBIL BODY
-    // =====================================================
+    /*
+     * -------------------------------------------------------
+     * ROLE
+     * -------------------------------------------------------
+     */
 
-    const body = await req.json();
-
-    const {
-      outletId: requestedOutletId,
-      supplierId,
-      remarks,
-      items,
-    } = body;
-
-    // =====================================================
-    // 3. TENTUKAN OUTLET
-    //
-    // ADMIN PUSAT
-    // -> boleh memilih outlet
-    //
-    // OUTLET_ADMIN
-    // -> wajib menggunakan outlet dari session
-    // -> tidak boleh memilih outlet lain
-    // =====================================================
-
-    let outletId: number;
-
-    if (user.role === "OUTLET_ADMIN") {
-      if (!user.outletId) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "User outlet belum memiliki outlet",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-
-      outletId = user.outletId;
-    } else {
-      if (!requestedOutletId) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Outlet wajib dipilih",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-
-      outletId = Number(requestedOutletId);
-    }
-
-    // =====================================================
-    // 4. VALIDASI SUPPLIER
-    // =====================================================
-
-    if (!supplierId) {
+    if (!canCreateOutletPurchase(user.role)) {
       return NextResponse.json(
         {
           success: false,
-          message: "Supplier wajib dipilih",
+          message:
+            "Anda tidak memiliki izin membuat Purchase Outlet",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    /*
+     * -------------------------------------------------------
+     * OUTLET ADMIN HARUS PUNYA OUTLET
+     * -------------------------------------------------------
+     */
+
+    if (
+      user.role === Role.OUTLET_ADMIN &&
+      !user.outletId
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "User Outlet Admin belum terhubung dengan outlet",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    /*
+     * -------------------------------------------------------
+     * BODY
+     * -------------------------------------------------------
+     */
+
+    let body: any;
+
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Format request tidak valid",
         },
         {
           status: 400,
@@ -262,14 +361,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // =====================================================
-    // 5. VALIDASI ITEMS
-    // =====================================================
+    const requestedOutletId = Number(
+      body?.outletId
+    );
 
-    if (
-      !Array.isArray(items) ||
-      items.length === 0
-    ) {
+    const supplierId = Number(
+      body?.supplierId
+    );
+
+    const remarks =
+      body?.remarks !== undefined &&
+      body?.remarks !== null
+        ? String(body.remarks).trim()
+        : null;
+
+    const items = Array.isArray(body?.items)
+      ? body.items
+      : [];
+
+    /*
+     * -------------------------------------------------------
+     * VALIDASI ITEMS
+     * -------------------------------------------------------
+     */
+
+    if (items.length === 0) {
       return NextResponse.json(
         {
           success: false,
@@ -281,73 +397,67 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // =====================================================
-    // 6. CEK OUTLET
-    // =====================================================
-
-    const outlet =
-      await prisma.outlet.findUnique({
-        where: {
-          id: outletId,
-        },
-      });
-
-    if (!outlet) {
+    if (items.length > 500) {
       return NextResponse.json(
         {
           success: false,
-          message: "Outlet tidak ditemukan",
+          message:
+            "Jumlah barang dalam satu Purchase Outlet terlalu banyak",
         },
         {
-          status: 404,
+          status: 400,
         }
       );
     }
 
-    // =====================================================
-    // 7. CEK SUPPLIER
-    // =====================================================
+    /*
+     * -------------------------------------------------------
+     * TENTUKAN OUTLET
+     * -------------------------------------------------------
+     *
+     * OUTLET_ADMIN
+     * -> SELALU session outlet
+     *
+     * ADMIN / PURCHASING
+     * -> boleh memilih outlet
+     *
+     * outletId dari frontend TIDAK PERNAH
+     * digunakan untuk OUTLET_ADMIN.
+     * -------------------------------------------------------
+     */
 
-    const supplier =
-      await prisma.supplier.findUnique({
-        where: {
-          id: Number(supplierId),
-        },
-      });
+    let outletId: number;
 
-    if (!supplier) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Supplier tidak ditemukan",
-        },
-        {
-          status: 404,
-        }
-      );
-    }
-
-    // =====================================================
-    // 8. VALIDASI BARANG + HITUNG TOTAL
-    // =====================================================
-
-    let total = 0;
-
-    for (const item of items) {
-      const barangId = Number(item.barangId);
-      const qty = Number(item.qty);
-      const price = Number(item.price);
+    if (user.role === Role.OUTLET_ADMIN) {
+      outletId = Number(user.outletId);
 
       if (
-        !barangId ||
-        qty <= 0 ||
-        price <= 0
+        !outletId ||
+        !Number.isInteger(outletId)
       ) {
         return NextResponse.json(
           {
             success: false,
             message:
-              "Barang, Qty, dan Harga harus valid",
+              "User Outlet Admin belum memiliki outlet yang valid",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+    } else {
+      if (
+        !requestedOutletId ||
+        !Number.isInteger(
+          requestedOutletId
+        )
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Outlet wajib dipilih",
           },
           {
             status: 400,
@@ -355,10 +465,241 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      outletId = requestedOutletId;
+    }
+
+    /*
+     * -------------------------------------------------------
+     * CEK OUTLET
+     * -------------------------------------------------------
+     */
+
+    const outlet =
+      await prisma.outlet.findUnique({
+        where: {
+          id: outletId,
+        },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          active: true,
+        },
+      });
+
+    if (!outlet) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Outlet tidak ditemukan",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    if (!outlet.active) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Outlet tersebut sedang tidak aktif",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+     * -------------------------------------------------------
+     * CEK SUPPLIER
+     * -------------------------------------------------------
+     */
+
+    if (
+      !supplierId ||
+      !Number.isInteger(supplierId)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Supplier wajib dipilih",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const supplier =
+      await prisma.supplier.findUnique({
+        where: {
+          id: supplierId,
+        },
+      });
+
+    if (!supplier) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Supplier tidak ditemukan",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    /*
+     * -------------------------------------------------------
+     * VALIDASI ITEMS
+     * -------------------------------------------------------
+     */
+
+    const normalizedItems: {
+      barangId: number;
+      qty: number;
+      price: number;
+      subtotal: number;
+    }[] = [];
+
+    const barangIds = new Set<number>();
+
+    let total = 0;
+
+    for (
+      let index = 0;
+      index < items.length;
+      index++
+    ) {
+      const item = items[index];
+
+      const barangId = Number(
+        item?.barangId
+      );
+
+      const qty = Number(item?.qty);
+
+      const price = Number(item?.price);
+
+      /*
+       * ID BARANG
+       */
+
+      if (
+        !barangId ||
+        !Number.isInteger(barangId)
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              `Barang pada item ke-${index + 1} tidak valid`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /*
+       * CEGAH DUPLIKAT BARANG
+       */
+
+      if (barangIds.has(barangId)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              `Barang ID ${barangId} muncul lebih dari satu kali`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      barangIds.add(barangId);
+
+      /*
+       * QTY
+       */
+
+      if (
+        !Number.isFinite(qty) ||
+        qty <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              `Qty barang pada item ke-${index + 1} harus lebih dari 0`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /*
+       * PRICE
+       */
+
+      if (
+        !Number.isFinite(price) ||
+        price <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              `Harga barang pada item ke-${index + 1} harus lebih dari 0`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /*
+       * CEGAH ANGKA TERLALU BESAR
+       */
+
+      if (
+        qty > 1000000000 ||
+        price > 1000000000000
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              `Qty atau harga barang pada item ke-${index + 1} terlalu besar`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /*
+       * CEK BARANG
+       */
+
       const barang =
         await prisma.barang.findUnique({
           where: {
             id: barangId,
+          },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            active: true,
           },
         });
 
@@ -375,106 +716,239 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      total += qty * price;
+      /*
+       * BARANG NONAKTIF TIDAK BOLEH
+       */
+
+      if (
+        barang.active === false
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              `Barang ${barang.name} sedang tidak aktif`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      const subtotal =
+        qty * price;
+
+      if (
+        !Number.isFinite(subtotal)
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              `Subtotal barang ${barang.name} tidak valid`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      total += subtotal;
+
+      normalizedItems.push({
+        barangId,
+        qty,
+        price,
+        subtotal,
+      });
     }
 
-    // =====================================================
-    // 9. GENERATE NOMOR PURCHASE
-    // =====================================================
+    /*
+     * -------------------------------------------------------
+     * VALIDASI TOTAL
+     * -------------------------------------------------------
+     */
 
-    const lastPurchase =
-      await prisma.outletPurchase.findFirst({
-        orderBy: {
-          id: "desc",
+    if (
+      !Number.isFinite(total) ||
+      total < 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Total Purchase Outlet tidak valid",
         },
-        select: {
-          id: true,
-        },
-      });
+        {
+          status: 400,
+        }
+      );
+    }
 
-    const nextNumber =
-      (lastPurchase?.id ?? 0) + 1;
-
-    const number =
-      `OP-${String(nextNumber).padStart(5, "0")}`;
-
-    // =====================================================
-    // 10. CREATE PURCHASE
-    // =====================================================
+    /*
+     * =======================================================
+     * CREATE PURCHASE
+     * =======================================================
+     *
+     * NOMOR PURCHASE TIDAK LAGI:
+     *
+     * lastPurchase.id + 1
+     *
+     * Karena dua request bersamaan bisa mendapatkan
+     * nomor yang sama.
+     *
+     * Kita buat record terlebih dahulu menggunakan
+     * temporary unique number.
+     *
+     * Setelah mendapatkan ID database,
+     * nomor final dibuat:
+     *
+     * OP-00001
+     * OP-00002
+     * dst.
+     *
+     * ID database dijamin unik.
+     * =======================================================
+     */
 
     const purchase =
-      await prisma.outletPurchase.create({
-        data: {
-          number,
+      await prisma.$transaction(
+        async (tx) => {
+          /*
+           * -------------------------------------------------
+           * TEMP NUMBER
+           * -------------------------------------------------
+           */
 
-          outletId,
+          const temporaryNumber =
+            `TMP-${randomUUID()}`;
 
-          supplierId: Number(supplierId),
+          /*
+           * -------------------------------------------------
+           * CREATE
+           * -------------------------------------------------
+           */
 
-          total,
+          const created =
+            await tx.outletPurchase.create({
+              data: {
+                number:
+                  temporaryNumber,
 
-          remarks: remarks || null,
+                outletId,
 
-          items: {
-            create: items.map(
-              (item: any) => {
-                const qty =
-                  Number(item.qty);
+                supplierId,
 
-                const price =
-                  Number(item.price);
+                total,
 
-                return {
-                  barangId:
-                    Number(
-                      item.barangId
+                remarks:
+                  remarks || null,
+
+                items: {
+                  create:
+                    normalizedItems.map(
+                      (item) => ({
+                        barangId:
+                          item.barangId,
+
+                        qty:
+                          item.qty,
+
+                        price:
+                          item.price,
+
+                        subtotal:
+                          item.subtotal,
+                      })
                     ),
+                },
+              },
 
-                  qty,
+              include: {
+                outlet: true,
 
-                  price,
+                supplier: true,
 
-                  subtotal:
-                    qty * price,
-                };
-              }
-            ),
-          },
-        },
+                items: {
+                  include: {
+                    barang: true,
+                  },
+                },
+              },
+            });
 
-        include: {
-          outlet: true,
+          /*
+           * -------------------------------------------------
+           * FINAL NUMBER
+           * -------------------------------------------------
+           */
 
-          supplier: true,
+          const finalNumber =
+            `OP-${String(
+              created.id
+            ).padStart(5, "0")}`;
 
-          items: {
-            include: {
-              barang: true,
+          /*
+           * -------------------------------------------------
+           * UPDATE NUMBER
+           * -------------------------------------------------
+           */
+
+          const updated =
+            await tx.outletPurchase.update({
+              where: {
+                id: created.id,
+              },
+
+              data: {
+                number:
+                  finalNumber,
+              },
+
+              include: {
+                outlet: true,
+
+                supplier: true,
+
+                items: {
+                  include: {
+                    barang: true,
+                  },
+                },
+              },
+            });
+
+          /*
+           * -------------------------------------------------
+           * HISTORY
+           * -------------------------------------------------
+           */
+
+          await tx.history.create({
+            data: {
+              transactionType:
+                "PURCHASE",
+
+              referenceNumber:
+                finalNumber,
+
+              description:
+                `Membuat Purchase Order Outlet ${finalNumber} untuk outlet ${outlet.name}`,
+
+              userId:
+                user.id,
             },
-          },
-        },
-      });
+          });
 
-    // =====================================================
-    // 11. HISTORY
-    // =====================================================
+          return updated;
+        }
+      );
 
-    await prisma.history.create({
-      data: {
-        transactionType: "PURCHASE",
-
-        referenceNumber:
-          purchase.number,
-
-        description:
-          "Membuat Purchase Order Outlet " +
-          purchase.number,
-      },
-    });
-
-    // =====================================================
-    // 12. RESPONSE
-    // =====================================================
+    /*
+     * =======================================================
+     * RESPONSE
+     * =======================================================
+     */
 
     return NextResponse.json({
       success: true,
@@ -484,11 +958,16 @@ export async function POST(req: NextRequest) {
 
       data: purchase,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error(
       "POST OUTLET PURCHASE ERROR:",
       error
     );
+
+    /*
+     * Jangan bocorkan detail database
+     * ke browser.
+     */
 
     return NextResponse.json(
       {

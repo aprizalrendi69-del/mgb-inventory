@@ -6,8 +6,29 @@ import {
   LogOut,
   ShieldCheck,
 } from "lucide-react";
+import { useEffect } from "react";
 
 export default function Header() {
+  useEffect(() => {
+    const sendHeartbeat = async () => {
+      try {
+        await fetch("/api/me/heartbeat", {
+          method: "POST",
+          credentials: "include",
+          cache: "no-store",
+        });
+      } catch {
+        // Abaikan error heartbeat
+      }
+    };
+
+    sendHeartbeat();
+
+    const interval = setInterval(sendHeartbeat, 15000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   async function logout() {
     try {
       await fetch("/api/logout", {
@@ -34,14 +55,7 @@ export default function Header() {
         shadow-[0_3px_14px_rgba(25,65,45,0.05)]
       "
     >
-      {/* =====================================================
-          LEFT
-      ===================================================== */}
-
       <div className="flex items-center gap-4">
-
-        {/* BRAND ICON */}
-
         <div
           className="
             flex
@@ -54,25 +68,11 @@ export default function Header() {
             text-[#238B59]
           "
         >
-          <ShieldCheck
-            size={19}
-            strokeWidth={1.8}
-          />
+          <ShieldCheck size={19} strokeWidth={1.8} />
         </div>
 
-
-        {/* TITLE */}
-
         <div>
-
-          <div
-            className="
-              flex
-              items-center
-              gap-2
-            "
-          >
-
+          <div className="flex items-center gap-2">
             <h1
               className="
                 text-[14px]
@@ -98,9 +98,7 @@ export default function Header() {
             >
               ERP Dashboard
             </span>
-
           </div>
-
 
           <p
             className="
@@ -114,20 +112,10 @@ export default function Header() {
           >
             Enterprise Resource Planning
           </p>
-
         </div>
-
       </div>
 
-
-      {/* =====================================================
-          RIGHT
-      ===================================================== */}
-
       <div className="flex items-center gap-3">
-
-        {/* SYSTEM STATUS */}
-
         <div
           className="
             hidden
@@ -142,7 +130,6 @@ export default function Header() {
             sm:flex
           "
         >
-
           <span
             className="
               h-1.5
@@ -163,11 +150,7 @@ export default function Header() {
           >
             SYSTEM ONLINE
           </span>
-
         </div>
-
-
-        {/* NOTIFICATION */}
 
         <button
           type="button"
@@ -190,11 +173,7 @@ export default function Header() {
           "
           aria-label="Notifikasi"
         >
-
-          <Bell
-            size={17}
-            strokeWidth={1.8}
-          />
+          <Bell size={17} strokeWidth={1.8} />
 
           <span
             className="
@@ -207,11 +186,7 @@ export default function Header() {
               bg-[#43B979]
             "
           />
-
         </button>
-
-
-        {/* DIVIDER */}
 
         <div
           className="
@@ -222,9 +197,6 @@ export default function Header() {
             sm:block
           "
         />
-
-
-        {/* LOGOUT */}
 
         <button
           type="button"
@@ -248,7 +220,6 @@ export default function Header() {
             hover:text-[#C45353]
           "
         >
-
           <LogOut
             size={16}
             strokeWidth={1.8}
@@ -268,11 +239,8 @@ export default function Header() {
           >
             Logout
           </span>
-
         </button>
-
       </div>
-
     </header>
   );
 }

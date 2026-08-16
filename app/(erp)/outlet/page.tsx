@@ -71,10 +71,56 @@ export default function OutletDashboardPage() {
     loadDashboard();
   }, []);
 
+  /*
+   * =========================================================
+   * FORMAT ANGKA RINGKAS
+   * =========================================================
+   *
+   * 999       -> 999
+   * 1.250     -> 1,3K
+   * 12.500    -> 12,5K
+   * 125.000   -> 125K
+   * 1.250.000 -> 1,3JT
+   * 1 Miliar  -> 1,0M
+   */
+  function formatCompact(value: number) {
+    const number = Number(value || 0);
+
+    if (number < 1000) {
+      return number.toLocaleString("id-ID");
+    }
+
+    if (number < 1_000_000) {
+      return `${(number / 1000)
+        .toFixed(number >= 100_000 ? 0 : 1)
+        .replace(".", ",")}K`;
+    }
+
+    if (number < 1_000_000_000) {
+      return `${(number / 1_000_000)
+        .toFixed(number >= 100_000_000 ? 0 : 1)
+        .replace(".", ",")}JT`;
+    }
+
+    return `${(number / 1_000_000_000)
+      .toFixed(1)
+      .replace(".", ",")}M`;
+  }
+
+  /*
+   * =========================================================
+   * FORMAT RUPIAH
+   * =========================================================
+   */
   function formatRupiah(value: number) {
     return Number(value || 0).toLocaleString("id-ID");
   }
 
+  /*
+   * =========================================================
+   * FORMAT DATE
+   * =========================================================
+   */
   function formatDate(value: string) {
     const date = new Date(value);
 
@@ -89,6 +135,11 @@ export default function OutletDashboardPage() {
     });
   }
 
+  /*
+   * =========================================================
+   * STATUS BADGE
+   * =========================================================
+   */
   function statusBadge(status: string) {
     if (status === "DRAFT") {
       return (
@@ -121,6 +172,11 @@ export default function OutletDashboardPage() {
     );
   }
 
+  /*
+   * =========================================================
+   * LOADING
+   * =========================================================
+   */
   if (loading) {
     return (
       <div className="flex min-h-full items-center justify-center bg-[#F6F8F7]">
@@ -135,6 +191,11 @@ export default function OutletDashboardPage() {
     );
   }
 
+  /*
+   * =========================================================
+   * ERROR
+   * =========================================================
+   */
   if (!data) {
     return (
       <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
@@ -148,7 +209,9 @@ export default function OutletDashboardPage() {
   return (
     <div className="min-h-full bg-[#F6F8F7] p-5 md:p-7 lg:p-8">
 
-      {/* HEADER */}
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="mb-1 text-sm font-medium text-[#497F70]">
@@ -176,22 +239,27 @@ export default function OutletDashboardPage() {
         </button>
       </div>
 
-      {/* SUMMARY CARDS */}
+      {/* =====================================================
+          SUMMARY CARDS
+      ===================================================== */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
 
         {/* TOTAL PURCHASE */}
         <Link
           href="/outlet/purchase"
-          className="group rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          className="group min-w-0 rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         >
-          <div className="flex items-start justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
               <p className="text-sm font-medium text-gray-500">
                 Total Purchase
               </p>
 
-              <p className="mt-2 text-3xl font-bold text-[#18352D]">
-                {data.totalPurchase}
+              <p
+                className="mt-2 truncate text-3xl font-bold text-[#18352D]"
+                title={data.totalPurchase.toLocaleString("id-ID")}
+              >
+                {formatCompact(data.totalPurchase)}
               </p>
 
               <p className="mt-1 text-xs text-gray-400">
@@ -199,7 +267,7 @@ export default function OutletDashboardPage() {
               </p>
             </div>
 
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
               <ShoppingCart size={21} />
             </div>
           </div>
@@ -216,16 +284,19 @@ export default function OutletDashboardPage() {
         {/* DRAFT */}
         <Link
           href="/outlet/purchase?status=DRAFT"
-          className="group rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          className="group min-w-0 rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         >
-          <div className="flex items-start justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
               <p className="text-sm font-medium text-gray-500">
                 Purchase Draft
               </p>
 
-              <p className="mt-2 text-3xl font-bold text-amber-600">
-                {data.totalDraft}
+              <p
+                className="mt-2 truncate text-3xl font-bold text-amber-600"
+                title={data.totalDraft.toLocaleString("id-ID")}
+              >
+                {formatCompact(data.totalDraft)}
               </p>
 
               <p className="mt-1 text-xs text-gray-400">
@@ -233,7 +304,7 @@ export default function OutletDashboardPage() {
               </p>
             </div>
 
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
               <Clock3 size={21} />
             </div>
           </div>
@@ -250,16 +321,19 @@ export default function OutletDashboardPage() {
         {/* APPROVED */}
         <Link
           href="/outlet/purchase?status=APPROVED"
-          className="group rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          className="group min-w-0 rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         >
-          <div className="flex items-start justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
               <p className="text-sm font-medium text-gray-500">
                 Menunggu Receive
               </p>
 
-              <p className="mt-2 text-3xl font-bold text-blue-600">
-                {data.totalApproved}
+              <p
+                className="mt-2 truncate text-3xl font-bold text-blue-600"
+                title={data.totalApproved.toLocaleString("id-ID")}
+              >
+                {formatCompact(data.totalApproved)}
               </p>
 
               <p className="mt-1 text-xs text-gray-400">
@@ -267,7 +341,7 @@ export default function OutletDashboardPage() {
               </p>
             </div>
 
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <PackageCheck size={21} />
             </div>
           </div>
@@ -284,16 +358,19 @@ export default function OutletDashboardPage() {
         {/* STOCK */}
         <Link
           href="/outlet/stock"
-          className="group rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          className="group min-w-0 rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         >
-          <div className="flex items-start justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
               <p className="text-sm font-medium text-gray-500">
                 Item Stok Outlet
               </p>
 
-              <p className="mt-2 text-3xl font-bold text-green-600">
-                {data.totalStock}
+              <p
+                className="mt-2 truncate text-3xl font-bold text-green-600"
+                title={data.totalStock.toLocaleString("id-ID")}
+              >
+                {formatCompact(data.totalStock)}
               </p>
 
               <p className="mt-1 text-xs text-gray-400">
@@ -301,7 +378,7 @@ export default function OutletDashboardPage() {
               </p>
             </div>
 
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-50 text-green-600">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-600">
               <Package size={21} />
             </div>
           </div>
@@ -316,65 +393,81 @@ export default function OutletDashboardPage() {
         </Link>
       </div>
 
-      {/* SECONDARY STATISTICS */}
+      {/* =====================================================
+          SECONDARY STATISTICS
+      ===================================================== */}
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
 
+        {/* RECEIVED */}
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
               <TrendingUp size={21} />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-gray-500">
                 Purchase Received
               </p>
 
-              <p className="mt-1 text-xl font-bold text-[#18352D]">
-                {data.totalReceived}
+              <p
+                className="mt-1 truncate text-xl font-bold text-[#18352D]"
+                title={data.totalReceived.toLocaleString("id-ID")}
+              >
+                {formatCompact(data.totalReceived)}
               </p>
             </div>
           </div>
         </div>
 
+        {/* RECEIPT */}
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-50 text-green-600">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-600">
               <CheckCircle2 size={21} />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-gray-500">
                 Total Receipt
               </p>
 
-              <p className="mt-1 text-xl font-bold text-[#18352D]">
-                {data.totalReceipt}
+              <p
+                className="mt-1 truncate text-xl font-bold text-[#18352D]"
+                title={data.totalReceipt.toLocaleString("id-ID")}
+              >
+                {formatCompact(data.totalReceipt)}
               </p>
             </div>
           </div>
         </div>
 
+        {/* INVENTORY */}
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
               <Boxes size={21} />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-gray-500">
                 Status Inventory
               </p>
 
-              <p className="mt-1 text-xl font-bold text-[#18352D]">
-                {data.totalStock} Item
+              <p
+                className="mt-1 truncate text-xl font-bold text-[#18352D]"
+                title={`${data.totalStock.toLocaleString("id-ID")} Item`}
+              >
+                {formatCompact(data.totalStock)} Item
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* QUICK MENU */}
+      {/* =====================================================
+          QUICK MENU
+      ===================================================== */}
       <div className="mb-6">
 
         <div className="mb-4 flex items-center justify-between">
@@ -391,6 +484,7 @@ export default function OutletDashboardPage() {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
 
+          {/* PURCHASE */}
           <Link
             href="/outlet/purchase/new"
             className="group rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
@@ -417,6 +511,7 @@ export default function OutletDashboardPage() {
             </div>
           </Link>
 
+          {/* BARANG MASUK */}
           <Link
             href="/outlet/barang-masuk"
             className="group rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
@@ -443,6 +538,7 @@ export default function OutletDashboardPage() {
             </div>
           </Link>
 
+          {/* STOCK OPNAME */}
           <Link
             href="/outlet/stock-opname"
             className="group rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
@@ -472,7 +568,9 @@ export default function OutletDashboardPage() {
         </div>
       </div>
 
-      {/* ALERT */}
+      {/* =====================================================
+          LOW STOCK ALERT
+      ===================================================== */}
       {data.lowStock > 0 && (
         <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between">
 
@@ -505,7 +603,9 @@ export default function OutletDashboardPage() {
         </div>
       )}
 
-      {/* RECENT PURCHASE */}
+      {/* =====================================================
+          RECENT PURCHASE
+      ===================================================== */}
       <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
         <div className="flex flex-col gap-3 border-b border-[#E5ECE9] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -629,8 +729,11 @@ export default function OutletDashboardPage() {
 
                     </td>
 
-                    <td className="whitespace-nowrap px-5 py-4 text-right font-semibold text-[#18352D]">
-                      Rp {formatRupiah(item.total)}
+                    <td
+                      className="whitespace-nowrap px-5 py-4 text-right font-semibold text-[#18352D]"
+                      title={`Rp ${formatRupiah(item.total)}`}
+                    >
+                      Rp {formatCompact(item.total)}
                     </td>
 
                     <td className="px-5 py-4 text-center">

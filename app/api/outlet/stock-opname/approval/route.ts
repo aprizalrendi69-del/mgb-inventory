@@ -3,16 +3,18 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 
 // =====================================================
-// GET LOGIN USER
+// CURRENT LOGIN USER
 // =====================================================
 
 async function getLoginUser() {
   const cookieStore = await cookies();
-
   const session = cookieStore.get("erp-session");
 
   if (!session) {
-    throw new Error("Tidak login");
+    return {
+      error: "Tidak login",
+      status: 401,
+    } as const;
   }
 
   let sessionData: any;
@@ -20,16 +22,28 @@ async function getLoginUser() {
   try {
     sessionData = JSON.parse(session.value);
   } catch {
-    throw new Error("Session tidak valid");
+    return {
+      error: "Session tidak valid",
+      status: 401,
+    } as const;
   }
 
-  if (!sessionData?.id) {
-    throw new Error("Session tidak valid");
+  const userId = Number(
+    sessionData?.id ??
+      sessionData?.user?.id ??
+      0
+  );
+
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return {
+      error: "Session tidak valid",
+      status: 401,
+    } as const;
   }
 
   const user = await prisma.user.findUnique({
     where: {
-      id: Number(sessionData.id),
+      id: userId,
     },
 
     select: {
@@ -50,46 +64,77 @@ async function getLoginUser() {
   });
 
   if (!user) {
-    throw new Error("User tidak ditemukan");
+    return {
+      error: "User tidak ditemukan",
+      status: 404,
+    } as const;
   }
 
   if (!user.active) {
-    throw new Error("User tidak aktif");
+    return {
+      error: "User tidak aktif",
+      status: 403,
+    } as const;
   }
 
-  return user;
-}
+  const role = String(user.role).toUpperCase();
 
-// =====================================================
-// ROLE
-// =====================================================
+  if (
+    role !== "ADMIN" &&
+    role !== "MANAGER" &&
+    role !== "OUTLET_ADMIN"
+  ) {
+    return {
+      error:
+        "Anda tidak memiliki akses approval stock opname outlet",
+      status: 403,
+    } as const;
+  }
 
-function isAdmin(user: {
-  role: string;
-}) {
-  return (
-    String(user.role).toUpperCase() ===
-    "ADMIN"
-  );
+  if (
+    role === "OUTLET_ADMIN" &&
+    (!user.outletId || !user.outlet)
+  ) {
+    return {
+      error:
+        "User outlet belum terhubung dengan outlet",
+      status: 400,
+    } as const;
+  }
+
+  return {
+    user,
+    role,
+  } as const;
 }
 
 // =====================================================
 // GET
+//
+// ADMIN / MANAGER
+// -> semua stock opname outlet
+//
+// OUTLET_ADMIN
+// -> hanya outlet sendiri
 // =====================================================
 
 export async function GET() {
   try {
-    const user = await getLoginUser();
+    const login = await getLoginUser();
 
-    // -------------------------------------------------
-    // FILTER OUTLET
-    //
-    // ADMIN PUSAT:
-    //   melihat semua stock opname outlet
-    //
-    // ADMIN OUTLET:
-    //   hanya melihat stock opname outlet sendiri
-    // -------------------------------------------------
+    if ("error" in login) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: login.error,
+        },
+        {
+          status: login.status,
+        }
+      );
+    }
+
+    const { user, role } = login;
 
     const where: any = {
       outletId: {
@@ -97,14 +142,12 @@ export async function GET() {
       },
     };
 
-    if (!isAdmin(user)) {
-      if (!user.outletId) {
-        throw new Error(
-          "User tidak terhubung dengan outlet"
-        );
-      }
+    // ---------------------------------------------------
+    // OUTLET ADMIN
+    // ---------------------------------------------------
 
-      where.outletId = user.outletId;
+    if (role === "OUTLET_ADMIN") {
+      where.outletId = Number(user.outletId);
     }
 
     const data =
@@ -122,7 +165,16 @@ export async function GET() {
 
           items: {
             include: {
-              barang: true,
+              barang: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  unit: true,
+                  purchasePrice: true,
+                  sellingPrice: true,
+                },
+              },
             },
 
             orderBy: {
@@ -141,7 +193,17 @@ export async function GET() {
     return NextResponse.json({
       success: true,
 
-      outlet: user.outlet || null,
+      user: {
+        id: user.id,
+        fullname: user.fullname,
+        role,
+        outletId: user.outletId,
+      },
+
+      outlet:
+        role === "OUTLET_ADMIN"
+          ? user.outlet || null
+          : null,
 
       data,
     });
@@ -167,21 +229,66 @@ export async function GET() {
 
 // =====================================================
 // POST APPROVE
+//
+// PENTING:
+//
+// COUNTING
+//      ↓
+// APPROVE
+//      ↓
+// UPDATE OutletStock
+//
+// TIDAK PERNAH UPDATE Barang.stock PUSAT
 // =====================================================
 
 export async function POST(
   req: NextRequest
 ) {
   try {
-    const user = await getLoginUser();
+    const login = await getLoginUser();
 
-    const body = await req.json();
+    if ("error" in login) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: login.error,
+        },
+        {
+          status: login.status,
+        }
+      );
+    }
+
+    const { user, role } = login;
+
+    // =================================================
+    // BODY
+    // =================================================
+
+    let body: any;
+
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Body request tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
     const opnameId = Number(
-      body?.opnameId
+      body?.opnameId ?? 0
     );
 
-    if (!opnameId || opnameId <= 0) {
+    if (
+      !Number.isInteger(opnameId) ||
+      opnameId <= 0
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -215,7 +322,16 @@ export async function POST(
 
           items: {
             include: {
-              barang: true,
+              barang: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  unit: true,
+                  purchasePrice: true,
+                  sellingPrice: true,
+                },
+              },
             },
           },
         },
@@ -235,7 +351,7 @@ export async function POST(
     }
 
     // =================================================
-    // HARUS STOCK OPNAME OUTLET
+    // HARUS OPNAME OUTLET
     // =================================================
 
     if (!opname.outletId) {
@@ -252,21 +368,43 @@ export async function POST(
     }
 
     // =================================================
-    // ADMIN OUTLET HANYA BOLEH APPROVE OUTLET SENDIRI
-    //
-    // ADMIN PUSAT BOLEH APPROVE SEMUA OUTLET
+    // OUTLET HARUS ADA
     // =================================================
 
-    if (!isAdmin(user)) {
+    if (!opname.outlet) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Outlet stock opname tidak ditemukan",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    // =================================================
+    // SECURITY OUTLET
+    //
+    // OUTLET_ADMIN:
+    // hanya outlet sendiri.
+    //
+    // ADMIN / MANAGER:
+    // boleh semua outlet.
+    // =================================================
+
+    if (role === "OUTLET_ADMIN") {
       if (
         !user.outletId ||
-        user.outletId !== opname.outletId
+        Number(user.outletId) !==
+          Number(opname.outletId)
       ) {
         return NextResponse.json(
           {
             success: false,
             message:
-              "Stock opname bukan milik outlet user",
+              "Anda tidak dapat approve stock opname outlet lain",
           },
           {
             status: 403,
@@ -276,14 +414,13 @@ export async function POST(
     }
 
     // =================================================
-    // STATUS
+    // STATUS HARUS COUNTING
     // =================================================
 
-    const status = String(
-      opname.status
-    ).toUpperCase();
+    const currentStatus =
+      String(opname.status).toUpperCase();
 
-    if (status === "APPROVED") {
+    if (currentStatus === "APPROVED") {
       return NextResponse.json(
         {
           success: false,
@@ -296,7 +433,7 @@ export async function POST(
       );
     }
 
-    if (status !== "COUNTING") {
+    if (currentStatus !== "COUNTING") {
       return NextResponse.json(
         {
           success: false,
@@ -330,6 +467,73 @@ export async function POST(
     }
 
     // =================================================
+    // VALIDASI ITEM
+    // =================================================
+
+    const barangIdSet =
+      new Set<number>();
+
+    for (const item of opname.items) {
+      const barangId =
+        Number(item.barangId);
+
+      if (
+        !Number.isInteger(barangId) ||
+        barangId <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Terdapat barang pada stock opname yang tidak valid",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      if (
+        barangIdSet.has(barangId)
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Terdapat barang duplikat pada stock opname",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      barangIdSet.add(barangId);
+
+      const physicalQty = Number(
+        item.physicalQty ?? 0
+      );
+
+      if (
+        !Number.isFinite(
+          physicalQty
+        ) ||
+        physicalQty < 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              `Qty fisik barang ${item.barang?.name || item.barangId} tidak valid`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+    }
+
+    // =================================================
     // TRANSACTION
     // =================================================
 
@@ -337,17 +541,36 @@ export async function POST(
       await prisma.$transaction(
         async (tx) => {
           // -------------------------------------------
-          // CEK ULANG DATA
+          // AMBIL ULANG OPNAME
           // -------------------------------------------
 
           const currentOpname =
             await tx.stockOpname.findUnique({
               where: {
-                id: opname.id,
+                id: opnameId,
               },
 
               include: {
-                items: true,
+                items: {
+                  include: {
+                    barang: {
+                      select: {
+                        id: true,
+                        code: true,
+                        name: true,
+                        unit: true,
+                      },
+                    },
+                  },
+                },
+
+                outlet: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                  },
+                },
               },
             });
 
@@ -358,7 +581,7 @@ export async function POST(
           }
 
           // -------------------------------------------
-          // CEK OUTLET
+          // OUTLET HARUS ADA
           // -------------------------------------------
 
           if (
@@ -369,26 +592,34 @@ export async function POST(
             );
           }
 
-          if (!isAdmin(user)) {
-            if (
-              !user.outletId ||
-              user.outletId !==
+          // -------------------------------------------
+          // SECURITY OUTLET ULANG
+          // -------------------------------------------
+
+          if (
+            role === "OUTLET_ADMIN" &&
+            Number(user.outletId) !==
+              Number(
                 currentOpname.outletId
-            ) {
-              throw new Error(
-                "Stock opname bukan milik outlet user"
-              );
-            }
+              )
+          ) {
+            throw new Error(
+              "Stock opname bukan milik outlet user"
+            );
           }
 
           // -------------------------------------------
-          // CEK STATUS
+          // STATUS ULANG
+          //
+          // Ini penting untuk mencegah approval
+          // dua kali.
           // -------------------------------------------
 
           if (
             String(
               currentOpname.status
-            ).toUpperCase() !== "COUNTING"
+            ).toUpperCase() !==
+            "COUNTING"
           ) {
             throw new Error(
               "Stock opname sudah diproses"
@@ -396,51 +627,72 @@ export async function POST(
           }
 
           // -------------------------------------------
-          // UPDATE OUTLET STOCK
+          // ITEM HARUS ADA
+          // -------------------------------------------
+
+          if (
+            !currentOpname.items ||
+            currentOpname.items.length === 0
+          ) {
+            throw new Error(
+              "Stock opname tidak memiliki barang"
+            );
+          }
+
+          // -------------------------------------------
+          // AMBIL STOCK OUTLET TERKINI
+          // -------------------------------------------
+          //
+          // PENTING:
+          // Kita mengambil OutletStock berdasarkan
+          // outletId + barangId.
+          //
+          // Tidak menyentuh Barang.stock pusat.
           // -------------------------------------------
 
           for (
             const item of currentOpname.items
           ) {
+            const barangId =
+              Number(item.barangId);
+
             const physicalQty =
               Math.max(
                 0,
                 Number(
-                  item.physicalQty || 0
+                  item.physicalQty ?? 0
                 )
               );
 
             const outletStock =
-              await tx.outletStock.findFirst(
+              await tx.outletStock.findUnique(
                 {
                   where: {
-                    outletId:
-                      currentOpname.outletId,
+                    outletId_barangId: {
+                      outletId:
+                        Number(
+                          currentOpname.outletId
+                        ),
 
-                    barangId:
-                      item.barangId,
+                      barangId,
+                    },
                   },
                 }
               );
 
-            if (outletStock) {
-              await tx.outletStock.update({
-                where: {
-                  id: outletStock.id,
-                },
+            // -----------------------------------------
+            // STOCK BELUM ADA
+            // -----------------------------------------
 
-                data: {
-                  stock: physicalQty,
-                },
-              });
-            } else {
+            if (!outletStock) {
               await tx.outletStock.create({
                 data: {
                   outletId:
-                    currentOpname.outletId,
+                    Number(
+                      currentOpname.outletId
+                    ),
 
-                  barangId:
-                    item.barangId,
+                  barangId,
 
                   stock: physicalQty,
 
@@ -449,7 +701,23 @@ export async function POST(
                   averageCost: 0,
                 },
               });
+
+              continue;
             }
+
+            // -----------------------------------------
+            // UPDATE STOCK OUTLET
+            // -----------------------------------------
+
+            await tx.outletStock.update({
+              where: {
+                id: outletStock.id,
+              },
+
+              data: {
+                stock: physicalQty,
+              },
+            });
           }
 
           // -------------------------------------------
@@ -479,7 +747,14 @@ export async function POST(
 
                 items: {
                   include: {
-                    barang: true,
+                    barang: {
+                      select: {
+                        id: true,
+                        code: true,
+                        name: true,
+                        unit: true,
+                      },
+                    },
                   },
                 },
               },
@@ -512,6 +787,7 @@ export async function POST(
     return NextResponse.json(
       {
         success: false,
+
         message:
           error?.message ||
           "Gagal menyetujui stock opname",

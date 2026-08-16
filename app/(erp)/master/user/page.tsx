@@ -10,6 +10,7 @@ import {
   UserPlus,
   Users,
   RefreshCw,
+  Circle,
 } from "lucide-react";
 
 type Outlet = {
@@ -25,6 +26,8 @@ type User = {
   active: boolean;
   outletId?: number | null;
   outlet?: Outlet | null;
+  lastSeen?: string | null;
+  online?: boolean;
 };
 
 export default function UserPage() {
@@ -33,6 +36,7 @@ export default function UserPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [onlineLoading, setOnlineLoading] = useState(false);
 
   const [search, setSearch] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -68,6 +72,64 @@ export default function UserPage() {
     }
   }
 
+  async function loadOnlineStatus() {
+    try {
+      setOnlineLoading(true);
+
+      const res = await fetch("/api/user/online", {
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        throw new Error("Gagal mengambil status online");
+      }
+
+      const json = await res.json();
+
+      if (!json.success) {
+        return;
+      }
+
+      const onlineUsers = json.users ?? [];
+
+      setData((currentUsers) =>
+        currentUsers.map((user) => {
+          const onlineUser = onlineUsers.find(
+            (item: any) => item.id === user.id
+          );
+
+          if (!onlineUser) {
+            return {
+              ...user,
+              online: false,
+              lastSeen: null,
+            };
+          }
+
+          return {
+            ...user,
+            online: Boolean(onlineUser.online),
+            lastSeen: onlineUser.lastSeen ?? null,
+          };
+        })
+      );
+    } catch (error) {
+      console.error(
+        "Load online status error:",
+        error
+      );
+    } finally {
+      setOnlineLoading(false);
+    }
+  }
+
+  async function loadAll() {
+    await Promise.all([
+      load(),
+      loadOutlets(),
+    ]);
+  }
+
   async function loadOutlets() {
     try {
       const res = await fetch("/api/outlet", {
@@ -87,8 +149,19 @@ export default function UserPage() {
   }
 
   useEffect(() => {
-    load();
-    loadOutlets();
+    loadAll();
+  }, []);
+
+  useEffect(() => {
+    loadOnlineStatus();
+
+    const interval = setInterval(() => {
+      loadOnlineStatus();
+    }, 30000);
+
+    return () => {
+      clearInterval(interval);
+    };
   }, []);
 
   async function simpan() {
@@ -112,7 +185,10 @@ export default function UserPage() {
       return;
     }
 
-    if (form.role === "OUTLET_ADMIN" && !form.outletId) {
+    if (
+      form.role === "OUTLET_ADMIN" &&
+      !form.outletId
+    ) {
       alert("Outlet wajib dipilih untuk OUTLET ADMIN");
       return;
     }
@@ -150,6 +226,7 @@ export default function UserPage() {
         setShowPassword(false);
 
         await load();
+        await loadOnlineStatus();
       } else {
         alert(json.message ?? "Gagal membuat user");
       }
@@ -170,13 +247,25 @@ export default function UserPage() {
 
     return data.filter((user) => {
       return (
-        user.username?.toLowerCase().includes(keyword) ||
-        user.fullname?.toLowerCase().includes(keyword) ||
-        user.role?.toLowerCase().includes(keyword) ||
-        user.outlet?.name?.toLowerCase().includes(keyword)
+        user.username
+          ?.toLowerCase()
+          .includes(keyword) ||
+        user.fullname
+          ?.toLowerCase()
+          .includes(keyword) ||
+        user.role
+          ?.toLowerCase()
+          .includes(keyword) ||
+        user.outlet?.name
+          ?.toLowerCase()
+          .includes(keyword)
       );
     });
   }, [data, search]);
+
+  const onlineCount = useMemo(() => {
+    return data.filter((user) => user.online).length;
+  }, [data]);
 
   function getRoleClass(role: string) {
     switch (role) {
@@ -198,6 +287,23 @@ export default function UserPage() {
       default:
         return "bg-gray-50 text-gray-700 border-gray-200";
     }
+  }
+
+  function formatLastSeen(lastSeen?: string | null) {
+    if (!lastSeen) {
+      return "Belum pernah aktif";
+    }
+
+    return new Date(lastSeen).toLocaleString(
+      "id-ID",
+      {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }
+    );
   }
 
   return (
@@ -227,11 +333,11 @@ export default function UserPage() {
         </div>
 
         <button
-          onClick={() => {
-            load();
-            loadOutlets();
+          onClick={async () => {
+            await loadAll();
+            await loadOnlineStatus();
           }}
-          disabled={loading}
+          disabled={loading || onlineLoading}
           className="
             inline-flex
             items-center
@@ -253,7 +359,11 @@ export default function UserPage() {
         >
           <RefreshCw
             size={17}
-            className={loading ? "animate-spin" : ""}
+            className={
+              loading || onlineLoading
+                ? "animate-spin"
+                : ""
+            }
           />
 
           Refresh
@@ -262,10 +372,9 @@ export default function UserPage() {
       </div>
 
       {/* SUMMARY */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
 
         <div className="rounded-2xl border border-[#DCE9E2] bg-white p-5 shadow-sm">
-
           <div className="flex items-center justify-between">
 
             <div>
@@ -280,6 +389,36 @@ export default function UserPage() {
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#E8F2ED] text-[#497F70]">
               <Users size={21} />
+            </div>
+
+          </div>
+        </div>
+
+        {/* ONLINE */}
+        <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
+
+          <div className="flex items-center justify-between">
+
+            <div>
+              <p className="text-sm text-slate-500">
+                Sedang Online
+              </p>
+
+              <p className="mt-1 text-2xl font-bold text-emerald-600">
+                {onlineCount}
+              </p>
+
+              <p className="mt-1 text-[10px] text-slate-400">
+                Update otomatis setiap 30 detik
+              </p>
+            </div>
+
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50">
+              <Circle
+                size={18}
+                fill="currentColor"
+                className="text-emerald-500"
+              />
             </div>
 
           </div>
@@ -341,7 +480,6 @@ export default function UserPage() {
 
             {/* USERNAME */}
             <div>
-
               <label className="text-sm font-medium text-slate-700">
                 Username
               </label>
@@ -373,12 +511,10 @@ export default function UserPage() {
                   focus:ring-[#497F70]/10
                 "
               />
-
             </div>
 
             {/* NAMA */}
             <div>
-
               <label className="text-sm font-medium text-slate-700">
                 Nama Lengkap
               </label>
@@ -410,12 +546,10 @@ export default function UserPage() {
                   focus:ring-[#497F70]/10
                 "
               />
-
             </div>
 
             {/* PASSWORD */}
             <div>
-
               <label className="text-sm font-medium text-slate-700">
                 Password
               </label>
@@ -472,12 +606,10 @@ export default function UserPage() {
                 </button>
 
               </div>
-
             </div>
 
             {/* ROLE */}
             <div>
-
               <label className="text-sm font-medium text-slate-700">
                 Role
               </label>
@@ -489,7 +621,8 @@ export default function UserPage() {
                     ...form,
                     role: e.target.value,
                     outletId:
-                      e.target.value === "OUTLET_ADMIN"
+                      e.target.value ===
+                      "OUTLET_ADMIN"
                         ? form.outletId
                         : "",
                   })
@@ -529,15 +662,12 @@ export default function UserPage() {
                 <option value="OUTLET_ADMIN">
                   OUTLET ADMIN
                 </option>
-
               </select>
-
             </div>
 
             {/* OUTLET */}
             {form.role === "OUTLET_ADMIN" && (
               <div>
-
                 <label className="text-sm font-medium text-slate-700">
                   Outlet
                 </label>
@@ -566,7 +696,6 @@ export default function UserPage() {
                     focus:ring-[#497F70]/10
                   "
                 >
-
                   <option value="">
                     Pilih Outlet
                   </option>
@@ -579,7 +708,6 @@ export default function UserPage() {
                       {outlet.name}
                     </option>
                   ))}
-
                 </select>
 
                 {outlets.length === 0 && (
@@ -587,7 +715,6 @@ export default function UserPage() {
                     Belum ada outlet yang tersedia.
                   </p>
                 )}
-
               </div>
             )}
 
@@ -615,7 +742,6 @@ export default function UserPage() {
                 disabled:opacity-60
               "
             >
-
               {saving ? (
                 <>
                   <RefreshCw
@@ -632,11 +758,9 @@ export default function UserPage() {
                   Simpan User
                 </>
               )}
-
             </button>
 
           </div>
-
         </div>
 
         {/* TABLE USER */}
@@ -700,10 +824,9 @@ export default function UserPage() {
 
           <div className="overflow-x-auto">
 
-            <table className="w-full min-w-[800px]">
+            <table className="w-full min-w-[900px]">
 
               <thead className="bg-[#F7FAF8]">
-
                 <tr>
 
                   <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -723,11 +846,14 @@ export default function UserPage() {
                   </th>
 
                   <th className="px-5 py-4 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Status
+                    Status Akun
+                  </th>
+
+                  <th className="px-5 py-4 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Online
                   </th>
 
                 </tr>
-
               </thead>
 
               <tbody className="divide-y divide-[#E8EEE9]">
@@ -736,22 +862,19 @@ export default function UserPage() {
 
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="px-5 py-12 text-center text-sm text-slate-500"
                     >
                       <div className="flex justify-center">
-
                         <RefreshCw
                           size={22}
                           className="animate-spin text-[#497F70]"
                         />
-
                       </div>
 
                       <p className="mt-3">
                         Memuat data user...
                       </p>
-
                     </td>
                   </tr>
 
@@ -759,17 +882,15 @@ export default function UserPage() {
 
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="px-5 py-12 text-center text-sm text-slate-500"
                     >
-
                       <Users
                         size={32}
                         className="mx-auto mb-3 text-slate-300"
                       />
 
                       Tidak ada user ditemukan.
-
                     </td>
                   </tr>
 
@@ -782,14 +903,39 @@ export default function UserPage() {
                       className="transition hover:bg-[#FAFCFB]"
                     >
 
+                      {/* USER */}
                       <td className="px-5 py-4">
 
                         <div className="flex items-center gap-3">
 
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E8F2ED] font-semibold text-[#497F70]">
-                            {user.fullname
-                              ?.charAt(0)
-                              ?.toUpperCase() || "U"}
+                          <div className="relative">
+
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E8F2ED] font-semibold text-[#497F70]">
+                              {user.fullname
+                                ?.charAt(0)
+                                ?.toUpperCase() ||
+                                "U"}
+                            </div>
+
+                            {/* ONLINE DOT */}
+                            <span
+                              className={`
+                                absolute
+                                bottom-0
+                                right-0
+                                h-3
+                                w-3
+                                rounded-full
+                                border-2
+                                border-white
+                                ${
+                                  user.online
+                                    ? "bg-emerald-500"
+                                    : "bg-slate-300"
+                                }
+                              `}
+                            />
+
                           </div>
 
                           <div>
@@ -808,10 +954,12 @@ export default function UserPage() {
 
                       </td>
 
+                      {/* USERNAME */}
                       <td className="px-5 py-4 text-sm text-slate-600">
                         @{user.username}
                       </td>
 
+                      {/* ROLE */}
                       <td className="px-5 py-4">
 
                         <span
@@ -828,17 +976,17 @@ export default function UserPage() {
                             ${getRoleClass(user.role)}
                           `}
                         >
-
                           <ShieldCheck size={13} />
 
-                          {user.role === "OUTLET_ADMIN"
+                          {user.role ===
+                          "OUTLET_ADMIN"
                             ? "OUTLET ADMIN"
                             : user.role}
-
                         </span>
 
                       </td>
 
+                      {/* OUTLET */}
                       <td className="px-5 py-4 text-sm text-slate-600">
 
                         {user.outlet?.name ? (
@@ -847,12 +995,13 @@ export default function UserPage() {
                           </span>
                         ) : (
                           <span className="text-slate-400">
-                            -
+                            Pusat
                           </span>
                         )}
 
                       </td>
 
+                      {/* ACCOUNT STATUS */}
                       <td className="px-5 py-4 text-center">
 
                         <span
@@ -886,9 +1035,66 @@ export default function UserPage() {
                             `}
                           />
 
-                          {user.active ? "Aktif" : "Nonaktif"}
+                          {user.active
+                            ? "Aktif"
+                            : "Nonaktif"}
 
                         </span>
+
+                      </td>
+
+                      {/* ONLINE */}
+                      <td className="px-5 py-4 text-center">
+
+                        <div className="flex flex-col items-center">
+
+                          <span
+                            className={`
+                              inline-flex
+                              items-center
+                              gap-1.5
+                              rounded-full
+                              px-3
+                              py-1
+                              text-xs
+                              font-semibold
+                              ${
+                                user.online
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "bg-slate-100 text-slate-500"
+                              }
+                            `}
+                          >
+
+                            <span
+                              className={`
+                                h-2
+                                w-2
+                                rounded-full
+                                ${
+                                  user.online
+                                    ? "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]"
+                                    : "bg-slate-300"
+                                }
+                              `}
+                            />
+
+                            {user.online
+                              ? "Online"
+                              : "Offline"}
+
+                          </span>
+
+                          {!user.online &&
+                            user.lastSeen && (
+                              <span className="mt-1 text-[9px] text-slate-400">
+                                {formatLastSeen(
+                                  user.lastSeen
+                                )}
+                              </span>
+                            )}
+
+                        </div>
 
                       </td>
 

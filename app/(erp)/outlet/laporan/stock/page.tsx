@@ -10,7 +10,20 @@ import {
   CheckCircle2,
   Package,
   Wallet,
+  Store,
+  FileText,
 } from "lucide-react";
+
+type Role = "ADMIN" | "OUTLET_ADMIN";
+
+type User = {
+  id: number;
+  username: string;
+  fullname: string;
+  role: Role;
+  outletId: number | null;
+  outlet?: Outlet | null;
+};
 
 type Outlet = {
   id: number;
@@ -23,8 +36,8 @@ type Barang = {
   code: string;
   name: string;
   unit: string;
-  purchasePrice: number;
-  sellingPrice: number;
+  purchasePrice?: number;
+  sellingPrice?: number;
 };
 
 type OutletStock = {
@@ -40,62 +53,139 @@ type OutletStock = {
 };
 
 export default function OutletStockReportPage() {
+  const [user, setUser] = useState<User | null>(null);
+
+  const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [data, setData] = useState<OutletStock[]>([]);
-  const [outlet, setOutlet] = useState<Outlet | null>(null);
+
+  const [selectedOutlet, setSelectedOutlet] =
+    useState("");
 
   const [search, setSearch] = useState("");
+
   const [loading, setLoading] = useState(true);
+  const [loadingOutlet, setLoadingOutlet] =
+    useState(true);
 
   // =====================================================
-  // LOAD DATA
+  // LOAD USER
   // =====================================================
 
-  async function loadData() {
+  async function loadUser() {
+    const res = await fetch("/api/me", {
+      cache: "no-store",
+    });
+
+    const json = await res.json();
+
+    if (!res.ok || !json.success || !json.user) {
+      throw new Error(
+        json.message || "Gagal mengambil user login"
+      );
+    }
+
+    const loginUser: User = json.user;
+
+    setUser(loginUser);
+
+    return loginUser;
+  }
+
+  // =====================================================
+  // LOAD OUTLET
+  // =====================================================
+
+  async function loadOutlets(loginUser?: User) {
     try {
-      setLoading(true);
+      setLoadingOutlet(true);
 
-      // =================================================
-      // USER LOGIN
-      // =================================================
-
-      const meRes = await fetch("/api/me", {
-        cache: "no-store",
-      });
-
-      const meJson = await meRes.json();
-
-      if (!meRes.ok || !meJson.success) {
-        throw new Error(
-          meJson.message ||
-            "Gagal mengambil user login"
-        );
-      }
-
-      const loginUser = meJson.user;
+      const currentUser =
+        loginUser || user;
 
       if (
-        !loginUser?.outletId ||
-        !loginUser?.outlet
+        currentUser?.role ===
+        "OUTLET_ADMIN"
       ) {
-        setOutlet(null);
-        setData([]);
+        if (
+          currentUser.outlet
+        ) {
+          setOutlets([
+            currentUser.outlet,
+          ]);
+
+          setSelectedOutlet(
+            String(
+              currentUser.outlet.id
+            )
+          );
+        }
+
         return;
       }
 
-      const loginOutlet: Outlet = {
-        id: Number(loginUser.outlet.id),
-        code: loginUser.outlet.code,
-        name: loginUser.outlet.name,
-      };
+      const res = await fetch(
+        "/api/outlet",
+        {
+          cache: "no-store",
+        }
+      );
 
-      setOutlet(loginOutlet);
+      const json = await res.json();
 
-      // =================================================
-      // STOCK OUTLET
-      // =================================================
+      const list: Outlet[] =
+        Array.isArray(json)
+          ? json
+          : Array.isArray(json.data)
+          ? json.data
+          : [];
+
+      setOutlets(list);
+    } catch (error) {
+      console.error(
+        "LOAD OUTLET REPORT ERROR:",
+        error
+      );
+
+      setOutlets([]);
+    } finally {
+      setLoadingOutlet(false);
+    }
+  }
+
+  // =====================================================
+  // LOAD STOCK
+  // =====================================================
+
+  async function loadData(
+    outletFilter?: string
+  ) {
+    try {
+      setLoading(true);
+
+      const currentUser =
+        user || (await loadUser());
+
+      let url =
+        "/api/outlet/stock-awal";
+
+      if (
+        currentUser.role ===
+        "OUTLET_ADMIN"
+      ) {
+        if (!currentUser.outletId) {
+          setData([]);
+          return;
+        }
+
+        url += `?outletId=${currentUser.outletId}`;
+      } else if (
+        outletFilter
+      ) {
+        url += `?outletId=${outletFilter}`;
+      }
 
       const res = await fetch(
-        `/api/outlet/stock?outletId=${loginOutlet.id}`,
+        url,
         {
           cache: "no-store",
         }
@@ -116,16 +206,33 @@ export default function OutletStockReportPage() {
           : [];
 
       // =================================================
-      // FILTER KETAT
+      // SECURITY FILTER CLIENT
+      // OUTLET ADMIN HANYA BOLEH MELIHAT OUTLET SENDIRI
       // =================================================
 
-      const outletStocks = stocks.filter(
-        (stock) =>
-          Number(stock.outletId) ===
-          loginOutlet.id
-      );
+      const filtered =
+        currentUser.role ===
+        "OUTLET_ADMIN"
+          ? stocks.filter(
+              (item) =>
+                Number(
+                  item.outletId
+                ) ===
+                Number(
+                  currentUser.outletId
+                )
+            )
+          : outletFilter
+          ? stocks.filter(
+              (item) =>
+                Number(
+                  item.outletId
+                ) ===
+                Number(outletFilter)
+            )
+          : stocks;
 
-      setData(outletStocks);
+      setData(filtered);
     } catch (error) {
       console.error(
         "LOAD OUTLET STOCK REPORT ERROR:",
@@ -138,9 +245,57 @@ export default function OutletStockReportPage() {
     }
   }
 
+  // =====================================================
+  // INITIAL
+  // =====================================================
+
   useEffect(() => {
-    loadData();
+    async function init() {
+      try {
+        const loginUser =
+          await loadUser();
+
+        await loadOutlets(
+          loginUser
+        );
+
+        if (
+          loginUser.role ===
+          "OUTLET_ADMIN"
+        ) {
+          await loadData(
+            String(
+              loginUser.outletId
+            )
+          );
+        } else {
+          await loadData("");
+        }
+      } catch (error) {
+        console.error(
+          "INIT OUTLET REPORT ERROR:",
+          error
+        );
+
+        setData([]);
+        setLoading(false);
+      }
+    }
+
+    init();
   }, []);
+
+  // =====================================================
+  // CHANGE OUTLET
+  // =====================================================
+
+  async function handleOutletChange(
+    value: string
+  ) {
+    setSelectedOutlet(value);
+
+    await loadData(value);
+  }
 
   // =====================================================
   // SEARCH
@@ -148,50 +303,73 @@ export default function OutletStockReportPage() {
 
   const filteredData = useMemo(() => {
     const keyword =
-      search.toLowerCase().trim();
+      search
+        .toLowerCase()
+        .trim();
 
     if (!keyword) {
       return data;
     }
 
-    return data.filter((item) => {
-      const text = [
-        item.barang?.code,
-        item.barang?.name,
-        item.barang?.unit,
-        item.outlet?.code,
-        item.outlet?.name,
-      ]
-        .join(" ")
-        .toLowerCase();
+    return data.filter(
+      (item) => {
+        const text = [
+          item.barang?.code,
+          item.barang?.name,
+          item.barang?.unit,
+          item.barang?.barcode,
+          item.outlet?.code,
+          item.outlet?.name,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
 
-      return text.includes(keyword);
-    });
+        return text.includes(
+          keyword
+        );
+      }
+    );
   }, [data, search]);
 
   // =====================================================
   // FORMAT
   // =====================================================
 
-  function formatNumber(value: number) {
-    return Number(value || 0).toLocaleString(
+  function formatNumber(
+    value: number
+  ) {
+    return Number(
+      value || 0
+    ).toLocaleString(
       "id-ID"
     );
   }
 
-  function formatRupiah(value: number) {
-    return `Rp ${formatNumber(value)}`;
+  function formatRupiah(
+    value: number
+  ) {
+    return `Rp ${formatNumber(
+      value
+    )}`;
   }
 
   // =====================================================
-  // STOCK STATUS
+  // STATUS
   // =====================================================
 
-  function getStockStatus(item: OutletStock) {
-    const stock = Number(item.stock || 0);
-    const minimum = Number(
-      item.minimumStock || 0
-    );
+  function getStockStatus(
+    item: OutletStock
+  ) {
+    const stock =
+      Number(
+        item.stock || 0
+      );
+
+    const minimum =
+      Number(
+        item.minimumStock || 0
+      );
 
     if (stock <= 0) {
       return "HABIS";
@@ -204,19 +382,23 @@ export default function OutletStockReportPage() {
     return "AMAN";
   }
 
-  function getStatusClass(item: OutletStock) {
-    const status = getStockStatus(item);
+  function getStatusClass(
+    item: OutletStock
+  ) {
+    const status =
+      getStockStatus(item);
 
-    switch (status) {
-      case "HABIS":
-        return "bg-[#FDECEC] text-[#C84B4B]";
-
-      case "MINIMUM":
-        return "bg-[#FFF4DD] text-[#9A6A18]";
-
-      default:
-        return "bg-[#E8F4EC] text-[#2F7A4F]";
+    if (status === "HABIS") {
+      return "bg-[#FDECEC] text-[#C84B4B]";
     }
+
+    if (
+      status === "MINIMUM"
+    ) {
+      return "bg-[#FFF4DD] text-[#9A6A18]";
+    }
+
+    return "bg-[#E8F4EC] text-[#2F7A4F]";
   }
 
   // =====================================================
@@ -229,7 +411,10 @@ export default function OutletStockReportPage() {
   const totalQty =
     filteredData.reduce(
       (sum, item) =>
-        sum + Number(item.stock || 0),
+        sum +
+        Number(
+          item.stock || 0
+        ),
       0
     );
 
@@ -237,30 +422,42 @@ export default function OutletStockReportPage() {
     filteredData.reduce(
       (sum, item) =>
         sum +
-        Number(item.stock || 0) *
-          Number(item.averageCost || 0),
-      0
-    );
-
-  const totalMinimum =
-    filteredData.reduce(
-      (sum, item) =>
-        sum +
-        Number(item.minimumStock || 0),
+        Number(
+          item.stock || 0
+        ) *
+          Number(
+            item.averageCost ||
+              0
+          ),
       0
     );
 
   const totalHabis =
     filteredData.filter(
       (item) =>
-        getStockStatus(item) === "HABIS"
+        getStockStatus(
+          item
+        ) === "HABIS"
     ).length;
 
-  const totalMinimumStatus =
+  const totalMinimum =
     filteredData.filter(
       (item) =>
-        getStockStatus(item) === "MINIMUM"
+        getStockStatus(
+          item
+        ) === "MINIMUM"
     ).length;
+
+  // =====================================================
+  // NAMA OUTLET TERPILIH
+  // =====================================================
+
+  const selectedOutletData =
+    outlets.find(
+      (item) =>
+        String(item.id) ===
+        selectedOutlet
+    );
 
   // =====================================================
   // RENDER
@@ -273,11 +470,11 @@ export default function OutletStockReportPage() {
           HEADER
       ================================================= */}
 
-      <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="mb-7 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
 
         <div className="flex items-center gap-3">
 
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#497F70] text-white shadow-sm">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#497F70] text-white shadow-sm">
             <Boxes size={23} />
           </div>
 
@@ -288,15 +485,9 @@ export default function OutletStockReportPage() {
             </h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              Laporan persediaan barang outlet
+              Laporan persediaan barang
+              berdasarkan stock outlet
             </p>
-
-            {outlet && (
-              <p className="mt-1 text-xs font-semibold text-[#497F70]">
-                Outlet: {outlet.code} -{" "}
-                {outlet.name}
-              </p>
-            )}
 
           </div>
 
@@ -304,7 +495,11 @@ export default function OutletStockReportPage() {
 
         <button
           type="button"
-          onClick={loadData}
+          onClick={() =>
+            loadData(
+              selectedOutlet
+            )
+          }
           disabled={loading}
           className="
             inline-flex
@@ -340,6 +535,158 @@ export default function OutletStockReportPage() {
       </div>
 
       {/* =================================================
+          FILTER
+      ================================================= */}
+
+      <div className="mb-6 rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+          {/* OUTLET */}
+
+          <div>
+
+            <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#35564C]">
+              <Store size={16} />
+              Outlet
+            </label>
+
+            <select
+              value={
+                user?.role ===
+                "OUTLET_ADMIN"
+                  ? String(
+                      user.outletId ??
+                        ""
+                    )
+                  : selectedOutlet
+              }
+              disabled={
+                user?.role ===
+                  "OUTLET_ADMIN" ||
+                loadingOutlet
+              }
+              onChange={(e) =>
+                handleOutletChange(
+                  e.target.value
+                )
+              }
+              className="
+                w-full
+                rounded-xl
+                border
+                border-[#D5E5DC]
+                bg-[#FAFCFB]
+                px-4
+                py-3
+                text-sm
+                font-medium
+                text-[#35564C]
+                outline-none
+                focus:border-[#497F70]
+                focus:bg-white
+                focus:ring-2
+                focus:ring-[#497F70]/10
+                disabled:cursor-not-allowed
+                disabled:bg-gray-100
+              "
+            >
+
+              {user?.role ===
+                "ADMIN" && (
+                <option value="">
+                  -- Semua Outlet --
+                </option>
+              )}
+
+              {outlets.map(
+                (item) => (
+                  <option
+                    key={item.id}
+                    value={item.id}
+                  >
+                    {item.code} -{" "}
+                    {item.name}
+                  </option>
+                )
+              )}
+
+            </select>
+
+          </div>
+
+          {/* SEARCH */}
+
+          <div>
+
+            <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#35564C]">
+              <Search size={16} />
+              Cari Barang
+            </label>
+
+            <div className="relative">
+
+              <Search
+                size={17}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+
+              <input
+                value={search}
+                onChange={(e) =>
+                  setSearch(
+                    e.target.value
+                  )
+                }
+                placeholder="Cari kode, barcode, nama barang..."
+                className="
+                  w-full
+                  rounded-xl
+                  border
+                  border-[#D5E5DC]
+                  bg-[#FAFCFB]
+                  py-3
+                  pl-9
+                  pr-4
+                  text-sm
+                  outline-none
+                  focus:border-[#497F70]
+                  focus:bg-white
+                  focus:ring-2
+                  focus:ring-[#497F70]/10
+                "
+              />
+
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* INFO FILTER */}
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+
+          <span className="rounded-full bg-[#EAF3EF] px-3 py-1.5 text-xs font-semibold text-[#497F70]">
+            {user?.role ===
+            "ADMIN"
+              ? selectedOutletData
+                ? `Outlet: ${selectedOutletData.code} - ${selectedOutletData.name}`
+                : "Semua Outlet"
+              : user?.outlet
+              ? `Outlet: ${user.outlet.code} - ${user.outlet.name}`
+              : "Outlet Login"}
+          </span>
+
+          <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-500">
+            Sumber: Stock Awal Outlet + Mutasi Outlet
+          </span>
+
+        </div>
+
+      </div>
+
+      {/* =================================================
           SUMMARY
       ================================================= */}
 
@@ -358,7 +705,9 @@ export default function OutletStockReportPage() {
               </p>
 
               <p className="mt-2 text-2xl font-bold text-[#18352D]">
-                {formatNumber(totalBarang)}
+                {formatNumber(
+                  totalBarang
+                )}
               </p>
 
             </div>
@@ -384,7 +733,9 @@ export default function OutletStockReportPage() {
               </p>
 
               <p className="mt-2 text-2xl font-bold text-[#18352D]">
-                {formatNumber(totalQty)}
+                {formatNumber(
+                  totalQty
+                )}
               </p>
 
             </div>
@@ -397,7 +748,7 @@ export default function OutletStockReportPage() {
 
         </div>
 
-        {/* NILAI STOCK */}
+        {/* NILAI */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
@@ -410,7 +761,9 @@ export default function OutletStockReportPage() {
               </p>
 
               <p className="mt-2 text-lg font-bold text-[#18352D]">
-                {formatRupiah(totalNilai)}
+                {formatRupiah(
+                  totalNilai
+                )}
               </p>
 
             </div>
@@ -423,7 +776,7 @@ export default function OutletStockReportPage() {
 
         </div>
 
-        {/* STATUS */}
+        {/* PERHATIAN */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
@@ -438,19 +791,23 @@ export default function OutletStockReportPage() {
               <p className="mt-2 text-2xl font-bold text-[#18352D]">
                 {formatNumber(
                   totalHabis +
-                    totalMinimumStatus
+                    totalMinimum
                 )}
               </p>
 
               <p className="mt-1 text-[11px] text-gray-400">
-                Habis: {totalHabis} · Minimum:{" "}
-                {totalMinimumStatus}
+                Habis:{" "}
+                {totalHabis}{" "}
+                · Minimum:{" "}
+                {totalMinimum}
               </p>
 
             </div>
 
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF4DD] text-[#9A6A18]">
-              <AlertTriangle size={19} />
+              <AlertTriangle
+                size={19}
+              />
             </div>
 
           </div>
@@ -465,64 +822,53 @@ export default function OutletStockReportPage() {
 
       <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
-        {/* TOOLBAR */}
+        <div className="flex flex-col gap-3 border-b border-[#E5ECE9] px-5 py-4 md:flex-row md:items-center md:justify-between md:px-6">
 
-        <div className="flex flex-col gap-4 border-b border-[#E5ECE9] px-5 py-4 md:flex-row md:items-center md:justify-between md:px-6">
+          <div className="flex items-center gap-3">
 
-          <div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+              <FileText size={19} />
+            </div>
 
-            <h2 className="font-semibold text-[#18352D]">
-              Stock Barang Outlet
-            </h2>
+            <div>
 
-            <p className="mt-1 text-xs text-gray-500">
-              Hanya stock outlet yang sedang
-              login
-            </p>
+              <h2 className="font-semibold text-[#18352D]">
+                Stock Barang Outlet
+              </h2>
+
+              <p className="mt-1 text-xs text-gray-500">
+                {user?.role ===
+                "ADMIN"
+                  ? "Data stock seluruh outlet sesuai filter"
+                  : "Data stock outlet yang sedang login"}
+              </p>
+
+            </div>
 
           </div>
 
-          <div className="relative w-full md:w-80">
-
-            <Search
-              size={17}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-
-            <input
-              value={search}
-              onChange={(e) =>
-                setSearch(e.target.value)
-              }
-              placeholder="Cari kode atau nama barang..."
-              className="
-                w-full
-                rounded-xl
-                border
-                border-[#D5E5DC]
-                bg-[#FAFCFB]
-                py-2.5
-                pl-9
-                pr-4
-                text-sm
-                outline-none
-                focus:border-[#497F70]
-              "
-            />
-
+          <div className="text-xs text-gray-400">
+            {formatNumber(
+              filteredData.length
+            )} barang
           </div>
 
         </div>
 
-        {/* TABLE */}
-
         <div className="overflow-x-auto">
 
-          <table className="min-w-[1200px] w-full text-sm">
+          <table className="min-w-[1250px] w-full text-sm">
 
             <thead className="bg-[#F5F8F6]">
 
               <tr className="border-b border-[#E5ECE9]">
+
+                {user?.role ===
+                  "ADMIN" && (
+                  <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
+                    Outlet
+                  </th>
+                )}
 
                 <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
                   Kode
@@ -545,7 +891,7 @@ export default function OutletStockReportPage() {
                 </th>
 
                 <th className="px-5 py-4 text-right font-semibold text-[#35564C]">
-                  Average Cost
+                  Harga Modal
                 </th>
 
                 <th className="px-5 py-4 text-right font-semibold text-[#35564C]">
@@ -567,7 +913,12 @@ export default function OutletStockReportPage() {
                 <tr>
 
                   <td
-                    colSpan={8}
+                    colSpan={
+                      user?.role ===
+                      "ADMIN"
+                        ? 9
+                        : 8
+                    }
                     className="px-5 py-12 text-center"
                   >
 
@@ -577,24 +928,44 @@ export default function OutletStockReportPage() {
                     />
 
                     <p className="text-sm text-gray-500">
-                      Memuat stock outlet...
+                      Memuat laporan
+                      stock outlet...
                     </p>
 
                   </td>
 
                 </tr>
 
-              ) : filteredData.length === 0 ? (
+              ) : filteredData.length ===
+                0 ? (
 
                 <tr>
 
                   <td
-                    colSpan={8}
-                    className="px-5 py-12 text-center text-sm text-gray-400"
+                    colSpan={
+                      user?.role ===
+                      "ADMIN"
+                        ? 9
+                        : 8
+                    }
+                    className="px-5 py-14 text-center"
                   >
 
-                    Belum ada stock barang
-                    untuk outlet ini
+                    <Package
+                      size={40}
+                      className="mx-auto mb-3 text-gray-300"
+                    />
+
+                    <p className="text-sm font-medium text-gray-500">
+                      Belum ada stock
+                      outlet
+                    </p>
+
+                    <p className="mt-1 text-xs text-gray-400">
+                      Pastikan Stock Awal
+                      Outlet sudah
+                      dimasukkan.
+                    </p>
 
                   </td>
 
@@ -602,153 +973,207 @@ export default function OutletStockReportPage() {
 
               ) : (
 
-                filteredData.map((item) => {
+                filteredData.map(
+                  (item) => {
 
-                  const stock =
-                    Number(item.stock || 0);
+                    const stock =
+                      Number(
+                        item.stock ||
+                          0
+                      );
 
-                  const minimum =
-                    Number(
-                      item.minimumStock || 0
+                    const minimum =
+                      Number(
+                        item.minimumStock ||
+                          0
+                      );
+
+                    const averageCost =
+                      Number(
+                        item.averageCost ||
+                          0
+                      );
+
+                    const nilaiStock =
+                      stock *
+                      averageCost;
+
+                    const status =
+                      getStockStatus(
+                        item
+                      );
+
+                    return (
+                      <tr
+                        key={
+                          item.id
+                        }
+                        className="
+                          border-b
+                          border-[#EDF2EF]
+                          hover:bg-[#FAFCFB]
+                        "
+                      >
+
+                        {/* OUTLET */}
+
+                        {user?.role ===
+                          "ADMIN" && (
+                          <td className="px-5 py-4 align-top">
+
+                            <div className="font-semibold text-[#18352D]">
+                              {
+                                item
+                                  .outlet
+                                  ?.name
+                              }
+                            </div>
+
+                            <div className="mt-0.5 text-xs text-gray-400">
+                              {
+                                item
+                                  .outlet
+                                  ?.code
+                              }
+                            </div>
+
+                          </td>
+                        )}
+
+                        {/* KODE */}
+
+                        <td className="px-5 py-4 align-top">
+
+                          <span className="font-semibold text-[#35564C]">
+                            {
+                              item
+                                .barang
+                                ?.code
+                            }
+                          </span>
+
+                        </td>
+
+                        {/* BARANG */}
+
+                        <td className="px-5 py-4 align-top">
+
+                          <div className="font-semibold text-[#18352D]">
+                            {
+                              item
+                                .barang
+                                ?.name
+                            }
+                          </div>
+
+                        </td>
+
+                        {/* SATUAN */}
+
+                        <td className="px-5 py-4 text-center align-top">
+
+                          {
+                            item
+                              .barang
+                              ?.unit ||
+                            "-"
+                          }
+
+                        </td>
+
+                        {/* STOCK */}
+
+                        <td className="px-5 py-4 text-right align-top">
+
+                          <span className="font-bold text-[#18352D]">
+                            {formatNumber(
+                              stock
+                            )}
+                          </span>
+
+                        </td>
+
+                        {/* MINIMUM */}
+
+                        <td className="px-5 py-4 text-right align-top">
+
+                          <span className="text-gray-500">
+                            {formatNumber(
+                              minimum
+                            )}
+                          </span>
+
+                        </td>
+
+                        {/* COST */}
+
+                        <td className="px-5 py-4 text-right align-top whitespace-nowrap">
+
+                          <span className="font-medium text-[#35564C]">
+                            {formatRupiah(
+                              averageCost
+                            )}
+                          </span>
+
+                        </td>
+
+                        {/* NILAI */}
+
+                        <td className="px-5 py-4 text-right align-top whitespace-nowrap">
+
+                          <span className="font-semibold text-[#18352D]">
+                            {formatRupiah(
+                              nilaiStock
+                            )}
+                          </span>
+
+                        </td>
+
+                        {/* STATUS */}
+
+                        <td className="px-5 py-4 text-center align-top">
+
+                          <span
+                            className={`
+                              inline-flex
+                              items-center
+                              gap-1.5
+                              rounded-full
+                              px-3
+                              py-1
+                              text-xs
+                              font-semibold
+                              ${getStatusClass(
+                                item
+                              )}
+                            `}
+                          >
+
+                            {status ===
+                            "AMAN" ? (
+                              <CheckCircle2
+                                size={
+                                  13
+                                }
+                              />
+                            ) : (
+                              <AlertTriangle
+                                size={
+                                  13
+                                }
+                              />
+                            )}
+
+                            {status}
+
+                          </span>
+
+                        </td>
+
+                      </tr>
                     );
-
-                  const averageCost =
-                    Number(
-                      item.averageCost || 0
-                    );
-
-                  const nilaiStock =
-                    stock * averageCost;
-
-                  const status =
-                    getStockStatus(item);
-
-                  return (
-                    <tr
-                      key={item.id}
-                      className="
-                        border-b
-                        border-[#EDF2EF]
-                        hover:bg-[#FAFCFB]
-                      "
-                    >
-
-                      {/* KODE */}
-
-                      <td className="px-5 py-4 align-top">
-
-                        <span className="font-semibold text-[#35564C]">
-                          {item.barang?.code}
-                        </span>
-
-                      </td>
-
-                      {/* BARANG */}
-
-                      <td className="px-5 py-4 align-top">
-
-                        <div className="font-semibold text-[#18352D]">
-                          {item.barang?.name}
-                        </div>
-
-                      </td>
-
-                      {/* SATUAN */}
-
-                      <td className="px-5 py-4 text-center align-top">
-
-                        <span className="text-gray-500">
-                          {item.barang?.unit ||
-                            "-"}
-                        </span>
-
-                      </td>
-
-                      {/* STOCK */}
-
-                      <td className="px-5 py-4 text-right align-top">
-
-                        <span className="font-bold text-[#18352D]">
-                          {formatNumber(stock)}
-                        </span>
-
-                      </td>
-
-                      {/* MINIMUM */}
-
-                      <td className="px-5 py-4 text-right align-top">
-
-                        <span className="text-gray-500">
-                          {formatNumber(minimum)}
-                        </span>
-
-                      </td>
-
-                      {/* AVERAGE COST */}
-
-                      <td className="px-5 py-4 text-right align-top whitespace-nowrap">
-
-                        <span className="font-medium text-[#35564C]">
-                          {formatRupiah(
-                            averageCost
-                          )}
-                        </span>
-
-                      </td>
-
-                      {/* NILAI STOCK */}
-
-                      <td className="px-5 py-4 text-right align-top whitespace-nowrap">
-
-                        <span className="font-semibold text-[#18352D]">
-                          {formatRupiah(
-                            nilaiStock
-                          )}
-                        </span>
-
-                      </td>
-
-                      {/* STATUS */}
-
-                      <td className="px-5 py-4 text-center align-top">
-
-                        <span
-                          className={`
-                            inline-flex
-                            items-center
-                            gap-1.5
-                            rounded-full
-                            px-3
-                            py-1
-                            text-xs
-                            font-semibold
-                            ${getStatusClass(item)}
-                          `}
-                        >
-
-                          {status ===
-                            "AMAN" && (
-                            <CheckCircle2
-                              size={13}
-                            />
-                          )}
-
-                          {status !==
-                            "AMAN" && (
-                            <AlertTriangle
-                              size={13}
-                            />
-                          )}
-
-                          {status}
-
-                        </span>
-
-                      </td>
-
-                    </tr>
-                  );
-                })
+                  }
+                )
 
               )}
 
@@ -758,23 +1183,28 @@ export default function OutletStockReportPage() {
 
         </div>
 
-        {/* FOOTER TOTAL */}
+        {/* TOTAL */}
 
         {!loading &&
-          filteredData.length > 0 && (
-            <div className="flex flex-col gap-2 border-t border-[#E5ECE9] bg-[#FAFCFB] px-5 py-4 md:flex-row md:items-center md:justify-between">
+          filteredData.length >
+            0 && (
+            <div className="flex flex-col gap-4 border-t border-[#E5ECE9] bg-[#FAFCFB] px-5 py-4 md:flex-row md:items-center md:justify-between">
 
-              <p className="text-xs text-gray-500">
-                Menampilkan{" "}
-                <span className="font-semibold text-[#35564C]">
-                  {formatNumber(
-                    filteredData.length
-                  )}
-                </span>{" "}
-                barang
-              </p>
+              <div>
 
-              <div className="flex items-center gap-6">
+                <p className="text-xs text-gray-500">
+                  Menampilkan{" "}
+                  <span className="font-semibold text-[#35564C]">
+                    {formatNumber(
+                      filteredData.length
+                    )}
+                  </span>{" "}
+                  barang
+                </p>
+
+              </div>
+
+              <div className="flex items-center gap-7">
 
                 <div className="text-right">
 
@@ -783,7 +1213,9 @@ export default function OutletStockReportPage() {
                   </p>
 
                   <p className="text-sm font-bold text-[#18352D]">
-                    {formatNumber(totalQty)}
+                    {formatNumber(
+                      totalQty
+                    )}
                   </p>
 
                 </div>
@@ -795,7 +1227,9 @@ export default function OutletStockReportPage() {
                   </p>
 
                   <p className="text-sm font-bold text-[#18352D]">
-                    {formatRupiah(totalNilai)}
+                    {formatRupiah(
+                      totalNilai
+                    )}
                   </p>
 
                 </div>

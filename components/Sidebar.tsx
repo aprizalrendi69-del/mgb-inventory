@@ -27,6 +27,7 @@ import {
   FileText,
   Settings,
   ChevronRight,
+  TrendingUp,
 } from "lucide-react";
 
 type Role =
@@ -35,7 +36,6 @@ type Role =
   | "PURCHASING"
   | "GUDANG"
   | "OUTLET_ADMIN";
-
 
 interface User {
   id?: number;
@@ -67,14 +67,14 @@ const menus: Menu[] = [
   {
     title: "Attendance",
     url: "/attendance",
-    roles: ["ADMIN", "MANAGER", "PURCHASING", "GUDANG"],
+    roles: ["ADMIN", "MANAGER", "GUDANG", "OUTLET_ADMIN"],
     icon: CalendarCheck,
   },
 
   {
     title: "Riwayat Absensi",
     url: "/attendance/history",
-    roles: ["ADMIN", "MANAGER", "PURCHASING", "GUDANG"],
+    roles: ["ADMIN", "MANAGER", "GUDANG", "OUTLET_ADMIN"],
     icon: History,
   },
 
@@ -116,10 +116,10 @@ const menus: Menu[] = [
   },
 
   {
-  title: "Master Outlet",
-  url: "/master/outlet",
-  roles: ["ADMIN"],
-  icon: Warehouse,
+    title: "Master Outlet",
+    url: "/master/outlet",
+    roles: ["ADMIN"],
+    icon: Warehouse,
   },
 
   {
@@ -146,55 +146,55 @@ const menus: Menu[] = [
   },
 
   {
-  title: "Master Barang Outlet",
-  url: "/outlet/master-barang",
-  roles: ["ADMIN", "OUTLET_ADMIN"],
-  icon: Package,
+    title: "Master Barang Outlet",
+    url: "/outlet/master-barang",
+    roles: ["ADMIN", "OUTLET_ADMIN"],
+    icon: Package,
   },
 
   {
     title: "Purchase Outlet",
     url: "/outlet/purchase",
-    roles: ["OUTLET_ADMIN"],
+    roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: ShoppingCart,
   },
 
   {
     title: "Barang Masuk Outlet",
     url: "/outlet/barang-masuk",
-    roles: ["OUTLET_ADMIN"],
+    roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: ArrowDownToLine,
   },
 
   {
     title: "Stock Outlet",
     url: "/outlet/stock",
-    roles: ["OUTLET_ADMIN"],
+    roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: Boxes,
   },
 
   {
     title: "Stock Awal Outlet",
     url: "/outlet/stock-awal",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN"],
     icon: Warehouse,
   },
 
-    {
+  {
     title: "Stock Opname Outlet",
     url: "/outlet/stock-opname",
-    roles: ["OUTLET_ADMIN"],
+    roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: ClipboardList,
   },
 
   {
     title: "Approval Stock Opname",
     url: "/outlet/stock-opname/approval",
-    roles: ["OUTLET_ADMIN"],
+    roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: ClipboardCheck,
   },
 
-    // =====================================================
+  // =====================================================
   // LAPORAN OUTLET
   // =====================================================
 
@@ -366,6 +366,22 @@ const menus: Menu[] = [
   },
 
   // =====================================================
+  // COST CONTROL
+  // =====================================================
+
+  {
+    title: "COST CONTROL",
+    header: true,
+  },
+
+  {
+    title: "Cost Control",
+    url: "/cost-control",
+    roles: ["ADMIN", "MANAGER"],
+    icon: TrendingUp,
+  },
+
+  // =====================================================
   // LAPORAN
   // =====================================================
 
@@ -533,7 +549,6 @@ export default function Sidebar({
         shadow-[4px_0_20px_rgba(48,78,67,0.12)]
       "
     >
-
       {/* =================================================
           BRAND
       ================================================= */}

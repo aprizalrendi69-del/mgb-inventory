@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 
+/*
+ * =========================================================
+ * CURRENT USER
+ * =========================================================
+ */
+
 async function getCurrentUser() {
   const cookieStore = await cookies();
   const session = cookieStore.get("erp-session");
@@ -11,24 +17,76 @@ async function getCurrentUser() {
   try {
     const sessionData = JSON.parse(session.value);
 
-    return await prisma.user.findUnique({
+    const userId = Number(
+      sessionData?.id ??
+      sessionData?.user?.id
+    );
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return null;
+    }
+
+    const user = await prisma.user.findUnique({
       where: {
-        id: sessionData.id,
+        id: userId,
       },
+
       select: {
         id: true,
         role: true,
         outletId: true,
+        active: true,
       },
     });
+
+    if (!user || !user.active) {
+      return null;
+    }
+
+    return user;
   } catch {
     return null;
   }
 }
 
-// =========================================================
-// GET
-// =========================================================
+/*
+ * =========================================================
+ * ROLE
+ * =========================================================
+ */
+
+function isCenterUser(role: string) {
+  return (
+    role === "ADMIN" ||
+    role === "MANAGER"
+  );
+}
+
+function isAllowedRole(role: string) {
+  return (
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "OUTLET_ADMIN"
+  );
+}
+
+/*
+ * =========================================================
+ * GET MASTER BARANG OUTLET
+ *
+ * ADMIN / MANAGER
+ * -> semua outlet
+ * -> bisa filter outlet
+ *
+ * OUTLET_ADMIN
+ * -> hanya outlet dari session
+ *
+ * SUMBER DATA:
+ * OutletBarang
+ *
+ * Barang tetap berasal dari Master Barang Central.
+ * =========================================================
+ */
 
 export async function GET(req: NextRequest) {
   try {
@@ -38,13 +96,25 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Tidak login",
+          message:
+            "Tidak login atau session sudah tidak aktif",
         },
         { status: 401 }
       );
     }
 
-    const { searchParams } = new URL(req.url);
+    if (!isAllowedRole(user.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Tidak memiliki akses",
+        },
+        { status: 403 }
+      );
+    }
+
+    const { searchParams } =
+      new URL(req.url);
 
     const search =
       searchParams.get("search")?.trim() || "";
@@ -54,13 +124,23 @@ export async function GET(req: NextRequest) {
 
     let outletId: number | null = null;
 
-    // OUTLET ADMIN hanya boleh melihat outlet sendiri
+    /*
+     * =====================================================
+     * OUTLET ADMIN
+     * =====================================================
+     */
+
     if (user.role === "OUTLET_ADMIN") {
-      if (!user.outletId) {
+      if (
+        !user.outletId ||
+        !Number.isInteger(user.outletId) ||
+        user.outletId <= 0
+      ) {
         return NextResponse.json(
           {
             success: false,
-            message: "User belum memiliki outlet",
+            message:
+              "User outlet belum memiliki outlet",
           },
           { status: 400 }
         );
@@ -69,26 +149,63 @@ export async function GET(req: NextRequest) {
       outletId = user.outletId;
     }
 
-    // ADMIN / MANAGER / role pusat
-    else if (requestedOutletId) {
-      const parsed = Number(requestedOutletId);
+    /*
+     * =====================================================
+     * ADMIN / MANAGER
+     * =====================================================
+     */
 
-      if (
-        Number.isInteger(parsed) &&
-        parsed > 0
-      ) {
+    if (isCenterUser(user.role)) {
+      if (requestedOutletId !== null) {
+        const parsed =
+          Number(requestedOutletId);
+
+        if (
+          !Number.isInteger(parsed) ||
+          parsed <= 0
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "Outlet ID tidak valid",
+            },
+            { status: 400 }
+          );
+        }
+
         outletId = parsed;
       }
     }
 
+    /*
+     * =====================================================
+     * WHERE
+     * =====================================================
+     */
+
     const where: any = {};
 
-    if (outletId) {
+    if (outletId !== null) {
       where.outletId = outletId;
     }
 
+    /*
+     * HANYA BARANG CENTRAL
+     */
+
+    where.barang = {
+      source: "CENTRAL",
+    };
+
+    /*
+     * SEARCH
+     */
+
     if (search) {
       where.barang = {
+        source: "CENTRAL",
+
         OR: [
           {
             code: {
@@ -109,21 +226,61 @@ export async function GET(req: NextRequest) {
       };
     }
 
+    /*
+     * =====================================================
+     * GET
+     * =====================================================
+     */
+
     const data =
       await prisma.outletBarang.findMany({
         where,
 
-        include: {
-          outlet: true,
+        select: {
+          id: true,
+          outletId: true,
+          barangId: true,
+          harga: true,
+          aktif: true,
+
+          outlet: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              active: true,
+            },
+          },
 
           barang: {
-            include: {
+            select: {
+              id: true,
+              code: true,
+              barcode: true,
+              name: true,
+              category: true,
+              brand: true,
+              unit: true,
+              source: true,
+              active: true,
+
               outletStocks: {
-                where: outletId
-                  ? {
-                      outletId,
-                    }
-                  : undefined,
+                where:
+                  outletId !== null
+                    ? {
+                        outletId,
+                      }
+                    : undefined,
+
+                select: {
+                  id: true,
+                  stock: true,
+                  minimumStock: true,
+                  averageCost: true,
+                  updatedAt: true,
+                },
+
+                take: 1,
               },
             },
           },
@@ -134,11 +291,25 @@ export async function GET(req: NextRequest) {
         },
       });
 
+    /*
+     * =====================================================
+     * RESPONSE
+     * =====================================================
+     */
+
     return NextResponse.json({
       success: true,
+
+      scope: {
+        role: user.role,
+        outletId,
+      },
+
+      total: data.length,
+
       data,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error(
       "GET OUTLET MASTER BARANG ERROR:",
       error
@@ -148,6 +319,7 @@ export async function GET(req: NextRequest) {
       {
         success: false,
         message:
+          error?.message ||
           "Gagal mengambil master barang outlet",
       },
       { status: 500 }
@@ -155,10 +327,13 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// =========================================================
-// POST
-// DAFTARKAN BARANG CENTRAL KE OUTLET
-// =========================================================
+/*
+ * =========================================================
+ * POST
+ *
+ * DAFTARKAN BARANG CENTRAL KE OUTLET
+ * =========================================================
+ */
 
 export async function POST(req: NextRequest) {
   try {
@@ -168,27 +343,65 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Tidak login",
+          message:
+            "Tidak login atau session sudah tidak aktif",
         },
         { status: 401 }
       );
     }
 
-    const body = await req.json();
+    if (!isAllowedRole(user.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Tidak memiliki akses",
+        },
+        { status: 403 }
+      );
+    }
 
-    const bodyOutletId = body.outletId;
-    const bodyBarangId = body.barangId;
-    const harga = body.harga;
+    let body: any;
+
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Request tidak valid",
+        },
+        { status: 400 }
+      );
+    }
+
+    const requestedOutletId =
+      body?.outletId;
+
+    const barangId =
+      Number(body?.barangId);
+
+    const harga =
+      Number(body?.harga || 0);
+
+    /*
+     * =====================================================
+     * TENTUKAN OUTLET
+     * =====================================================
+     */
 
     let outletId: number;
 
-    // OUTLET ADMIN
     if (user.role === "OUTLET_ADMIN") {
-      if (!user.outletId) {
+      if (
+        !user.outletId ||
+        !Number.isInteger(user.outletId) ||
+        user.outletId <= 0
+      ) {
         return NextResponse.json(
           {
             success: false,
-            message: "User belum memiliki outlet",
+            message:
+              "User belum memiliki outlet",
           },
           { status: 400 }
         );
@@ -196,23 +409,29 @@ export async function POST(req: NextRequest) {
 
       outletId = user.outletId;
     } else {
-      outletId = Number(bodyOutletId);
+      outletId =
+        Number(requestedOutletId);
+
+      if (
+        !Number.isInteger(outletId) ||
+        outletId <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Outlet wajib dipilih",
+          },
+          { status: 400 }
+        );
+      }
     }
 
-    if (
-      !Number.isInteger(outletId) ||
-      outletId <= 0
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Outlet wajib dipilih",
-        },
-        { status: 400 }
-      );
-    }
-
-    const barangId = Number(bodyBarangId);
+    /*
+     * =====================================================
+     * VALIDASI BARANG
+     * =====================================================
+     */
 
     if (
       !Number.isInteger(barangId) ||
@@ -222,17 +441,43 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           message:
-            "Barang dari Master Barang Pusat wajib dipilih",
+            "Barang Master Central wajib dipilih",
         },
         { status: 400 }
       );
     }
 
-    // CEK OUTLET
+    if (
+      !Number.isFinite(harga) ||
+      harga < 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Harga outlet tidak valid",
+        },
+        { status: 400 }
+      );
+    }
+
+    /*
+     * =====================================================
+     * CEK OUTLET
+     * =====================================================
+     */
+
     const outlet =
       await prisma.outlet.findUnique({
         where: {
           id: outletId,
+        },
+
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          active: true,
         },
       });
 
@@ -240,18 +485,46 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Outlet tidak ditemukan",
+          message:
+            "Outlet tidak ditemukan",
         },
         { status: 404 }
       );
     }
 
-    // CEK BARANG CENTRAL
+    if (!outlet.active) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Outlet sedang tidak aktif",
+        },
+        { status: 400 }
+      );
+    }
+
+    /*
+     * =====================================================
+     * CEK BARANG CENTRAL
+     * =====================================================
+     */
+
     const barang =
       await prisma.barang.findFirst({
         where: {
           id: barangId,
           source: "CENTRAL",
+          active: true,
+        },
+
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          barcode: true,
+          minimumStock: true,
+          purchasePrice: true,
+          source: true,
         },
       });
 
@@ -266,39 +539,94 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // CEK SUDAH TERDAFTAR
-    const existing =
-      await prisma.outletBarang.findUnique({
-        where: {
-          outletId_barangId: {
-            outletId,
-            barangId,
-          },
-        },
-      });
+    /*
+     * =====================================================
+     * TRANSACTION
+     *
+     * OutletBarang + OutletStock
+     * =====================================================
+     */
 
-    if (existing) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Barang sudah terdaftar di outlet ini",
-        },
-        { status: 400 }
-      );
-    }
-
-    // TRANSACTION
     const result =
       await prisma.$transaction(
         async (tx) => {
+          /*
+           * CEK OUTLET BARANG
+           */
+
+          const existing =
+            await tx.outletBarang.findUnique({
+              where: {
+                outletId_barangId: {
+                  outletId,
+                  barangId,
+                },
+              },
+            });
+
+          if (existing) {
+            /*
+             * Kalau sudah ada:
+             *
+             * jangan duplicate.
+             * aktifkan kembali.
+             */
+
+            const updated =
+              await tx.outletBarang.update({
+                where: {
+                  id: existing.id,
+                },
+
+                data: {
+                  harga,
+                  aktif: true,
+                },
+
+                include: {
+                  outlet: true,
+                  barang: true,
+                },
+              });
+
+            /*
+             * Pastikan OutletStock ada.
+             */
+
+            await tx.outletStock.upsert({
+              where: {
+                outletId_barangId: {
+                  outletId,
+                  barangId,
+                },
+              },
+
+              update: {},
+
+              create: {
+                outletId,
+                barangId,
+                stock: 0,
+                minimumStock:
+                  barang.minimumStock || 0,
+                averageCost:
+                  barang.purchasePrice || 0,
+              },
+            });
+
+            return updated;
+          }
+
+          /*
+           * BUAT OUTLET BARANG
+           */
+
           const outletBarang =
             await tx.outletBarang.create({
               data: {
                 outletId,
                 barangId,
-                harga:
-                  Number(harga) || 0,
+                harga,
                 aktif: true,
               },
 
@@ -308,9 +636,21 @@ export async function POST(req: NextRequest) {
               },
             });
 
-          // BUAT STOCK OUTLET OTOMATIS
-          await tx.outletStock.create({
-            data: {
+          /*
+           * BUAT STOCK OUTLET
+           */
+
+          await tx.outletStock.upsert({
+            where: {
+              outletId_barangId: {
+                outletId,
+                barangId,
+              },
+            },
+
+            update: {},
+
+            create: {
               outletId,
               barangId,
               stock: 0,
@@ -325,23 +665,40 @@ export async function POST(req: NextRequest) {
         }
       );
 
-    return NextResponse.json({
-      success: true,
-      message:
-        "Barang berhasil didaftarkan ke outlet",
-      data: result,
-    });
-  } catch (error) {
+    return NextResponse.json(
+      {
+        success: true,
+
+        message:
+          "Barang berhasil didaftarkan ke Master Barang Outlet",
+
+        data: result,
+      },
+      { status: 201 }
+    );
+  } catch (error: any) {
     console.error(
       "POST OUTLET MASTER BARANG ERROR:",
       error
     );
 
+    if (error?.code === "P2002") {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Barang sudah terdaftar di outlet ini",
+        },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json(
       {
         success: false,
         message:
-          "Gagal menambahkan barang outlet",
+          error?.message ||
+          "Gagal mendaftarkan barang ke outlet",
       },
       { status: 500 }
     );

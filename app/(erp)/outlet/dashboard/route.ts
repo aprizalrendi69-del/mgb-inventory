@@ -13,7 +13,6 @@ import {
   ArrowRight,
   RefreshCw,
   CalendarDays,
-  Send,
   Boxes,
   ChevronRight,
   FileText,
@@ -56,42 +55,77 @@ type UserData = {
   };
 };
 
-function formatNumber(value: number) {
-  return Number(value || 0).toLocaleString("id-ID");
+/*
+ * =========================================================
+ * FORMAT ANGKA
+ * =========================================================
+ */
+
+function cleanNumber(value: number | string | null | undefined) {
+  const number = Number(value ?? 0);
+
+  if (!Number.isFinite(number)) return 0;
+
+  // Hilangkan floating point error
+  return Number(number.toFixed(2));
 }
 
-function formatCurrency(value: number) {
-  return `Rp ${Number(value || 0).toLocaleString("id-ID")}`;
+function formatNumber(value: number | string | null | undefined) {
+  const number = cleanNumber(value);
+
+  return number.toLocaleString("id-ID", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
-function formatCompactCurrency(value: number) {
-  const number = Number(value || 0);
+function formatCurrency(value: number | string | null | undefined) {
+  const number = cleanNumber(value);
 
-  if (number >= 1_000_000_000_000) {
-    return `Rp ${(number / 1_000_000_000_000)
-      .toFixed(2)
-      .replace(".", ",")} T`;
+  return `Rp ${number.toLocaleString("id-ID", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+/*
+ * =========================================================
+ * STATUS BADGE
+ * =========================================================
+ */
+
+function StatusBadge({ status }: { status: string }) {
+  const normalized = String(status || "").toUpperCase();
+
+  if (normalized === "DRAFT") {
+    return (
+      <span className="rounded-lg border border-amber-100 bg-amber-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-amber-600">
+        DRAFT
+      </span>
+    );
   }
 
-  if (number >= 1_000_000_000) {
-    return `Rp ${(number / 1_000_000_000)
-      .toFixed(2)
-      .replace(".", ",")} M`;
+  if (normalized === "APPROVED") {
+    return (
+      <span className="rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-blue-600">
+        APPROVED
+      </span>
+    );
   }
 
-  if (number >= 1_000_000) {
-    return `Rp ${(number / 1_000_000)
-      .toFixed(2)
-      .replace(".", ",")} jt`;
+  if (normalized === "RECEIVED") {
+    return (
+      <span className="rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-emerald-600">
+        RECEIVED
+      </span>
+    );
   }
 
-  if (number >= 1_000) {
-    return `Rp ${(number / 1_000)
-      .toFixed(1)
-      .replace(".", ",")} rb`;
-  }
-
-  return formatCurrency(number);
+  return (
+    <span className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-slate-500">
+      {normalized || "-"}
+    </span>
+  );
 }
 
 export default function OutletDashboardPage() {
@@ -162,40 +196,6 @@ export default function OutletDashboardPage() {
     });
   }
 
-  function statusBadge(status: string) {
-    const normalized = String(status || "").toUpperCase();
-
-    if (normalized === "DRAFT") {
-      return (
-        <span className="rounded-lg border border-amber-100 bg-amber-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-amber-600">
-          DRAFT
-        </span>
-      );
-    }
-
-    if (normalized === "APPROVED") {
-      return (
-        <span className="rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-blue-600">
-          APPROVED
-        </span>
-      );
-    }
-
-    if (normalized === "RECEIVED") {
-      return (
-        <span className="rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-emerald-600">
-          RECEIVED
-        </span>
-      );
-    }
-
-    return (
-      <span className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-slate-500">
-        {normalized || "-"}
-      </span>
-    );
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F5F8F7] p-4 sm:p-6 lg:p-8">
@@ -247,10 +247,40 @@ export default function OutletDashboardPage() {
   const outletName = user?.outlet?.name || "Outlet";
   const outletCode = user?.outlet?.code || "";
 
+  const totalPurchase = cleanNumber(data.totalPurchase);
+  const totalDraft = cleanNumber(data.totalDraft);
+  const totalApproved = cleanNumber(data.totalApproved);
+  const totalReceived = cleanNumber(data.totalReceived);
+  const totalReceipt = cleanNumber(data.totalReceipt);
+  const totalStock = cleanNumber(data.totalStock);
+  const lowStock = cleanNumber(data.lowStock);
+
+  /*
+   * =========================================================
+   * PERSENTASE
+   * =========================================================
+   */
+
+  const receivedPercentage =
+    totalPurchase > 0
+      ? Math.min(
+          100,
+          Math.round((totalReceived / totalPurchase) * 100)
+        )
+      : 0;
+
+  const approvedPercentage =
+    totalPurchase > 0
+      ? Math.min(
+          100,
+          Math.round((totalApproved / totalPurchase) * 100)
+        )
+      : 0;
+
   const cards = [
     {
       title: "Total Purchase",
-      value: formatNumber(data.totalPurchase),
+      value: formatNumber(totalPurchase),
       icon: ShoppingCart,
       iconBg: "bg-amber-50",
       iconColor: "text-amber-500",
@@ -259,7 +289,7 @@ export default function OutletDashboardPage() {
     },
     {
       title: "Purchase Draft",
-      value: formatNumber(data.totalDraft),
+      value: formatNumber(totalDraft),
       icon: Clock3,
       iconBg: "bg-orange-50",
       iconColor: "text-orange-500",
@@ -268,7 +298,7 @@ export default function OutletDashboardPage() {
     },
     {
       title: "Menunggu Receive",
-      value: formatNumber(data.totalApproved),
+      value: formatNumber(totalApproved),
       icon: PackageCheck,
       iconBg: "bg-blue-50",
       iconColor: "text-blue-500",
@@ -277,7 +307,7 @@ export default function OutletDashboardPage() {
     },
     {
       title: "Barang Received",
-      value: formatNumber(data.totalReceived),
+      value: formatNumber(totalReceived),
       icon: CheckCircle2,
       iconBg: "bg-emerald-50",
       iconColor: "text-emerald-500",
@@ -286,7 +316,7 @@ export default function OutletDashboardPage() {
     },
     {
       title: "Total Receipt",
-      value: formatNumber(data.totalReceipt),
+      value: formatNumber(totalReceipt),
       icon: FileText,
       iconBg: "bg-violet-50",
       iconColor: "text-violet-500",
@@ -295,7 +325,7 @@ export default function OutletDashboardPage() {
     },
     {
       title: "Item Stok Outlet",
-      value: formatNumber(data.totalStock),
+      value: formatNumber(totalStock),
       icon: Boxes,
       iconBg: "bg-cyan-50",
       iconColor: "text-cyan-500",
@@ -304,7 +334,7 @@ export default function OutletDashboardPage() {
     },
     {
       title: "Stock Alert",
-      value: formatNumber(data.lowStock),
+      value: formatNumber(lowStock),
       icon: AlertTriangle,
       iconBg: "bg-rose-50",
       iconColor: "text-rose-500",
@@ -360,7 +390,7 @@ export default function OutletDashboardPage() {
       hover: "hover:border-violet-200 hover:bg-violet-50/40",
     },
     {
-      title: "Barang Masuk",
+      title: "Riwayat Masuk",
       description: "Riwayat penerimaan",
       href: "/outlet/barang-masuk",
       icon: Truck,
@@ -370,35 +400,13 @@ export default function OutletDashboardPage() {
     },
   ];
 
-  const receivedPercentage =
-    data.totalPurchase > 0
-      ? Math.min(
-          100,
-          Math.round(
-            (data.totalReceived / data.totalPurchase) * 100
-          )
-        )
-      : 0;
-
-  const approvedPercentage =
-    data.totalPurchase > 0
-      ? Math.min(
-          100,
-          Math.round(
-            (data.totalApproved / data.totalPurchase) * 100
-          )
-        )
-      : 0;
-
   return (
     <div className="min-h-screen bg-[#F5F8F7] text-slate-800">
       <div className="mx-auto max-w-[1600px] space-y-6 p-4 sm:p-6 lg:p-8">
 
         {/* HEADER */}
-
         <section className="relative overflow-hidden rounded-[30px] border border-white bg-white p-6 shadow-[0_10px_40px_rgba(15,23,42,0.05)] sm:p-8">
           <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full bg-emerald-100/50 blur-3xl" />
-
           <div className="absolute -bottom-24 right-48 h-48 w-48 rounded-full bg-teal-100/40 blur-3xl" />
 
           <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
@@ -462,7 +470,6 @@ export default function OutletDashboardPage() {
         </section>
 
         {/* STATISTIC CARD */}
-
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
           {cards.map((card) => {
             const Icon = card.icon;
@@ -481,9 +488,7 @@ export default function OutletDashboardPage() {
                   <div
                     className={`flex h-11 w-11 items-center justify-center rounded-xl ${card.iconBg}`}
                   >
-                    <Icon
-                      className={`h-5 w-5 ${card.iconColor}`}
-                    />
+                    <Icon className={`h-5 w-5 ${card.iconColor}`} />
                   </div>
 
                   <ArrowRight
@@ -513,12 +518,10 @@ export default function OutletDashboardPage() {
           })}
         </section>
 
-        {/* OVERVIEW + INFORMATION */}
-
+        {/* OVERVIEW */}
         <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
 
           {/* PURCHASE OVERVIEW */}
-
           <div className="rounded-[28px] border border-white bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.045)] xl:col-span-2">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-center gap-3">
@@ -547,17 +550,17 @@ export default function OutletDashboardPage() {
             </div>
 
             <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+
               <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
                 <div className="flex items-center gap-2">
                   <Clock3 className="h-4 w-4 text-amber-500" />
-
                   <span className="text-[10px] font-bold uppercase tracking-wide text-amber-600">
                     Draft
                   </span>
                 </div>
 
                 <p className="mt-2 text-2xl font-bold text-amber-700">
-                  {formatNumber(data.totalDraft)}
+                  {formatNumber(totalDraft)}
                 </p>
 
                 <p className="mt-1 text-[10px] text-slate-400">
@@ -568,14 +571,13 @@ export default function OutletDashboardPage() {
               <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
                 <div className="flex items-center gap-2">
                   <PackageCheck className="h-4 w-4 text-blue-500" />
-
                   <span className="text-[10px] font-bold uppercase tracking-wide text-blue-600">
                     Approved
                   </span>
                 </div>
 
                 <p className="mt-2 text-2xl font-bold text-blue-700">
-                  {formatNumber(data.totalApproved)}
+                  {formatNumber(totalApproved)}
                 </p>
 
                 <p className="mt-1 text-[10px] text-slate-400">
@@ -586,14 +588,13 @@ export default function OutletDashboardPage() {
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-
                   <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">
                     Received
                   </span>
                 </div>
 
                 <p className="mt-2 text-2xl font-bold text-emerald-700">
-                  {formatNumber(data.totalReceived)}
+                  {formatNumber(totalReceived)}
                 </p>
 
                 <p className="mt-1 text-[10px] text-slate-400">
@@ -603,7 +604,6 @@ export default function OutletDashboardPage() {
             </div>
 
             {/* PROGRESS */}
-
             <div className="mt-6 rounded-2xl bg-slate-50 p-5">
               <div className="flex items-center justify-between">
                 <div>
@@ -637,7 +637,7 @@ export default function OutletDashboardPage() {
                   </p>
 
                   <p className="mt-1 text-sm font-bold text-slate-700">
-                    {formatNumber(data.totalPurchase)}
+                    {formatNumber(totalPurchase)}
                   </p>
                 </div>
 
@@ -647,7 +647,7 @@ export default function OutletDashboardPage() {
                   </p>
 
                   <p className="mt-1 text-sm font-bold text-emerald-600">
-                    {formatNumber(data.totalReceived)}
+                    {formatNumber(totalReceived)}
                   </p>
                 </div>
               </div>
@@ -666,7 +666,7 @@ export default function OutletDashboardPage() {
                 </div>
 
                 <p className="mt-1 text-lg font-bold text-blue-600">
-                  {formatNumber(data.totalApproved)}
+                  {formatNumber(totalApproved)}
                 </p>
               </div>
 
@@ -676,14 +676,13 @@ export default function OutletDashboardPage() {
                 </span>
 
                 <p className="mt-1 text-lg font-bold text-violet-600">
-                  {formatNumber(data.totalReceipt)}
+                  {formatNumber(totalReceipt)}
                 </p>
               </div>
             </div>
           </div>
 
           {/* INFORMATION */}
-
           <div className="rounded-[28px] border border-white bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
@@ -734,7 +733,7 @@ export default function OutletDashboardPage() {
                   </p>
 
                   <p className="mt-1 text-lg font-bold text-cyan-600">
-                    {formatNumber(data.totalStock)}
+                    {formatNumber(totalStock)}
                   </p>
                 </Link>
 
@@ -749,7 +748,7 @@ export default function OutletDashboardPage() {
                   </p>
 
                   <p className="mt-1 text-lg font-bold text-emerald-600">
-                    {formatNumber(data.totalReceipt)}
+                    {formatNumber(totalReceipt)}
                   </p>
                 </Link>
               </div>
@@ -758,7 +757,6 @@ export default function OutletDashboardPage() {
         </section>
 
         {/* QUICK MENU */}
-
         <section>
           <div className="mb-4">
             <h2 className="text-lg font-bold text-slate-800">
@@ -784,9 +782,7 @@ export default function OutletDashboardPage() {
                     <div
                       className={`flex h-10 w-10 items-center justify-center rounded-xl ${menu.iconBg}`}
                     >
-                      <Icon
-                        className={`h-5 w-5 ${menu.iconColor}`}
-                      />
+                      <Icon className={`h-5 w-5 ${menu.iconColor}`} />
                     </div>
 
                     <ChevronRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-slate-500" />
@@ -806,11 +802,9 @@ export default function OutletDashboardPage() {
         </section>
 
         {/* STOCK ALERT + PURCHASE ACTIVITY */}
-
         <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
 
           {/* STOCK ALERT */}
-
           <div className="rounded-[28px] border border-white bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
             <div className="flex items-start justify-between">
               <div>
@@ -831,14 +825,14 @@ export default function OutletDashboardPage() {
                 </div>
               </div>
 
-              {data.lowStock > 0 && (
+              {lowStock > 0 && (
                 <span className="rounded-xl bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-600">
-                  {formatNumber(data.lowStock)} Alert
+                  {formatNumber(lowStock)} Alert
                 </span>
               )}
             </div>
 
-            {data.lowStock > 0 ? (
+            {lowStock > 0 ? (
               <div className="mt-5">
                 <div className="rounded-2xl border border-orange-100 bg-orange-50/60 p-5">
                   <div className="flex items-center gap-4">
@@ -852,8 +846,8 @@ export default function OutletDashboardPage() {
                       </p>
 
                       <p className="mt-1 text-xs text-orange-600">
-                        {formatNumber(data.lowStock)} item outlet
-                        memiliki stok habis atau di bawah batas minimum.
+                        {formatNumber(lowStock)} item outlet memiliki
+                        stok habis atau di bawah batas minimum.
                       </p>
                     </div>
                   </div>
@@ -885,7 +879,6 @@ export default function OutletDashboardPage() {
           </div>
 
           {/* RECENT PURCHASE */}
-
           <div className="rounded-[28px] border border-white bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
             <div className="flex items-center justify-between">
               <div>
@@ -905,36 +898,34 @@ export default function OutletDashboardPage() {
 
             <div className="mt-5 divide-y divide-slate-100">
               {data.recentPurchase.length > 0 ? (
-                data.recentPurchase
-                  .slice(0, 6)
-                  .map((item) => (
-                    <Link
-                      key={item.id}
-                      href={`/outlet/purchase/${item.id}`}
-                      className="flex items-center gap-3 py-3 transition hover:bg-slate-50"
-                    >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50">
-                        <ShoppingCart className="h-4 w-4 text-amber-500" />
-                      </div>
+                data.recentPurchase.slice(0, 6).map((item) => (
+                  <Link
+                    key={item.id}
+                    href={`/outlet/purchase/${item.id}`}
+                    className="flex items-center gap-3 py-3 transition hover:bg-slate-50"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50">
+                      <ShoppingCart className="h-4 w-4 text-amber-500" />
+                    </div>
 
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-slate-700">
-                          {item.number}
-                        </p>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-slate-700">
+                        {item.number}
+                      </p>
 
-                        <p className="mt-0.5 truncate text-xs text-slate-400">
-                          {item.supplier?.name || "-"} •{" "}
-                          {formatDate(item.purchaseDate)}
-                        </p>
-                      </div>
+                      <p className="mt-0.5 truncate text-xs text-slate-400">
+                        {item.supplier?.name || "-"} •{" "}
+                        {formatDate(item.purchaseDate)}
+                      </p>
+                    </div>
 
-                      <div className="flex shrink-0 items-center gap-2">
-                        {statusBadge(item.status)}
+                    <div className="flex shrink-0 items-center gap-2">
+                      <StatusBadge status={item.status} />
 
-                        <ChevronRight className="h-4 w-4 text-slate-300" />
-                      </div>
-                    </Link>
-                  ))
+                      <ChevronRight className="h-4 w-4 text-slate-300" />
+                    </div>
+                  </Link>
+                ))
               ) : (
                 <div className="py-10 text-center text-sm text-slate-400">
                   Belum ada Purchase Order.
@@ -945,7 +936,6 @@ export default function OutletDashboardPage() {
         </section>
 
         {/* PURCHASE TABLE */}
-
         <section className="overflow-hidden rounded-[28px] border border-white bg-white shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
             <div>
@@ -1037,11 +1027,11 @@ export default function OutletDashboardPage() {
                       </td>
 
                       <td className="px-6 py-4 text-right font-semibold text-slate-700">
-                        Rp {formatNumber(item.total)}
+                        {formatCurrency(item.total)}
                       </td>
 
                       <td className="px-6 py-4 text-center">
-                        {statusBadge(item.status)}
+                        <StatusBadge status={item.status} />
                       </td>
 
                       <td className="px-6 py-4 text-center">
@@ -1062,7 +1052,6 @@ export default function OutletDashboardPage() {
         </section>
 
         {/* FOOTER */}
-
         <footer className="border-t border-slate-200 py-5 text-center">
           <p className="text-xs text-slate-400">
             PT. Mitra Garam Bogatama • ERP Inventory System •{" "}

@@ -1,6 +1,109 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { cookies } from "next/headers";
+
+// =====================================================
+// CURRENT LOGIN USER
+// =====================================================
+
+async function getCurrentUser() {
+  // ---------------------------------------------------
+  // Ambil cookie session
+  // ---------------------------------------------------
+
+  const { cookies } = await import("next/headers");
+
+  const cookieStore = await cookies();
+
+  const session =
+    cookieStore.get("erp-session");
+
+  if (!session) {
+    return null;
+  }
+
+  // ---------------------------------------------------
+  // Parse session
+  // ---------------------------------------------------
+
+  let sessionData: any;
+
+  try {
+    sessionData = JSON.parse(
+      session.value
+    );
+  } catch {
+    return null;
+  }
+
+  // ---------------------------------------------------
+  // Support beberapa bentuk session
+  // ---------------------------------------------------
+
+  const userId = Number(
+    sessionData?.id ??
+      sessionData?.user?.id
+  );
+
+  if (
+    !Number.isInteger(userId) ||
+    userId <= 0
+  ) {
+    return null;
+  }
+
+  // ---------------------------------------------------
+  // Ambil user langsung dari database
+  // ---------------------------------------------------
+
+  return await prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+
+    select: {
+      id: true,
+      username: true,
+      fullname: true,
+      role: true,
+      active: true,
+      outletId: true,
+
+      outlet: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          active: true,
+        },
+      },
+    },
+  });
+}
+
+// =====================================================
+// GET DETAIL OUTLET BARANG MASUK
+//
+// Sumber:
+//
+// PURCHASE-xxx
+// -> Purchase Supplier Outlet
+//
+// TRANSFER-xxx
+// -> Transfer Gudang Pusat -> Outlet
+//
+// SECURITY:
+//
+// ADMIN
+// -> semua outlet
+//
+// MANAGER
+// -> semua outlet
+//
+// OUTLET_ADMIN
+// -> hanya outlet sendiri
+//
+// TIDAK ADA perubahan stock di endpoint ini.
+// =====================================================
 
 export async function GET(
   req: NextRequest,
@@ -11,306 +114,645 @@ export async function GET(
   }
 ) {
   try {
-    // ==========================================
-    // CEK SESSION
-    // ==========================================
+    // ===================================================
+    // 1. SESSION
+    // ===================================================
 
-    const cookieStore = await cookies();
-    const session = cookieStore.get("erp-session");
-
-    if (!session) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Tidak login",
-        },
-        { status: 401 }
-      );
-    }
-
-    let sessionData: any;
-
-    try {
-      sessionData = JSON.parse(session.value);
-    } catch {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Session tidak valid",
-        },
-        { status: 401 }
-      );
-    }
-
-    const user = await prisma.user.findUnique({
-      where: {
-        id: sessionData.id,
-      },
-      select: {
-        id: true,
-        role: true,
-        outletId: true,
-      },
-    });
+    const user =
+      await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message: "User tidak ditemukan",
+          message: "Tidak login",
         },
-        { status: 404 }
+        {
+          status: 401,
+        }
       );
     }
 
-    // ==========================================
-    // VALIDASI ROLE
-    // ==========================================
+    // ===================================================
+    // 2. USER HARUS AKTIF
+    // ===================================================
+
+    if (!user.active) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "User tidak aktif",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    // ===================================================
+    // 3. ROLE
+    // ===================================================
+
+    const role =
+      String(
+        user.role || ""
+      ).toUpperCase();
 
     if (
-      user.role !== "ADMIN" &&
-      user.role !== "OUTLET_ADMIN"
+      role !== "ADMIN" &&
+      role !== "MANAGER" &&
+      role !== "OUTLET_ADMIN"
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Tidak memiliki akses",
+          message:
+            "Tidak memiliki akses",
         },
-        { status: 403 }
+        {
+          status: 403,
+        }
       );
     }
 
-    // ==========================================
-    // FILTER OUTLET
-    //
-    // ADMIN
-    // → semua outlet
-    //
-    // OUTLET_ADMIN
-    // → hanya outlet miliknya
-    // ==========================================
+    // ===================================================
+    // 4. PARAMETER
+    // ===================================================
 
-    const outletFilter =
-      user.role === "OUTLET_ADMIN"
-        ? {
-            outletId: user.outletId ?? -1,
-          }
-        : {};
+    const { id } =
+      await context.params;
 
-    const { id } = await context.params;
+    const sourceId =
+      String(id || "").trim();
 
-    if (!id) {
+    if (!sourceId) {
       return NextResponse.json(
         {
           success: false,
-          message: "ID barang masuk tidak valid",
+          message:
+            "ID barang masuk tidak valid",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    // ==========================================
-    // PURCHASE SUPPLIER
-    // ==========================================
+    // ===================================================
+    // 5. FILTER OUTLET
+    //
+    // ADMIN / MANAGER
+    // -> tidak dibatasi outlet
+    //
+    // OUTLET_ADMIN
+    // -> HANYA outlet dari user
+    //
+    // Penting:
+    // outletId tidak pernah dipercaya dari frontend.
+    // ===================================================
 
-    if (id.startsWith("PURCHASE-")) {
-      const purchaseId = Number(
-        id.replace("PURCHASE-", "")
-      );
+    let outletFilter:
+      | { outletId: number }
+      | Record<string, never> = {};
 
-      if (!purchaseId || Number.isNaN(purchaseId)) {
+    if (role === "OUTLET_ADMIN") {
+      if (
+        !user.outletId ||
+        !Number.isInteger(
+          user.outletId
+        ) ||
+        user.outletId <= 0
+      ) {
         return NextResponse.json(
           {
             success: false,
-            message: "ID purchase tidak valid",
+            message:
+              "User outlet belum terhubung dengan outlet",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
 
-      const purchase =
-        await prisma.outletPurchase.findFirst({
-          where: {
-            id: purchaseId,
-            ...outletFilter,
-          },
+      outletFilter = {
+        outletId:
+          user.outletId,
+      };
+    }
 
-          include: {
-            outlet: true,
-            supplier: true,
-            items: {
-              include: {
-                barang: true,
+    // ===================================================
+    // 6. PURCHASE SUPPLIER
+    // ===================================================
+
+    if (
+      sourceId.toUpperCase().startsWith(
+        "PURCHASE-"
+      )
+    ) {
+      // -------------------------------------------------
+      // Ambil ID
+      // -------------------------------------------------
+
+      const purchaseId =
+        Number(
+          sourceId.replace(
+            /^PURCHASE-/i,
+            ""
+          )
+        );
+
+      if (
+        !Number.isInteger(
+          purchaseId
+        ) ||
+        purchaseId <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "ID purchase tidak valid",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      // -------------------------------------------------
+      // Ambil Purchase
+      //
+      // SECURITY:
+      // OUTLET_ADMIN hanya bisa mendapatkan
+      // purchase dari outlet miliknya.
+      // -------------------------------------------------
+
+      const purchase =
+        await prisma.outletPurchase.findFirst(
+          {
+            where: {
+              id: purchaseId,
+
+              ...outletFilter,
+            },
+
+            include: {
+              outlet: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  active: true,
+                },
+              },
+
+              supplier: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                },
+              },
+
+              items: {
+                include: {
+                  barang: true,
+                },
               },
             },
-          },
-        });
+          }
+        );
+
+      // -------------------------------------------------
+      // Tidak ditemukan
+      // -------------------------------------------------
 
       if (!purchase) {
         return NextResponse.json(
           {
             success: false,
-            message: "Purchase Order tidak ditemukan",
+            message:
+              "Purchase Order tidak ditemukan",
           },
-          { status: 404 }
+          {
+            status: 404,
+          }
         );
       }
 
+      // -------------------------------------------------
+      // Outlet harus aktif
+      // -------------------------------------------------
+
+      if (
+        !purchase.outlet?.active
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Outlet tujuan tidak aktif",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      // -------------------------------------------------
+      // SECURITY BARANG
+      //
+      // Semua barang Purchase Outlet harus berasal
+      // dari Master Barang Central.
+      // -------------------------------------------------
+
+      for (
+        const item of purchase.items
+      ) {
+        if (!item.barang) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                `Barang ID ${item.barangId} tidak ditemukan`,
+            },
+            {
+              status: 400,
+            }
+          );
+        }
+
+        if (
+          item.barang.source !==
+          "CENTRAL"
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                `Barang ${item.barang.name} bukan berasal dari Master Barang Pusat`,
+            },
+            {
+              status: 400,
+            }
+          );
+        }
+      }
+
+      // -------------------------------------------------
+      // RESPONSE
+      //
+      // Struktur dipertahankan agar frontend
+      // yang sekarang tidak perlu diubah.
+      // -------------------------------------------------
+
       return NextResponse.json({
         success: true,
+
         data: {
           id: purchase.id,
-          sourceId: purchase.id,
-          sumber: "PURCHASE",
 
-          nomor: purchase.number,
-          tanggal: purchase.purchaseDate,
+          sourceId:
+            purchase.id,
 
-          status: purchase.status,
+          sumber:
+            "PURCHASE",
+
+          nomor:
+            purchase.number,
+
+          tanggal:
+            purchase.purchaseDate,
+
+          status:
+            purchase.status,
 
           remarks:
-            purchase.remarks || null,
+            purchase.remarks ||
+            null,
 
-          outlet: purchase.outlet
-            ? {
-                id: purchase.outlet.id,
-                code: purchase.outlet.code,
-                name: purchase.outlet.name,
-              }
-            : null,
+          outlet:
+            purchase.outlet
+              ? {
+                  id:
+                    purchase.outlet
+                      .id,
 
-          supplier: purchase.supplier
-            ? {
-                id: purchase.supplier.id,
-                code: purchase.supplier.code,
-                name: purchase.supplier.name,
-              }
-            : null,
+                  code:
+                    purchase.outlet
+                      .code,
+
+                  name:
+                    purchase.outlet
+                      .name,
+                }
+              : null,
+
+          supplier:
+            purchase.supplier
+              ? {
+                  id:
+                    purchase.supplier
+                      .id,
+
+                  code:
+                    purchase.supplier
+                      .code,
+
+                  name:
+                    purchase.supplier
+                      .name,
+                }
+              : null,
 
           purchase: {
-            id: purchase.id,
-            number: purchase.number,
-            status: purchase.status,
+            id:
+              purchase.id,
+
+            number:
+              purchase.number,
+
+            status:
+              purchase.status,
+
             purchaseDate:
               purchase.purchaseDate,
-            remarks: purchase.remarks,
+
+            remarks:
+              purchase.remarks,
           },
 
-          items: purchase.items.map(
-            (item) => ({
-              id: item.id,
-              barangId: item.barangId,
-              qty: item.qty,
-              receivedQty:
-                item.receivedQty,
-              price: item.price,
-              subtotal: item.subtotal,
-              barang: item.barang,
-            })
-          ),
+          items:
+            purchase.items.map(
+              (item) => ({
+                id:
+                  item.id,
+
+                barangId:
+                  item.barangId,
+
+                qty:
+                  item.qty,
+
+                receivedQty:
+                  item.receivedQty,
+
+                price:
+                  item.price,
+
+                subtotal:
+                  item.subtotal,
+
+                barang:
+                  item.barang,
+              })
+            ),
         },
       });
     }
 
-    // ==========================================
-    // TRANSFER GUDANG PUSAT
-    // ==========================================
+    // ===================================================
+    // 7. TRANSFER GUDANG PUSAT
+    // ===================================================
 
-    if (id.startsWith("TRANSFER-")) {
-      const transferId = Number(
-        id.replace("TRANSFER-", "")
-      );
+    if (
+      sourceId.toUpperCase().startsWith(
+        "TRANSFER-"
+      )
+    ) {
+      // -------------------------------------------------
+      // Ambil ID
+      // -------------------------------------------------
 
-      if (!transferId || Number.isNaN(transferId)) {
+      const transferId =
+        Number(
+          sourceId.replace(
+            /^TRANSFER-/i,
+            ""
+          )
+        );
+
+      if (
+        !Number.isInteger(
+          transferId
+        ) ||
+        transferId <= 0
+      ) {
         return NextResponse.json(
           {
             success: false,
-            message: "ID transfer tidak valid",
+            message:
+              "ID transfer tidak valid",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
 
-      const transfer =
-        await prisma.outletTransfer.findFirst({
-          where: {
-            id: transferId,
-            ...outletFilter,
-          },
+      // -------------------------------------------------
+      // Ambil transfer
+      //
+      // OUTLET_ADMIN hanya bisa mendapatkan
+      // transfer ke outlet miliknya.
+      // -------------------------------------------------
 
-          include: {
-            outlet: true,
-            items: {
-              include: {
-                barang: true,
+      const transfer =
+        await prisma.outletTransfer.findFirst(
+          {
+            where: {
+              id: transferId,
+
+              ...outletFilter,
+            },
+
+            include: {
+              outlet: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  active: true,
+                },
+              },
+
+              items: {
+                include: {
+                  barang: true,
+                },
               },
             },
-          },
-        });
+          }
+        );
+
+      // -------------------------------------------------
+      // Tidak ditemukan
+      // -------------------------------------------------
 
       if (!transfer) {
         return NextResponse.json(
           {
             success: false,
-            message: "Data transfer tidak ditemukan",
+            message:
+              "Data transfer tidak ditemukan",
           },
-          { status: 404 }
+          {
+            status: 404,
+          }
         );
       }
 
+      // -------------------------------------------------
+      // Outlet harus aktif
+      // -------------------------------------------------
+
+      if (
+        !transfer.outlet?.active
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Outlet tujuan tidak aktif",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      // -------------------------------------------------
+      // SECURITY BARANG
+      // -------------------------------------------------
+
+      for (
+        const item of transfer.items
+      ) {
+        if (!item.barang) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                `Barang ID ${item.barangId} tidak ditemukan`,
+            },
+            {
+              status: 400,
+            }
+          );
+        }
+
+        if (
+          item.barang.source !==
+          "CENTRAL"
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                `Barang ${item.barang.name} bukan berasal dari Master Barang Pusat`,
+            },
+            {
+              status: 400,
+            }
+          );
+        }
+      }
+
+      // -------------------------------------------------
+      // RESPONSE
+      // -------------------------------------------------
+
       return NextResponse.json({
         success: true,
+
         data: {
-          id: transfer.id,
-          sourceId: transfer.id,
-          sumber: "TRANSFER",
+          id:
+            transfer.id,
 
-          nomor: transfer.number,
-          tanggal: transfer.transferDate,
+          sourceId:
+            transfer.id,
 
-          status: transfer.status,
+          sumber:
+            "TRANSFER",
 
-          remarks: null,
+          nomor:
+            transfer.number,
 
-          outlet: transfer.outlet
-            ? {
-                id: transfer.outlet.id,
-                code: transfer.outlet.code,
-                name: transfer.outlet.name,
+          tanggal:
+            transfer.transferDate,
+
+          status:
+            transfer.status,
+
+          remarks:
+            null,
+
+          outlet:
+            transfer.outlet
+              ? {
+                  id:
+                    transfer.outlet
+                      .id,
+
+                  code:
+                    transfer.outlet
+                      .code,
+
+                  name:
+                    transfer.outlet
+                      .name,
+                }
+              : null,
+
+          supplier:
+            null,
+
+          purchase:
+            null,
+
+          items:
+            transfer.items.map(
+              (item) => {
+                const price =
+                  item.barang
+                    ?.purchasePrice ??
+                  0;
+
+                return {
+                  id:
+                    item.id,
+
+                  barangId:
+                    item.barangId,
+
+                  qty:
+                    item.qty,
+
+                  receivedQty:
+                    item.receivedQty,
+
+                  price,
+
+                  subtotal:
+                    Number(
+                      item.qty
+                    ) *
+                    Number(price),
+
+                  barang:
+                    item.barang,
+                };
               }
-            : null,
-
-          supplier: null,
-          purchase: null,
-
-          items: transfer.items.map(
-            (item) => {
-              const price =
-                item.barang.purchasePrice ??
-                0;
-
-              return {
-                id: item.id,
-                barangId: item.barangId,
-
-                qty: item.qty,
-
-                receivedQty:
-                  item.receivedQty,
-
-                price,
-
-                subtotal:
-                  Number(item.qty) *
-                  Number(price),
-
-                barang: item.barang,
-              };
-            }
-          ),
+            ),
         },
       });
     }
+
+    // ===================================================
+    // 8. SOURCE TIDAK DIKENALI
+    // ===================================================
 
     return NextResponse.json(
       {
@@ -318,9 +760,11 @@ export async function GET(
         message:
           "Sumber barang masuk tidak dikenali",
       },
-      { status: 400 }
+      {
+        status: 400,
+      }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error(
       "GET DETAIL OUTLET BARANG MASUK ERROR:",
       error
@@ -330,9 +774,12 @@ export async function GET(
       {
         success: false,
         message:
+          error?.message ||
           "Gagal mengambil detail barang masuk outlet",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }

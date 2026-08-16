@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import * as XLSX from "xlsx";
 import {
   Plus,
   Upload,
@@ -71,12 +70,17 @@ export default function OutletMasterBarangPage() {
   }, []);
 
   useEffect(() => {
-    loadData();
+    if (user) {
+      loadData();
+    }
   }, [search, outletId, user]);
 
   async function loadUser() {
     try {
-      const res = await fetch("/api/me");
+      const res = await fetch("/api/me", {
+        cache: "no-store",
+      });
+
       const json = await res.json();
 
       if (json?.user) {
@@ -103,7 +107,10 @@ export default function OutletMasterBarangPage() {
 
   async function loadOutlets() {
     try {
-      const res = await fetch("/api/outlet");
+      const res = await fetch("/api/outlet", {
+        cache: "no-store",
+      });
+
       const json = await res.json();
 
       if (json.success) {
@@ -120,8 +127,8 @@ export default function OutletMasterBarangPage() {
     try {
       const params = new URLSearchParams();
 
-      if (search) {
-        params.set("search", search);
+      if (search.trim()) {
+        params.set("search", search.trim());
       }
 
       if (outletId) {
@@ -129,27 +136,37 @@ export default function OutletMasterBarangPage() {
       }
 
       const res = await fetch(
-        `/api/outlet/master-barang?${params.toString()}`
+        `/api/outlet/master-barang?${params.toString()}`,
+        {
+          cache: "no-store",
+        }
       );
 
       const json = await res.json();
 
       if (json.success) {
         setData(json.data || []);
+      } else {
+        setData([]);
       }
     } catch (error) {
-      console.error("Gagal mengambil master barang:", error);
+      console.error(
+        "Gagal mengambil master barang:",
+        error
+      );
     } finally {
       setLoading(false);
     }
   }
 
   function resetForm() {
+    const selectedOutlet =
+      user?.role === "OUTLET_ADMIN" && user.outletId
+        ? String(user.outletId)
+        : outletId || "";
+
     setForm({
-      outletId:
-        user?.role === "OUTLET_ADMIN" && user.outletId
-          ? String(user.outletId)
-          : outletId || "",
+      outletId: selectedOutlet,
       code: "",
       barcode: "",
       name: "",
@@ -161,7 +178,9 @@ export default function OutletMasterBarangPage() {
     });
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(
+    e: React.FormEvent
+  ) {
     e.preventDefault();
 
     const selectedOutlet =
@@ -174,12 +193,35 @@ export default function OutletMasterBarangPage() {
       return;
     }
 
+    if (!form.code.trim()) {
+      alert("Kode barang wajib diisi");
+      return;
+    }
+
+    if (!form.name.trim()) {
+      alert("Nama barang wajib diisi");
+      return;
+    }
+
+    if (!form.unit.trim()) {
+      alert("Satuan wajib diisi");
+      return;
+    }
+
     setSaving(true);
 
     try {
       const payload = {
-        ...form,
         outletId: String(selectedOutlet),
+        code: form.code.trim(),
+        barcode: form.barcode.trim(),
+        name: form.name.trim(),
+        category: form.category.trim(),
+        brand: form.brand.trim(),
+        unit: form.unit.trim(),
+        harga: Number(form.harga) || 0,
+        minimumStock:
+          Number(form.minimumStock) || 0,
       };
 
       const res = await fetch(
@@ -195,23 +237,40 @@ export default function OutletMasterBarangPage() {
 
       const json = await res.json();
 
-      if (!json.success) {
-        alert(json.message || "Gagal menambahkan barang");
+      if (!res.ok || !json.success) {
+        alert(
+          json.message ||
+            "Gagal menambahkan barang"
+        );
         return;
       }
 
-      alert("Barang outlet berhasil ditambahkan");
+      alert(
+        json.message ||
+          "Barang outlet berhasil ditambahkan"
+      );
 
       setShowForm(false);
       resetForm();
-      loadData();
+
+      await loadData();
     } catch (error) {
-      console.error(error);
-      alert("Terjadi kesalahan saat menyimpan barang");
+      console.error(
+        "Gagal menyimpan barang:",
+        error
+      );
+
+      alert(
+        "Terjadi kesalahan saat menyimpan barang"
+      );
     } finally {
       setSaving(false);
     }
   }
+
+  // =========================================================
+  // IMPORT EXCEL
+  // =========================================================
 
   async function handleImport(
     e: React.ChangeEvent<HTMLInputElement>
@@ -232,141 +291,69 @@ export default function OutletMasterBarangPage() {
     }
 
     try {
-      const buffer = await file.arrayBuffer();
+      setLoading(true);
 
-      const workbook = XLSX.read(buffer, {
-        type: "array",
-      });
+      const formData = new FormData();
 
-      if (!workbook.SheetNames.length) {
-        alert("File Excel tidak memiliki sheet");
-        return;
-      }
+      formData.append("file", file);
+      formData.append(
+        "outletId",
+        String(selectedOutlet)
+      );
 
-      const sheet =
-        workbook.Sheets[workbook.SheetNames[0]];
-
-      const rows = XLSX.utils.sheet_to_json<any>(
-        sheet,
+      const res = await fetch(
+        "/api/outlet/master-barang/import",
         {
-          defval: "",
+          method: "POST",
+          body: formData,
         }
       );
 
-      if (rows.length === 0) {
-        alert("Excel kosong");
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        alert(
+          json.message ||
+            "Import barang outlet gagal"
+        );
         return;
       }
 
-      let berhasil = 0;
-      let gagal = 0;
-
-      for (const row of rows) {
-        const payload = {
-          outletId: String(selectedOutlet),
-
-          code:
-            row["Kode Barang"] ||
-            row["Kode"] ||
-            row["code"] ||
-            "",
-
-          barcode:
-            row["Barcode"] ||
-            row["barcode"] ||
-            "",
-
-          name:
-            row["Nama Barang"] ||
-            row["Nama"] ||
-            row["name"] ||
-            "",
-
-          category:
-            row["Kategori"] ||
-            row["category"] ||
-            "",
-
-          brand:
-            row["Brand"] ||
-            row["Merk"] ||
-            row["brand"] ||
-            "",
-
-          unit:
-            row["Satuan"] ||
-            row["unit"] ||
-            "",
-
-          harga:
-            row["Harga"] ||
-            row["harga"] ||
-            0,
-
-          minimumStock:
-            row["Minimum Stock"] ||
-            row["minimumStock"] ||
-            0,
-        };
-
-        if (
-          !payload.code ||
-          !payload.name ||
-          !payload.unit
-        ) {
-          gagal++;
-          continue;
-        }
-
-        try {
-          const res = await fetch(
-            "/api/outlet/master-barang",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(payload),
-            }
-          );
-
-          const json = await res.json();
-
-          if (json.success) {
-            berhasil++;
-          } else {
-            gagal++;
-          }
-        } catch (error) {
-          console.error(
-            "Gagal import baris:",
-            error
-          );
-
-          gagal++;
-        }
-      }
+      const summary = json.summary || {};
 
       alert(
-        `Import selesai\n\nBerhasil: ${berhasil}\nGagal: ${gagal}`
+        json.message ||
+          `Import selesai.\n\n` +
+            `Total: ${summary.total || 0}\n` +
+            `Berhasil: ${summary.berhasil || 0}\n` +
+            `Dilewati: ${summary.dilewati || 0}\n` +
+            `Gagal: ${summary.gagal || 0}`
       );
 
-      loadData();
+      await loadData();
     } catch (error) {
-      console.error(error);
+      console.error(
+        "IMPORT BARANG OUTLET ERROR:",
+        error
+      );
 
-      alert("Gagal membaca file Excel");
+      alert(
+        "Terjadi kesalahan saat import Excel"
+      );
+    } finally {
+      setLoading(false);
+      e.target.value = "";
     }
-
-    e.target.value = "";
   }
 
   return (
     <div className="p-6">
 
-      {/* HEADER */}
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
 
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
         <div>
           <h1 className="text-2xl font-bold text-[#29483A]">
@@ -396,16 +383,20 @@ export default function OutletMasterBarangPage() {
               font-semibold
               text-white
               hover:bg-[#42685A]
+              disabled:cursor-not-allowed
             "
           >
             <Upload size={17} />
 
-            Import Excel
+            {loading
+              ? "Mengimport..."
+              : "Import Excel"}
 
             <input
               type="file"
               accept=".xlsx,.xls"
               className="hidden"
+              disabled={loading}
               onChange={handleImport}
             />
           </label>
@@ -413,6 +404,7 @@ export default function OutletMasterBarangPage() {
           {/* TAMBAH BARANG */}
 
           <button
+            type="button"
             onClick={() => {
               resetForm();
               setShowForm(true);
@@ -439,7 +431,34 @@ export default function OutletMasterBarangPage() {
         </div>
       </div>
 
-      {/* FILTER */}
+      {/* =====================================================
+          INFO IMPORT
+      ===================================================== */}
+
+      <div className="mb-5 rounded-xl border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-800">
+
+        <div className="font-semibold">
+          Format Excel Import
+        </div>
+
+        <div className="mt-1">
+          Kolom wajib: <b>Kode Barang</b>
+        </div>
+
+        <div>
+          Kolom harga: <b>Harga</b> (opsional)
+        </div>
+
+        <div className="mt-1 text-xs text-green-700">
+          Barang harus sudah terdaftar di Master
+          Barang Central.
+        </div>
+
+      </div>
+
+      {/* =====================================================
+          FILTER
+      ===================================================== */}
 
       <div
         className="
@@ -475,6 +494,7 @@ export default function OutletMasterBarangPage() {
                 py-2.5
                 text-sm
                 outline-none
+                focus:border-[#527A6B]
               "
             >
               <option value="">
@@ -532,7 +552,9 @@ export default function OutletMasterBarangPage() {
           {/* REFRESH */}
 
           <button
+            type="button"
             onClick={loadData}
+            disabled={loading}
             className="
               flex
               items-center
@@ -547,9 +569,17 @@ export default function OutletMasterBarangPage() {
               font-semibold
               text-gray-700
               hover:bg-gray-50
+              disabled:opacity-50
             "
           >
-            <RefreshCw size={16} />
+            <RefreshCw
+              size={16}
+              className={
+                loading
+                  ? "animate-spin"
+                  : ""
+              }
+            />
 
             Refresh
           </button>
@@ -557,7 +587,9 @@ export default function OutletMasterBarangPage() {
         </div>
       </div>
 
-      {/* TABLE */}
+      {/* =====================================================
+          TABLE
+      ===================================================== */}
 
       <div
         className="
@@ -576,6 +608,7 @@ export default function OutletMasterBarangPage() {
             <thead className="bg-[#EEF5F1]">
 
               <tr>
+
                 <th className="px-4 py-3 text-left">
                   No
                 </th>
@@ -611,6 +644,7 @@ export default function OutletMasterBarangPage() {
                 <th className="px-4 py-3 text-center">
                   Status
                 </th>
+
               </tr>
 
             </thead>
@@ -623,6 +657,11 @@ export default function OutletMasterBarangPage() {
                     colSpan={9}
                     className="py-10 text-center text-gray-500"
                   >
+                    <RefreshCw
+                      size={22}
+                      className="mx-auto mb-2 animate-spin"
+                    />
+
                     Memuat data...
                   </td>
                 </tr>
@@ -646,7 +685,11 @@ export default function OutletMasterBarangPage() {
                 data.map((item, index) => (
                   <tr
                     key={item.id}
-                    className="border-t border-gray-100 hover:bg-gray-50"
+                    className="
+                      border-t
+                      border-gray-100
+                      hover:bg-gray-50
+                    "
                   >
 
                     <td className="px-4 py-3">
@@ -718,7 +761,9 @@ export default function OutletMasterBarangPage() {
         </div>
       </div>
 
-      {/* FORM */}
+      {/* =====================================================
+          FORM TAMBAH BARANG
+      ===================================================== */}
 
       {showForm && (
         <div
@@ -756,6 +801,7 @@ export default function OutletMasterBarangPage() {
                 py-4
               "
             >
+
               <div>
 
                 <h2 className="text-lg font-bold text-[#29483A]">
@@ -763,13 +809,16 @@ export default function OutletMasterBarangPage() {
                 </h2>
 
                 <p className="text-xs text-gray-500">
-                  Tambahkan barang ke outlet
+                  Tambahkan barang dari Master Barang Central
                 </p>
 
               </div>
 
               <button
-                onClick={() => setShowForm(false)}
+                type="button"
+                onClick={() =>
+                  setShowForm(false)
+                }
                 className="
                   rounded-lg
                   p-2
@@ -803,7 +852,8 @@ export default function OutletMasterBarangPage() {
                     onChange={(e) =>
                       setForm({
                         ...form,
-                        outletId: e.target.value,
+                        outletId:
+                          e.target.value,
                       })
                     }
                     className="
@@ -815,6 +865,7 @@ export default function OutletMasterBarangPage() {
                       py-2.5
                     "
                   >
+
                     <option value="">
                       Pilih Outlet
                     </option>
@@ -824,7 +875,8 @@ export default function OutletMasterBarangPage() {
                         key={outlet.id}
                         value={outlet.id}
                       >
-                        {outlet.code} - {outlet.name}
+                        {outlet.code} -{" "}
+                        {outlet.name}
                       </option>
                     ))}
 
@@ -856,9 +908,11 @@ export default function OutletMasterBarangPage() {
                       w-full
                       rounded-xl
                       border
+                      border-gray-300
                       px-4
                       py-2.5
                     "
+                    placeholder="Kode Barang Central"
                   />
 
                 </div>
@@ -883,6 +937,7 @@ export default function OutletMasterBarangPage() {
                       w-full
                       rounded-xl
                       border
+                      border-gray-300
                       px-4
                       py-2.5
                     "
@@ -911,6 +966,7 @@ export default function OutletMasterBarangPage() {
                       w-full
                       rounded-xl
                       border
+                      border-gray-300
                       px-4
                       py-2.5
                     "
@@ -931,13 +987,15 @@ export default function OutletMasterBarangPage() {
                     onChange={(e) =>
                       setForm({
                         ...form,
-                        category: e.target.value,
+                        category:
+                          e.target.value,
                       })
                     }
                     className="
                       w-full
                       rounded-xl
                       border
+                      border-gray-300
                       px-4
                       py-2.5
                     "
@@ -965,6 +1023,7 @@ export default function OutletMasterBarangPage() {
                       w-full
                       rounded-xl
                       border
+                      border-gray-300
                       px-4
                       py-2.5
                     "
@@ -993,6 +1052,7 @@ export default function OutletMasterBarangPage() {
                       w-full
                       rounded-xl
                       border
+                      border-gray-300
                       px-4
                       py-2.5
                     "
@@ -1023,6 +1083,7 @@ export default function OutletMasterBarangPage() {
                       w-full
                       rounded-xl
                       border
+                      border-gray-300
                       px-4
                       py-2.5
                     "
@@ -1045,13 +1106,15 @@ export default function OutletMasterBarangPage() {
                     onChange={(e) =>
                       setForm({
                         ...form,
-                        minimumStock: e.target.value,
+                        minimumStock:
+                          e.target.value,
                       })
                     }
                     className="
                       w-full
                       rounded-xl
                       border
+                      border-gray-300
                       px-4
                       py-2.5
                     "
@@ -1067,7 +1130,9 @@ export default function OutletMasterBarangPage() {
 
                 <button
                   type="button"
-                  onClick={() => setShowForm(false)}
+                  onClick={() =>
+                    setShowForm(false)
+                  }
                   className="
                     rounded-xl
                     border

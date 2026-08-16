@@ -1,119 +1,233 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { OutletPurchaseStatus, Role } from "@prisma/client";
+import {
+  OutletPurchaseStatus,
+  Role,
+} from "@prisma/client";
+import { cookies } from "next/headers";
+
+// =====================================================
+// GET CURRENT USER
+// =====================================================
+
+async function getCurrentUser() {
+  const cookieStore = await cookies();
+
+  const sessionCookie =
+    cookieStore.get("session") ||
+    cookieStore.get("erp-session");
+
+  if (!sessionCookie) {
+    return null;
+  }
+
+  let userId: number | null = null;
+
+  // ===================================================
+  // SESSION DATABASE
+  // ===================================================
+
+  const dbSession =
+    await prisma.session.findUnique({
+      where: {
+        token: sessionCookie.value,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullname: true,
+            role: true,
+            active: true,
+            outletId: true,
+            outlet: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+  if (dbSession) {
+    if (
+      dbSession.expiresAt <
+      new Date()
+    ) {
+      return null;
+    }
+
+    userId = dbSession.user.id;
+  } else {
+    // =================================================
+    // SESSION JSON
+    // =================================================
+
+    try {
+      const parsed = JSON.parse(
+        sessionCookie.value
+      );
+
+      userId = Number(
+        parsed?.user?.id ??
+          parsed?.id ??
+          0
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  if (!userId) {
+    return null;
+  }
+
+  // ===================================================
+  // USER
+  // ===================================================
+
+  const user =
+    await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        fullname: true,
+        role: true,
+        active: true,
+        outletId: true,
+        outlet: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+  if (!user || !user.active) {
+    return null;
+  }
+
+  return user;
+}
+
+// =====================================================
+// POST RECEIVE PURCHASE OUTLET
+// =====================================================
 
 export async function POST(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  {
+    params,
+  }: {
+    params: Promise<{
+      id: string;
+    }>;
+  }
 ) {
   try {
+    // =================================================
+    // ID
+    // =================================================
+
     const { id } = await params;
 
     const purchaseId = Number(id);
 
-    if (!purchaseId) {
+    if (
+      !Number.isInteger(purchaseId) ||
+      purchaseId <= 0
+    ) {
       return NextResponse.json(
         {
           success: false,
-          message: "ID Purchase Outlet tidak valid",
+          message:
+            "ID Purchase Outlet tidak valid",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    // =========================
-    // SESSION
-    // =========================
+    // =================================================
+    // CURRENT USER
+    // =================================================
 
-    const cookieHeader = req.headers.get("cookie");
+    const user =
+      await getCurrentUser();
 
-    if (!cookieHeader) {
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
           message: "Belum login",
         },
-        { status: 401 }
-      );
-    }
-
-    const token = cookieHeader
-      .split(";")
-      .find((item) =>
-        item.trim().startsWith("session=")
-      )
-      ?.split("=")[1];
-
-    if (!token) {
-      return NextResponse.json(
         {
-          success: false,
-          message: "Session tidak ditemukan",
-        },
-        { status: 401 }
+          status: 401,
+        }
       );
     }
 
-    const session = await prisma.session.findUnique({
-      where: {
-        token,
-      },
-      include: {
-        user: true,
-      },
-    });
+    // =================================================
+    // SECURITY ROLE
+    //
+    // HANYA OUTLET_ADMIN
+    // =================================================
 
     if (
-      !session ||
-      session.expiresAt < new Date()
+      user.role !== Role.OUTLET_ADMIN
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Session tidak valid",
-        },
-        { status: 401 }
-      );
-    }
-
-    // =========================
-    // ROLE
-    // =========================
-
-    if (session.user.role !== Role.OUTLET_ADMIN) {
       return NextResponse.json(
         {
           success: false,
           message:
             "Hanya Admin Outlet yang boleh menerima Purchase Outlet",
         },
-        { status: 403 }
+        {
+          status: 403,
+        }
       );
     }
 
-    if (!session.user.outletId) {
+    // =================================================
+    // USER HARUS PUNYA OUTLET
+    // =================================================
+
+    if (!user.outletId) {
       return NextResponse.json(
         {
           success: false,
           message:
             "User belum terhubung dengan outlet",
         },
-        { status: 400 }
+        {
+          status: 403,
+        }
       );
     }
 
-    // =========================
-    // PURCHASE
-    // =========================
+    // =================================================
+    // AMBIL PURCHASE
+    // =================================================
 
     const purchase =
       await prisma.outletPurchase.findUnique({
         where: {
           id: purchaseId,
         },
+
         include: {
           outlet: true,
+
           supplier: true,
+
           items: {
             include: {
               barang: true,
@@ -129,17 +243,22 @@ export async function POST(
           message:
             "Purchase Order Outlet tidak ditemukan",
         },
-        { status: 404 }
+        {
+          status: 404,
+        }
       );
     }
 
-    // =========================
-    // CEK OUTLET
-    // =========================
+    // =================================================
+    // SECURITY OUTLET
+    //
+    // ADMIN OUTLET HANYA BOLEH
+    // MENERIMA PURCHASE MILIK OUTLET SENDIRI
+    // =================================================
 
     if (
       purchase.outletId !==
-      session.user.outletId
+      user.outletId
     ) {
       return NextResponse.json(
         {
@@ -147,48 +266,78 @@ export async function POST(
           message:
             "Purchase Order ini bukan milik outlet Anda",
         },
-        { status: 403 }
+        {
+          status: 403,
+        }
       );
     }
 
-    // =========================
-    // HARUS APPROVED
-    // =========================
+    // =================================================
+    // STATUS HARUS APPROVED
+    // =================================================
 
     if (
       purchase.status !==
       OutletPurchaseStatus.APPROVED
     ) {
+      if (
+        purchase.status ===
+        OutletPurchaseStatus.RECEIVED
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Purchase Order ini sudah diterima",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
       return NextResponse.json(
         {
           success: false,
           message:
-            "Purchase Order Outlet harus APPROVED sebelum diterima",
+            `Purchase Order Outlet harus APPROVED sebelum diterima. Status saat ini: ${purchase.status}`,
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    if (purchase.items.length === 0) {
+    // =================================================
+    // HARUS ADA ITEM
+    // =================================================
+
+    if (
+      !purchase.items ||
+      purchase.items.length === 0
+    ) {
       return NextResponse.json(
         {
           success: false,
           message:
             "Purchase Order Outlet tidak memiliki barang",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    // =========================
-    // CEGAH RECEIVE ULANG
-    // =========================
+    // =================================================
+    // CEK RECEIPT SEBELUM TRANSACTION
+    // =================================================
 
     const existingReceipt =
       await prisma.outletReceipt.findFirst({
         where: {
           purchaseId: purchase.id,
         },
+
         select: {
           id: true,
           number: true,
@@ -202,26 +351,126 @@ export async function POST(
           message:
             `Purchase Order sudah diterima dengan nomor ${existingReceipt.number}`,
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    // =========================
+    // =================================================
     // TRANSACTION
-    // =========================
+    // =================================================
 
     const result =
       await prisma.$transaction(
         async (tx) => {
-          // =========================
+          // ===========================================
+          // AMBIL ULANG PURCHASE
+          //
+          // Penting untuk mencegah race condition
+          // ===========================================
+
+          const currentPurchase =
+            await tx.outletPurchase.findUnique({
+              where: {
+                id: purchase.id,
+              },
+
+              include: {
+                outlet: true,
+
+                supplier: true,
+
+                items: {
+                  include: {
+                    barang: true,
+                  },
+                },
+              },
+            });
+
+          if (!currentPurchase) {
+            throw new Error(
+              "Purchase Order Outlet tidak ditemukan"
+            );
+          }
+
+          // ===========================================
+          // CEK OUTLET ULANG
+          // ===========================================
+
+          if (
+            currentPurchase.outletId !==
+            user.outletId
+          ) {
+            throw new Error(
+              "Purchase Order bukan milik outlet user"
+            );
+          }
+
+          // ===========================================
+          // CEK STATUS ULANG
+          // ===========================================
+
+          if (
+            currentPurchase.status !==
+            OutletPurchaseStatus.APPROVED
+          ) {
+            throw new Error(
+              `Purchase Order sudah diproses. Status: ${currentPurchase.status}`
+            );
+          }
+
+          // ===========================================
+          // CEK RECEIPT ULANG
+          // ===========================================
+
+          const duplicateReceipt =
+            await tx.outletReceipt.findFirst({
+              where: {
+                purchaseId:
+                  currentPurchase.id,
+              },
+
+              select: {
+                id: true,
+                number: true,
+              },
+            });
+
+          if (duplicateReceipt) {
+            throw new Error(
+              `Purchase Order sudah diterima dengan nomor ${duplicateReceipt.number}`
+            );
+          }
+
+          // ===========================================
+          // VALIDASI ITEM ULANG
+          // ===========================================
+
+          if (
+            currentPurchase.items.length ===
+            0
+          ) {
+            throw new Error(
+              "Purchase Order tidak memiliki barang"
+            );
+          }
+
+          // ===========================================
           // NOMOR RECEIPT
-          // =========================
+          //
+          // Gunakan ID sequence database.
+          // Tetap aman dari bentrok karena create
+          // berada dalam transaction.
+          // ===========================================
 
           const lastReceipt =
             await tx.outletReceipt.findFirst({
               orderBy: {
                 id: "desc",
               },
+
               select: {
                 id: true,
               },
@@ -235,30 +484,49 @@ export async function POST(
               nextNumber
             ).padStart(5, "0")}`;
 
-          // =========================
+          // ===========================================
           // CREATE RECEIPT
-          // =========================
+          // ===========================================
 
           const receipt =
             await tx.outletReceipt.create({
               data: {
-                number: receiptNumber,
-                purchaseId: purchase.id,
-                outletId: purchase.outletId,
-                supplierId: purchase.supplierId,
+                number:
+                  receiptNumber,
+
+                purchaseId:
+                  currentPurchase.id,
+
+                outletId:
+                  currentPurchase.outletId,
+
+                supplierId:
+                  currentPurchase.supplierId,
+
                 remarks:
-                  `Penerimaan ${purchase.number}`,
+                  `Penerimaan ${currentPurchase.number}`,
 
                 items: {
                   create:
-                    purchase.items.map(
+                    currentPurchase.items.map(
                       (item) => ({
                         barangId:
                           item.barangId,
-                        qty: item.qty,
-                        price: item.price,
+
+                        qty:
+                          Number(
+                            item.qty
+                          ),
+
+                        price:
+                          Number(
+                            item.price
+                          ),
+
                         subtotal:
-                          item.subtotal,
+                          Number(
+                            item.subtotal
+                          ),
                       })
                     ),
                 },
@@ -266,7 +534,9 @@ export async function POST(
 
               include: {
                 outlet: true,
+
                 supplier: true,
+
                 items: {
                   include: {
                     barang: true,
@@ -275,22 +545,54 @@ export async function POST(
               },
             });
 
-          // =========================
-          // UPDATE OUTLET STOCK
-          // =========================
+          // ===========================================
+          // UPDATE STOCK OUTLET
+          // ===========================================
 
-          for (const item of purchase.items) {
+          for (const item of
+            currentPurchase.items) {
+            const qty =
+              Number(item.qty);
+
+            const price =
+              Number(item.price);
+
+            if (
+              !Number.isFinite(qty) ||
+              qty <= 0
+            ) {
+              throw new Error(
+                `Qty barang ${item.barang.name} tidak valid`
+              );
+            }
+
+            if (
+              !Number.isFinite(price) ||
+              price < 0
+            ) {
+              throw new Error(
+                `Harga barang ${item.barang.name} tidak valid`
+              );
+            }
+
+            // =========================================
+            // STOCK OUTLET
+            // =========================================
+
             const existingStock =
-              await tx.outletStock.findUnique({
-                where: {
-                  outletId_barangId: {
-                    outletId:
-                      purchase.outletId,
-                    barangId:
-                      item.barangId,
+              await tx.outletStock.findUnique(
+                {
+                  where: {
+                    outletId_barangId: {
+                      outletId:
+                        currentPurchase.outletId,
+
+                      barangId:
+                        item.barangId,
+                    },
                   },
-                },
-              });
+                }
+              );
 
             if (existingStock) {
               const oldStock =
@@ -303,12 +605,6 @@ export async function POST(
                   existingStock.averageCost
                 );
 
-              const qty =
-                Number(item.qty);
-
-              const price =
-                Number(item.price);
-
               const newStock =
                 oldStock + qty;
 
@@ -317,17 +613,22 @@ export async function POST(
                   ? (
                       oldStock *
                         oldAverage +
-                      qty * price
-                    ) / newStock
+                      qty *
+                        price
+                    ) /
+                    newStock
                   : price;
 
               await tx.outletStock.update({
                 where: {
-                  id: existingStock.id,
+                  id:
+                    existingStock.id,
                 },
 
                 data: {
-                  stock: newStock,
+                  stock:
+                    newStock,
+
                   averageCost:
                     newAverage,
                 },
@@ -336,28 +637,30 @@ export async function POST(
               await tx.outletStock.create({
                 data: {
                   outletId:
-                    purchase.outletId,
+                    currentPurchase.outletId,
 
                   barangId:
                     item.barangId,
 
                   stock:
-                    Number(item.qty),
+                    qty,
 
                   minimumStock:
                     Number(
-                      item.barang.minimumStock
+                      item.barang
+                        .minimumStock ??
+                        0
                     ),
 
                   averageCost:
-                    Number(item.price),
+                    price,
                 },
               });
             }
 
-            // =========================
+            // =========================================
             // RECEIVED QTY
-            // =========================
+            // =========================================
 
             await tx.outletPurchaseItem.update({
               where: {
@@ -365,20 +668,20 @@ export async function POST(
               },
 
               data: {
-                receivedQty:
-                  item.qty,
+                receivedQty: qty,
               },
             });
           }
 
-          // =========================
-          // PURCHASE -> RECEIVED
-          // =========================
+          // ===========================================
+          // UPDATE PURCHASE -> RECEIVED
+          // ===========================================
 
           const updatedPurchase =
             await tx.outletPurchase.update({
               where: {
-                id: purchase.id,
+                id:
+                  currentPurchase.id,
               },
 
               data: {
@@ -388,7 +691,9 @@ export async function POST(
 
               include: {
                 outlet: true,
+
                 supplier: true,
+
                 items: {
                   include: {
                     barang: true,
@@ -397,9 +702,9 @@ export async function POST(
               },
             });
 
-          // =========================
+          // ===========================================
           // HISTORY
-          // =========================
+          // ===========================================
 
           await tx.history.create({
             data: {
@@ -410,28 +715,37 @@ export async function POST(
                 receipt.number,
 
               description:
-                `Menerima Purchase Outlet ${purchase.number} untuk outlet ${purchase.outlet.name}`,
+                `Menerima Purchase Outlet ${currentPurchase.number} untuk outlet ${currentPurchase.outlet.name}`,
 
               userId:
-                session.user.id,
+                user.id,
             },
           });
 
           return {
             receipt,
+
             purchase:
               updatedPurchase,
           };
         }
       );
 
+    // =================================================
+    // RESPONSE
+    // =================================================
+
     return NextResponse.json({
       success: true,
+
       message:
         "Barang berhasil diterima dan stok outlet bertambah",
+
       data: result,
+
+      outlet: user.outlet,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error(
       "RECEIVE OUTLET PURCHASE ERROR:",
       error
@@ -440,10 +754,14 @@ export async function POST(
     return NextResponse.json(
       {
         success: false,
+
         message:
+          error?.message ||
           "Gagal menerima Purchase Order Outlet",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }

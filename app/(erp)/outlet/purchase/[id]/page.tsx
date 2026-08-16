@@ -11,7 +11,10 @@ import {
   ShoppingCart,
   RefreshCw,
   CheckCircle2,
+  FileText,
 } from "lucide-react";
+
+import { exportPurchasePDF } from "@/lib/exportPurchasePdf";
 
 type Outlet = {
   id: number;
@@ -35,6 +38,7 @@ type Barang = {
 };
 
 type PurchaseItem = {
+  id?: number;
   barangId: number;
   barang: Barang;
   qty: number;
@@ -50,6 +54,7 @@ type Purchase = {
   total: number;
   remarks: string | null;
   status: string;
+  purchaseDate?: string | Date | null;
   outlet: Outlet;
   supplier: Supplier;
   items: PurchaseItem[];
@@ -609,6 +614,49 @@ export default function PurchaseOutletDetailPage() {
     }
   }
 
+  function handleExportPDF() {
+    if (!purchase) {
+      alert("Data Purchase Outlet belum tersedia");
+      return;
+    }
+
+    const pdfData = {
+      ...purchase,
+
+      // Pastikan item punya subtotal terbaru
+      items: items.map((item) => ({
+        ...item,
+        subtotal:
+          Number(item.qty) *
+          Number(item.price),
+      })),
+
+      total,
+
+      // Pastikan outlet ikut terbaca oleh
+      // fungsi export PDF
+      outlet:
+        purchase.outlet ||
+        outlets.find(
+          (outlet) =>
+            outlet.id ===
+            Number(outletId)
+        ) ||
+        null,
+
+      supplier:
+        purchase.supplier ||
+        suppliers.find(
+          (supplier) =>
+            supplier.id ===
+            Number(supplierId)
+        ) ||
+        null,
+    };
+
+    exportPurchasePDF(pdfData);
+  }
+
   if (loading) {
     return (
       <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
@@ -631,6 +679,8 @@ export default function PurchaseOutletDetailPage() {
 
   return (
     <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
+
+      {/* HEADER */}
 
       <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
@@ -666,6 +716,8 @@ export default function PurchaseOutletDetailPage() {
 
         <div className="flex flex-wrap items-center gap-3">
 
+          {/* STATUS */}
+
           <span
             className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
               purchase.status === "DRAFT"
@@ -679,6 +731,19 @@ export default function PurchaseOutletDetailPage() {
           >
             {purchase.status}
           </span>
+
+          {/* PDF */}
+
+          <button
+            type="button"
+            onClick={handleExportPDF}
+            className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
+          >
+            <FileText size={17} />
+            Export PDF
+          </button>
+
+          {/* APPROVE */}
 
           {canApprove && (
             <button
@@ -705,6 +770,8 @@ export default function PurchaseOutletDetailPage() {
                 : "Approve"}
             </button>
           )}
+
+          {/* DELETE */}
 
           {isDraft && (
             <button
@@ -735,6 +802,8 @@ export default function PurchaseOutletDetailPage() {
       </div>
 
       <div className="space-y-6">
+
+        {/* INFORMASI PO */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
@@ -853,6 +922,8 @@ export default function PurchaseOutletDetailPage() {
           </div>
 
         </div>
+
+        {/* TAMBAH BARANG */}
 
         {isDraft && (
           <div className="rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
@@ -997,6 +1068,8 @@ export default function PurchaseOutletDetailPage() {
 
           </div>
         )}
+
+        {/* DETAIL BARANG */}
 
         <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
@@ -1173,6 +1246,17 @@ export default function PurchaseOutletDetailPage() {
                   )
                 )}
 
+                {items.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={isDraft ? 7 : 6}
+                      className="px-5 py-12 text-center text-gray-400"
+                    >
+                      Belum ada barang.
+                    </td>
+                  </tr>
+                )}
+
               </tbody>
 
               <tfoot>
@@ -1202,6 +1286,8 @@ export default function PurchaseOutletDetailPage() {
 
         </div>
 
+        {/* BOTTOM ACTION */}
+
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
 
           <button
@@ -1214,6 +1300,17 @@ export default function PurchaseOutletDetailPage() {
             className="rounded-xl border border-[#D5E5DC] bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-[#F5F8F6]"
           >
             Kembali
+          </button>
+
+          {/* PDF BOTTOM */}
+
+          <button
+            type="button"
+            onClick={handleExportPDF}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-700"
+          >
+            <FileText size={17} />
+            Export PDF
           </button>
 
           {isDraft && (
