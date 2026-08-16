@@ -8,34 +8,45 @@ datasource db {
 }
 
 model User {
-  id        Int       @id @default(autoincrement())
-  username  String    @unique
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
   password  String
   fullname  String
   role      Role
   outletId  Int?
-  active    Boolean   @default(true)
-  createdAt DateTime  @default(now())
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   histories History[]
   sessions  Session[]
 
-  outlet    Outlet?   @relation(fields: [outletId], references: [id])
+  outlet Outlet? @relation(fields: [outletId], references: [id])
 }
 
 model Outlet {
-  id         Int      @id @default(autoincrement())
-  code       String   @unique
-  name       String
-  address    String?
-  city       String?
-  phone      String?
-  active     Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  address   String?
+  city      String?
+  phone     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  users      User[]
+  users User[]
+
+  purchases  OutletPurchase[]
+  receipts   OutletReceipt[]
+  stocks     OutletStock[]
+  transfers  OutletTransfer[]
+  deliveries Delivery[]
+
+  stockOpnames StockOpname[]
+  outletBarang OutletBarang[]
+
+  sourceBarangs Barang[] @relation("BarangSourceOutlet")
 }
 
 model Session {
@@ -48,20 +59,24 @@ model Session {
 }
 
 model Supplier {
-  id            Int            @id @default(autoincrement())
-  code          String         @unique
+  id            Int      @id @default(autoincrement())
+  code          String   @unique
   name          String
   address       String?
   city          String?
   phone         String?
   email         String?
   contactPerson String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  MasterHarga   MasterHarga[]
-  priceSummary  PriceSummary[]
-  purchases     Purchase[]
-  receipts      Receipt[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  MasterHarga  MasterHarga[]
+  priceSummary PriceSummary[]
+  purchases    Purchase[]
+  receipts     Receipt[]
+
+  outletPurchases OutletPurchase[]
+  outletReceipts  OutletReceipt[]
 }
 
 model Customer {
@@ -79,22 +94,32 @@ model Customer {
 }
 
 model Barang {
-  id                 Int                  @id @default(autoincrement())
-  code               String               @unique
-  barcode            String?              @unique
-  name               String
-  category           String?
-  brand              String?
-  unit               String
-  minimumStock       Float                @default(0)
-  stock              Float                @default(0)
-  purchasePrice      Float                @default(0)
-  sellingPrice       Float                @default(0)
-  hasExpired         Boolean              @default(false)
-  active             Boolean              @default(true)
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  expiredWarning     Int                  @default(30)
+  id             Int      @id @default(autoincrement())
+  code           String   @unique
+  barcode        String?  @unique
+  name           String
+  category       String?
+  brand          String?
+  unit           String
+  minimumStock   Float    @default(0)
+  stock          Float    @default(0)
+  purchasePrice  Float    @default(0)
+  sellingPrice   Float    @default(0)
+  hasExpired     Boolean  @default(false)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  expiredWarning Int      @default(30)
+
+  // ============================================
+  // SUMBER BARANG
+  // ============================================
+
+  source         BarangSource @default(CENTRAL)
+  sourceOutletId Int?
+
+  sourceOutlet Outlet? @relation("BarangSourceOutlet", fields: [sourceOutletId], references: [id])
+
   adjustmentItems    AdjustmentItem[]
   batches            BarangBatch[]
   batchStocks        BatchStock[]
@@ -109,6 +134,15 @@ model Barang {
   stockMutations     StockMutation[]
   stockOpnameHistory StockOpnameHistory[]
   stockOpnameItems   StockOpnameItem[]
+
+  outletPurchaseItems OutletPurchaseItem[]
+  outletReceiptItems  OutletReceiptItem[]
+  outletStocks        OutletStock[]
+  outletTransferItems OutletTransferItem[]
+  outletBarang        OutletBarang[]
+
+  @@index([source])
+  @@index([sourceOutletId])
 }
 
 model BarangBatch {
@@ -150,6 +184,112 @@ model PurchaseItem {
   barang      Barang   @relation(fields: [barangId], references: [id])
 }
 
+model OutletPurchase {
+  id           Int                  @id @default(autoincrement())
+  number       String               @unique
+  outletId     Int
+  supplierId   Int
+  purchaseDate DateTime             @default(now())
+  status       OutletPurchaseStatus @default(DRAFT)
+  remarks      String?
+  total        Float                @default(0)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  outlet   Outlet               @relation(fields: [outletId], references: [id])
+  supplier Supplier             @relation(fields: [supplierId], references: [id])
+  items    OutletPurchaseItem[]
+  receipts OutletReceipt[]
+
+  @@index([outletId])
+  @@index([supplierId])
+}
+
+model OutletPurchaseItem {
+  id          Int   @id @default(autoincrement())
+  purchaseId  Int
+  barangId    Int
+  qty         Float
+  receivedQty Float @default(0)
+  price       Float
+  discount    Float @default(0)
+  tax         Float @default(0)
+  subtotal    Float
+
+  purchase OutletPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  barang   Barang         @relation(fields: [barangId], references: [id])
+
+  @@index([purchaseId])
+  @@index([barangId])
+}
+
+model OutletReceipt {
+  id          Int      @id @default(autoincrement())
+  number      String   @unique
+  purchaseId  Int
+  outletId    Int
+  supplierId  Int
+  receiptDate DateTime @default(now())
+  remarks     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  purchase OutletPurchase      @relation(fields: [purchaseId], references: [id])
+  outlet   Outlet              @relation(fields: [outletId], references: [id])
+  supplier Supplier            @relation(fields: [supplierId], references: [id])
+  items    OutletReceiptItem[]
+
+  @@index([outletId])
+  @@index([purchaseId])
+}
+
+model OutletReceiptItem {
+  id        Int   @id @default(autoincrement())
+  receiptId Int
+  barangId  Int
+  qty       Float
+  price     Float
+  subtotal  Float
+
+  receipt OutletReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  barang  Barang        @relation(fields: [barangId], references: [id])
+
+  @@index([receiptId])
+  @@index([barangId])
+}
+
+model OutletStock {
+  id           Int      @id @default(autoincrement())
+  outletId     Int
+  barangId     Int
+  stock        Float    @default(0)
+  minimumStock Float    @default(0)
+  averageCost  Float    @default(0)
+  updatedAt    DateTime @updatedAt
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  barang Barang @relation(fields: [barangId], references: [id])
+
+  @@unique([outletId, barangId])
+  @@index([outletId])
+  @@index([barangId])
+}
+
+model OutletBarang {
+  id        Int      @id @default(autoincrement())
+  outletId  Int
+  barangId  Int
+  harga     Float?   @default(0)
+  aktif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  barang Barang @relation(fields: [barangId], references: [id], onDelete: Cascade)
+
+  @@unique([outletId, barangId])
+}
+
 model Receipt {
   id          Int           @id @default(autoincrement())
   number      String        @unique
@@ -179,15 +319,18 @@ model Delivery {
   id           Int            @id @default(autoincrement())
   number       String         @unique
   customerId   Int
+  outletId     Int?
   deliveryDate DateTime       @default(now())
   status       DeliveryStatus @default(DRAFT)
   remarks      String?
   totalQty     Float          @default(0)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
-  customer     Customer       @relation(fields: [customerId], references: [id])
-  items        DeliveryItem[]
-  suratJalan   SuratJalan?
+
+  customer   Customer       @relation(fields: [customerId], references: [id])
+  outlet     Outlet?        @relation(fields: [outletId], references: [id])
+  items      DeliveryItem[]
+  suratJalan SuratJalan?
 }
 
 model DeliveryItem {
@@ -268,16 +411,21 @@ model Inventory {
 }
 
 model StockOpname {
-  id         Int                  @id @default(autoincrement())
-  code       String               @unique
-  date       DateTime             @default(now())
-  status     String               @default("COUNTING")
+  id         Int      @id @default(autoincrement())
+  code       String   @unique
+  date       DateTime @default(now())
+  status     String   @default("COUNTING")
   createdBy  Int?
   approvedBy Int?
-  createdAt  DateTime             @default(now())
-  updatedAt  DateTime             @updatedAt
-  histories  StockOpnameHistory[]
-  items      StockOpnameItem[]
+  outletId   Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  outlet    Outlet?              @relation(fields: [outletId], references: [id])
+  histories StockOpnameHistory[]
+  items     StockOpnameItem[]
+
+  @@index([outletId])
 }
 
 model StockOpnameItem {
@@ -492,12 +640,47 @@ model PriceSummary {
   @@index([supplierId])
 }
 
+model OutletTransfer {
+  id           Int                  @id @default(autoincrement())
+  number       String               @unique
+  outletId     Int
+  transferDate DateTime             @default(now())
+  status       OutletTransferStatus @default(SENT)
+  remarks      String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  outlet Outlet               @relation(fields: [outletId], references: [id])
+  items  OutletTransferItem[]
+
+  @@index([outletId])
+}
+
+model OutletTransferItem {
+  id          Int   @id @default(autoincrement())
+  transferId  Int
+  barangId    Int
+  qty         Float
+  receivedQty Float @default(0)
+
+  transfer OutletTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  barang   Barang         @relation(fields: [barangId], references: [id])
+
+  @@index([transferId])
+  @@index([barangId])
+}
+
 enum Role {
   ADMIN
   MANAGER
   PURCHASING
   GUDANG
   OUTLET_ADMIN
+}
+
+enum BarangSource {
+  CENTRAL
+  OUTLET
 }
 
 enum PurchaseStatus {
@@ -526,4 +709,16 @@ enum HistoryType {
   RECEIPT
   DELIVERY
   STOCK_OPNAME
+}
+
+enum OutletPurchaseStatus {
+  DRAFT
+  APPROVED
+  RECEIVED
+}
+
+enum OutletTransferStatus {
+  SENT
+  PARTIAL
+  RECEIVED
 }

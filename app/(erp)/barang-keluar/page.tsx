@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
 import {
   PackageMinus,
   Search,
@@ -13,6 +14,7 @@ import {
   FileText,
   ScanLine,
   X,
+  Store,
 } from "lucide-react";
 
 import BarcodeInputScanner from "@/components/BarcodeInputScanner";
@@ -21,24 +23,40 @@ import CameraBarcodeScanner from "@/components/CameraBarcodeScanner";
 export default function BarangKeluarPage() {
   const [barang, setBarang] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
+  const [outlets, setOutlets] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
 
   const [customer, setCustomer] = useState("");
+  const [outlet, setOutlet] = useState("");
   const [note, setNote] = useState("");
 
   const [searchBarang, setSearchBarang] = useState("");
   const [showBarang, setShowBarang] = useState(false);
-  const [selectedBarang, setSelectedBarang] = useState<any>(null);
+  const [selectedBarang, setSelectedBarang] =
+    useState<any>(null);
 
   const [qty, setQty] = useState("");
 
-  const [openCamera, setOpenCamera] = useState(false);
-  const [scanBarang, setScanBarang] = useState<any>(null);
-  const [scanQty, setScanQty] = useState("1");
+  const [openCamera, setOpenCamera] =
+    useState(false);
 
-  const [loadingBarang, setLoadingBarang] = useState(false);
-  const [loadingCustomer, setLoadingCustomer] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [scanBarang, setScanBarang] =
+    useState<any>(null);
+
+  const [scanQty, setScanQty] =
+    useState("1");
+
+  const [loadingBarang, setLoadingBarang] =
+    useState(false);
+
+  const [loadingCustomer, setLoadingCustomer] =
+    useState(false);
+
+  const [loadingOutlet, setLoadingOutlet] =
+    useState(false);
+
+  const [saving, setSaving] =
+    useState(false);
 
   // =========================================================
   // LOAD BARANG
@@ -59,8 +77,12 @@ export default function BarangKeluarPage() {
           ? json
           : json.data || []
       );
-    } catch (err) {
-      console.error("LOAD BARANG ERROR:", err);
+    } catch (error) {
+      console.error(
+        "LOAD BARANG ERROR:",
+        error
+      );
+
       setBarang([]);
     } finally {
       setLoadingBarang(false);
@@ -86,17 +108,57 @@ export default function BarangKeluarPage() {
           ? json
           : json.data || []
       );
-    } catch (err) {
-      console.error("LOAD CUSTOMER ERROR:", err);
+    } catch (error) {
+      console.error(
+        "LOAD CUSTOMER ERROR:",
+        error
+      );
+
       setCustomers([]);
     } finally {
       setLoadingCustomer(false);
     }
   }
 
+  // =========================================================
+  // LOAD OUTLET
+  // =========================================================
+
+  async function loadOutlet() {
+    try {
+      setLoadingOutlet(true);
+
+      const res = await fetch("/api/outlet", {
+        cache: "no-store",
+      });
+
+      const json = await res.json();
+
+      setOutlets(
+        Array.isArray(json)
+          ? json
+          : json.data || []
+      );
+    } catch (error) {
+      console.error(
+        "LOAD OUTLET ERROR:",
+        error
+      );
+
+      setOutlets([]);
+    } finally {
+      setLoadingOutlet(false);
+    }
+  }
+
+  // =========================================================
+  // INITIAL LOAD
+  // =========================================================
+
   useEffect(() => {
     loadBarang();
     loadCustomer();
+    loadOutlet();
   }, []);
 
   // =========================================================
@@ -143,11 +205,17 @@ export default function BarangKeluarPage() {
     }
 
     if (Number(data.stock) <= 0) {
-      alert(`Stock ${data.name} sudah habis`);
+      alert(
+        `Stock ${data.name} sudah habis`
+      );
+
       return false;
     }
 
-    if (jumlah > Number(data.stock)) {
+    if (
+      jumlah >
+      Number(data.stock)
+    ) {
       alert(
         `Stock ${data.name} hanya ${data.stock}`
       );
@@ -159,12 +227,14 @@ export default function BarangKeluarPage() {
 
     setCart((prev) => {
       const exist = prev.find(
-        (x) => x.barangId === data.id
+        (x) =>
+          x.barangId === data.id
       );
 
       if (exist) {
         const newQty =
-          exist.qty + jumlah;
+          Number(exist.qty) +
+          jumlah;
 
         if (
           newQty >
@@ -175,16 +245,20 @@ export default function BarangKeluarPage() {
           );
 
           berhasil = false;
+
           return prev;
         }
 
         return prev.map((x) => {
-          if (x.barangId === data.id) {
+          if (
+            x.barangId === data.id
+          ) {
             return {
               ...x,
               qty: newQty,
               subtotal:
-                newQty * x.price,
+                newQty *
+                Number(x.price || 0),
             };
           }
 
@@ -192,22 +266,27 @@ export default function BarangKeluarPage() {
         });
       }
 
-      const price = Number(
-        data.purchasePrice ?? 0
-      );
+      const price =
+        Number(
+          data.purchasePrice ?? 0
+        );
 
       return [
         ...prev,
+
         {
           barangId: data.id,
           code: data.code,
           barcode: data.barcode,
           name: data.name,
           unit: data.unit,
-          stock: Number(data.stock ?? 0),
+          stock: Number(
+            data.stock ?? 0
+          ),
           qty: jumlah,
           price,
-          subtotal: price * jumlah,
+          subtotal:
+            price * jumlah,
         },
       ];
     });
@@ -221,16 +300,20 @@ export default function BarangKeluarPage() {
 
   function tambahManual() {
     if (!selectedBarang) {
-      alert("Pilih barang terlebih dahulu");
+      alert(
+        "Pilih barang terlebih dahulu"
+      );
+
       return;
     }
 
     const jumlah = Number(qty);
 
-    const berhasil = tambahKeCart(
-      selectedBarang,
-      jumlah
-    );
+    const berhasil =
+      tambahKeCart(
+        selectedBarang,
+        jumlah
+      );
 
     if (berhasil) {
       setSelectedBarang(null);
@@ -263,7 +346,8 @@ export default function BarangKeluarPage() {
         }
       );
 
-      const json = await res.json();
+      const json =
+        await res.json();
 
       if (!json.success) {
         alert(
@@ -274,12 +358,15 @@ export default function BarangKeluarPage() {
         return;
       }
 
-      setScanBarang(json.data);
+      setScanBarang(
+        json.data
+      );
+
       setScanQty("1");
-    } catch (err) {
+    } catch (error) {
       console.error(
         "SCAN BARCODE ERROR:",
-        err
+        error
       );
 
       alert(
@@ -297,12 +384,14 @@ export default function BarangKeluarPage() {
       return;
     }
 
-    const jumlah = Number(scanQty);
+    const jumlah =
+      Number(scanQty);
 
-    const berhasil = tambahKeCart(
-      scanBarang,
-      jumlah
-    );
+    const berhasil =
+      tambahKeCart(
+        scanBarang,
+        jumlah
+      );
 
     if (berhasil) {
       setScanBarang(null);
@@ -328,47 +417,80 @@ export default function BarangKeluarPage() {
 
   async function simpan() {
     if (!customer) {
-      alert("Pilih customer terlebih dahulu");
+      alert(
+        "Pilih customer terlebih dahulu"
+      );
+
+      return;
+    }
+
+    if (!outlet) {
+      alert(
+        "Pilih outlet tujuan terlebih dahulu"
+      );
+
       return;
     }
 
     if (cart.length === 0) {
-      alert("Belum ada barang");
+      alert(
+        "Belum ada barang"
+      );
+
       return;
     }
 
     try {
       setSaving(true);
 
-      const res = await fetch(
-        "/api/barang-keluar",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            customerId: Number(customer),
-            note,
-            items: cart.map((item) => ({
-              barangId:
-                item.barangId,
-              qty: item.qty,
-            })),
-          }),
-        }
-      );
+      const res =
+        await fetch(
+          "/api/barang-keluar",
+          {
+            method: "POST",
 
-      const json = await res.json();
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify({
+                customerId:
+                  Number(customer),
+
+                outletId:
+                  Number(outlet),
+
+                note,
+
+                items:
+                  cart.map(
+                    (item) => ({
+                      barangId:
+                        item.barangId,
+
+                      qty:
+                        Number(
+                          item.qty
+                        ),
+                    })
+                  ),
+              }),
+          }
+        );
+
+      const json =
+        await res.json();
 
       if (json.success) {
         alert(
-          "Barang keluar berhasil disimpan"
+          "Barang keluar berhasil disimpan sebagai DRAFT"
         );
 
         setCart([]);
         setCustomer("");
+        setOutlet("");
         setNote("");
 
         await loadBarang();
@@ -396,35 +518,44 @@ export default function BarangKeluarPage() {
   // TOTAL
   // =========================================================
 
-  const totalQty = cart.reduce(
-    (total, item) =>
-      total + Number(item.qty || 0),
-    0
-  );
+  const totalQty =
+    cart.reduce(
+      (total, item) =>
+        total +
+        Number(
+          item.qty || 0
+        ),
+      0
+    );
 
-  const totalNominal = cart.reduce(
-    (total, item) =>
-      total +
-      Number(item.subtotal || 0),
-    0
-  );
+  const totalNominal =
+    cart.reduce(
+      (total, item) =>
+        total +
+        Number(
+          item.subtotal || 0
+        ),
+      0
+    );
 
   // =========================================================
-  // FORMAT
+  // FORMAT NUMBER
   // =========================================================
 
-  function formatNumber(value: any) {
+  function formatNumber(
+    value: any
+  ) {
     return Number(
       value ?? 0
-    ).toLocaleString("id-ID");
+    ).toLocaleString(
+      "id-ID"
+    );
   }
 
   return (
     <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
 
-      {/* ================================================= */}
       {/* HEADER */}
-      {/* ================================================= */}
 
       <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
@@ -463,15 +594,9 @@ export default function BarangKeluarPage() {
 
       </div>
 
-      {/* ================================================= */}
-      {/* MAIN CARD */}
-      {/* ================================================= */}
-
       <div className="space-y-6">
 
-        {/* ================================================= */}
-        {/* CUSTOMER & KETERANGAN */}
-        {/* ================================================= */}
+        {/* INFORMASI */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm md:p-6">
 
@@ -488,14 +613,14 @@ export default function BarangKeluarPage() {
               </h2>
 
               <p className="text-xs text-gray-500">
-                Tentukan customer dan keterangan transaksi
+                Tentukan customer, outlet tujuan dan keterangan
               </p>
 
             </div>
 
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
 
             {/* CUSTOMER */}
 
@@ -509,23 +634,7 @@ export default function BarangKeluarPage() {
               </label>
 
               <select
-                className="
-                  w-full
-                  rounded-xl
-                  border
-                  border-[#D5E5DC]
-                  bg-[#FAFCFB]
-                  px-4
-                  py-3
-                  text-sm
-                  text-gray-700
-                  outline-none
-                  transition
-                  focus:border-[#497F70]
-                  focus:bg-white
-                  focus:ring-2
-                  focus:ring-[#497F70]/10
-                "
+                className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-[#497F70] focus:bg-white focus:ring-2 focus:ring-[#497F70]/10"
                 value={customer}
                 onChange={(e) =>
                   setCustomer(
@@ -535,22 +644,86 @@ export default function BarangKeluarPage() {
               >
 
                 <option value="">
-                  -- Pilih Customer --
+                  {loadingCustomer
+                    ? "Memuat customer..."
+                    : "-- Pilih Customer --"}
                 </option>
 
-                {customers.map((c) => (
-                  <option
-                    key={c.id}
-                    value={c.id}
-                  >
-                    {c.code
-                      ? `${c.code} - `
-                      : ""}
-                    {c.name}
-                  </option>
-                ))}
+                {customers.map(
+                  (c) => (
+                    <option
+                      key={c.id}
+                      value={c.id}
+                    >
+                      {c.code
+                        ? `${c.code} - `
+                        : ""}
+                      {c.name}
+                    </option>
+                  )
+                )}
 
               </select>
+
+            </div>
+
+            {/* OUTLET */}
+
+            <div>
+
+              <label className="mb-2 block text-sm font-semibold text-[#35564C]">
+                Outlet Tujuan
+                <span className="ml-1 text-red-500">
+                  *
+                </span>
+              </label>
+
+              <div className="relative">
+
+                <Store
+                  size={17}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+
+                <select
+                  className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-10 pr-4 text-sm text-gray-700 outline-none transition focus:border-[#497F70] focus:bg-white focus:ring-2 focus:ring-[#497F70]/10"
+                  value={outlet}
+                  onChange={(e) =>
+                    setOutlet(
+                      e.target.value
+                    )
+                  }
+                >
+
+                  <option value="">
+                    {loadingOutlet
+                      ? "Memuat outlet..."
+                      : "-- Pilih Outlet Tujuan --"}
+                  </option>
+
+                  {outlets
+                    .filter(
+                      (o) =>
+                        o.active !==
+                        false
+                    )
+                    .map(
+                      (o) => (
+                        <option
+                          key={o.id}
+                          value={o.id}
+                        >
+                          {o.code
+                            ? `${o.code} - `
+                            : ""}
+                          {o.name}
+                        </option>
+                      )
+                    )}
+
+                </select>
+
+              </div>
 
             </div>
 
@@ -566,36 +739,12 @@ export default function BarangKeluarPage() {
 
                 <FileText
                   size={17}
-                  className="
-                    absolute
-                    left-3
-                    top-1/2
-                    -translate-y-1/2
-                    text-gray-400
-                  "
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
                 />
 
                 <input
-                  className="
-                    w-full
-                    rounded-xl
-                    border
-                    border-[#D5E5DC]
-                    bg-[#FAFCFB]
-                    py-3
-                    pl-10
-                    pr-4
-                    text-sm
-                    text-gray-700
-                    outline-none
-                    transition
-                    placeholder:text-gray-400
-                    focus:border-[#497F70]
-                    focus:bg-white
-                    focus:ring-2
-                    focus:ring-[#497F70]/10
-                  "
-                  placeholder="Contoh: Pengiriman ke customer..."
+                  className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-10 pr-4 text-sm text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-[#497F70] focus:bg-white focus:ring-2 focus:ring-[#497F70]/10"
+                  placeholder="Contoh: Pengiriman ke outlet..."
                   value={note}
                   onChange={(e) =>
                     setNote(
@@ -612,9 +761,7 @@ export default function BarangKeluarPage() {
 
         </div>
 
-        {/* ================================================= */}
         {/* SCANNER */}
-        {/* ================================================= */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm md:p-6">
 
@@ -653,22 +800,7 @@ export default function BarangKeluarPage() {
               onClick={() =>
                 setOpenCamera(true)
               }
-              className="
-                inline-flex
-                items-center
-                justify-center
-                gap-2
-                rounded-xl
-                bg-[#497F70]
-                px-5
-                py-3
-                text-sm
-                font-semibold
-                text-white
-                shadow-sm
-                transition
-                hover:bg-[#3D6D60]
-              "
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#497F70] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3D6D60]"
             >
 
               <Camera size={18} />
@@ -678,8 +810,6 @@ export default function BarangKeluarPage() {
             </button>
 
           </div>
-
-          {/* CAMERA */}
 
           {openCamera && (
             <div className="mt-5 overflow-hidden rounded-2xl border border-[#DDE9E4] bg-[#18352D] p-4">
@@ -703,14 +833,7 @@ export default function BarangKeluarPage() {
                   onClick={() =>
                     setOpenCamera(false)
                   }
-                  className="
-                    rounded-lg
-                    p-2
-                    text-white/70
-                    transition
-                    hover:bg-white/10
-                    hover:text-white
-                  "
+                  className="rounded-lg p-2 text-white/70 transition hover:bg-white/10 hover:text-white"
                 >
                   <X size={18} />
                 </button>
@@ -729,21 +852,7 @@ export default function BarangKeluarPage() {
                 onClick={() =>
                   setOpenCamera(false)
                 }
-                className="
-                  mt-3
-                  w-full
-                  rounded-xl
-                  border
-                  border-white/20
-                  bg-white/10
-                  px-4
-                  py-2.5
-                  text-sm
-                  font-medium
-                  text-white
-                  transition
-                  hover:bg-white/20
-                "
+                className="mt-3 w-full rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/20"
               >
                 Tutup Kamera
               </button>
@@ -753,9 +862,7 @@ export default function BarangKeluarPage() {
 
         </div>
 
-        {/* ================================================= */}
         {/* SEARCH BARANG */}
-        {/* ================================================= */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm md:p-6">
 
@@ -781,8 +888,6 @@ export default function BarangKeluarPage() {
 
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
 
-            {/* SEARCH */}
-
             <div className="relative flex-1">
 
               <label className="mb-2 block text-sm font-semibold text-[#35564C]">
@@ -793,33 +898,11 @@ export default function BarangKeluarPage() {
 
                 <Search
                   size={18}
-                  className="
-                    absolute
-                    left-3
-                    top-1/2
-                    -translate-y-1/2
-                    text-gray-400
-                  "
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
                 />
 
                 <input
-                  className="
-                    w-full
-                    rounded-xl
-                    border
-                    border-[#D5E5DC]
-                    bg-[#FAFCFB]
-                    py-3
-                    pl-10
-                    pr-4
-                    text-sm
-                    outline-none
-                    transition
-                    focus:border-[#497F70]
-                    focus:bg-white
-                    focus:ring-2
-                    focus:ring-[#497F70]/10
-                  "
+                  className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-10 pr-4 text-sm outline-none transition focus:border-[#497F70] focus:bg-white focus:ring-2 focus:ring-[#497F70]/10"
                   placeholder="Ketik kode, nama, atau barcode..."
                   value={searchBarang}
                   onFocus={() =>
@@ -830,31 +913,21 @@ export default function BarangKeluarPage() {
                       e.target.value
                     );
 
-                    setShowBarang(true);
-                    setSelectedBarang(null);
+                    setShowBarang(
+                      true
+                    );
+
+                    setSelectedBarang(
+                      null
+                    );
                   }}
                 />
 
               </div>
 
-              {/* DROPDOWN */}
-
               {showBarang &&
                 searchBarang && (
-                  <div className="
-                    absolute
-                    left-0
-                    right-0
-                    z-40
-                    mt-2
-                    max-h-72
-                    overflow-y-auto
-                    rounded-xl
-                    border
-                    border-[#DDE9E4]
-                    bg-white
-                    shadow-lg
-                  ">
+                  <div className="absolute left-0 right-0 z-40 mt-2 max-h-72 overflow-y-auto rounded-xl border border-[#DDE9E4] bg-white shadow-lg">
 
                     {loadingBarang ? (
                       <div className="flex items-center justify-center gap-2 p-5 text-sm text-gray-500">
@@ -888,18 +961,11 @@ export default function BarangKeluarPage() {
                             type="button"
                             key={b.id}
                             onClick={() =>
-                              pilihBarang(b)
+                              pilihBarang(
+                                b
+                              )
                             }
-                            className="
-                              w-full
-                              border-b
-                              border-[#EDF2EF]
-                              p-3
-                              text-left
-                              transition
-                              last:border-0
-                              hover:bg-[#F5F8F6]
-                            "
+                            className="w-full border-b border-[#EDF2EF] p-3 text-left transition last:border-0 hover:bg-[#F5F8F6]"
                           >
 
                             <div className="font-semibold text-[#18352D]">
@@ -939,8 +1005,6 @@ export default function BarangKeluarPage() {
 
             </div>
 
-            {/* QTY */}
-
             <div className="w-full md:w-32">
 
               <label className="mb-2 block text-sm font-semibold text-[#35564C]">
@@ -950,52 +1014,22 @@ export default function BarangKeluarPage() {
               <input
                 type="number"
                 min="1"
-                className="
-                  w-full
-                  rounded-xl
-                  border
-                  border-[#D5E5DC]
-                  bg-[#FAFCFB]
-                  px-4
-                  py-3
-                  text-sm
-                  outline-none
-                  transition
-                  focus:border-[#497F70]
-                  focus:bg-white
-                  focus:ring-2
-                  focus:ring-[#497F70]/10
-                "
+                className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm outline-none transition focus:border-[#497F70] focus:bg-white focus:ring-2 focus:ring-[#497F70]/10"
                 placeholder="0"
                 value={qty}
                 onChange={(e) =>
-                  setQty(e.target.value)
+                  setQty(
+                    e.target.value
+                  )
                 }
               />
 
             </div>
 
-            {/* TAMBAH */}
-
             <button
               type="button"
               onClick={tambahManual}
-              className="
-                inline-flex
-                h-[46px]
-                items-center
-                justify-center
-                gap-2
-                rounded-xl
-                bg-[#497F70]
-                px-5
-                text-sm
-                font-semibold
-                text-white
-                shadow-sm
-                transition
-                hover:bg-[#3D6D60]
-              "
+              className="inline-flex h-[46px] items-center justify-center gap-2 rounded-xl bg-[#497F70] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3D6D60]"
             >
 
               <Plus size={18} />
@@ -1008,9 +1042,7 @@ export default function BarangKeluarPage() {
 
         </div>
 
-        {/* ================================================= */}
         {/* CART */}
-        {/* ================================================= */}
 
         <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
@@ -1094,18 +1126,10 @@ export default function BarangKeluarPage() {
 
                       <div className="flex flex-col items-center">
 
-                        <div className="
-                          mb-3
-                          flex
-                          h-14
-                          w-14
-                          items-center
-                          justify-center
-                          rounded-full
-                          bg-[#EAF3EF]
-                          text-[#497F70]
-                        ">
-                          <ShoppingCart size={25} />
+                        <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#EAF3EF] text-[#497F70]">
+                          <ShoppingCart
+                            size={25}
+                          />
                         </div>
 
                         <p className="font-semibold text-gray-700">
@@ -1123,18 +1147,14 @@ export default function BarangKeluarPage() {
                   </tr>
                 ) : (
                   cart.map(
-                    (item, index) => (
+                    (
+                      item,
+                      index
+                    ) => (
                       <tr
                         key={`${item.barangId}-${index}`}
-                        className="
-                          border-b
-                          border-[#EDF2EF]
-                          transition
-                          hover:bg-[#FAFCFB]
-                        "
+                        className="border-b border-[#EDF2EF] transition hover:bg-[#FAFCFB]"
                       >
-
-                        {/* BARANG */}
 
                         <td className="px-5 py-4">
 
@@ -1150,14 +1170,21 @@ export default function BarangKeluarPage() {
 
                             {item.barcode && (
                               <>
-                                <span>•</span>
                                 <span>
-                                  {item.barcode}
+                                  •
+                                </span>
+
+                                <span>
+                                  {
+                                    item.barcode
+                                  }
                                 </span>
                               </>
                             )}
 
-                            <span>•</span>
+                            <span>
+                              •
+                            </span>
 
                             <span>
                               {item.unit}
@@ -1167,28 +1194,15 @@ export default function BarangKeluarPage() {
 
                         </td>
 
-                        {/* STOCK */}
-
                         <td className="px-5 py-4 text-center">
 
-                          <span className="
-                            inline-flex
-                            rounded-full
-                            bg-[#EAF3EF]
-                            px-3
-                            py-1
-                            text-xs
-                            font-semibold
-                            text-[#497F70]
-                          ">
+                          <span className="inline-flex rounded-full bg-[#EAF3EF] px-3 py-1 text-xs font-semibold text-[#497F70]">
                             {formatNumber(
                               item.stock
                             )}
                           </span>
 
                         </td>
-
-                        {/* QTY */}
 
                         <td className="px-5 py-4 text-center">
 
@@ -1200,8 +1214,6 @@ export default function BarangKeluarPage() {
 
                         </td>
 
-                        {/* HARGA */}
-
                         <td className="whitespace-nowrap px-5 py-4 text-right text-gray-600">
 
                           Rp{" "}
@@ -1210,8 +1222,6 @@ export default function BarangKeluarPage() {
                           )}
 
                         </td>
-
-                        {/* TOTAL */}
 
                         <td className="whitespace-nowrap px-5 py-4 text-right font-semibold text-[#18352D]">
 
@@ -1222,30 +1232,22 @@ export default function BarangKeluarPage() {
 
                         </td>
 
-                        {/* AKSI */}
-
                         <td className="px-5 py-4 text-center">
 
                           <button
                             type="button"
                             onClick={() =>
-                              hapus(index)
+                              hapus(
+                                index
+                              )
                             }
-                            className="
-                              inline-flex
-                              items-center
-                              justify-center
-                              rounded-lg
-                              bg-red-50
-                              p-2
-                              text-red-500
-                              transition
-                              hover:bg-red-100
-                            "
+                            className="inline-flex items-center justify-center rounded-lg bg-red-50 p-2 text-red-500 transition hover:bg-red-100"
                             title="Hapus barang"
                           >
 
-                            <Trash2 size={16} />
+                            <Trash2
+                              size={16}
+                            />
 
                           </button>
 
@@ -1264,13 +1266,9 @@ export default function BarangKeluarPage() {
 
         </div>
 
-        {/* ================================================= */}
         {/* SUMMARY */}
-        {/* ================================================= */}
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-
-          {/* INFO */}
 
           <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm lg:col-span-2">
 
@@ -1295,7 +1293,9 @@ export default function BarangKeluarPage() {
                 </p>
 
                 <p className="mt-1 text-2xl font-bold text-[#18352D]">
-                  {formatNumber(totalQty)}
+                  {formatNumber(
+                    totalQty
+                  )}
                 </p>
 
               </div>
@@ -1303,8 +1303,6 @@ export default function BarangKeluarPage() {
             </div>
 
           </div>
-
-          {/* TOTAL */}
 
           <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
@@ -1330,26 +1328,7 @@ export default function BarangKeluarPage() {
                 saving ||
                 cart.length === 0
               }
-              className="
-                mt-5
-                inline-flex
-                w-full
-                items-center
-                justify-center
-                gap-2
-                rounded-xl
-                bg-[#497F70]
-                px-5
-                py-3.5
-                text-sm
-                font-semibold
-                text-white
-                shadow-sm
-                transition
-                hover:bg-[#3D6D60]
-                disabled:cursor-not-allowed
-                disabled:opacity-50
-              "
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#497F70] px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3D6D60] disabled:cursor-not-allowed disabled:opacity-50"
             >
 
               {saving ? (
@@ -1360,11 +1339,12 @@ export default function BarangKeluarPage() {
                   />
 
                   Menyimpan...
-
                 </>
               ) : (
                 <>
-                  <PackageMinus size={17} />
+                  <PackageMinus
+                    size={17}
+                  />
 
                   Simpan Barang Keluar
                 </>
@@ -1378,39 +1358,21 @@ export default function BarangKeluarPage() {
 
       </div>
 
-      {/* ================================================= */}
-      {/* MODAL HASIL SCAN */}
-      {/* ================================================= */}
+      {/* MODAL SCAN */}
 
       {scanBarang && (
-        <div className="
-          fixed
-          inset-0
-          z-50
-          flex
-          items-center
-          justify-center
-          bg-black/50
-          p-4
-        ">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
 
-          <div className="
-            w-full
-            max-w-md
-            overflow-hidden
-            rounded-2xl
-            border
-            border-[#DDE9E4]
-            bg-white
-            shadow-2xl
-          ">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-2xl">
 
             <div className="flex items-center justify-between border-b border-[#E5ECE9] px-5 py-4">
 
               <div className="flex items-center gap-3">
 
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
-                  <ScanLine size={19} />
+                  <ScanLine
+                    size={19}
+                  />
                 </div>
 
                 <div>
@@ -1430,16 +1392,11 @@ export default function BarangKeluarPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setScanBarang(null)
+                  setScanBarang(
+                    null
+                  )
                 }
-                className="
-                  rounded-lg
-                  p-2
-                  text-gray-400
-                  transition
-                  hover:bg-gray-100
-                  hover:text-gray-600
-                "
+                className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
               >
                 <X size={18} />
               </button>
@@ -1515,22 +1472,7 @@ export default function BarangKeluarPage() {
                 <input
                   type="number"
                   min="1"
-                  className="
-                    w-full
-                    rounded-xl
-                    border
-                    border-[#D5E5DC]
-                    bg-[#FAFCFB]
-                    px-4
-                    py-3
-                    text-sm
-                    outline-none
-                    transition
-                    focus:border-[#497F70]
-                    focus:bg-white
-                    focus:ring-2
-                    focus:ring-[#497F70]/10
-                  "
+                  className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm outline-none transition focus:border-[#497F70] focus:bg-white focus:ring-2 focus:ring-[#497F70]/10"
                   value={scanQty}
                   onChange={(e) =>
                     setScanQty(
@@ -1546,48 +1488,27 @@ export default function BarangKeluarPage() {
                 <button
                   type="button"
                   onClick={() =>
-                    setScanBarang(null)
+                    setScanBarang(
+                      null
+                    )
                   }
-                  className="
-                    rounded-xl
-                    border
-                    border-[#D5E5DC]
-                    bg-white
-                    px-4
-                    py-3
-                    text-sm
-                    font-semibold
-                    text-gray-600
-                    transition
-                    hover:bg-[#F5F8F6]
-                  "
+                  className="rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm font-semibold text-gray-600 transition hover:bg-[#F5F8F6]"
                 >
                   Batal
                 </button>
 
                 <button
                   type="button"
-                  onClick={tambahDariScan}
-                  className="
-                    inline-flex
-                    items-center
-                    justify-center
-                    gap-2
-                    rounded-xl
-                    bg-[#497F70]
-                    px-4
-                    py-3
-                    text-sm
-                    font-semibold
-                    text-white
-                    transition
-                    hover:bg-[#3D6D60]
-                  "
+                  onClick={
+                    tambahDariScan
+                  }
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#497F70] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#3D6D60]"
                 >
 
                   <Plus size={17} />
 
                   Tambah
+
                 </button>
 
               </div>

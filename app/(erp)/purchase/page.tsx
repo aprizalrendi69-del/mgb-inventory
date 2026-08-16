@@ -16,14 +16,46 @@ import {
   Printer,
   Check,
   Truck,
+  Store,
 } from "lucide-react";
 
+type PurchaseRow = {
+  id: number;
+  number: string;
+  purchaseDate?: string;
+  total: number;
+  status: string;
+
+  supplier?: {
+    id: number;
+    code?: string;
+    name: string;
+  };
+
+  outlet?: {
+    id: number;
+    code?: string;
+    name: string;
+  };
+
+  outletId?: number | null;
+  supplierId?: number;
+
+  source?: "PUSAT" | "OUTLET" | string;
+
+  destinationType?: "PUSAT" | "OUTLET";
+  destinationId?: number | null;
+  destinationName?: string;
+  destinationCode?: string | null;
+};
+
 export default function PurchasePage() {
-  const [purchase, setPurchase] = useState<any[]>([]);
+  const [purchase, setPurchase] = useState<PurchaseRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("SEMUA");
+  const [source, setSource] = useState("SEMUA");
 
   useEffect(() => {
     loadPurchase();
@@ -39,22 +71,36 @@ export default function PurchasePage() {
 
       const json = await res.json();
 
-      if (json.success) {
-        setPurchase(json.data || []);
-      } else {
-        console.error(
-          json.message ||
-            "Gagal mengambil data Purchase"
-        );
+      console.log("PURCHASE DATA:", json);
 
+      if (!json.success || !Array.isArray(json.data)) {
         setPurchase([]);
+        return;
       }
-    } catch (error) {
-      console.error(
-        "PURCHASE ERROR:",
-        error
+
+      /*
+       * NORMALISASI DATA
+       *
+       * Kalau source dari API ada -> pakai.
+       * Kalau tidak ada tapi ada outletId -> otomatis OUTLET.
+       * Selain itu -> PUSAT.
+       */
+      const normalized: PurchaseRow[] = json.data.map(
+        (item: any) => ({
+          ...item,
+
+          source:
+            item.source === "OUTLET" ||
+            item.outletId !== null &&
+              item.outletId !== undefined
+              ? "OUTLET"
+              : "PUSAT",
+        })
       );
 
+      setPurchase(normalized);
+    } catch (error) {
+      console.error("PURCHASE ERROR:", error);
       setPurchase([]);
     } finally {
       setLoading(false);
@@ -91,7 +137,10 @@ export default function PurchasePage() {
         );
       }
     } catch (error) {
-      console.error(error);
+      console.error(
+        "APPROVE PURCHASE ERROR:",
+        error
+      );
 
       alert(
         "Terjadi kesalahan saat approve Purchase Order"
@@ -117,10 +166,7 @@ export default function PurchasePage() {
       const json = await res.json();
 
       if (json.success) {
-        alert(
-          "Barang berhasil diterima"
-        );
-
+        alert("Barang berhasil diterima");
         await loadPurchase();
       } else {
         alert(
@@ -129,7 +175,10 @@ export default function PurchasePage() {
         );
       }
     } catch (error) {
-      console.error(error);
+      console.error(
+        "RECEIVE PURCHASE ERROR:",
+        error
+      );
 
       alert(
         "Terjadi kesalahan saat menerima barang"
@@ -138,11 +187,15 @@ export default function PurchasePage() {
   }
 
   const filteredPurchase = useMemo(() => {
-    const keyword = search
-      .toLowerCase()
-      .trim();
+    const keyword =
+      search.toLowerCase().trim();
 
-    return purchase.filter((item: any) => {
+    return purchase.filter((item) => {
+      const itemSource =
+        item.source === "OUTLET"
+          ? "OUTLET"
+          : "PUSAT";
+
       const nomorPO =
         item.number
           ?.toLowerCase()
@@ -153,50 +206,86 @@ export default function PurchasePage() {
           ?.toLowerCase()
           .includes(keyword);
 
+      const kodeSupplier =
+        item.supplier?.code
+          ?.toLowerCase()
+          .includes(keyword);
+
+      const namaOutlet =
+        item.outlet?.name
+          ?.toLowerCase()
+          .includes(keyword);
+
+      const kodeOutlet =
+        item.outlet?.code
+          ?.toLowerCase()
+          .includes(keyword);
+
       const cocokSearch =
         !keyword ||
         nomorPO ||
-        namaSupplier;
+        namaSupplier ||
+        kodeSupplier ||
+        namaOutlet ||
+        kodeOutlet;
 
       const cocokStatus =
         status === "SEMUA" ||
         item.status === status;
 
+      const cocokSource =
+        source === "SEMUA" ||
+        itemSource === source;
+
       return (
         cocokSearch &&
-        cocokStatus
+        cocokStatus &&
+        cocokSource
       );
     });
   }, [
     purchase,
     search,
     status,
+    source,
   ]);
 
   const totalPurchase =
     purchase.length;
 
+  const totalPusat =
+    purchase.filter(
+      (item) =>
+        item.source !== "OUTLET"
+    ).length;
+
+  const totalOutlet =
+    purchase.filter(
+      (item) =>
+        item.source === "OUTLET"
+    ).length;
+
   const totalDraft =
     purchase.filter(
-      (item: any) =>
+      (item) =>
         item.status === "DRAFT"
     ).length;
 
   const totalApproved =
     purchase.filter(
-      (item: any) =>
+      (item) =>
         item.status === "APPROVED"
     ).length;
 
   const totalReceived =
     purchase.filter(
-      (item: any) =>
+      (item) =>
         item.status === "RECEIVED"
     ).length;
 
   const totalValue =
     purchase.reduce(
-      (total: number, item: any) =>
+      (total, item) =>
         total +
         Number(item.total || 0),
       0
@@ -307,7 +396,7 @@ export default function PurchasePage() {
             </h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              Kelola Purchase Order dan penerimaan barang
+              Kelola Purchase Order pusat dan outlet
             </p>
           </div>
 
@@ -349,16 +438,16 @@ export default function PurchasePage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">
-                Draft
+                Purchase Pusat
               </p>
 
-              <p className="mt-1 text-2xl font-bold text-amber-600">
-                {totalDraft}
+              <p className="mt-1 text-2xl font-bold text-[#497F70]">
+                {totalPusat}
               </p>
             </div>
 
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-              <Clock3 size={21} />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+              <ShoppingCart size={21} />
             </div>
           </div>
         </div>
@@ -367,16 +456,16 @@ export default function PurchasePage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">
-                Approved
+                Purchase Outlet
               </p>
 
               <p className="mt-1 text-2xl font-bold text-blue-600">
-                {totalApproved}
+                {totalOutlet}
               </p>
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-              <CheckCircle2 size={21} />
+              <Store size={21} />
             </div>
           </div>
         </div>
@@ -401,31 +490,59 @@ export default function PurchasePage() {
 
       </div>
 
-      {/* TOTAL VALUE */}
+      {/* STATUS */}
 
-      <div className="mb-6 rounded-2xl border border-[#DDE9E4] bg-white px-5 py-4 shadow-sm">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
 
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+              <Clock3 size={19} />
+            </div>
 
-          <div>
-            <p className="text-sm text-gray-500">
-              Total Nilai Purchase Order
-            </p>
+            <div>
+              <p className="text-sm text-gray-500">
+                Draft
+              </p>
 
-            <p className="mt-1 text-xl font-bold text-[#18352D]">
-              Rp {formatRupiah(totalValue)}
-            </p>
+              <p className="text-xl font-bold text-amber-600">
+                {totalDraft}
+              </p>
+            </div>
           </div>
+        </div>
 
-          <div className="text-sm text-gray-400">
-            {filteredPurchase.length} PO ditampilkan
+        <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <CheckCircle2 size={19} />
+            </div>
+
+            <div>
+              <p className="text-sm text-gray-500">
+                Approved
+              </p>
+
+              <p className="text-xl font-bold text-blue-600">
+                {totalApproved}
+              </p>
+            </div>
           </div>
+        </div>
 
+        <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
+          <p className="text-sm text-gray-500">
+            Total Nilai Purchase
+          </p>
+
+          <p className="mt-1 text-xl font-bold text-[#18352D]">
+            Rp {formatRupiah(totalValue)}
+          </p>
         </div>
 
       </div>
 
-      {/* MAIN */}
+      {/* TABLE */}
 
       <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
@@ -448,13 +565,33 @@ export default function PurchasePage() {
                 onChange={(e) =>
                   setSearch(e.target.value)
                 }
-                placeholder="Cari No PO atau supplier..."
+                placeholder="Cari No PO, supplier, atau outlet..."
                 className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
               />
 
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+
+              <select
+                value={source}
+                onChange={(e) =>
+                  setSource(e.target.value)
+                }
+                className="rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-2.5 text-sm outline-none focus:border-[#497F70]"
+              >
+                <option value="SEMUA">
+                  Semua Purchase
+                </option>
+
+                <option value="PUSAT">
+                  Purchase Pusat
+                </option>
+
+                <option value="OUTLET">
+                  Purchase Outlet
+                </option>
+              </select>
 
               <select
                 value={status}
@@ -510,15 +647,21 @@ export default function PurchasePage() {
           </div>
 
           <div className="mt-4 text-sm text-gray-500">
+
             Menampilkan{" "}
+
             <span className="font-semibold text-[#18352D]">
               {filteredPurchase.length}
             </span>{" "}
+
             dari{" "}
+
             <span className="font-semibold text-[#18352D]">
               {purchase.length}
             </span>{" "}
+
             Purchase Order
+
           </div>
 
         </div>
@@ -541,12 +684,20 @@ export default function PurchasePage() {
                   No. PO
                 </th>
 
+                <th className="px-5 py-4 text-center font-semibold text-[#35564C]">
+                  Jenis
+                </th>
+
                 <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
                   Tanggal
                 </th>
 
                 <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
                   Supplier
+                </th>
+
+                <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
+                  Outlet
                 </th>
 
                 <th className="px-5 py-4 text-right font-semibold text-[#35564C]">
@@ -568,13 +719,13 @@ export default function PurchasePage() {
             <tbody>
 
               {loading ? (
+
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={9}
                     className="px-5 py-14 text-center"
                   >
                     <div className="flex flex-col items-center gap-3 text-gray-500">
-
                       <RefreshCw
                         size={25}
                         className="animate-spin text-[#497F70]"
@@ -583,14 +734,15 @@ export default function PurchasePage() {
                       <span>
                         Loading Purchase Order...
                       </span>
-
                     </div>
                   </td>
                 </tr>
+
               ) : filteredPurchase.length === 0 ? (
+
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={9}
                     className="px-5 py-14 text-center"
                   >
                     <div className="flex flex-col items-center">
@@ -604,139 +756,277 @@ export default function PurchasePage() {
                       </p>
 
                       <p className="mt-1 text-sm text-gray-400">
-                        Coba ubah pencarian atau filter status.
+                        Coba ubah pencarian atau filter.
                       </p>
 
                     </div>
                   </td>
                 </tr>
+
               ) : (
+
                 filteredPurchase.map(
-                  (
-                    item: any,
-                    index: number
-                  ) => (
-                    <tr
-                      key={item.id}
-                      className="border-b border-[#EDF2EF] transition hover:bg-[#FAFCFB]"
-                    >
+                  (item, index) => {
 
-                      <td className="px-5 py-4 text-gray-500">
-                        {index + 1}
-                      </td>
+                    const isOutlet =
+                      item.source === "OUTLET";
 
-                      <td className="px-5 py-4">
+                    return (
+                      <tr
+                        key={`${isOutlet ? "OUTLET" : "PUSAT"}-${item.id}`}
+                        className="border-b border-[#EDF2EF] transition hover:bg-[#FAFCFB]"
+                      >
 
-                        <Link
-                          href={`/purchase/${item.id}`}
-                          className="font-semibold text-[#18352D] transition hover:text-[#497F70]"
-                        >
-                          {item.number || "-"}
-                        </Link>
+                        {/* NO */}
 
-                      </td>
+                        <td className="px-5 py-4 text-gray-500">
+                          {index + 1}
+                        </td>
 
-                      <td className="px-5 py-4 text-gray-600">
-                        {formatDate(
-                          item.purchaseDate
-                        )}
-                      </td>
+                        {/* PO */}
 
-                      <td className="px-5 py-4">
-
-                        <div className="flex items-center gap-3">
-
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
-                            <Truck size={17} />
-                          </div>
-
-                          <span className="font-medium text-gray-700">
-                            {item.supplier?.name ||
-                              "-"}
-                          </span>
-
-                        </div>
-
-                      </td>
-
-                      <td className="px-5 py-4 text-right font-semibold text-[#18352D]">
-                        Rp{" "}
-                        {formatRupiah(
-                          item.total
-                        )}
-                      </td>
-
-                      <td className="px-5 py-4 text-center">
-                        <StatusBadge
-                          status={
-                            item.status
-                          }
-                        />
-                      </td>
-
-                      <td className="px-5 py-4">
-
-                        <div className="flex flex-wrap justify-center gap-2">
+                        <td className="px-5 py-4">
 
                           <Link
-                            href={`/purchase/${item.id}`}
-                            title="Detail Purchase"
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-[#EAF3EF] px-3 py-2 text-xs font-semibold text-[#497F70] transition hover:bg-[#DDEDE6]"
+                            href={
+                              isOutlet
+                                ? `/outlet/purchase/${item.id}`
+                                : `/purchase/${item.id}`
+                            }
+                            className="font-semibold text-[#18352D] transition hover:text-[#497F70]"
                           >
-                            <Eye size={14} />
-                            Detail
+                            {item.number || "-"}
                           </Link>
 
-                          {item.status ===
-                            "DRAFT" && (
-                            <button
-                              onClick={() =>
-                                approvePurchase(
-                                  item.id
-                                )
-                              }
-                              title="Approve Purchase"
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-600"
-                            >
-                              <Check size={14} />
-                              Approve
-                            </button>
+                        </td>
+
+                        {/* JENIS */}
+
+                        <td className="px-5 py-4 text-center">
+
+                          {isOutlet ? (
+
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                              <Store size={13} />
+                              Outlet
+                            </span>
+
+                          ) : (
+
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EAF3EF] px-3 py-1.5 text-xs font-semibold text-[#497F70]">
+                              <ShoppingCart size={13} />
+                              Pusat
+                            </span>
+
                           )}
 
-                          {item.status ===
-                            "APPROVED" && (
-                            <button
-                              onClick={() =>
-                                receivePurchase(
-                                  item.id
-                                )
-                              }
-                              title="Terima Barang"
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-green-700"
-                            >
-                              <PackageCheck size={14} />
-                              Receive
-                            </button>
+                        </td>
+
+                        {/* TANGGAL */}
+
+                        <td className="px-5 py-4 text-gray-600">
+                          {formatDate(
+                            item.purchaseDate
+                          )}
+                        </td>
+
+                        {/* SUPPLIER */}
+
+                        <td className="px-5 py-4">
+
+                          <div className="flex items-center gap-3">
+
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
+                              <Truck size={17} />
+                            </div>
+
+                            <span className="font-medium text-gray-700">
+                              {item.supplier?.name || "-"}
+                            </span>
+
+                          </div>
+
+                        </td>
+
+                        {/* OUTLET */}
+
+                        <td className="px-5 py-4">
+
+                          {isOutlet ? (
+
+                            <div className="flex items-center gap-2">
+
+                              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                                <Store size={15} />
+                              </div>
+
+                              <div>
+
+                                <div className="font-medium text-gray-700">
+                                  {item.outlet?.name ||
+                                    item.destinationName ||
+                                    "-"}
+                                </div>
+
+                                {(item.outlet?.code ||
+                                  item.destinationCode) && (
+                                  <div className="text-xs text-gray-400">
+                                    {item.outlet?.code ||
+                                      item.destinationCode}
+                                  </div>
+                                )}
+
+                              </div>
+
+                            </div>
+
+                          ) : (
+
+                            <span className="text-gray-400">
+                              Gudang Pusat
+                            </span>
+
                           )}
 
-                          <a
-                            href={`/purchase/print?id=${item.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="Print Purchase Order"
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#D5E5DC] bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition hover:bg-[#F5F8F6]"
-                          >
-                            <Printer size={14} />
-                            Print
-                          </a>
+                        </td>
 
-                        </div>
+                        {/* TOTAL */}
 
-                      </td>
+                        <td className="px-5 py-4 text-right font-semibold text-[#18352D]">
+                          Rp{" "}
+                          {formatRupiah(
+                            item.total
+                          )}
+                        </td>
 
-                    </tr>
-                  )
+                        {/* STATUS */}
+
+                        <td className="px-5 py-4 text-center">
+                          <StatusBadge
+                            status={
+                              item.status
+                            }
+                          />
+                        </td>
+
+                        {/* AKSI */}
+
+                        <td className="px-5 py-4">
+
+                          <div className="flex flex-wrap justify-center gap-2">
+
+                            {/* DETAIL */}
+
+                            <Link
+                              href={
+                                isOutlet
+                                  ? `/outlet/purchase/${item.id}`
+                                  : `/purchase/${item.id}`
+                              }
+                              title="Detail Purchase"
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-[#EAF3EF] px-3 py-2 text-xs font-semibold text-[#497F70] transition hover:bg-[#DDEDE6]"
+                            >
+                              <Eye size={14} />
+                              Detail
+                            </Link>
+
+                            {/* PUSAT */}
+
+                            {!isOutlet &&
+                              item.status ===
+                                "DRAFT" && (
+
+                                <button
+                                  onClick={() =>
+                                    approvePurchase(
+                                      item.id
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-600"
+                                >
+                                  <Check size={14} />
+                                  Approve
+                                </button>
+
+                              )}
+
+                            {!isOutlet &&
+                              item.status ===
+                                "APPROVED" && (
+
+                                <button
+                                  onClick={() =>
+                                    receivePurchase(
+                                      item.id
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-green-700"
+                                >
+                                  <PackageCheck
+                                    size={14}
+                                  />
+                                  Receive
+                                </button>
+
+                              )}
+
+                            {/* OUTLET */}
+
+                            {isOutlet &&
+                              item.status ===
+                                "DRAFT" && (
+
+                                <Link
+                                  href={`/outlet/purchase/${item.id}`}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-600"
+                                >
+                                  <Check size={14} />
+                                  Proses
+                                </Link>
+
+                              )}
+
+                            {isOutlet &&
+                              item.status ===
+                                "APPROVED" && (
+
+                                <Link
+                                  href={`/outlet/purchase/${item.id}`}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-green-700"
+                                >
+                                  <PackageCheck
+                                    size={14}
+                                  />
+                                  Receive
+                                </Link>
+
+                              )}
+
+                            {/* PRINT */}
+
+                            <a
+                              href={
+                                isOutlet
+                                  ? `/outlet/purchase/print?id=${item.id}`
+                                  : `/purchase/print?id=${item.id}`
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-[#D5E5DC] bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition hover:bg-[#F5F8F6]"
+                            >
+                              <Printer size={14} />
+                              Print
+                            </a>
+
+                          </div>
+
+                        </td>
+
+                      </tr>
+                    );
+                  }
                 )
+
               )}
 
             </tbody>

@@ -33,7 +33,9 @@ type Role =
   | "ADMIN"
   | "MANAGER"
   | "PURCHASING"
-  | "GUDANG";
+  | "GUDANG"
+  | "OUTLET_ADMIN";
+
 
 interface User {
   id?: number;
@@ -114,10 +116,112 @@ const menus: Menu[] = [
   },
 
   {
+  title: "Master Outlet",
+  url: "/master/outlet",
+  roles: ["ADMIN"],
+  icon: Warehouse,
+  },
+
+  {
     title: "Master Karyawan",
     url: "/employee",
     roles: ["ADMIN", "MANAGER"],
     icon: UserRound,
+  },
+
+  // =====================================================
+  // OUTLET
+  // =====================================================
+
+  {
+    title: "OUTLET",
+    header: true,
+  },
+
+  {
+    title: "Dashboard Outlet",
+    url: "/outlet",
+    roles: ["OUTLET_ADMIN"],
+    icon: LayoutDashboard,
+  },
+
+  {
+  title: "Master Barang Outlet",
+  url: "/outlet/master-barang",
+  roles: ["ADMIN", "OUTLET_ADMIN"],
+  icon: Package,
+  },
+
+  {
+    title: "Purchase Outlet",
+    url: "/outlet/purchase",
+    roles: ["OUTLET_ADMIN"],
+    icon: ShoppingCart,
+  },
+
+  {
+    title: "Barang Masuk Outlet",
+    url: "/outlet/barang-masuk",
+    roles: ["OUTLET_ADMIN"],
+    icon: ArrowDownToLine,
+  },
+
+  {
+    title: "Stock Outlet",
+    url: "/outlet/stock",
+    roles: ["OUTLET_ADMIN"],
+    icon: Boxes,
+  },
+
+  {
+    title: "Stock Awal Outlet",
+    url: "/outlet/stock-awal",
+    roles: ["ADMIN", "OUTLET_ADMIN"],
+    icon: Warehouse,
+  },
+
+    {
+    title: "Stock Opname Outlet",
+    url: "/outlet/stock-opname",
+    roles: ["OUTLET_ADMIN"],
+    icon: ClipboardList,
+  },
+
+  {
+    title: "Approval Stock Opname",
+    url: "/outlet/stock-opname/approval",
+    roles: ["OUTLET_ADMIN"],
+    icon: ClipboardCheck,
+  },
+
+    // =====================================================
+  // LAPORAN OUTLET
+  // =====================================================
+
+  {
+    title: "LAPORAN OUTLET",
+    header: true,
+  },
+
+  {
+    title: "Laporan Purchase Order",
+    url: "/outlet/laporan/purchase",
+    roles: ["ADMIN", "OUTLET_ADMIN"],
+    icon: FileText,
+  },
+
+  {
+    title: "Laporan Delivery Order",
+    url: "/outlet/laporan/delivery",
+    roles: ["ADMIN", "OUTLET_ADMIN"],
+    icon: FileText,
+  },
+
+  {
+    title: "Laporan Stock Outlet",
+    url: "/outlet/laporan/stock",
+    roles: ["ADMIN", "OUTLET_ADMIN"],
+    icon: FileText,
   },
 
   // =====================================================

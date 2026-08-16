@@ -5,18 +5,15 @@ import { prisma } from "@/lib/prisma";
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
+    const file = formData.get("file");
 
-    const file = formData.get("file") as File;
-
-    if (!file) {
+    if (!(file instanceof File)) {
       return NextResponse.json(
         {
           success: false,
-          message: "File tidak ditemukan",
+          message: "File Excel tidak ditemukan",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
@@ -26,113 +23,173 @@ export async function POST(req: NextRequest) {
       type: "buffer",
     });
 
+    if (!workbook.SheetNames.length) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Excel tidak memiliki sheet",
+        },
+        { status: 400 }
+      );
+    }
+
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
 
     const rows = XLSX.utils.sheet_to_json<any>(sheet, {
       defval: "",
     });
 
-    if (rows.length === 0) {
-      return NextResponse.json({
-        success: false,
-        message: "Excel kosong",
-      });
+    if (!rows.length) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Excel kosong",
+        },
+        { status: 400 }
+      );
     }
 
-    console.log("TOTAL ROW:", rows.length);
-    console.log("HEADER:", Object.keys(rows[0]));
-
-    let total = 0;
+    let baru = 0;
+    let update = 0;
+    let dilewati = 0;
     let gagal = 0;
 
     for (const row of rows) {
-      const kode =
-        row["Kode"] ||
-        row["Kode Barang"] ||
-        row["kode"] ||
-        row["code"] ||
-        "";
+      const kode = String(
+        row["Kode Barang"] ??
+          row["Kode"] ??
+          row["kode"] ??
+          row["code"] ??
+          ""
+      ).trim();
 
-      const nama =
-        row["Nama Barang"] ||
-        row["Nama"] ||
-        row["nama"] ||
-        "";
+      const nama = String(
+        row["Nama Barang"] ??
+          row["Nama"] ??
+          row["nama"] ??
+          ""
+      ).trim();
 
-      const kategori =
-        row["Kategori"] ||
-        row["kategori"] ||
-        "";
+      const kategori = String(
+        row["Kategori"] ??
+          row["kategori"] ??
+          ""
+      ).trim();
 
-      const satuan =
-        row["Satuan"] ||
-        row["Unit"] ||
-        row["satuan"] ||
-        row["unit"] ||
-        "PCS";
+      const satuan = String(
+        row["Satuan"] ??
+          row["Unit"] ??
+          row["satuan"] ??
+          row["unit"] ??
+          "PCS"
+      ).trim();
 
       if (!kode || !nama) {
         gagal++;
         continue;
       }
 
-      console.log({
-        kode,
-        nama,
-        kategori,
-        satuan,
-      });
-
       try {
-        await prisma.barang.upsert({
+        const existing = await prisma.barang.findUnique({
           where: {
-            code: String(kode),
+            code: kode,
           },
+        });
 
-          update: {
-            barcode: String(kode),
-            name: String(nama),
-            category: kategori ? String(kategori) : null,
-            unit: String(satuan),
-          },
+        // ============================================
+        // BARANG SUDAH ADA
+        // ============================================
 
-          create: {
-            code: String(kode),
-            barcode: String(kode),
-            name: String(nama),
-            category: kategori ? String(kategori) : null,
-            unit: String(satuan),
+        if (existing) {
+          // Barang outlet tidak boleh disentuh
+          if (existing.source === "OUTLET") {
+            dilewati++;
+            continue;
+          }
+
+          // Barang CENTRAL -> update master pusat
+          await prisma.barang.update({
+            where: {
+              id: existing.id,
+            },
+            data: {
+              barcode: existing.barcode || kode,
+              name: nama,
+              category: kategori || null,
+              unit: satuan || "PCS",
+
+              // Tetap CENTRAL
+              source: "CENTRAL",
+              sourceOutletId: null,
+            },
+          });
+
+          update++;
+          continue;
+        }
+
+        // ============================================
+        // BARANG BARU
+        // ============================================
+
+        await prisma.barang.create({
+          data: {
+            code: kode,
+            barcode: kode,
+            name: nama,
+            category: kategori || null,
+            unit: satuan || "PCS",
+
             stock: 0,
             minimumStock: 0,
             purchasePrice: 0,
             sellingPrice: 0,
             hasExpired: false,
             active: true,
+
+            // IMPORT MASTER = CENTRAL
+            source: "CENTRAL",
+            sourceOutletId: null,
           },
         });
 
-        total++;
-      } catch (err) {
-        console.error("GAGAL IMPORT:", err);
+        baru++;
+      } catch (error) {
+        console.error(
+          `Gagal import barang ${kode}:`,
+          error
+        );
+
         gagal++;
       }
     }
 
     return NextResponse.json({
       success: true,
-      message: `Berhasil import ${total} barang, ${gagal} gagal`,
+      message:
+        `Import selesai. ` +
+        `Baru: ${baru}, ` +
+        `Update: ${update}, ` +
+        `Barang outlet dilewati: ${dilewati}, ` +
+        `Gagal: ${gagal}.`,
+      summary: {
+        totalExcel: rows.length,
+        baru,
+        update,
+        dilewati,
+        gagal,
+      },
     });
   } catch (error: any) {
-    console.error("IMPORT BARANG ERROR:", error);
+    console.error("IMPORT MASTER BARANG ERROR:", error);
 
     return NextResponse.json(
       {
         success: false,
-        message: error.message,
+        message:
+          error?.message || "Gagal import master barang",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }

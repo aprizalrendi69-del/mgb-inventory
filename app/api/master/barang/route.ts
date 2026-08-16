@@ -1,65 +1,72 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// =========================================================
+// GET - MASTER BARANG
+// =========================================================
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
 
-    const search = searchParams.get("search") || "";
-    const category = searchParams.get("category") || "";
+    const search = searchParams.get("search")?.trim() || "";
+    const category = searchParams.get("category")?.trim() || "";
+    const source = searchParams.get("source")?.trim() || "CENTRAL";
+
+    const where: any = {};
 
     // =====================================================
-    // GET DATA BARANG
+    // FILTER SOURCE
+    // =====================================================
+
+    if (source === "CENTRAL") {
+      where.source = "CENTRAL";
+    } else if (source === "OUTLET") {
+      where.source = "OUTLET";
+    }
+    // source === ALL = tampilkan semua
+
+    // =====================================================
+    // SEARCH
+    // =====================================================
+
+    if (search) {
+      where.OR = [
+        {
+          code: {
+            contains: search,
+          },
+        },
+        {
+          name: {
+            contains: search,
+          },
+        },
+        {
+          barcode: {
+            contains: search,
+          },
+        },
+      ];
+    }
+
+    // =====================================================
+    // CATEGORY
+    // =====================================================
+
+    if (category) {
+      where.category = category;
+    }
+
+    // =====================================================
+    // GET DATA
     // =====================================================
 
     const data = await prisma.barang.findMany({
-      where: {
-        AND: [
-          search
-            ? {
-                OR: [
-                  {
-                    code: {
-                      contains: search,
-                    },
-                  },
-                  {
-                    name: {
-                      contains: search,
-                    },
-                  },
-                ],
-              }
-            : {},
-
-          category
-            ? {
-                category,
-              }
-            : {},
-        ],
-      },
-
-      // =====================================================
-      // RELATION DATA
-      // =====================================================
+      where,
 
       include: {
-        // =================================================
-        // HARGA TERAKHIR / SUMMARY HARGA
-        // =================================================
-
         priceSummary: true,
-
-        // =================================================
-        // BATCH STOCK / EXPIRED
-        // =================================================
-        //
-        // Hanya batch yang masih mempunyai stock
-        // yang dikirim ke frontend.
-        //
-        // Diurutkan berdasarkan expired terdekat.
-        //
 
         batchStocks: {
           where: {
@@ -67,26 +74,10 @@ export async function GET(req: NextRequest) {
               gt: 0,
             },
           },
-
           orderBy: {
             expiredDate: "asc",
           },
         },
-
-        // =================================================
-        // SUPPLIER TERAKHIR
-        // =================================================
-        //
-        // Barang
-        //   ↓
-        // PurchaseItem
-        //   ↓
-        // Purchase
-        //   ↓
-        // Supplier
-        //
-        // Ambil PurchaseItem dari purchase terbaru.
-        //
 
         purchaseItems: {
           orderBy: {
@@ -94,9 +85,7 @@ export async function GET(req: NextRequest) {
               purchaseDate: "desc",
             },
           },
-
           take: 1,
-
           include: {
             purchase: {
               include: {
@@ -105,11 +94,9 @@ export async function GET(req: NextRequest) {
             },
           },
         },
-      },
 
-      // =====================================================
-      // SORT BARANG
-      // =====================================================
+        sourceOutlet: true,
+      },
 
       orderBy: {
         id: "desc",
@@ -117,24 +104,11 @@ export async function GET(req: NextRequest) {
     });
 
     // =====================================================
-    // FORMAT RESPONSE
+    // FORMAT
     // =====================================================
-    //
-    // Supplier dibuat langsung menjadi:
-    //
-    // supplier: {
-    //   id,
-    //   code,
-    //   name
-    // }
-    //
-    // Sehingga frontend barcode tidak perlu membaca
-    // PurchaseItem lagi.
-    //
 
     const result = data.map((item) => {
-      const lastPurchaseItem =
-        item.purchaseItems?.[0];
+      const lastPurchaseItem = item.purchaseItems?.[0];
 
       const supplier =
         lastPurchaseItem?.purchase?.supplier;
@@ -150,15 +124,18 @@ export async function GET(req: NextRequest) {
             }
           : null,
 
-        // PurchaseItem tidak perlu dikirim
-        // karena supplier sudah diformat di atas.
+        outlet: item.sourceOutlet
+          ? {
+              id: item.sourceOutlet.id,
+              code: item.sourceOutlet.code,
+              name: item.sourceOutlet.name,
+            }
+          : null,
+
         purchaseItems: undefined,
+        sourceOutlet: undefined,
       };
     });
-
-    // =====================================================
-    // RESPONSE
-    // =====================================================
 
     return NextResponse.json({
       success: true,
@@ -173,7 +150,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        message: "Gagal mengambil data barang",
+        message:
+          "Gagal mengambil data master barang",
       },
       {
         status: 500,
@@ -183,7 +161,7 @@ export async function GET(req: NextRequest) {
 }
 
 // =========================================================
-// POST - CREATE BARANG
+// POST - CREATE BARANG PUSAT
 // =========================================================
 
 export async function POST(req: Request) {
@@ -191,72 +169,94 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     // =====================================================
+    // NORMALISASI
+    // =====================================================
+
+    const code = String(body.code || "").trim();
+    const name = String(body.name || "").trim();
+    const unit = String(body.unit || "").trim();
+    const category = String(body.category || "").trim();
+    const brand = String(body.brand || "").trim();
+    const barcodeInput = String(body.barcode || "").trim();
+
+    // =====================================================
     // VALIDASI
     // =====================================================
 
-    if (!body.code) {
-      return NextResponse.json({
-        success: false,
-        message: "Kode barang wajib diisi",
-      });
+    if (!code) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Kode barang wajib diisi",
+        },
+        { status: 400 }
+      );
     }
 
-    if (!body.name) {
-      return NextResponse.json({
-        success: false,
-        message: "Nama barang wajib diisi",
-      });
+    if (!name) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Nama barang wajib diisi",
+        },
+        { status: 400 }
+      );
     }
 
-    if (!body.unit) {
-      return NextResponse.json({
-        success: false,
-        message: "Satuan wajib diisi",
-      });
+    if (!unit) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Satuan wajib diisi",
+        },
+        { status: 400 }
+      );
     }
 
     // =====================================================
-    // CEK KODE BARANG
+    // CEK KODE
     // =====================================================
 
     const cekKode = await prisma.barang.findUnique({
       where: {
-        code: body.code,
+        code,
       },
     });
 
     if (cekKode) {
-      return NextResponse.json({
-        success: false,
-        message: "Kode barang sudah digunakan",
-      });
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Kode barang sudah digunakan",
+        },
+        { status: 400 }
+      );
     }
 
     // =====================================================
     // BARCODE
     // =====================================================
 
-    const barcode =
-      body.barcode && body.barcode !== ""
-        ? body.barcode
-        : `MGB-${body.code}`;
+    const barcode = barcodeInput || `MGB-${code}`;
 
     // =====================================================
     // CEK BARCODE
     // =====================================================
 
-    const cekBarcode =
-      await prisma.barang.findFirst({
-        where: {
-          barcode,
-        },
-      });
+    const cekBarcode = await prisma.barang.findFirst({
+      where: {
+        barcode,
+      },
+    });
 
     if (cekBarcode) {
-      return NextResponse.json({
-        success: false,
-        message: "Barcode sudah digunakan",
-      });
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Barcode sudah digunakan",
+        },
+        { status: 400 }
+      );
     }
 
     // =====================================================
@@ -265,19 +265,14 @@ export async function POST(req: Request) {
 
     const barang = await prisma.barang.create({
       data: {
-        code: body.code,
-
+        code,
         barcode,
+        name,
 
-        name: body.name,
+        category: category || null,
+        brand: brand || null,
 
-        category:
-          body.category || null,
-
-        brand:
-          body.brand || null,
-
-        unit: body.unit,
+        unit,
 
         minimumStock: Number(
           body.minimumStock || 0
@@ -300,15 +295,22 @@ export async function POST(req: Request) {
         active: true,
 
         expiredWarning: 30,
+
+        // Barang baru selalu dibuat sebagai
+        // barang master pusat.
+        source: "CENTRAL",
+        sourceOutletId: null,
       },
     });
 
     // =====================================================
-    // RESPONSE CREATE
+    // RESPONSE
     // =====================================================
 
     return NextResponse.json({
       success: true,
+      message:
+        "Master barang pusat berhasil ditambahkan",
       data: barang,
     });
   } catch (err: any) {
@@ -322,7 +324,7 @@ export async function POST(req: Request) {
         success: false,
         message:
           err?.message ||
-          "Gagal membuat barang",
+          "Gagal membuat master barang pusat",
       },
       {
         status: 500,

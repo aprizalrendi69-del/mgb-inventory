@@ -12,15 +12,25 @@ import {
   RefreshCw,
 } from "lucide-react";
 
+type Outlet = {
+  id: number;
+  name: string;
+};
+
 type User = {
   id: number;
   username: string;
   fullname: string;
   role: string;
+  active: boolean;
+  outletId?: number | null;
+  outlet?: Outlet | null;
 };
 
 export default function UserPage() {
   const [data, setData] = useState<User[]>([]);
+  const [outlets, setOutlets] = useState<Outlet[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -32,6 +42,7 @@ export default function UserPage() {
     fullname: "",
     password: "",
     role: "ADMIN",
+    outletId: "",
   });
 
   async function load() {
@@ -57,8 +68,27 @@ export default function UserPage() {
     }
   }
 
+  async function loadOutlets() {
+    try {
+      const res = await fetch("/api/outlet", {
+        cache: "no-store",
+      });
+
+      const json = await res.json();
+
+      if (json.success) {
+        setOutlets(json.data ?? []);
+      } else {
+        console.error(json.message);
+      }
+    } catch (error) {
+      console.error("Load outlet error:", error);
+    }
+  }
+
   useEffect(() => {
     load();
+    loadOutlets();
   }, []);
 
   async function simpan() {
@@ -82,6 +112,11 @@ export default function UserPage() {
       return;
     }
 
+    if (form.role === "OUTLET_ADMIN" && !form.outletId) {
+      alert("Outlet wajib dipilih untuk OUTLET ADMIN");
+      return;
+    }
+
     try {
       setSaving(true);
 
@@ -90,7 +125,13 @@ export default function UserPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          outletId:
+            form.role === "OUTLET_ADMIN"
+              ? Number(form.outletId)
+              : null,
+        }),
       });
 
       const json = await res.json();
@@ -103,6 +144,7 @@ export default function UserPage() {
           fullname: "",
           password: "",
           role: "ADMIN",
+          outletId: "",
         });
 
         setShowPassword(false);
@@ -130,7 +172,8 @@ export default function UserPage() {
       return (
         user.username?.toLowerCase().includes(keyword) ||
         user.fullname?.toLowerCase().includes(keyword) ||
-        user.role?.toLowerCase().includes(keyword)
+        user.role?.toLowerCase().includes(keyword) ||
+        user.outlet?.name?.toLowerCase().includes(keyword)
       );
     });
   }, [data, search]);
@@ -149,6 +192,9 @@ export default function UserPage() {
       case "GUDANG":
         return "bg-amber-50 text-amber-700 border-amber-200";
 
+      case "OUTLET_ADMIN":
+        return "bg-emerald-50 text-emerald-700 border-emerald-200";
+
       default:
         return "bg-gray-50 text-gray-700 border-gray-200";
     }
@@ -158,16 +204,17 @@ export default function UserPage() {
     <div className="min-h-full bg-[#F5F8F6] p-6 md:p-8">
 
       {/* HEADER */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-8">
+      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
         <div>
           <div className="flex items-center gap-3">
+
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#497F70] text-white shadow-sm">
               <Users size={22} />
             </div>
 
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-slate-800">
+              <h1 className="text-2xl font-bold text-slate-800 md:text-3xl">
                 Master User
               </h1>
 
@@ -175,11 +222,15 @@ export default function UserPage() {
                 Kelola akun pengguna dan hak akses aplikasi
               </p>
             </div>
+
           </div>
         </div>
 
         <button
-          onClick={load}
+          onClick={() => {
+            load();
+            loadOutlets();
+          }}
           disabled={loading}
           className="
             inline-flex
@@ -210,9 +261,8 @@ export default function UserPage() {
 
       </div>
 
-
       {/* SUMMARY */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
 
         <div className="rounded-2xl border border-[#DCE9E2] bg-white p-5 shadow-sm">
 
@@ -235,7 +285,6 @@ export default function UserPage() {
           </div>
 
         </div>
-
 
         <div className="rounded-2xl border border-[#DCE9E2] bg-white p-5 shadow-sm">
 
@@ -261,9 +310,7 @@ export default function UserPage() {
 
       </div>
 
-
-      <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
-
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_1fr]">
 
         {/* FORM USER */}
         <div className="rounded-2xl border border-[#DCE9E2] bg-white shadow-sm">
@@ -290,8 +337,7 @@ export default function UserPage() {
 
           </div>
 
-
-          <div className="p-5 space-y-5">
+          <div className="space-y-5 p-5">
 
             {/* USERNAME */}
             <div>
@@ -330,7 +376,6 @@ export default function UserPage() {
 
             </div>
 
-
             {/* NAMA */}
             <div>
 
@@ -367,7 +412,6 @@ export default function UserPage() {
               />
 
             </div>
-
 
             {/* PASSWORD */}
             <div>
@@ -431,7 +475,6 @@ export default function UserPage() {
 
             </div>
 
-
             {/* ROLE */}
             <div>
 
@@ -445,6 +488,10 @@ export default function UserPage() {
                   setForm({
                     ...form,
                     role: e.target.value,
+                    outletId:
+                      e.target.value === "OUTLET_ADMIN"
+                        ? form.outletId
+                        : "",
                   })
                 }
                 className="
@@ -478,10 +525,71 @@ export default function UserPage() {
                 <option value="GUDANG">
                   GUDANG
                 </option>
+
+                <option value="OUTLET_ADMIN">
+                  OUTLET ADMIN
+                </option>
+
               </select>
 
             </div>
 
+            {/* OUTLET */}
+            {form.role === "OUTLET_ADMIN" && (
+              <div>
+
+                <label className="text-sm font-medium text-slate-700">
+                  Outlet
+                </label>
+
+                <select
+                  value={form.outletId}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      outletId: e.target.value,
+                    })
+                  }
+                  className="
+                    mt-2
+                    w-full
+                    rounded-xl
+                    border
+                    border-[#D5E5DC]
+                    bg-white
+                    px-4
+                    py-3
+                    text-sm
+                    outline-none
+                    focus:border-[#497F70]
+                    focus:ring-2
+                    focus:ring-[#497F70]/10
+                  "
+                >
+
+                  <option value="">
+                    Pilih Outlet
+                  </option>
+
+                  {outlets.map((outlet) => (
+                    <option
+                      key={outlet.id}
+                      value={outlet.id}
+                    >
+                      {outlet.name}
+                    </option>
+                  ))}
+
+                </select>
+
+                {outlets.length === 0 && (
+                  <p className="mt-2 text-xs text-amber-600">
+                    Belum ada outlet yang tersedia.
+                  </p>
+                )}
+
+              </div>
+            )}
 
             {/* BUTTON */}
             <button
@@ -531,9 +639,8 @@ export default function UserPage() {
 
         </div>
 
-
         {/* TABLE USER */}
-        <div className="rounded-2xl border border-[#DCE9E2] bg-white shadow-sm overflow-hidden">
+        <div className="overflow-hidden rounded-2xl border border-[#DCE9E2] bg-white shadow-sm">
 
           <div className="border-b border-[#E5ECE8] p-5">
 
@@ -544,11 +651,10 @@ export default function UserPage() {
                   Daftar User
                 </h2>
 
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="mt-1 text-xs text-slate-500">
                   Semua akun pengguna yang terdaftar
                 </p>
               </div>
-
 
               <div className="relative w-full md:w-72">
 
@@ -592,10 +698,9 @@ export default function UserPage() {
 
           </div>
 
-
           <div className="overflow-x-auto">
 
-            <table className="w-full min-w-[650px]">
+            <table className="w-full min-w-[800px]">
 
               <thead className="bg-[#F7FAF8]">
 
@@ -613,6 +718,10 @@ export default function UserPage() {
                     Role
                   </th>
 
+                  <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Outlet
+                  </th>
+
                   <th className="px-5 py-4 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Status
                   </th>
@@ -621,26 +730,28 @@ export default function UserPage() {
 
               </thead>
 
-
               <tbody className="divide-y divide-[#E8EEE9]">
 
                 {loading ? (
 
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={5}
                       className="px-5 py-12 text-center text-sm text-slate-500"
                     >
                       <div className="flex justify-center">
+
                         <RefreshCw
                           size={22}
                           className="animate-spin text-[#497F70]"
                         />
+
                       </div>
 
                       <p className="mt-3">
                         Memuat data user...
                       </p>
+
                     </td>
                   </tr>
 
@@ -648,15 +759,17 @@ export default function UserPage() {
 
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={5}
                       className="px-5 py-12 text-center text-sm text-slate-500"
                     >
+
                       <Users
                         size={32}
                         className="mx-auto mb-3 text-slate-300"
                       />
 
                       Tidak ada user ditemukan.
+
                     </td>
                   </tr>
 
@@ -680,6 +793,7 @@ export default function UserPage() {
                           </div>
 
                           <div>
+
                             <p className="font-medium text-slate-800">
                               {user.fullname || "-"}
                             </p>
@@ -687,17 +801,16 @@ export default function UserPage() {
                             <p className="text-xs text-slate-400">
                               ID #{user.id}
                             </p>
+
                           </div>
 
                         </div>
 
                       </td>
 
-
                       <td className="px-5 py-4 text-sm text-slate-600">
                         @{user.username}
                       </td>
-
 
                       <td className="px-5 py-4">
 
@@ -715,32 +828,65 @@ export default function UserPage() {
                             ${getRoleClass(user.role)}
                           `}
                         >
+
                           <ShieldCheck size={13} />
 
-                          {user.role}
+                          {user.role === "OUTLET_ADMIN"
+                            ? "OUTLET ADMIN"
+                            : user.role}
+
                         </span>
 
                       </td>
 
+                      <td className="px-5 py-4 text-sm text-slate-600">
+
+                        {user.outlet?.name ? (
+                          <span className="font-medium text-slate-700">
+                            {user.outlet.name}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">
+                            -
+                          </span>
+                        )}
+
+                      </td>
 
                       <td className="px-5 py-4 text-center">
 
-                        <span className="
-                          inline-flex
-                          items-center
-                          gap-1.5
-                          rounded-full
-                          bg-green-50
-                          px-3
-                          py-1
-                          text-xs
-                          font-medium
-                          text-green-700
-                        ">
+                        <span
+                          className={`
+                            inline-flex
+                            items-center
+                            gap-1.5
+                            rounded-full
+                            px-3
+                            py-1
+                            text-xs
+                            font-medium
+                            ${
+                              user.active
+                                ? "bg-green-50 text-green-700"
+                                : "bg-red-50 text-red-700"
+                            }
+                          `}
+                        >
 
-                          <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                          <span
+                            className={`
+                              h-1.5
+                              w-1.5
+                              rounded-full
+                              ${
+                                user.active
+                                  ? "bg-green-500"
+                                  : "bg-red-500"
+                              }
+                            `}
+                          />
 
-                          Aktif
+                          {user.active ? "Aktif" : "Nonaktif"}
 
                         </span>
 
