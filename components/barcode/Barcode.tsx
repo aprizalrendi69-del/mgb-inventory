@@ -19,8 +19,9 @@ export default function Barcode({
       canvasRef.current,
       value,
       {
-        width: 180,
-        margin: 2,
+        width: 256,
+        height: 256,
+        margin: 0,
         errorCorrectionLevel: "M",
         color: {
           dark: "#000000",
@@ -38,14 +39,46 @@ export default function Barcode({
     );
   }, [value]);
 
+  if (!value) return null;
+
   return (
-    <div className="flex flex-col items-center justify-center">
+    <div
+      className="
+        flex
+        w-[40mm]
+        h-[30mm]
+        flex-col
+        items-center
+        justify-center
+        overflow-hidden
+        bg-white
+        text-black
+      "
+    >
+      {/* QR CODE */}
+
       <canvas
         ref={canvasRef}
-        className="h-auto w-[180px]"
+        className="
+          block
+          h-[16mm]
+          w-[16mm]
+        "
       />
 
-      <div className="mt-1 text-center text-sm font-semibold text-black">
+      {/* KODE */}
+
+      <div
+        className="
+          mt-[1mm]
+          max-w-[34mm]
+          truncate
+          text-center
+          text-[2.5mm]
+          font-semibold
+          leading-none
+        "
+      >
         {value}
       </div>
     </div>

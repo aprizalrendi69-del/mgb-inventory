@@ -7,6 +7,7 @@ import {
   Search,
   CalendarDays,
   ShoppingCart,
+  Building2,
 } from "lucide-react";
 
 type Supplier = {
@@ -29,7 +30,6 @@ type Purchase = {
   total?: number;
 
   supplier?: Supplier;
-
   outlet?: Outlet;
 
   items?: any[];
@@ -42,16 +42,81 @@ export default function LaporanPurchaseOutletPage() {
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [outletId, setOutletId] = useState("");
 
-  const [tanggalAwal, setTanggalAwal] =
-    useState("");
+  const [tanggalAwal, setTanggalAwal] = useState("");
+  const [tanggalAkhir, setTanggalAkhir] = useState("");
 
-  const [tanggalAkhir, setTanggalAkhir] =
-    useState("");
+  /*
+   * =====================================================
+   * USER ROLE
+   * =====================================================
+   */
 
-  // =====================================================
-  // LOAD DATA PURCHASE OUTLET
-  // =====================================================
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userOutlet, setUserOutlet] = useState<Outlet | null>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
+
+  /*
+   * =====================================================
+   * LOAD CURRENT USER
+   * =====================================================
+   */
+
+  async function loadCurrentUser() {
+    try {
+      setLoadingUser(true);
+
+      const res = await fetch("/api/me", {
+        cache: "no-store",
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          json?.message || "Gagal mengambil data user"
+        );
+      }
+
+      const user =
+        json?.user ??
+        json?.data ??
+        json;
+
+      setUserRole(
+        user?.role
+          ? String(user.role).toUpperCase()
+          : null
+      );
+
+      setUserOutlet(
+        user?.outlet
+          ? {
+              id: Number(user.outlet.id),
+              code: user.outlet.code,
+              name: user.outlet.name,
+            }
+          : null
+      );
+    } catch (error) {
+      console.error(
+        "LOAD CURRENT USER ERROR:",
+        error
+      );
+
+      setUserRole(null);
+      setUserOutlet(null);
+    } finally {
+      setLoadingUser(false);
+    }
+  }
+
+  /*
+   * =====================================================
+   * LOAD DATA PURCHASE OUTLET
+   * =====================================================
+   */
 
   async function loadData() {
     try {
@@ -96,23 +161,80 @@ export default function LaporanPurchaseOutletPage() {
     }
   }
 
-  // =====================================================
-  // INITIAL LOAD
-  // =====================================================
+  /*
+   * =====================================================
+   * INITIAL LOAD
+   * =====================================================
+   */
 
   useEffect(() => {
+    loadCurrentUser();
     loadData();
   }, []);
 
-  // =====================================================
-  // FILTER DATA
-  // =====================================================
+  /*
+   * =====================================================
+   * ROLE
+   * =====================================================
+   */
+
+  const isOutletAdmin =
+    userRole === "OUTLET_ADMIN";
+
+  const isAdminPusat =
+    userRole === "ADMIN" ||
+    userRole === "PURCHASING";
+
+  /*
+   * =====================================================
+   * OUTLET LIST
+   *
+   * ADMIN/PURCHASING:
+   * -> ambil outlet dari data Purchase
+   *
+   * OUTLET_ADMIN:
+   * -> tidak perlu dropdown
+   * =====================================================
+   */
+
+  const outletList = useMemo(() => {
+    const map = new Map<number, Outlet>();
+
+    for (const item of data) {
+      if (!item.outlet) continue;
+
+      const id = Number(item.outlet.id);
+
+      if (!map.has(id)) {
+        map.set(id, {
+          id,
+          code: item.outlet.code,
+          name: item.outlet.name,
+        });
+      }
+    }
+
+    return Array.from(map.values()).sort(
+      (a, b) =>
+        a.name.localeCompare(
+          b.name,
+          "id"
+        )
+    );
+  }, [data]);
+
+  /*
+   * =====================================================
+   * FILTER DATA
+   * =====================================================
+   */
 
   const filteredData = useMemo(() => {
     return data.filter((item) => {
-      const keyword = search
-        .toLowerCase()
-        .trim();
+      const keyword =
+        search
+          .toLowerCase()
+          .trim();
 
       const text = `
         ${item.number ?? ""}
@@ -122,7 +244,10 @@ export default function LaporanPurchaseOutletPage() {
         ${item.outlet?.name ?? ""}
       `.toLowerCase();
 
-      // SEARCH
+      /*
+       * SEARCH
+       */
+
       if (
         keyword &&
         !text.includes(keyword)
@@ -130,7 +255,10 @@ export default function LaporanPurchaseOutletPage() {
         return false;
       }
 
-      // STATUS
+      /*
+       * STATUS
+       */
+
       if (
         status &&
         String(item.status ?? "")
@@ -140,9 +268,42 @@ export default function LaporanPurchaseOutletPage() {
         return false;
       }
 
-      // =================================================
-      // FILTER TANGGAL
-      // =================================================
+      /*
+       * =================================================
+       * OUTLET FILTER
+       * =================================================
+       *
+       * ADMIN/PURCHASING:
+       * -> mengikuti dropdown
+       *
+       * OUTLET_ADMIN:
+       * -> paksa outlet milik sendiri
+       *
+       * Ini hanya lapisan frontend.
+       * API tetap menjadi pengaman utama.
+       */
+
+      if (isOutletAdmin) {
+        if (
+          !userOutlet ||
+          Number(item.outlet?.id) !==
+            Number(userOutlet.id)
+        ) {
+          return false;
+        }
+      } else if (
+        outletId &&
+        Number(item.outlet?.id) !==
+          Number(outletId)
+      ) {
+        return false;
+      }
+
+      /*
+       * =================================================
+       * FILTER TANGGAL
+       * =================================================
+       */
 
       if (
         tanggalAwal ||
@@ -152,9 +313,10 @@ export default function LaporanPurchaseOutletPage() {
           return false;
         }
 
-        const tanggal = new Date(
-          item.purchaseDate
-        );
+        const tanggal =
+          new Date(
+            item.purchaseDate
+          );
 
         if (
           Number.isNaN(
@@ -164,22 +326,30 @@ export default function LaporanPurchaseOutletPage() {
           return false;
         }
 
-        // TANGGAL AWAL
+        /*
+         * TANGGAL AWAL
+         */
+
         if (tanggalAwal) {
-          const awal = new Date(
-            `${tanggalAwal}T00:00:00`
-          );
+          const awal =
+            new Date(
+              `${tanggalAwal}T00:00:00`
+            );
 
           if (tanggal < awal) {
             return false;
           }
         }
 
-        // TANGGAL AKHIR
+        /*
+         * TANGGAL AKHIR
+         */
+
         if (tanggalAkhir) {
-          const akhir = new Date(
-            `${tanggalAkhir}T23:59:59`
-          );
+          const akhir =
+            new Date(
+              `${tanggalAkhir}T23:59:59`
+            );
 
           if (tanggal > akhir) {
             return false;
@@ -193,13 +363,18 @@ export default function LaporanPurchaseOutletPage() {
     data,
     search,
     status,
+    outletId,
     tanggalAwal,
     tanggalAkhir,
+    isOutletAdmin,
+    userOutlet,
   ]);
 
-  // =====================================================
-  // TOTAL
-  // =====================================================
+  /*
+   * =====================================================
+   * TOTAL
+   * =====================================================
+   */
 
   const totalPO =
     filteredData.length;
@@ -214,9 +389,11 @@ export default function LaporanPurchaseOutletPage() {
       0
     );
 
-  // =====================================================
-  // FORMAT NUMBER
-  // =====================================================
+  /*
+   * =====================================================
+   * FORMAT NUMBER
+   * =====================================================
+   */
 
   function formatNumber(
     value: any
@@ -226,9 +403,11 @@ export default function LaporanPurchaseOutletPage() {
     ).toLocaleString("id-ID");
   }
 
-  // =====================================================
-  // FORMAT RUPIAH
-  // =====================================================
+  /*
+   * =====================================================
+   * FORMAT RUPIAH
+   * =====================================================
+   */
 
   function formatRupiah(
     value: any
@@ -238,9 +417,11 @@ export default function LaporanPurchaseOutletPage() {
     )}`;
   }
 
-  // =====================================================
-  // FORMAT DATE
-  // =====================================================
+  /*
+   * =====================================================
+   * FORMAT DATE
+   * =====================================================
+   */
 
   function formatDate(
     value?: string
@@ -270,41 +451,43 @@ export default function LaporanPurchaseOutletPage() {
     );
   }
 
-  // =====================================================
-  // STATUS CLASS
-  // =====================================================
+  /*
+   * =====================================================
+   * STATUS CLASS
+   * =====================================================
+   */
 
   function statusClass(
     value?: string
   ) {
-    const status =
+    const currentStatus =
       String(
         value ?? ""
       ).toUpperCase();
 
     if (
-      status ===
+      currentStatus ===
       "APPROVED"
     ) {
       return "bg-green-50 text-green-700";
     }
 
     if (
-      status ===
+      currentStatus ===
       "RECEIVED"
     ) {
       return "bg-blue-50 text-blue-700";
     }
 
     if (
-      status ===
+      currentStatus ===
       "CANCELLED"
     ) {
       return "bg-red-50 text-red-700";
     }
 
     if (
-      status ===
+      currentStatus ===
       "REJECTED"
     ) {
       return "bg-red-50 text-red-700";
@@ -313,20 +496,36 @@ export default function LaporanPurchaseOutletPage() {
     return "bg-yellow-50 text-yellow-700";
   }
 
-  // =====================================================
-  // RESET FILTER
-  // =====================================================
+  /*
+   * =====================================================
+   * RESET FILTER
+   * =====================================================
+   */
 
   function resetFilter() {
     setSearch("");
     setStatus("");
     setTanggalAwal("");
     setTanggalAkhir("");
+
+    /*
+     * Outlet hanya boleh di-reset
+     * untuk ADMIN/PURCHASING.
+     *
+     * OUTLET_ADMIN memang tidak punya
+     * pilihan outlet.
+     */
+
+    if (!isOutletAdmin) {
+      setOutletId("");
+    }
   }
 
-  // =====================================================
-  // RENDER
-  // =====================================================
+  /*
+   * =====================================================
+   * RENDER
+   * =====================================================
+   */
 
   return (
     <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
@@ -361,25 +560,7 @@ export default function LaporanPurchaseOutletPage() {
           type="button"
           onClick={loadData}
           disabled={loading}
-          className="
-            inline-flex
-            items-center
-            justify-center
-            gap-2
-            rounded-xl
-            border
-            border-[#DDE9E4]
-            bg-white
-            px-4
-            py-2.5
-            text-sm
-            font-semibold
-            text-[#35564C]
-            shadow-sm
-            transition
-            hover:bg-[#F5F8F6]
-            disabled:opacity-50
-          "
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#DDE9E4] bg-white px-4 py-2.5 text-sm font-semibold text-[#35564C] shadow-sm transition hover:bg-[#F5F8F6] disabled:opacity-50"
         >
 
           <RefreshCw
@@ -398,12 +579,40 @@ export default function LaporanPurchaseOutletPage() {
       </div>
 
       {/* ================================================= */}
+      {/* OUTLET ADMIN INFO */}
+      {/* ================================================= */}
+
+      {isOutletAdmin &&
+        userOutlet && (
+          <div className="mb-6 flex items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4">
+
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
+              <Building2 size={19} />
+            </div>
+
+            <div>
+
+              <p className="text-xs font-medium text-blue-500">
+                Outlet Anda
+              </p>
+
+              <p className="font-semibold text-blue-800">
+                {userOutlet.name}
+                <span className="ml-2 text-xs font-medium text-blue-500">
+                  ({userOutlet.code})
+                </span>
+              </p>
+
+            </div>
+
+          </div>
+        )}
+
+      {/* ================================================= */}
       {/* SUMMARY */}
       {/* ================================================= */}
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-
-        {/* TOTAL PO */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
@@ -411,9 +620,7 @@ export default function LaporanPurchaseOutletPage() {
 
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
 
-              <ShoppingCart
-                size={19}
-              />
+              <ShoppingCart size={19} />
 
             </div>
 
@@ -435,17 +642,13 @@ export default function LaporanPurchaseOutletPage() {
 
         </div>
 
-        {/* TOTAL NOMINAL */}
-
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
           <div className="flex items-center gap-3">
 
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
 
-              <FileText
-                size={19}
-              />
+              <FileText size={19} />
 
             </div>
 
@@ -481,9 +684,7 @@ export default function LaporanPurchaseOutletPage() {
 
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
 
-              <Search
-                size={19}
-              />
+              <Search size={19} />
 
             </div>
 
@@ -503,6 +704,7 @@ export default function LaporanPurchaseOutletPage() {
 
           {(search ||
             status ||
+            outletId ||
             tanggalAwal ||
             tanggalAkhir) && (
             <button
@@ -516,11 +718,23 @@ export default function LaporanPurchaseOutletPage() {
 
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <div
+          className={`grid grid-cols-1 gap-4 md:grid-cols-2 ${
+            isAdminPusat
+              ? "lg:grid-cols-6"
+              : "lg:grid-cols-4"
+          }`}
+        >
 
           {/* SEARCH */}
 
-          <div className="lg:col-span-2">
+          <div
+            className={
+              isAdminPusat
+                ? "lg:col-span-2"
+                : "lg:col-span-1"
+            }
+          >
 
             <label className="mb-2 block text-sm font-semibold text-[#35564C]">
               Cari
@@ -541,27 +755,64 @@ export default function LaporanPurchaseOutletPage() {
                   )
                 }
                 placeholder="Nomor PO / supplier / outlet..."
-                className="
-                  w-full
-                  rounded-xl
-                  border
-                  border-[#D5E5DC]
-                  bg-[#FAFCFB]
-                  py-3
-                  pl-10
-                  pr-4
-                  text-sm
-                  outline-none
-                  focus:border-[#497F70]
-                  focus:bg-white
-                  focus:ring-2
-                  focus:ring-[#497F70]/10
-                "
+                className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-10 pr-4 text-sm outline-none focus:border-[#497F70] focus:bg-white focus:ring-2 focus:ring-[#497F70]/10"
               />
 
             </div>
 
           </div>
+
+          {/* ================================================= */}
+          {/* DROPDOWN OUTLET */}
+          {/* HANYA ADMIN PUSAT */}
+          {/* ================================================= */}
+
+          {isAdminPusat && (
+            <div>
+
+              <label className="mb-2 block text-sm font-semibold text-[#35564C]">
+                Outlet
+              </label>
+
+              <div className="relative">
+
+                <Building2
+                  size={17}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+
+                <select
+                  value={outletId}
+                  onChange={(e) =>
+                    setOutletId(
+                      e.target.value
+                    )
+                  }
+                  className="w-full appearance-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-10 pr-4 text-sm outline-none focus:border-[#497F70] focus:bg-white focus:ring-2 focus:ring-[#497F70]/10"
+                >
+
+                  <option value="">
+                    Semua Outlet
+                  </option>
+
+                  {outletList.map(
+                    (outlet) => (
+                      <option
+                        key={outlet.id}
+                        value={outlet.id}
+                      >
+                        {outlet.code} -{" "}
+                        {outlet.name}
+                      </option>
+                    )
+                  )}
+
+                </select>
+
+              </div>
+
+            </div>
+          )}
 
           {/* STATUS */}
 
@@ -578,18 +829,7 @@ export default function LaporanPurchaseOutletPage() {
                   e.target.value
                 )
               }
-              className="
-                w-full
-                rounded-xl
-                border
-                border-[#D5E5DC]
-                bg-[#FAFCFB]
-                px-4
-                py-3
-                text-sm
-                outline-none
-                focus:border-[#497F70]
-              "
+              className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm outline-none focus:border-[#497F70]"
             >
 
               <option value="">
@@ -637,27 +877,13 @@ export default function LaporanPurchaseOutletPage() {
 
               <input
                 type="date"
-                value={
-                  tanggalAwal
-                }
+                value={tanggalAwal}
                 onChange={(e) =>
                   setTanggalAwal(
                     e.target.value
                   )
                 }
-                className="
-                  w-full
-                  rounded-xl
-                  border
-                  border-[#D5E5DC]
-                  bg-[#FAFCFB]
-                  py-3
-                  pl-9
-                  pr-3
-                  text-sm
-                  outline-none
-                  focus:border-[#497F70]
-                "
+                className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-9 pr-3 text-sm outline-none focus:border-[#497F70]"
               />
 
             </div>
@@ -681,27 +907,13 @@ export default function LaporanPurchaseOutletPage() {
 
               <input
                 type="date"
-                value={
-                  tanggalAkhir
-                }
+                value={tanggalAkhir}
                 onChange={(e) =>
                   setTanggalAkhir(
                     e.target.value
                   )
                 }
-                className="
-                  w-full
-                  rounded-xl
-                  border
-                  border-[#D5E5DC]
-                  bg-[#FAFCFB]
-                  py-3
-                  pl-9
-                  pr-3
-                  text-sm
-                  outline-none
-                  focus:border-[#497F70]
-                "
+                className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-9 pr-3 text-sm outline-none focus:border-[#497F70]"
               />
 
             </div>
@@ -718,17 +930,13 @@ export default function LaporanPurchaseOutletPage() {
 
       <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
-        {/* TABLE HEADER */}
-
         <div className="border-b border-[#E5ECE9] px-5 py-4 md:px-6">
 
           <div className="flex items-center gap-3">
 
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
 
-              <FileText
-                size={19}
-              />
+              <FileText size={19} />
 
             </div>
 
@@ -747,8 +955,6 @@ export default function LaporanPurchaseOutletPage() {
           </div>
 
         </div>
-
-        {/* TABLE */}
 
         <div className="overflow-x-auto">
 
@@ -792,9 +998,8 @@ export default function LaporanPurchaseOutletPage() {
 
             <tbody>
 
-              {/* LOADING */}
-
-              {loading ? (
+              {loading ||
+              loadingUser ? (
                 <tr>
 
                   <td
@@ -814,10 +1019,7 @@ export default function LaporanPurchaseOutletPage() {
                   </td>
 
                 </tr>
-              ) : filteredData.length ===
-                0 ? (
-
-                /* EMPTY */
+              ) : filteredData.length === 0 ? (
 
                 <tr>
 
@@ -844,121 +1046,68 @@ export default function LaporanPurchaseOutletPage() {
                 </tr>
               ) : (
 
-                /* DATA */
-
                 filteredData.map(
-                  (
-                    item,
-                    index
-                  ) => (
+                  (item, index) => (
 
                     <tr
                       key={item.id}
-                      className="
-                        border-b
-                        border-[#EDF2EF]
-                        transition
-                        hover:bg-[#FAFCFB]
-                      "
+                      className="border-b border-[#EDF2EF] transition hover:bg-[#FAFCFB]"
                     >
-
-                      {/* NO */}
 
                       <td className="px-5 py-4 text-gray-500">
                         {index + 1}
                       </td>
 
-                      {/* NOMOR PO */}
-
                       <td className="px-5 py-4">
 
                         <span className="font-semibold text-[#18352D]">
-                          {item.number ||
-                            "-"}
+                          {item.number || "-"}
                         </span>
 
                       </td>
 
-                      {/* TANGGAL */}
-
                       <td className="px-5 py-4 text-gray-600">
-
                         {formatDate(
                           item.purchaseDate
                         )}
-
                       </td>
-
-                      {/* SUPPLIER */}
 
                       <td className="px-5 py-4">
 
                         <div className="font-medium text-[#18352D]">
-
-                          {item
-                            .supplier
-                            ?.name ||
+                          {item.supplier?.name ||
                             "-"}
-
                         </div>
 
-                        {item
-                          .supplier
-                          ?.code && (
+                        {item.supplier?.code && (
                           <div className="text-xs text-gray-400">
-                            {
-                              item
-                                .supplier
-                                .code
-                            }
+                            {item.supplier.code}
                           </div>
                         )}
 
                       </td>
 
-                      {/* OUTLET */}
-
                       <td className="px-5 py-4">
 
                         <div className="font-medium text-[#18352D]">
-
-                          {item
-                            .outlet
-                            ?.name ||
+                          {item.outlet?.name ||
                             "-"}
-
                         </div>
 
-                        {item
-                          .outlet
-                          ?.code && (
+                        {item.outlet?.code && (
                           <div className="text-xs text-gray-400">
-                            {
-                              item
-                                .outlet
-                                .code
-                            }
+                            {item.outlet.code}
                           </div>
                         )}
 
                       </td>
-
-                      {/* STATUS */}
 
                       <td className="px-5 py-4 text-center">
 
                         <span
-                          className={`
-                            inline-flex
-                            rounded-full
-                            px-3
-                            py-1
-                            text-xs
-                            font-semibold
-                            ${statusClass(
-                              item.status
-                            )}
-                          `}
+                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusClass(
+                            item.status
+                          )}`}
                         >
                           {item.status ||
                             "DRAFT"}
@@ -966,14 +1115,10 @@ export default function LaporanPurchaseOutletPage() {
 
                       </td>
 
-                      {/* TOTAL */}
-
                       <td className="px-5 py-4 text-right font-semibold text-[#18352D]">
-
                         {formatRupiah(
                           item.total
                         )}
-
                       </td>
 
                     </tr>

@@ -21,6 +21,8 @@ prisma/*.db-journal
 .env
 .env.local
 .env.production
+private-key.pem
+digital-certificate.txt
 
 # Upload files
 public/uploads/

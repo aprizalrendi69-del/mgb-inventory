@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 
@@ -9,8 +9,7 @@ import { cookies } from "next/headers";
 async function getCurrentUser() {
   const cookieStore = await cookies();
 
-  const session =
-    cookieStore.get("erp-session");
+  const session = cookieStore.get("erp-session");
 
   if (!session) {
     return null;
@@ -19,9 +18,7 @@ async function getCurrentUser() {
   let sessionData: any;
 
   try {
-    sessionData = JSON.parse(
-      session.value
-    );
+    sessionData = JSON.parse(session.value);
   } catch {
     return null;
   }
@@ -66,29 +63,28 @@ async function getCurrentUser() {
 // =====================================================
 // GET OUTLET BARANG MASUK
 //
-// SUMBER:
-//
-// 1. PURCHASE
-//    Supplier -> Outlet
-//
-// 2. TRANSFER
-//    Gudang Pusat -> Outlet
-//
-// SECURITY:
-//
-// ADMIN
+// ADMIN / ADMIN PUSAT
 // -> semua outlet
+// -> bisa filter outlet
+// -> bisa filter tanggal
 //
 // MANAGER
 // -> semua outlet
 //
 // OUTLET_ADMIN
 // -> hanya outlet sendiri
+// -> tidak bisa memilih outlet lain
 //
-// Tidak menerima outletId dari frontend.
+// QUERY:
+// ?outletId=1
+// ?dateFrom=2026-08-01
+// ?dateTo=2026-08-17
+//
 // =====================================================
 
-export async function GET() {
+export async function GET(
+  request: NextRequest
+) {
   try {
     // ===================================================
     // 1. SESSION
@@ -117,8 +113,7 @@ export async function GET() {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "User tidak aktif",
+          message: "User tidak aktif",
         },
         {
           status: 403,
@@ -130,10 +125,9 @@ export async function GET() {
     // 3. ROLE
     // ===================================================
 
-    const role =
-      String(
-        user.role || ""
-      ).toUpperCase();
+    const role = String(
+      user.role || ""
+    ).toUpperCase();
 
     if (
       role !== "ADMIN" &&
@@ -153,22 +147,70 @@ export async function GET() {
     }
 
     // ===================================================
-    // 4. FILTER OUTLET
+    // 4. QUERY PARAMETER
+    // ===================================================
+
+    const { searchParams } =
+      new URL(request.url);
+
+    const outletIdParam =
+      searchParams.get("outletId");
+
+    const dateFrom =
+      searchParams.get("dateFrom");
+
+    const dateTo =
+      searchParams.get("dateTo");
+
+    // ===================================================
+    // 5. VALIDASI OUTLET ID
+    // ===================================================
+
+    let selectedOutletId:
+      number | null = null;
+
+    if (outletIdParam) {
+      const parsedOutletId =
+        Number(outletIdParam);
+
+      if (
+        !Number.isInteger(
+          parsedOutletId
+        ) ||
+        parsedOutletId <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Outlet ID tidak valid",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      selectedOutletId =
+        parsedOutletId;
+    }
+
+    // ===================================================
+    // 6. SECURITY OUTLET
+    // ===================================================
     //
-    // ADMIN / MANAGER
-    // -> semua outlet
+    // OUTLET_ADMIN:
+    // hanya boleh outlet miliknya sendiri.
     //
-    // OUTLET_ADMIN
-    // -> outlet miliknya saja
+    // ADMIN / MANAGER:
+    // boleh memilih outlet.
     //
-    // TIDAK ADA outletId dari query.
     // ===================================================
 
     let outletFilter: any = {};
 
     if (
-      role ===
-      "OUTLET_ADMIN"
+      role === "OUTLET_ADMIN"
     ) {
       if (
         !user.outletId ||
@@ -189,14 +231,121 @@ export async function GET() {
         );
       }
 
+      // -----------------------------------------------
+      // Jika outlet admin mencoba memilih outlet lain
+      // -----------------------------------------------
+
+      if (
+        selectedOutletId !== null &&
+        selectedOutletId !==
+          user.outletId
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Anda hanya dapat melihat barang masuk outlet sendiri",
+          },
+          {
+            status: 403,
+          }
+        );
+      }
+
       outletFilter = {
         outletId:
           user.outletId,
       };
+    } else {
+      // -----------------------------------------------
+      // ADMIN / MANAGER
+      // -----------------------------------------------
+
+      if (
+        selectedOutletId !== null
+      ) {
+        outletFilter = {
+          outletId:
+            selectedOutletId,
+        };
+      }
     }
 
     // ===================================================
-    // 5. PURCHASE OUTLET
+    // 7. FILTER TANGGAL
+    // ===================================================
+
+    function buildDateFilter(
+      fieldName: string
+    ) {
+      const filter: any = {};
+
+      // -----------------------------------------------
+      // TANGGAL AWAL
+      // -----------------------------------------------
+
+      if (dateFrom) {
+        const start =
+          new Date(
+            `${dateFrom}T00:00:00`
+          );
+
+        if (
+          Number.isNaN(
+            start.getTime()
+          )
+        ) {
+          throw new Error(
+            "Tanggal awal tidak valid"
+          );
+        }
+
+        filter[fieldName] = {
+          ...(filter[fieldName] || {}),
+          gte: start,
+        };
+      }
+
+      // -----------------------------------------------
+      // TANGGAL AKHIR
+      // -----------------------------------------------
+
+      if (dateTo) {
+        const end =
+          new Date(
+            `${dateTo}T23:59:59.999`
+          );
+
+        if (
+          Number.isNaN(
+            end.getTime()
+          )
+        ) {
+          throw new Error(
+            "Tanggal akhir tidak valid"
+          );
+        }
+
+        filter[fieldName] = {
+          ...(filter[fieldName] || {}),
+          lte: end,
+        };
+      }
+
+      return filter;
+    }
+
+    // ===================================================
+    // 8. FILTER PURCHASE
+    // ===================================================
+
+    const purchaseDateFilter =
+      buildDateFilter(
+        "purchaseDate"
+      );
+
+    // ===================================================
+    // 9. PURCHASE OUTLET
     // ===================================================
 
     const purchases =
@@ -204,6 +353,7 @@ export async function GET() {
         {
           where: {
             ...outletFilter,
+            ...purchaseDateFilter,
           },
 
           include: {
@@ -239,19 +389,13 @@ export async function GET() {
       );
 
     // ===================================================
-    // 6. VALIDASI PURCHASE
-    //
-    // Jangan tampilkan data yang outlet-nya tidak aktif.
-    // Jangan tampilkan barang non-CENTRAL.
+    // 10. VALIDASI PURCHASE
     // ===================================================
 
     const validPurchases =
       purchases.filter(
         (purchase) => {
-          // ---------------------------------------------
           // Outlet harus ada dan aktif
-          // ---------------------------------------------
-
           if (
             !purchase.outlet ||
             !purchase.outlet.active
@@ -259,10 +403,7 @@ export async function GET() {
             return false;
           }
 
-          // ---------------------------------------------
-          // Semua barang harus CENTRAL
-          // ---------------------------------------------
-
+          // Barang harus CENTRAL
           return purchase.items.every(
             (item) =>
               item.barang &&
@@ -273,7 +414,7 @@ export async function GET() {
       );
 
     // ===================================================
-    // 7. MAP PURCHASE
+    // 11. MAP PURCHASE
     // ===================================================
 
     const purchaseData =
@@ -287,8 +428,7 @@ export async function GET() {
               ) =>
                 total +
                 Number(
-                  item.qty ??
-                    0
+                  item.qty ?? 0
                 ),
               0
             );
@@ -307,18 +447,13 @@ export async function GET() {
               0
             );
 
-          // ---------------------------------------------
-          // STATUS
-          // ---------------------------------------------
-
           let status =
             String(
               purchase.status
             );
 
           if (
-            totalReceived >
-              0 &&
+            totalReceived > 0 &&
             totalReceived <
               totalItem
           ) {
@@ -327,8 +462,7 @@ export async function GET() {
           }
 
           if (
-            totalItem >
-              0 &&
+            totalItem > 0 &&
             totalReceived >=
               totalItem
           ) {
@@ -337,7 +471,8 @@ export async function GET() {
           }
 
           return {
-            id: `PURCHASE-${purchase.id}`,
+            id:
+              `PURCHASE-${purchase.id}`,
 
             sourceId:
               purchase.id,
@@ -362,18 +497,15 @@ export async function GET() {
                 ? {
                     id:
                       purchase
-                        .outlet
-                        .id,
+                        .outlet.id,
 
                     code:
                       purchase
-                        .outlet
-                        .code,
+                        .outlet.code,
 
                     name:
                       purchase
-                        .outlet
-                        .name,
+                        .outlet.name,
                   }
                 : null,
 
@@ -382,18 +514,15 @@ export async function GET() {
                 ? {
                     id:
                       purchase
-                        .supplier
-                        .id,
+                        .supplier.id,
 
                     code:
                       purchase
-                        .supplier
-                        .code,
+                        .supplier.code,
 
                     name:
                       purchase
-                        .supplier
-                        .name,
+                        .supplier.name,
                   }
                 : null,
 
@@ -408,7 +537,8 @@ export async function GET() {
                 purchase.status,
 
               purchaseDate:
-                purchase.purchaseDate,
+                purchase
+                  .purchaseDate,
 
               remarks:
                 purchase.remarks,
@@ -425,8 +555,7 @@ export async function GET() {
 
                   qty:
                     Number(
-                      item.qty ??
-                        0
+                      item.qty ?? 0
                     ),
 
                   receivedQty:
@@ -437,8 +566,7 @@ export async function GET() {
 
                   price:
                     Number(
-                      item.price ??
-                        0
+                      item.price ?? 0
                     ),
 
                   subtotal:
@@ -456,7 +584,16 @@ export async function GET() {
       );
 
     // ===================================================
-    // 8. TRANSFER GUDANG PUSAT -> OUTLET
+    // 12. FILTER TRANSFER
+    // ===================================================
+
+    const transferDateFilter =
+      buildDateFilter(
+        "transferDate"
+      );
+
+    // ===================================================
+    // 13. TRANSFER GUDANG -> OUTLET
     // ===================================================
 
     const transfers =
@@ -464,6 +601,7 @@ export async function GET() {
         {
           where: {
             ...outletFilter,
+            ...transferDateFilter,
           },
 
           include: {
@@ -491,26 +629,18 @@ export async function GET() {
       );
 
     // ===================================================
-    // 9. VALIDASI TRANSFER
+    // 14. VALIDASI TRANSFER
     // ===================================================
 
     const validTransfers =
       transfers.filter(
         (transfer) => {
-          // ---------------------------------------------
-          // Outlet harus ada dan aktif
-          // ---------------------------------------------
-
           if (
             !transfer.outlet ||
             !transfer.outlet.active
           ) {
             return false;
           }
-
-          // ---------------------------------------------
-          // Semua barang harus CENTRAL
-          // ---------------------------------------------
 
           return transfer.items.every(
             (item) =>
@@ -522,7 +652,7 @@ export async function GET() {
       );
 
     // ===================================================
-    // 10. MAP TRANSFER
+    // 15. MAP TRANSFER
     // ===================================================
 
     const transferData =
@@ -536,8 +666,7 @@ export async function GET() {
               ) =>
                 total +
                 Number(
-                  item.qty ??
-                    0
+                  item.qty ?? 0
                 ),
               0
             );
@@ -556,18 +685,13 @@ export async function GET() {
               0
             );
 
-          // ---------------------------------------------
-          // STATUS
-          // ---------------------------------------------
-
           let status =
             String(
               transfer.status
             );
 
           if (
-            totalReceived >
-              0 &&
+            totalReceived > 0 &&
             totalReceived <
               totalItem
           ) {
@@ -576,8 +700,7 @@ export async function GET() {
           }
 
           if (
-            totalItem >
-              0 &&
+            totalItem > 0 &&
             totalReceived >=
               totalItem
           ) {
@@ -586,7 +709,8 @@ export async function GET() {
           }
 
           return {
-            id: `TRANSFER-${transfer.id}`,
+            id:
+              `TRANSFER-${transfer.id}`,
 
             sourceId:
               transfer.id,
@@ -611,18 +735,15 @@ export async function GET() {
                 ? {
                     id:
                       transfer
-                        .outlet
-                        .id,
+                        .outlet.id,
 
                     code:
                       transfer
-                        .outlet
-                        .code,
+                        .outlet.code,
 
                     name:
                       transfer
-                        .outlet
-                        .name,
+                        .outlet.name,
                   }
                 : null,
 
@@ -643,7 +764,8 @@ export async function GET() {
                 transfer.status,
 
               transferDate:
-                transfer.transferDate,
+                transfer
+                  .transferDate,
 
               remarks:
                 transfer.remarks,
@@ -661,8 +783,7 @@ export async function GET() {
 
                   const qty =
                     Number(
-                      item.qty ??
-                        0
+                      item.qty ?? 0
                     );
 
                   return {
@@ -695,7 +816,7 @@ export async function GET() {
       );
 
     // ===================================================
-    // 11. GABUNGKAN
+    // 16. GABUNGKAN PURCHASE + TRANSFER
     // ===================================================
 
     const data = [
@@ -712,7 +833,7 @@ export async function GET() {
     );
 
     // ===================================================
-    // 12. RESPONSE
+    // 17. RESPONSE
     // ===================================================
 
     return NextResponse.json({
@@ -730,6 +851,17 @@ export async function GET() {
 
         outletId:
           user.outletId,
+      },
+
+      filters: {
+        outletId:
+          selectedOutletId,
+
+        dateFrom:
+          dateFrom || null,
+
+        dateTo:
+          dateTo || null,
       },
 
       data,

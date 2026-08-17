@@ -65,6 +65,18 @@ export default function OutletBarangMasukDetailPage() {
   const [loading, setLoading] = useState(true);
   const [receiving, setReceiving] = useState(false);
 
+  // =====================================================
+  // QTY DITERIMA MANUAL
+  // =====================================================
+
+  const [receivedQty, setReceivedQty] = useState<
+    Record<number, number>
+  >({});
+
+  // =====================================================
+  // LOAD DATA
+  // =====================================================
+
   useEffect(() => {
     loadData();
   }, [id]);
@@ -87,11 +99,27 @@ export default function OutletBarangMasukDetailPage() {
           "LOAD DETAIL BARANG MASUK:",
           json.message
         );
+
         setData(null);
         return;
       }
 
-      setData(json.data);
+      const detail: Detail = json.data;
+
+      // =================================================
+      // SET QTY DITERIMA
+      // =================================================
+
+      const initialQty: Record<number, number> = {};
+
+      detail.items.forEach((item) => {
+        initialQty[item.id] =
+          item.receivedQty ?? 0;
+      });
+
+      setReceivedQty(initialQty);
+
+      setData(detail);
     } catch (error) {
       console.error(
         "LOAD DETAIL BARANG MASUK ERROR:",
@@ -104,13 +132,44 @@ export default function OutletBarangMasukDetailPage() {
     }
   }
 
+  // =====================================================
+  // HANDLE RECEIVE
+  // =====================================================
+
   async function handleReceive() {
     if (!data) return;
 
     if (
-      data.status === "RECEIVED"
+      data.status === "RECEIVED" ||
+      data.status === "SELESAI"
     ) {
       return;
+    }
+
+    // ===================================================
+    // VALIDASI QTY TRANSFER
+    // ===================================================
+
+    if (data.sumber === "TRANSFER") {
+      for (const item of data.items) {
+        const qtyTerima = Number(
+          receivedQty[item.id] ?? 0
+        );
+
+        if (qtyTerima < 0) {
+          alert(
+            `Qty diterima untuk ${item.barang.name} tidak boleh negatif.`
+          );
+          return;
+        }
+
+        if (qtyTerima > item.qty) {
+          alert(
+            `Qty diterima ${item.barang.name} tidak boleh lebih besar dari qty kirim (${item.qty}).`
+          );
+          return;
+        }
+      }
     }
 
     const confirmed = window.confirm(
@@ -123,19 +182,36 @@ export default function OutletBarangMasukDetailPage() {
       setReceiving(true);
 
       let url = "";
+      let body: string | undefined;
+
+      // =================================================
+      // TRANSFER GUDANG
+      // =================================================
 
       if (data.sumber === "TRANSFER") {
         url = `/api/outlet/barang-masuk/${id}/receive`;
-      } else {
-        url = `/api/outlet/barang-masuk/receive`;
+
+        body = JSON.stringify({
+          items: data.items.map((item) => ({
+            id: item.id,
+            receivedQty: Number(
+              receivedQty[item.id] ?? 0
+            ),
+          })),
+        });
       }
 
-      const body =
-        data.sumber === "PURCHASE"
-          ? JSON.stringify({
-              purchaseId: data.sourceId,
-            })
-          : undefined;
+      // =================================================
+      // PURCHASE SUPPLIER
+      // =================================================
+
+      else {
+        url = `/api/outlet/barang-masuk/receive`;
+
+        body = JSON.stringify({
+          purchaseId: data.sourceId,
+        });
+      }
 
       const res = await fetch(url, {
         method: "POST",
@@ -175,26 +251,41 @@ export default function OutletBarangMasukDetailPage() {
     }
   }
 
+  // =====================================================
+  // TOTAL QTY
+  // =====================================================
+
   const totalQty =
     data?.items?.reduce(
       (total, item) =>
         total +
         (data.sumber === "TRANSFER"
-          ? item.receivedQty ?? 0
+          ? Number(
+              receivedQty[item.id] ?? 0
+            )
           : item.qty),
       0
     ) ?? 0;
+
+  // =====================================================
+  // TOTAL VALUE
+  // =====================================================
 
   const totalValue =
     data?.items?.reduce(
       (total, item) =>
         total +
         (data.sumber === "TRANSFER"
-          ? (item.receivedQty ?? 0) *
-            item.price
+          ? Number(
+              receivedQty[item.id] ?? 0
+            ) * item.price
           : item.subtotal),
       0
     ) ?? 0;
+
+  // =====================================================
+  // SOURCE BADGE
+  // =====================================================
 
   function sourceBadge() {
     if (data?.sumber === "PURCHASE") {
@@ -211,6 +302,10 @@ export default function OutletBarangMasukDetailPage() {
       </span>
     );
   }
+
+  // =====================================================
+  // STATUS BADGE
+  // =====================================================
 
   function statusBadge() {
     const status =
@@ -242,6 +337,10 @@ export default function OutletBarangMasukDetailPage() {
     );
   }
 
+  // =====================================================
+  // LOADING
+  // =====================================================
+
   if (loading) {
     return (
       <div className="flex min-h-[70vh] items-center justify-center">
@@ -255,6 +354,10 @@ export default function OutletBarangMasukDetailPage() {
       </div>
     );
   }
+
+  // =====================================================
+  // DATA NOT FOUND
+  // =====================================================
 
   if (!data) {
     return (
@@ -289,6 +392,10 @@ export default function OutletBarangMasukDetailPage() {
   const alreadyReceived =
     data.status === "RECEIVED" ||
     data.status === "SELESAI";
+
+  // =====================================================
+  // RENDER
+  // =====================================================
 
   return (
     <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
@@ -358,7 +465,9 @@ export default function OutletBarangMasukDetailPage() {
           <button
             type="button"
             onClick={loadData}
-            disabled={loading || receiving}
+            disabled={
+              loading || receiving
+            }
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm hover:bg-[#F5F8F6]"
           >
             <RefreshCw
@@ -505,7 +614,9 @@ export default function OutletBarangMasukDetailPage() {
           </h2>
 
           <p className="mt-1 text-sm text-gray-400">
-            Daftar barang yang diterima outlet
+            {data.sumber === "TRANSFER"
+              ? "Masukkan jumlah barang yang benar-benar diterima outlet"
+              : "Daftar barang yang diterima outlet"}
           </p>
         </div>
 
@@ -572,17 +683,20 @@ export default function OutletBarangMasukDetailPage() {
                 data.items.map(
                   (item, index) => {
 
-                    const receivedQty =
+                    const qtyDiterima =
                       data.sumber ===
                       "TRANSFER"
-                        ? item.receivedQty ??
-                          0
+                        ? Number(
+                            receivedQty[
+                              item.id
+                            ] ?? 0
+                          )
                         : item.qty;
 
                     const subtotal =
                       data.sumber ===
                       "TRANSFER"
-                        ? receivedQty *
+                        ? qtyDiterima *
                           item.price
                         : item.subtotal;
 
@@ -616,8 +730,46 @@ export default function OutletBarangMasukDetailPage() {
 
                         {data.sumber ===
                           "TRANSFER" && (
-                          <td className="px-5 py-4 text-center font-semibold text-green-700">
-                            {receivedQty}
+                          <td className="px-5 py-4 text-center">
+
+                            <input
+                              type="number"
+                              min={0}
+                              max={item.qty}
+                              value={
+                                receivedQty[
+                                  item.id
+                                ] ?? ""
+                              }
+                              onChange={(e) => {
+                                const value =
+                                  e.target.value;
+
+                                setReceivedQty(
+                                  (prev) => ({
+                                    ...prev,
+                                    [item.id]:
+                                      value ===
+                                      ""
+                                        ? 0
+                                        : Number(
+                                            value
+                                          ),
+                                  })
+                                );
+                              }}
+                              disabled={
+                                alreadyReceived ||
+                                receiving
+                              }
+                              className="w-24 rounded-lg border border-[#CFE0D8] bg-white px-3 py-2 text-center font-semibold text-[#18352D] outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/20 disabled:bg-gray-100"
+                            />
+
+                            <div className="mt-1 text-[11px] text-gray-400">
+                              Maks.{" "}
+                              {item.qty}
+                            </div>
+
                           </td>
                         )}
 

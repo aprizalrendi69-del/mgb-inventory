@@ -79,10 +79,13 @@ async function getLoginUser() {
 
   const role = String(user.role).toUpperCase();
 
+  // =====================================================
+  // ROLE YANG BOLEH AKSES
+  // =====================================================
+
   if (
     role !== "OUTLET_ADMIN" &&
-    role !== "ADMIN" &&
-    role !== "MANAGER"
+    role !== "ADMIN"
   ) {
     return {
       error:
@@ -91,9 +94,9 @@ async function getLoginUser() {
     } as const;
   }
 
-  // ---------------------------------------------------
-  // OUTLET ADMIN WAJIB PUNYA OUTLET
-  // ---------------------------------------------------
+  // =====================================================
+  // OUTLET ADMIN WAJIB TERHUBUNG OUTLET
+  // =====================================================
 
   if (
     role === "OUTLET_ADMIN" &&
@@ -115,14 +118,18 @@ async function getLoginUser() {
 // =====================================================
 // GET STOCK OUTLET UNTUK OPNAME
 //
-// ADMIN / MANAGER
+// ADMIN
 // -> bisa melihat semua outlet
+// -> bisa filter outletId
 //
 // OUTLET_ADMIN
 // -> hanya outlet sendiri
+// -> tidak bisa mengganti outlet
 // =====================================================
 
-export async function GET() {
+export async function GET(
+  req: NextRequest
+) {
   try {
     const login = await getLoginUser();
 
@@ -140,21 +147,39 @@ export async function GET() {
 
     const { user, role } = login;
 
+    const { searchParams } =
+      new URL(req.url);
+
+    const requestedOutletId = Number(
+      searchParams.get("outletId") ?? 0
+    );
+
     const where: any = {};
 
-    // ---------------------------------------------------
-    // SECURITY OUTLET ADMIN
-    // ---------------------------------------------------
+    // =================================================
+    // OUTLET ADMIN
+    // =================================================
 
     if (role === "OUTLET_ADMIN") {
-      where.outletId = Number(user.outletId);
+      where.outletId = Number(
+        user.outletId
+      );
     }
 
-    // ---------------------------------------------------
-    // ADMIN / MANAGER
-    // ---------------------------------------------------
-    // Tidak diberi filter sehingga bisa melihat
-    // seluruh stock outlet.
+    // =================================================
+    // ADMIN PUSAT
+    // =================================================
+    // Admin boleh melihat semua outlet.
+    // Jika outletId dikirim, filter berdasarkan outlet.
+    // =================================================
+
+    if (
+      role === "ADMIN" &&
+      requestedOutletId > 0
+    ) {
+      where.outletId =
+        requestedOutletId;
+    }
 
     const stocks =
       await prisma.outletStock.findMany({
@@ -206,6 +231,8 @@ export async function GET() {
         outletId: user.outletId,
       },
 
+      // Admin pusat mendapatkan null karena
+      // outlet bisa dipilih dari filter.
       outlet:
         role === "OUTLET_ADMIN"
           ? user.outlet || null
@@ -236,12 +263,14 @@ export async function GET() {
 // =====================================================
 // POST CREATE STOCK OPNAME
 //
-// CREATE = COUNTING
+// ADMIN
+// -> wajib memilih outlet
 //
-// PENTING:
-// - TIDAK mengubah OutletStock
-// - Status = COUNTING
-// - Perubahan stock dilakukan saat APPROVE
+// OUTLET_ADMIN
+// -> otomatis menggunakan outlet session
+// -> tidak perlu mengirim outletId
+//
+// CREATE = COUNTING
 // =====================================================
 
 export async function POST(
@@ -311,18 +340,21 @@ export async function POST(
 
     // =================================================
     // TENTUKAN OUTLET
-    //
-    // OUTLET_ADMIN
-    // -> SELALU outlet dari session
-    //
-    // ADMIN / MANAGER
-    // -> outletId dari request
     // =================================================
 
     let outletId: number;
 
+    // -------------------------------------------------
+    // OUTLET ADMIN
+    // -------------------------------------------------
+    // Tidak peduli body mengirim outletId atau tidak.
+    // Outlet selalu berasal dari session.
+    // -------------------------------------------------
+
     if (role === "OUTLET_ADMIN") {
-      outletId = Number(user.outletId);
+      outletId = Number(
+        user.outletId
+      );
 
       if (
         !Number.isInteger(outletId) ||
@@ -339,7 +371,31 @@ export async function POST(
           }
         );
       }
-    } else {
+
+      // Jika mencoba mengirim outlet lain
+      // tetap ditolak.
+      if (
+        requestedOutletId > 0 &&
+        requestedOutletId !== outletId
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Anda tidak dapat membuat stock opname untuk outlet lain",
+          },
+          {
+            status: 403,
+          }
+        );
+      }
+    }
+
+    // -------------------------------------------------
+    // ADMIN PUSAT
+    // -------------------------------------------------
+
+    else {
       if (
         !Number.isInteger(
           requestedOutletId
@@ -350,7 +406,7 @@ export async function POST(
           {
             success: false,
             message:
-              "Outlet wajib dipilih",
+              "Outlet wajib dipilih oleh Admin Pusat",
           },
           {
             status: 400,
@@ -358,7 +414,8 @@ export async function POST(
         );
       }
 
-      outletId = requestedOutletId;
+      outletId =
+        requestedOutletId;
     }
 
     // =================================================
@@ -392,34 +449,7 @@ export async function POST(
     }
 
     // =================================================
-    // SECURITY TAMBAHAN
-    //
-    // OUTLET_ADMIN TIDAK BOLEH MEMANIPULASI
-    // outletId melalui body.
-    //
-    // Walaupun dia mengirim outletId outlet lain,
-    // tetap dipaksa menggunakan outlet session.
-    // =================================================
-
-    if (
-      role === "OUTLET_ADMIN" &&
-      requestedOutletId > 0 &&
-      requestedOutletId !== outletId
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Anda tidak dapat membuat stock opname untuk outlet lain",
-        },
-        {
-          status: 403,
-        }
-      );
-    }
-
-    // =================================================
-    // VALIDASI STOCK ID
+    // PARSE ITEMS
     // =================================================
 
     const parsedItems = items.map(
@@ -445,17 +475,18 @@ export async function POST(
       }
     );
 
-    // -------------------------------------------------
-    // CEK STOCK ID
-    // -------------------------------------------------
+    // =================================================
+    // VALIDASI STOCK ID
+    // =================================================
 
-    const invalidStock = parsedItems.find(
-      (item) =>
-        !Number.isInteger(
-          item.stockId
-        ) ||
-        item.stockId <= 0
-    );
+    const invalidStock =
+      parsedItems.find(
+        (item) =>
+          !Number.isInteger(
+            item.stockId
+          ) ||
+          item.stockId <= 0
+      );
 
     if (invalidStock) {
       return NextResponse.json(
@@ -470,17 +501,18 @@ export async function POST(
       );
     }
 
-    // -------------------------------------------------
-    // CEK PHYSICAL QTY
-    // -------------------------------------------------
+    // =================================================
+    // VALIDASI PHYSICAL QTY
+    // =================================================
 
-    const invalidQty = parsedItems.find(
-      (item) =>
-        !Number.isFinite(
-          item.physicalQty
-        ) ||
-        item.physicalQty < 0
-    );
+    const invalidQty =
+      parsedItems.find(
+        (item) =>
+          !Number.isFinite(
+            item.physicalQty
+          ) ||
+          item.physicalQty < 0
+      );
 
     if (invalidQty) {
       return NextResponse.json(
@@ -496,10 +528,7 @@ export async function POST(
     }
 
     // =================================================
-    // CEK DUPLIKAT STOCK ID
-    //
-    // Satu barang tidak boleh muncul dua kali
-    // dalam satu stock opname.
+    // CEK DUPLIKAT STOCK
     // =================================================
 
     const stockIdSet = new Set(
@@ -524,18 +553,11 @@ export async function POST(
       );
     }
 
-    const stockIds = Array.from(
-      stockIdSet
-    );
+    const stockIds =
+      Array.from(stockIdSet);
 
     // =================================================
-    // AMBIL STOCK
-    //
-    // PENTING:
-    // WHERE MENGUNCI outletId.
-    //
-    // Jadi user tidak bisa mengirim stockId
-    // milik outlet lain.
+    // AMBIL STOCK BERDASARKAN OUTLET
     // =================================================
 
     const stocks =
@@ -562,12 +584,9 @@ export async function POST(
         },
       });
 
-    // =================================================
-    // SEMUA STOCK HARUS DITEMUKAN
-    // =================================================
-
     if (
-      stocks.length !== stockIds.length
+      stocks.length !==
+      stockIds.length
     ) {
       return NextResponse.json(
         {
@@ -582,10 +601,7 @@ export async function POST(
     }
 
     // =================================================
-    // CEK BARANG ID UNIK
-    //
-    // Pencegahan tambahan jika database mempunyai
-    // data stock yang tidak semestinya.
+    // BARANG ID UNIK
     // =================================================
 
     const barangIds =
@@ -633,23 +649,18 @@ export async function POST(
 
     const code =
       "SO-" +
-      String(nextId).padStart(5, "0");
+      String(nextId).padStart(
+        5,
+        "0"
+      );
 
     // =================================================
-    // CREATE COUNTING
-    //
-    // TIDAK ADA UPDATE OUTLET STOCK DI SINI.
-    //
-    // Stock baru berubah ketika approval dilakukan.
+    // CREATE
     // =================================================
 
     const result =
       await prisma.$transaction(
         async (tx) => {
-          // -------------------------------------------
-          // CEK ULANG OUTLET
-          // -------------------------------------------
-
           const currentOutlet =
             await tx.outlet.findUnique({
               where: {
@@ -668,10 +679,6 @@ export async function POST(
               "Outlet tidak ditemukan"
             );
           }
-
-          // -------------------------------------------
-          // CEK STOCK ULANG DI DALAM TRANSACTION
-          // -------------------------------------------
 
           const currentStocks =
             await tx.outletStock.findMany({
@@ -700,10 +707,6 @@ export async function POST(
             );
           }
 
-          // -------------------------------------------
-          // BUAT MAP INPUT
-          // -------------------------------------------
-
           const inputMap =
             new Map<
               number,
@@ -724,21 +727,13 @@ export async function POST(
             );
           }
 
-          // -------------------------------------------
-          // CREATE OPNAME
-          // -------------------------------------------
-
           const opname =
             await tx.stockOpname.create({
               data: {
                 code,
-
                 outletId,
-
                 date: new Date(),
-
                 status: "COUNTING",
-
                 createdBy: user.id,
 
                 items: {
@@ -815,10 +810,6 @@ export async function POST(
           return opname;
         }
       );
-
-    // =================================================
-    // RESPONSE
-    // =================================================
 
     return NextResponse.json(
       {
