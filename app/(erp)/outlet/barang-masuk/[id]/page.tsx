@@ -139,6 +139,29 @@ export default function OutletBarangMasukDetailPage() {
   async function handleReceive() {
     if (!data) return;
 
+    // ===================================================
+    // PURCHASE SUPPLIER
+    //
+    // Purchase hanya boleh diterima jika PO sudah
+    // APPROVED.
+    // ===================================================
+
+    if (data.sumber === "PURCHASE") {
+      const purchaseStatus =
+        data.purchase?.status?.toUpperCase();
+
+      if (purchaseStatus !== "APPROVED") {
+        alert(
+          "Purchase Order belum di-approve. Barang belum dapat diterima."
+        );
+        return;
+      }
+    }
+
+    // ===================================================
+    // SUDAH DITERIMA
+    // ===================================================
+
     if (
       data.status === "RECEIVED" ||
       data.status === "SELESAI"
@@ -252,6 +275,41 @@ export default function OutletBarangMasukDetailPage() {
   }
 
   // =====================================================
+  // STATUS PENERIMAAN
+  // =====================================================
+
+  const alreadyReceived =
+    data?.status === "RECEIVED" ||
+    data?.status === "SELESAI";
+
+  // =====================================================
+  // STATUS PURCHASE ORDER
+  // =====================================================
+
+  const purchaseStatus =
+    data?.purchase?.status?.toUpperCase();
+
+  // =====================================================
+  // BOLEH TERIMA BARANG?
+  // =====================================================
+  //
+  // PURCHASE:
+  //   hanya APPROVED
+  //
+  // TRANSFER:
+  //   tetap boleh selama belum RECEIVED/SELESAI
+  //
+  // =====================================================
+
+  const canReceive =
+    data?.sumber === "PURCHASE"
+      ? purchaseStatus === "APPROVED" &&
+        !alreadyReceived
+      : data?.sumber === "TRANSFER"
+        ? !alreadyReceived
+        : false;
+
+  // =====================================================
   // TOTAL QTY
   // =====================================================
 
@@ -338,6 +396,55 @@ export default function OutletBarangMasukDetailPage() {
   }
 
   // =====================================================
+  // PURCHASE STATUS BADGE
+  // =====================================================
+
+  function purchaseStatusBadge() {
+    if (!data?.purchase) return null;
+
+    const status =
+      data.purchase.status?.toUpperCase();
+
+    if (status === "APPROVED") {
+      return (
+        <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+          Approved
+        </span>
+      );
+    }
+
+    if (status === "DRAFT") {
+      return (
+        <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+          Draft
+        </span>
+      );
+    }
+
+    if (status === "RECEIVED") {
+      return (
+        <span className="inline-flex rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+          Received
+        </span>
+      );
+    }
+
+    if (status === "CANCELLED") {
+      return (
+        <span className="inline-flex rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+          Cancelled
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+        {status || "-"}
+      </span>
+    );
+  }
+
+  // =====================================================
   // LOADING
   // =====================================================
 
@@ -389,10 +496,6 @@ export default function OutletBarangMasukDetailPage() {
     );
   }
 
-  const alreadyReceived =
-    data.status === "RECEIVED" ||
-    data.status === "SELESAI";
-
   // =====================================================
   // RENDER
   // =====================================================
@@ -438,9 +541,23 @@ export default function OutletBarangMasukDetailPage() {
 
         </div>
 
+        {/* =================================================
+            ACTION BUTTON
+            ================================================= */}
+
         <div className="flex flex-wrap gap-2">
 
-          {!alreadyReceived && (
+          {/* ===============================================
+              TOMBOL TERIMA BARANG
+
+              PURCHASE:
+              hanya muncul ketika PO APPROVED
+
+              TRANSFER:
+              muncul selama belum diterima
+              =============================================== */}
+
+          {canReceive && (
             <button
               type="button"
               onClick={handleReceive}
@@ -461,6 +578,10 @@ export default function OutletBarangMasukDetailPage() {
                 : "Terima Barang"}
             </button>
           )}
+
+          {/* ===============================================
+              REFRESH
+              =============================================== */}
 
           <button
             type="button"
@@ -489,6 +610,8 @@ export default function OutletBarangMasukDetailPage() {
 
       <div className="mb-6 grid gap-4 md:grid-cols-4">
 
+        {/* NOMOR */}
+
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
           <p className="text-xs font-medium text-gray-400">
             Nomor Penerimaan
@@ -498,6 +621,8 @@ export default function OutletBarangMasukDetailPage() {
             {data.nomor}
           </p>
         </div>
+
+        {/* TANGGAL */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
           <p className="text-xs font-medium text-gray-400">
@@ -513,6 +638,8 @@ export default function OutletBarangMasukDetailPage() {
           </p>
         </div>
 
+        {/* OUTLET */}
+
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
           <p className="text-xs font-medium text-gray-400">
             Outlet
@@ -527,7 +654,10 @@ export default function OutletBarangMasukDetailPage() {
           </p>
         </div>
 
+        {/* SUPPLIER / SOURCE */}
+
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
+
           <p className="text-xs font-medium text-gray-400">
             {data.sumber === "PURCHASE"
               ? "Supplier"
@@ -558,6 +688,7 @@ export default function OutletBarangMasukDetailPage() {
               </p>
             </>
           )}
+
         </div>
 
       </div>
@@ -566,7 +697,9 @@ export default function OutletBarangMasukDetailPage() {
 
       <div className="mb-6 rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-5">
+
+          {/* SUMBER */}
 
           <div>
             <p className="text-xs font-medium text-gray-400">
@@ -578,9 +711,11 @@ export default function OutletBarangMasukDetailPage() {
             </div>
           </div>
 
+          {/* STATUS BARANG MASUK */}
+
           <div>
             <p className="text-xs font-medium text-gray-400">
-              Status
+              Status Barang Masuk
             </p>
 
             <div className="mt-2">
@@ -588,19 +723,67 @@ export default function OutletBarangMasukDetailPage() {
             </div>
           </div>
 
+          {/* PURCHASE ORDER */}
+
           {data.purchase && (
             <div>
               <p className="text-xs font-medium text-gray-400">
                 Purchase Order
               </p>
 
-              <p className="mt-2 font-semibold text-[#18352D]">
-                {data.purchase.number}
-              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <p className="font-semibold text-[#18352D]">
+                  {data.purchase.number}
+                </p>
+
+                {purchaseStatusBadge()}
+              </div>
             </div>
           )}
 
         </div>
+
+        {/* ===============================================
+            INFORMASI JIKA PO BELUM APPROVED
+            =============================================== */}
+
+        {data.sumber === "PURCHASE" &&
+          purchaseStatus !== "APPROVED" &&
+          !alreadyReceived && (
+            <div className="mt-5 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3">
+
+              <div className="flex items-start gap-3">
+
+                <div className="mt-0.5 shrink-0">
+                  <PackageCheck
+                    size={18}
+                    className="text-yellow-600"
+                  />
+                </div>
+
+                <div>
+
+                  <p className="text-sm font-semibold text-yellow-800">
+                    Barang belum dapat diterima
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-yellow-700">
+                    Purchase Order masih berstatus{" "}
+                    <strong>
+                      {data.purchase?.status ||
+                        "DRAFT"}
+                    </strong>
+                    . Barang hanya dapat diterima
+                    setelah Purchase Order di-approve
+                    oleh admin pusat.
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+          )}
 
       </div>
 
@@ -609,6 +792,7 @@ export default function OutletBarangMasukDetailPage() {
       <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
         <div className="border-b border-[#E5ECE9] p-5">
+
           <h2 className="font-bold text-[#18352D]">
             Barang Diterima
           </h2>
@@ -618,6 +802,7 @@ export default function OutletBarangMasukDetailPage() {
               ? "Masukkan jumlah barang yang benar-benar diterima outlet"
               : "Daftar barang yang diterima outlet"}
           </p>
+
         </div>
 
         <div className="overflow-x-auto">
@@ -667,6 +852,7 @@ export default function OutletBarangMasukDetailPage() {
 
               {data.items.length === 0 ? (
                 <tr>
+
                   <td
                     colSpan={
                       data.sumber ===
@@ -678,6 +864,7 @@ export default function OutletBarangMasukDetailPage() {
                   >
                     Tidak ada barang.
                   </td>
+
                 </tr>
               ) : (
                 data.items.map(
@@ -715,6 +902,7 @@ export default function OutletBarangMasukDetailPage() {
                         </td>
 
                         <td className="px-5 py-4">
+
                           <div className="font-semibold text-[#18352D]">
                             {item.barang.name}
                           </div>
@@ -722,6 +910,7 @@ export default function OutletBarangMasukDetailPage() {
                           <div className="mt-1 text-xs text-gray-400">
                             {item.barang.unit}
                           </div>
+
                         </td>
 
                         <td className="px-5 py-4 text-center font-semibold">
@@ -838,6 +1027,7 @@ export default function OutletBarangMasukDetailPage() {
 
       {data.remarks && (
         <div className="mt-6 rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
+
           <p className="text-sm font-semibold text-[#35564C]">
             Catatan
           </p>
@@ -845,6 +1035,7 @@ export default function OutletBarangMasukDetailPage() {
           <p className="mt-2 text-sm text-gray-600">
             {data.remarks}
           </p>
+
         </div>
       )}
 

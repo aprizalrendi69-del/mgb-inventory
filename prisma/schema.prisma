@@ -8,21 +8,22 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  username  String   @unique
+  id        Int       @id @default(autoincrement())
+  username  String    @unique
   password  String
   fullname  String
   role      Role
   outletId  Int?
-  active    Boolean  @default(true)
+  active    Boolean   @default(true)
   lastSeen  DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   histories History[]
   sessions  Session[]
 
-  outlet Outlet? @relation(fields: [outletId], references: [id])
+  outletStockOuts OutletStockOut[]
+  outlet          Outlet?          @relation(fields: [outletId], references: [id])
 }
 
 model Outlet {
@@ -41,13 +42,73 @@ model Outlet {
   purchases  OutletPurchase[]
   receipts   OutletReceipt[]
   stocks     OutletStock[]
-  transfers  OutletTransfer[]
   deliveries Delivery[]
 
   stockOpnames StockOpname[]
   outletBarang OutletBarang[]
+  stockOuts    OutletStockOut[]
+
+  transfersOut OutletTransfer[] @relation("TransferSourceOutlet")
+  transfersIn  OutletTransfer[] @relation("TransferDestinationOutlet")
 
   sourceBarangs Barang[] @relation("BarangSourceOutlet")
+}
+
+model OutletStockOut {
+  id       Int    @id @default(autoincrement())
+  number   String @unique
+  outletId Int
+  barangId Int
+  userId   Int?
+
+  trxDate DateTime @default(now())
+
+  type   String
+  status WasteStatus @default(PENDING)
+
+  qtyProcessed Float
+  wasteQty     Float   @default(0)
+  netQty       Float   @default(0)
+  unitCost     Float   @default(0)
+  totalCost    Float   @default(0)
+  note         String?
+
+  approvedBy Int?
+  approvedAt DateTime?
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  barang Barang @relation(fields: [barangId], references: [id])
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@index([outletId])
+  @@index([barangId])
+  @@index([trxDate])
+  @@index([type])
+  @@index([status])
+}
+
+model OutletTransfer {
+  id     Int    @id @default(autoincrement())
+  number String @unique
+
+  // NULL = berasal dari gudang pusat
+  sourceOutletId Int?
+
+  // Outlet tujuan
+  outletId Int
+
+  transferDate DateTime             @default(now())
+  status       OutletTransferStatus @default(SENT)
+  remarks      String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  sourceOutlet Outlet?              @relation("TransferSourceOutlet", fields: [sourceOutletId], references: [id])
+  outlet       Outlet               @relation("TransferDestinationOutlet", fields: [outletId], references: [id])
+  items        OutletTransferItem[]
+
+  @@index([sourceOutletId])
+  @@index([outletId])
 }
 
 model Session {
@@ -141,6 +202,7 @@ model Barang {
   outletStocks        OutletStock[]
   outletTransferItems OutletTransferItem[]
   outletBarang        OutletBarang[]
+  outletStockOuts     OutletStockOut[]
 
   @@index([source])
   @@index([sourceOutletId])
@@ -412,21 +474,49 @@ model Inventory {
 }
 
 model StockOpname {
-  id         Int      @id @default(autoincrement())
-  code       String   @unique
-  date       DateTime @default(now())
-  status     String   @default("COUNTING")
+  id   Int    @id @default(autoincrement())
+  code String @unique
+
+  date DateTime @default(now())
+
+  // ============================================
+  // JENIS STOCK OPNAME
+  //
+  // WEEKLY  = opname mingguan / monitoring
+  // MONTHLY = opname bulanan / opname resmi
+  // ============================================
+
+  type StockOpnameType @default(WEEKLY)
+
+  // ============================================
+  // STATUS
+  //
+  // WEEKLY
+  // -> COMPLETED
+  //
+  // MONTHLY
+  // -> COUNTING
+  // -> APPROVED
+  // ============================================
+
+  status String @default("COUNTING")
+
   createdBy  Int?
   approvedBy Int?
-  outletId   Int?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+
+  outletId Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   outlet    Outlet?              @relation(fields: [outletId], references: [id])
   histories StockOpnameHistory[]
   items     StockOpnameItem[]
 
   @@index([outletId])
+  @@index([type])
+  @@index([status])
+  @@index([date])
 }
 
 model StockOpnameItem {
@@ -641,22 +731,6 @@ model PriceSummary {
   @@index([supplierId])
 }
 
-model OutletTransfer {
-  id           Int                  @id @default(autoincrement())
-  number       String               @unique
-  outletId     Int
-  transferDate DateTime             @default(now())
-  status       OutletTransferStatus @default(SENT)
-  remarks      String?
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
-
-  outlet Outlet               @relation(fields: [outletId], references: [id])
-  items  OutletTransferItem[]
-
-  @@index([outletId])
-}
-
 model OutletTransferItem {
   id          Int   @id @default(autoincrement())
   transferId  Int
@@ -722,4 +796,15 @@ enum OutletTransferStatus {
   SENT
   PARTIAL
   RECEIVED
+}
+
+enum WasteStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum StockOpnameType {
+  WEEKLY
+  MONTHLY
 }

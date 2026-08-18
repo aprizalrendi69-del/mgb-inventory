@@ -1,82 +1,92 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export async function GET() {
+  try {
+    const data = await prisma.purchase.findMany({
+      include: {
+        supplier: true,
 
-export async function GET(){
+        items: {
+          include: {
+            barang: true,
+          },
+        },
+      },
 
-try{
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
 
+    const result = data.map((item) => ({
+      id: item.id,
+      number: item.number,
+      date: item.createdAt,
+      supplier: item.supplier?.name ?? "-",
+      status: item.status,
 
-const data = await prisma.purchase.findMany({
+      total: item.items.reduce(
+        (sum, row) =>
+          sum +
+          Number(row.qty ?? 0) *
+            Number(row.price ?? 0),
+        0
+      ),
 
-include:{
-supplier:true,
-items:{
-include:{
-barang:true
-}
-}
-},
+      // =====================================================
+      // DETAIL BARANG PO
+      // =====================================================
 
-orderBy:{
-createdAt:"desc"
-}
+      items: item.items.map((row) => ({
+        id: row.id,
 
-});
+        barangId: row.barang?.id ?? null,
 
+        kode:
+          row.barang?.code ??
+          row.barang?.kode ??
+          "-",
 
+        nama:
+          row.barang?.name ??
+          row.barang?.nama ??
+          "-",
 
-const result=data.map((item)=>({
+        satuan:
+          row.barang?.satuan ??
+          row.barang?.unit ??
+          "-",
 
+        qty: Number(row.qty ?? 0),
 
-id:item.id,
+        harga: Number(row.price ?? 0),
 
-number:item.number,
+        subtotal:
+          Number(row.qty ?? 0) *
+          Number(row.price ?? 0),
+      })),
+    }));
 
-date:item.createdAt,
+    return NextResponse.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error(
+      "Gagal mengambil laporan purchase:",
+      error
+    );
 
-supplier:item.supplier?.name ?? "-",
-
-
-status:item.status,
-
-
-total:item.items.reduce(
-(sum,row)=>
-sum + ((row.qty ?? 0) * (row.price ?? 0)),
-0
-)
-
-
-}));
-
-
-
-return NextResponse.json({
-
-success:true,
-
-data:result
-
-});
-
-
-}catch(error){
-
-console.log(error);
-
-
-return NextResponse.json({
-
-success:false,
-
-message:"Gagal mengambil laporan purchase"
-
-},
-{
-status:500
-});
-
-}
-
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "Gagal mengambil laporan purchase",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
 }

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import {
   DeliveryStatus,
   HistoryType,
+  OutletTransferStatus,
 } from "@prisma/client";
 
 export async function PUT(
@@ -17,7 +18,11 @@ export async function PUT(
     const { id } = await params;
     const deliveryId = Number(id);
 
-    if (!deliveryId) {
+    // =====================================================
+    // VALIDASI ID
+    // =====================================================
+
+    if (!deliveryId || Number.isNaN(deliveryId)) {
       return NextResponse.json(
         {
           success: false,
@@ -35,19 +40,29 @@ export async function PUT(
       where: {
         id: deliveryId,
       },
+
       include: {
         customer: true,
+
         outlet: true,
+
         items: {
           include: {
             barang: true,
           },
+
           orderBy: {
             id: "asc",
           },
         },
+
+        suratJalan: true,
       },
     });
+
+    // =====================================================
+    // DELIVERY TIDAK DITEMUKAN
+    // =====================================================
 
     if (!delivery) {
       return NextResponse.json(
@@ -60,7 +75,7 @@ export async function PUT(
     }
 
     // =====================================================
-    // HANYA DRAFT
+    // HANYA DRAFT YANG BOLEH RELEASE
     // =====================================================
 
     if (delivery.status !== DeliveryStatus.DRAFT) {
@@ -74,6 +89,10 @@ export async function PUT(
       );
     }
 
+    // =====================================================
+    // VALIDASI ITEM
+    // =====================================================
+
     if (!delivery.items || delivery.items.length === 0) {
       return NextResponse.json(
         {
@@ -85,32 +104,39 @@ export async function PUT(
     }
 
     // =====================================================
-    // OUTLET
+    // VALIDASI OUTLET TUJUAN
     // =====================================================
-    // PENTING:
-    // Delivery.outletId adalah sumber outlet.
-    // JANGAN gunakan customerId sebagai outletId.
+    //
+    // Delivery.outletId = OUTLET TUJUAN
+    //
+    // sourceOutletId TIDAK DIAMBIL DARI DELIVERY
+    // karena pengiriman ini berasal dari GUDANG PUSAT.
+    //
     // =====================================================
 
-    let outlet = null;
-
-    if (delivery.outletId) {
-      outlet = await prisma.outlet.findUnique({
-        where: {
-          id: delivery.outletId,
+    if (!delivery.outletId) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            `Delivery ${delivery.number} belum memiliki outlet tujuan.`,
         },
-      });
+        { status: 400 }
+      );
     }
 
-    // Kalau Delivery memang untuk outlet tetapi outletId kosong,
-    // jangan release.
+    const outlet = await prisma.outlet.findUnique({
+      where: {
+        id: delivery.outletId,
+      },
+    });
+
     if (!outlet) {
       return NextResponse.json(
         {
           success: false,
           message:
-            `Delivery ${delivery.number} belum terhubung ke outlet. ` +
-            `Pastikan outletId pada Delivery sudah terisi.`,
+            `Outlet tujuan dengan ID ${delivery.outletId} tidak ditemukan.`,
         },
         { status: 400 }
       );
@@ -126,6 +152,10 @@ export async function PUT(
       // ===================================================
 
       for (const item of delivery.items) {
+        // ===============================================
+        // AMBIL BARANG TERBARU
+        // ===============================================
+
         const barang = await tx.barang.findUnique({
           where: {
             id: item.barangId,
@@ -138,9 +168,13 @@ export async function PUT(
           );
         }
 
+        // ===============================================
+        // QTY
+        // ===============================================
+
         const qtyKeluar = Number(item.qty);
 
-        if (!qtyKeluar || qtyKeluar <= 0) {
+        if (!Number.isFinite(qtyKeluar) || qtyKeluar <= 0) {
           throw new Error(
             `Qty barang ${barang.name} tidak valid`
           );
@@ -152,13 +186,21 @@ export async function PUT(
 
         const stockSebelum = Number(barang.stock);
 
+        // ===============================================
+        // CEK STOCK
+        // ===============================================
+
         if (stockSebelum < qtyKeluar) {
           throw new Error(
             `Stock ${barang.name} tidak cukup. ` +
-            `Stock tersedia: ${stockSebelum}, ` +
-            `kebutuhan: ${qtyKeluar}`
+              `Stock tersedia: ${stockSebelum}, ` +
+              `kebutuhan: ${qtyKeluar}`
           );
         }
+
+        // ===============================================
+        // STOCK SESUDAH
+        // ===============================================
 
         const stockSesudah =
           stockSebelum - qtyKeluar;
@@ -168,22 +210,30 @@ export async function PUT(
         // ===============================================
 
         if (barang.hasExpired) {
-          const batches = await tx.batchStock.findMany({
-            where: {
-              barangId: barang.id,
-              qty: {
-                gt: 0,
+          const batches =
+            await tx.batchStock.findMany({
+              where: {
+                barangId: barang.id,
+
+                qty: {
+                  gt: 0,
+                },
               },
-            },
-            orderBy: [
-              {
-                expiredDate: "asc",
-              },
-              {
-                id: "asc",
-              },
-            ],
-          });
+
+              orderBy: [
+                {
+                  expiredDate: "asc",
+                },
+
+                {
+                  id: "asc",
+                },
+              ],
+            });
+
+          // =============================================
+          // TIDAK ADA BATCH
+          // =============================================
 
           if (batches.length === 0) {
             throw new Error(
@@ -191,19 +241,28 @@ export async function PUT(
             );
           }
 
-          const totalBatchStock = batches.reduce(
-            (total, batch) =>
-              total + Number(batch.qty),
-            0
-          );
+          // =============================================
+          // TOTAL STOCK BATCH
+          // =============================================
+
+          const totalBatchStock =
+            batches.reduce(
+              (total, batch) =>
+                total + Number(batch.qty),
+              0
+            );
 
           if (totalBatchStock < qtyKeluar) {
             throw new Error(
               `Stock batch ${barang.name} tidak cukup. ` +
-              `Tersedia ${totalBatchStock}, ` +
-              `kebutuhan ${qtyKeluar}`
+                `Tersedia ${totalBatchStock}, ` +
+                `kebutuhan ${qtyKeluar}`
             );
           }
+
+          // =============================================
+          // FEFO
+          // =============================================
 
           let remainingQty = qtyKeluar;
 
@@ -219,17 +278,25 @@ export async function PUT(
               remainingQty
             );
 
+            const newBatchQty =
+              batchQty - usedQty;
+
             await tx.batchStock.update({
               where: {
                 id: batch.id,
               },
+
               data: {
-                qty: batchQty - usedQty,
+                qty: newBatchQty,
               },
             });
 
             remainingQty -= usedQty;
           }
+
+          // =============================================
+          // FEFO GAGAL
+          // =============================================
 
           if (remainingQty > 0) {
             throw new Error(
@@ -247,23 +314,26 @@ export async function PUT(
             where: {
               id: barang.id,
             },
+
             data: {
               stock: stockSesudah,
             },
           });
 
         // ===============================================
-        // INVENTORY
+        // UPDATE INVENTORY
         // ===============================================
 
         await tx.inventory.upsert({
           where: {
             barangId: barang.id,
           },
+
           update: {
             stock: stockSesudah,
             availableStock: stockSesudah,
           },
+
           create: {
             barangId: barang.id,
             stock: stockSesudah,
@@ -291,15 +361,25 @@ export async function PUT(
         await tx.stockCard.create({
           data: {
             barangId: barang.id,
+
             trxType: "DELIVERY",
+
             trxNumber: delivery.number,
+
             referenceId: delivery.id,
+
             warehouse: "MAIN",
+
             qtyIn: 0,
+
             qtyOut: qtyKeluar,
+
             balance: updatedBarang.stock,
+
             unitPrice,
+
             totalValue,
+
             note:
               delivery.remarks ||
               "Barang keluar Delivery Order",
@@ -313,11 +393,17 @@ export async function PUT(
         await tx.stockMutation.create({
           data: {
             barangId: barang.id,
+
             type: "OUT",
+
             qty: qtyKeluar,
+
             stockBefore: stockSebelum,
+
             stockAfter: stockSesudah,
+
             reference: delivery.number,
+
             description:
               "Release Delivery Order",
           },
@@ -333,6 +419,7 @@ export async function PUT(
           where: {
             id: delivery.id,
           },
+
           data: {
             status: DeliveryStatus.RELEASED,
           },
@@ -357,6 +444,7 @@ export async function PUT(
           await tx.suratJalan.create({
             data: {
               number: sjNumber,
+
               deliveryId: delivery.id,
             },
           });
@@ -365,17 +453,31 @@ export async function PUT(
       // ===================================================
       // 4. OUTLET TRANSFER
       // ===================================================
+      //
+      // PENTING:
+      //
+      // sourceOutletId = NULL
+      //
+      // karena sumber pengiriman adalah GUDANG PUSAT,
+      // bukan outlet lain.
+      //
+      // outletId = outlet tujuan.
+      //
+      // ===================================================
 
       let outletTransfer =
         await tx.outletTransfer.findFirst({
           where: {
             outletId: outlet.id,
+
             remarks: {
               contains: delivery.number,
             },
           },
+
           include: {
             outlet: true,
+
             items: {
               include: {
                 barang: true,
@@ -383,6 +485,10 @@ export async function PUT(
             },
           },
         });
+
+      // ===================================================
+      // CREATE TRANSFER
+      // ===================================================
 
       if (!outletTransfer) {
         const transferNumber =
@@ -395,24 +501,42 @@ export async function PUT(
           await tx.outletTransfer.create({
             data: {
               number: transferNumber,
+
+              // =========================================
+              // GUDANG PUSAT
+              // =========================================
+              sourceOutletId: null,
+
+              // =========================================
+              // OUTLET TUJUAN
+              // =========================================
               outletId: outlet.id,
-              status: "SENT",
+
+              transferDate: new Date(),
+
+              status:
+                OutletTransferStatus.SENT,
+
               remarks:
-                `Pengiriman dari gudang - ${delivery.number}`,
+                `Pengiriman dari gudang pusat - ${delivery.number}`,
 
               items: {
-                create: delivery.items.map(
-                  (item) => ({
-                    barangId: item.barangId,
-                    qty: Number(item.qty),
-                    receivedQty: 0,
-                  })
-                ),
+                create:
+                  delivery.items.map(
+                    (item) => ({
+                      barangId: item.barangId,
+
+                      qty: Number(item.qty),
+
+                      receivedQty: 0,
+                    })
+                  ),
               },
             },
 
             include: {
               outlet: true,
+
               items: {
                 include: {
                   barang: true,
@@ -436,20 +560,27 @@ export async function PUT(
 
           description:
             `Release Delivery Order ${delivery.number} ` +
-            `dan kirim ke outlet ${outlet.name}`,
+            `dan kirim dari gudang pusat ke outlet ${outlet.name}`,
         },
       });
 
+      // ===================================================
+      // RETURN
+      // ===================================================
+
       return {
         delivery: releasedDelivery,
+
         suratJalan,
+
         outletTransfer,
+
         outlet,
       };
     });
 
     // =====================================================
-    // SUCCESS
+    // SUCCESS RESPONSE
     // =====================================================
 
     return NextResponse.json({
@@ -457,7 +588,7 @@ export async function PUT(
 
       message:
         `Delivery Order ${delivery.number} berhasil di-Release ` +
-        `dan dikirim ke ${result.outlet.name}`,
+        `dan dikirim dari gudang pusat ke ${result.outlet.name}`,
 
       data: {
         deliveryId:
@@ -474,6 +605,10 @@ export async function PUT(
       },
     });
   } catch (error: any) {
+    // =====================================================
+    // ERROR
+    // =====================================================
+
     console.error(
       "APPROVE DELIVERY ERROR:",
       error
@@ -482,10 +617,12 @@ export async function PUT(
     return NextResponse.json(
       {
         success: false,
+
         message:
           error?.message ||
           "Gagal melakukan release Delivery Order",
       },
+
       {
         status: 500,
       }

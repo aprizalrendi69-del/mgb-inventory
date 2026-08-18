@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname 0.0.0.0",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+  "dev": "next dev --hostname 0.0.0.0",
+  "build": "next build",
+  "start": "next start",
+  "lint": "eslint",
+  "backup": "node scripts/backup.js"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

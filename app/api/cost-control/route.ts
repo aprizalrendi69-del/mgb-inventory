@@ -12,13 +12,92 @@ async function getCurrentUser() {
   const cookieStore = await cookies();
   const session = cookieStore.get("erp-session");
 
-  if (!session) return null;
+  if (!session) {
+    return null;
+  }
 
   try {
     const data = JSON.parse(session.value);
+
     return data?.user ?? data;
   } catch {
     return null;
+  }
+}
+
+/*
+ * =========================================================
+ * RESOLVE USER OUTLET
+ * =========================================================
+ *
+ * Prioritas:
+ *
+ * 1. session.user.outletId
+ * 2. session.outletId
+ * 3. session.user.outlet.id
+ * 4. database User.outletId
+ *
+ * Ini penting karena beberapa session lama tidak membawa
+ * outletId walaupun User di database sudah memiliki outlet.
+ * =========================================================
+ */
+
+async function resolveUserOutletId(user: any) {
+  const sessionOutletId =
+    Number(
+      user?.outletId ??
+        user?.outlet?.id ??
+        user?.outletIdValue ??
+        0
+    );
+
+  if (sessionOutletId > 0) {
+    return sessionOutletId;
+  }
+
+  /*
+   * FALLBACK DATABASE
+   */
+
+  const possibleUserId =
+    Number(
+      user?.id ??
+        user?.userId ??
+        user?.user_id ??
+        0
+    );
+
+  if (
+    !Number.isInteger(
+      possibleUserId
+    ) ||
+    possibleUserId <= 0
+  ) {
+    return 0;
+  }
+
+  try {
+    const dbUser =
+      await prisma.user.findUnique({
+        where: {
+          id: possibleUserId,
+        },
+
+        select: {
+          outletId: true,
+        },
+      });
+
+    return Number(
+      dbUser?.outletId ?? 0
+    );
+  } catch (error) {
+    console.error(
+      "RESOLVE USER OUTLET ERROR:",
+      error
+    );
+
+    return 0;
   }
 }
 
@@ -46,7 +125,8 @@ const COST_CATEGORIES = [
   "PACKAGING",
 ] as const;
 
-type CostCategory = (typeof COST_CATEGORIES)[number];
+type CostCategory =
+  (typeof COST_CATEGORIES)[number];
 
 /*
  * =========================================================
@@ -61,13 +141,21 @@ function catKey(
     .toUpperCase()
     .trim();
 
-  if (!n) return null;
+  if (!n) {
+    return null;
+  }
 
-  if (n.includes("VEGET") || n.includes("SAYUR")) {
+  if (
+    n.includes("VEGET") ||
+    n.includes("SAYUR")
+  ) {
     return "VEGETABLES";
   }
 
-  if (n.includes("FRUIT") || n.includes("BUAH")) {
+  if (
+    n.includes("FRUIT") ||
+    n.includes("BUAH")
+  ) {
     return "FRUITS";
   }
 
@@ -75,7 +163,10 @@ function catKey(
     return "GROCERIES";
   }
 
-  if (n.includes("PASTR") || n.includes("BAKERY")) {
+  if (
+    n.includes("PASTR") ||
+    n.includes("BAKERY")
+  ) {
     return "PASTRY";
   }
 
@@ -83,7 +174,10 @@ function catKey(
     return "FROZEN FOOD";
   }
 
-  if (n.includes("SEAFOOD") || n.includes("SEA FOOD")) {
+  if (
+    n.includes("SEAFOOD") ||
+    n.includes("SEA FOOD")
+  ) {
     return "SEAFOOD";
   }
 
@@ -95,15 +189,24 @@ function catKey(
     return "CHICKEN & POULTRY";
   }
 
-  if (n.includes("WIP") || n.includes("SOUP")) {
+  if (
+    n.includes("WIP") ||
+    n.includes("SOUP")
+  ) {
     return "WIP & SOUP";
   }
 
-  if (n.includes("BEVER") || n.includes("MINUM")) {
+  if (
+    n.includes("BEVER") ||
+    n.includes("MINUM")
+  ) {
     return "BEVERAGE";
   }
 
-  if (n.includes("MEAT") || n.includes("DAGING")) {
+  if (
+    n.includes("MEAT") ||
+    n.includes("DAGING")
+  ) {
     return "MEATS";
   }
 
@@ -116,7 +219,10 @@ function catKey(
     return "KITCHEN FUEL";
   }
 
-  if (n.includes("STAFF") || n.includes("KARYAWAN")) {
+  if (
+    n.includes("STAFF") ||
+    n.includes("KARYAWAN")
+  ) {
     return "STAFF MEALS";
   }
 
@@ -226,7 +332,9 @@ const BENCHMARKS: Record<string, any> = {
  */
 
 function outletKey(name: string) {
-  const n = String(name || "").toUpperCase().trim();
+  const n = String(name || "")
+    .toUpperCase()
+    .trim();
 
   if (n.includes("GANGNAM")) {
     return "GANGNAM";
@@ -247,24 +355,35 @@ function outletKey(name: string) {
 
 function startOfDay(date: Date) {
   const d = new Date(date);
+
   d.setHours(0, 0, 0, 0);
+
   return d;
 }
 
 function nextDay(date: Date) {
   const d = startOfDay(date);
+
   d.setDate(d.getDate() + 1);
+
   return d;
 }
 
 function num(value: any) {
-  const result = Number(value ?? 0);
+  const result = Number(
+    value ?? 0
+  );
 
-  return Number.isFinite(result) ? result : 0;
+  return Number.isFinite(result)
+    ? result
+    : 0;
 }
 
 function createCategoryMap() {
-  const result: Record<string, number> = {};
+  const result: Record<
+    string,
+    number
+  > = {};
 
   for (const category of COST_CATEGORIES) {
     result[category] = 0;
@@ -279,14 +398,17 @@ function addAmount(
   amount: number
 ) {
   target[category] =
-    (target[category] || 0) + num(amount);
+    (target[category] || 0) +
+    num(amount);
 }
 
 function benchmarkStatus(
   value: number,
   benchmark: any
 ) {
-  if (!benchmark) return "-";
+  if (!benchmark) {
+    return "-";
+  }
 
   const [
     target,
@@ -302,11 +424,15 @@ function benchmarkStatus(
     return "-";
   }
 
-  if (value >= num(critical)) {
+  if (
+    value >= num(critical)
+  ) {
     return "CRITICAL";
   }
 
-  if (value >= num(warning)) {
+  if (
+    value >= num(warning)
+  ) {
     return "WARNING";
   }
 
@@ -315,23 +441,90 @@ function benchmarkStatus(
 
 /*
  * =========================================================
- * GET
+ * ROLE HELPER
  * =========================================================
  */
 
-export async function GET(req: NextRequest) {
-  try {
-    const user: any = await getCurrentUser();
+function isOutletAdmin(user: any) {
+  const role = String(
+    user?.role || ""
+  )
+    .toUpperCase()
+    .trim();
 
-    const { searchParams } = new URL(req.url);
+  return (
+    role === "OUTLET_ADMIN" ||
+    role === "ADMIN_OUTLET"
+  );
+}
+
+function isCentralAdmin(user: any) {
+  const role = String(
+    user?.role || ""
+  )
+    .toUpperCase()
+    .trim();
+
+  return role === "ADMIN";
+}
+
+/*
+ * =========================================================
+ * GET COST CONTROL
+ * =========================================================
+ */
+
+export async function GET(
+  req: NextRequest
+) {
+  try {
+    /*
+     * =======================================================
+     * CURRENT USER
+     * =======================================================
+     */
+
+    const user: any =
+      await getCurrentUser();
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Tidak login",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
+    /*
+     * =======================================================
+     * QUERY
+     * =======================================================
+     */
+
+    const {
+      searchParams,
+    } = new URL(req.url);
+
+    const now = new Date();
 
     const month =
-      searchParams.get("month") ||
-      new Date().toISOString().slice(0, 7);
+      searchParams.get(
+        "month"
+      ) ||
+      `${now.getFullYear()}-${String(
+        now.getMonth() + 1
+      ).padStart(2, "0")}`;
 
-    const requestedOutlet = Number(
-      searchParams.get("outletId") || 0
-    );
+    const requestedOutlet =
+      Number(
+        searchParams.get(
+          "outletId"
+        ) || 0
+      );
 
     /*
      * =======================================================
@@ -339,23 +532,36 @@ export async function GET(req: NextRequest) {
      * =======================================================
      */
 
-    let salesByOutlet: Record<string, number> = {};
+    let salesByOutlet: Record<
+      string,
+      number
+    > = {};
 
     const salesRaw =
-      searchParams.get("salesByOutlet");
+      searchParams.get(
+        "salesByOutlet"
+      );
 
     if (salesRaw) {
       try {
-        const parsed = JSON.parse(salesRaw);
+        const parsed =
+          JSON.parse(
+            salesRaw
+          );
 
         if (
           parsed &&
-          typeof parsed === "object"
+          typeof parsed ===
+            "object"
         ) {
-          for (const [key, value] of Object.entries(
+          for (const [
+            key,
+            value,
+          ] of Object.entries(
             parsed
           )) {
-            salesByOutlet[key] = num(value);
+            salesByOutlet[key] =
+              num(value);
           }
         }
       } catch {
@@ -363,9 +569,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const oldNetSales = num(
-      searchParams.get("netSales")
-    );
+    /*
+     * BACKWARD COMPATIBILITY
+     */
+
+    const oldNetSales =
+      num(
+        searchParams.get(
+          "netSales"
+        )
+      );
 
     /*
      * =======================================================
@@ -373,21 +586,79 @@ export async function GET(req: NextRequest) {
      * =======================================================
      */
 
-    let allowedOutlet = requestedOutlet;
+    const outletAdmin =
+      isOutletAdmin(user);
 
-    if (user?.role === "OUTLET_ADMIN") {
-      allowedOutlet = num(user?.outletId);
+    const centralAdmin =
+      isCentralAdmin(user);
 
-      if (!allowedOutlet) {
+    /*
+     * Role selain ADMIN dan OUTLET ADMIN
+     * tidak boleh mengakses Cost Control.
+     */
+
+    if (
+      !centralAdmin &&
+      !outletAdmin
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Anda tidak memiliki akses Cost Control",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    /*
+     * =======================================================
+     * RESOLVE OUTLET
+     * =======================================================
+     */
+
+    let allowedOutlet =
+      requestedOutlet;
+
+    /*
+     * OUTLET ADMIN:
+     *
+     * Jangan percaya outletId dari query.
+     * Outlet harus berasal dari user sendiri.
+     *
+     * Jika session tidak memiliki outletId,
+     * ambil dari tabel User.
+     */
+
+    if (outletAdmin) {
+      const userOutletId =
+        await resolveUserOutletId(
+          user
+        );
+
+      if (!userOutletId) {
         return NextResponse.json(
           {
             success: false,
             message:
               "User belum memiliki outlet",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
+
+      /*
+       * SECURITY:
+       * query outletId dari browser tidak boleh
+       * mengganti outlet milik user.
+       */
+
+      allowedOutlet =
+        userOutletId;
     }
 
     /*
@@ -396,11 +667,17 @@ export async function GET(req: NextRequest) {
      * =======================================================
      */
 
-    const monthStart = startOfDay(
-      new Date(`${month}-01T00:00:00`)
-    );
+    const monthStart =
+      startOfDay(
+        new Date(
+          `${month}-01T00:00:00`
+        )
+      );
 
-    const monthEnd = new Date(monthStart);
+    const monthEnd =
+      new Date(
+        monthStart
+      );
 
     monthEnd.setMonth(
       monthEnd.getMonth() + 1
@@ -412,23 +689,55 @@ export async function GET(req: NextRequest) {
      * =======================================================
      */
 
-    const outlets = allowedOutlet
-      ? await prisma.outlet.findMany({
-          where: {
-            id: allowedOutlet,
-          },
-          orderBy: {
-            name: "asc",
-          },
-        })
-      : await prisma.outlet.findMany({
-          where: {
-            active: true,
-          },
-          orderBy: {
-            name: "asc",
-          },
-        });
+    const outlets =
+      allowedOutlet
+        ? await prisma.outlet.findMany(
+            {
+              where: {
+                id: allowedOutlet,
+
+                ...(outletAdmin
+                  ? {}
+                  : {}),
+              },
+
+              orderBy: {
+                name: "asc",
+              },
+            }
+          )
+        : await prisma.outlet.findMany(
+            {
+              where: {
+                active: true,
+              },
+
+              orderBy: {
+                name: "asc",
+              },
+            }
+          );
+
+    /*
+     * Jika outlet yang diminta tidak ditemukan,
+     * jangan diam-diam mengembalikan data kosong.
+     */
+
+    if (
+      allowedOutlet &&
+      outlets.length === 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Outlet tidak ditemukan",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
 
     const results: any[] = [];
 
@@ -446,26 +755,57 @@ export async function GET(req: NextRequest) {
        */
 
       const outletMaster =
-        await prisma.outletBarang.findMany({
-          where: {
-            outletId: outlet.id,
-            aktif: true,
-          },
-          include: {
-            barang: true,
-          },
-          orderBy: {
-            barang: {
-              name: "asc",
-            },
-          },
-        });
+        await prisma.outletBarang.findMany(
+          {
+            where: {
+              outletId:
+                outlet.id,
 
-      const outletBarangIds = new Set(
-        outletMaster.map(
-          (item) => Number(item.barangId)
-        )
-      );
+              aktif: true,
+            },
+
+            include: {
+              barang: true,
+            },
+
+            orderBy: {
+              barang: {
+                name: "asc",
+              },
+            },
+          }
+        );
+
+      const outletBarangIds =
+        new Set(
+          outletMaster.map(
+            (item) =>
+              Number(
+                item.barangId
+              )
+          )
+        );
+
+      /*
+       * =====================================================
+       * MASTER MAP
+       * =====================================================
+       */
+
+      const masterMap =
+        new Map<
+          number,
+          any
+        >();
+
+      for (const master of outletMaster) {
+        masterMap.set(
+          Number(
+            master.barangId
+          ),
+          master
+        );
+      }
 
       /*
        * =====================================================
@@ -473,251 +813,503 @@ export async function GET(req: NextRequest) {
        * =====================================================
        */
 
-      const priceMap = new Map<
-        number,
-        number
-      >();
+      const priceMap =
+        new Map<
+          number,
+          number
+        >();
 
       for (const master of outletMaster) {
         priceMap.set(
-          Number(master.barangId),
+          Number(
+            master.barangId
+          ),
           num(
             master.harga ??
-              master.barang?.purchasePrice
+              master.barang
+                ?.purchasePrice
           )
         );
       }
 
       /*
        * =====================================================
-       * STOCK OPNAME BULAN INI
+       * STOCK OPNAME
        * =====================================================
        */
 
-      const opnames =
-        await prisma.stockOpname.findMany({
-          where: {
-            outletId: outlet.id,
-            status: "APPROVED",
-            date: {
-              gte: monthStart,
-              lt: monthEnd,
+      const opnameRows =
+        await prisma.stockOpname.findMany(
+          {
+            where: {
+              outletId:
+                outlet.id,
+
+              date: {
+                gte: monthStart,
+                lt: monthEnd,
+              },
+
+              OR: [
+                {
+                  type: "WEEKLY",
+
+                  status: {
+                    in: [
+                      "COMPLETED",
+                      "APPROVED",
+                    ],
+                  },
+                },
+
+                {
+                  type: "MONTHLY",
+
+                  status: "APPROVED",
+                },
+              ],
             },
-          },
 
-          orderBy: {
-            date: "asc",
-          },
+            orderBy: {
+              date: "asc",
+            },
 
-          include: {
-            items: {
-              include: {
-                barang: true,
+            include: {
+              items: {
+                include: {
+                  barang: true,
+                },
               },
             },
-          },
-        });
+          }
+        );
 
-      /*
-       * =====================================================
-       * STOCK OPNAME TERAKHIR SEBELUM BULAN
-       * =====================================================
-       */
+      const weeklyOpnames =
+        opnameRows
+          .filter(
+            (so) =>
+              String(
+                so.type
+              ).toUpperCase() ===
+              "WEEKLY"
+          )
+          .sort(
+            (a, b) =>
+              new Date(
+                a.date
+              ).getTime() -
+              new Date(
+                b.date
+              ).getTime()
+          );
+
+      const monthlyOpnames =
+        opnameRows
+          .filter(
+            (so) =>
+              String(
+                so.type
+              ).toUpperCase() ===
+                "MONTHLY" &&
+              String(
+                so.status
+              ).toUpperCase() ===
+                "APPROVED"
+          )
+          .sort(
+            (a, b) =>
+              new Date(
+                a.date
+              ).getTime() -
+              new Date(
+                b.date
+              ).getTime()
+          );
 
       const previousOpname =
-        await prisma.stockOpname.findFirst({
-          where: {
-            outletId: outlet.id,
-            status: "APPROVED",
-            date: {
-              lt: monthStart,
+        await prisma.stockOpname.findFirst(
+          {
+            where: {
+              outletId:
+                outlet.id,
+
+              date: {
+                lt: monthStart,
+              },
+
+              OR: [
+                {
+                  type: "MONTHLY",
+                  status: "APPROVED",
+                },
+
+                {
+                  type: "WEEKLY",
+                  status: {
+                    in: [
+                      "COMPLETED",
+                      "APPROVED",
+                    ],
+                  },
+                },
+              ],
             },
-          },
 
-          orderBy: {
-            date: "desc",
-          },
+            orderBy: {
+              date: "desc",
+            },
 
-          include: {
-            items: {
-              include: {
-                barang: true,
+            include: {
+              items: {
+                include: {
+                  barang: true,
+                },
               },
             },
-          },
-        });
+          }
+        );
 
       /*
        * =====================================================
-       * RECEIPTS
+       * OUTLET RECEIPT
        * =====================================================
        */
 
       const receipts =
-        await prisma.outletReceipt.findMany({
-          where: {
-            outletId: outlet.id,
-            receiptDate: {
-              gte: monthStart,
-              lt: monthEnd,
-            },
-          },
+        await prisma.outletReceipt.findMany(
+          {
+            where: {
+              outletId:
+                outlet.id,
 
-          include: {
-            items: {
-              include: {
-                barang: true,
+              receiptDate: {
+                gte: monthStart,
+                lt: monthEnd,
               },
             },
-          },
 
-          orderBy: {
-            receiptDate: "asc",
-          },
-        });
+            include: {
+              items: {
+                include: {
+                  barang: true,
+                },
+              },
+            },
+
+            orderBy: {
+              receiptDate: "asc",
+            },
+          }
+        );
 
       /*
        * =====================================================
-       * PRICE HELPER
+       * TRANSFER PUSAT -> OUTLET
        * =====================================================
        */
+
+      const transfers =
+        await prisma.outletTransfer.findMany(
+          {
+            where: {
+              outletId:
+                outlet.id,
+
+              transferDate: {
+                gte: monthStart,
+                lt: monthEnd,
+              },
+
+              status: {
+                in: [
+                  "PARTIAL",
+                  "RECEIVED",
+                ],
+              },
+            },
+
+            include: {
+              items: {
+                include: {
+                  barang: true,
+                },
+              },
+            },
+
+            orderBy: {
+              transferDate:
+                "asc",
+            },
+          }
+        );
+
+      /*
+       * =====================================================
+       * WASTE
+       * =====================================================
+       */
+
+      const outletWastes =
+        await prisma.outletStockOut.findMany(
+          {
+            where: {
+              outletId:
+                outlet.id,
+
+              type: "WASTE",
+
+              trxDate: {
+                gte: monthStart,
+                lt: monthEnd,
+              },
+            },
+
+            include: {
+              barang: true,
+            },
+
+            orderBy: {
+              trxDate: "asc",
+            },
+          }
+        );
 
       function itemPrice(
         barangId: number,
         barang?: any
       ) {
         return (
-          priceMap.get(barangId) ??
-          num(barang?.purchasePrice)
+          priceMap.get(
+            barangId
+          ) ??
+          num(
+            barang?.purchasePrice
+          )
         );
       }
 
-      /*
-       * =====================================================
-       * OPENING QTY
-       * =====================================================
-       */
-
       const openingQtyMap =
-        new Map<number, number>();
+        new Map<
+          number,
+          number
+        >();
 
       if (previousOpname) {
-        for (const item of previousOpname.items || []) {
+        for (const item of
+          previousOpname.items ||
+          []) {
           const barangId =
-            Number(item.barangId);
+            Number(
+              item.barangId
+            );
 
           if (
-            !outletBarangIds.has(barangId)
+            !outletBarangIds.has(
+              barangId
+            )
           ) {
             continue;
           }
 
           openingQtyMap.set(
             barangId,
-            num(item.physicalQty)
-          );
-        }
-      } else if (opnames.length > 0) {
-        /*
-         * Jika belum ada SO sebelum bulan,
-         * gunakan systemQty pada SO pertama
-         * sebagai opening.
-         */
-        const firstOpname = opnames[0];
-
-        for (const item of firstOpname.items || []) {
-          const barangId =
-            Number(item.barangId);
-
-          if (
-            !outletBarangIds.has(barangId)
-          ) {
-            continue;
-          }
-
-          openingQtyMap.set(
-            barangId,
-            num(item.systemQty)
+            num(
+              item.physicalQty
+            )
           );
         }
       }
 
-      /*
-       * =====================================================
-       * WEEKLY
-       * =====================================================
-       */
-
-      const weeks: any[] = [];
-
-      for (
-        let index = 0;
-        index < opnames.length;
-        index++
+      function calculateReceived(
+        periodStart: Date,
+        periodEnd: Date
       ) {
-        const so = opnames[index];
-
-        const openingByCat =
+        const result =
           createCategoryMap();
 
-        const purchaseByCat =
-          createCategoryMap();
-
-        const endingByCat =
-          createCategoryMap();
-
-        const wasteByCat =
-          createCategoryMap();
-
-        /*
-         * ---------------------------------------------------
-         * OPENING
-         * ---------------------------------------------------
-         */
-
-        for (const [
-          barangId,
-          qty,
-        ] of openingQtyMap.entries()) {
-          const master =
-            outletMaster.find(
-              (item) =>
-                Number(item.barangId) ===
-                barangId
+        for (const receipt of
+          receipts) {
+          const receiptDate =
+            new Date(
+              receipt.receiptDate
             );
 
-          if (!master) continue;
+          if (
+            receiptDate <
+              periodStart ||
+            receiptDate >=
+              periodEnd
+          ) {
+            continue;
+          }
 
-          const category = catKey(
-            master.barang?.category
-          );
+          for (const item of
+            receipt.items || []) {
+            const barangId =
+              Number(
+                item.barangId
+              );
 
-          if (!category) continue;
+            if (
+              !outletBarangIds.has(
+                barangId
+              )
+            ) {
+              continue;
+            }
 
-          const price = itemPrice(
-            barangId,
-            master.barang
-          );
+            const master =
+              masterMap.get(
+                barangId
+              );
 
-          addAmount(
-            openingByCat,
-            category,
-            qty * price
-          );
+            const barang =
+              master?.barang ??
+              item.barang;
+
+            const category =
+              catKey(
+                barang?.category
+              );
+
+            if (!category) {
+              continue;
+            }
+
+            const subtotal =
+              num(
+                item.subtotal
+              );
+
+            const qty =
+              num(
+                item.qty
+              );
+
+            const price =
+              itemPrice(
+                barangId,
+                barang
+              );
+
+            const amount =
+              subtotal > 0
+                ? subtotal
+                : qty * price;
+
+            addAmount(
+              result,
+              category,
+              amount
+            );
+          }
         }
 
-        /*
-         * ---------------------------------------------------
-         * ENDING + WASTE
-         * ---------------------------------------------------
-         */
+        for (const transfer of
+          transfers) {
+          const transferDate =
+            new Date(
+              transfer.transferDate
+            );
 
-        const currentSnapshot =
-          new Map<number, number>();
+          if (
+            transferDate <
+              periodStart ||
+            transferDate >=
+              periodEnd
+          ) {
+            continue;
+          }
 
-        for (const item of so.items || []) {
+          for (const item of
+            transfer.items || []) {
+            const barangId =
+              Number(
+                item.barangId
+              );
+
+            if (
+              !outletBarangIds.has(
+                barangId
+              )
+            ) {
+              continue;
+            }
+
+            const receivedQty =
+              num(
+                item.receivedQty
+              );
+
+            if (
+              receivedQty <= 0
+            ) {
+              continue;
+            }
+
+            const master =
+              masterMap.get(
+                barangId
+              );
+
+            const barang =
+              master?.barang ??
+              item.barang;
+
+            const category =
+              catKey(
+                barang?.category
+              );
+
+            if (!category) {
+              continue;
+            }
+
+            const price =
+              itemPrice(
+                barangId,
+                barang
+              );
+
+            addAmount(
+              result,
+              category,
+              receivedQty *
+                price
+            );
+          }
+        }
+
+        return result;
+      }
+
+      function calculateWaste(
+        periodStart: Date,
+        periodEnd: Date
+      ) {
+        const result =
+          createCategoryMap();
+
+        for (const waste of
+          outletWastes) {
+          const wasteDate =
+            new Date(
+              waste.trxDate
+            );
+
+          if (
+            wasteDate <
+              periodStart ||
+            wasteDate >=
+              periodEnd
+          ) {
+            continue;
+          }
+
           const barangId =
-            Number(item.barangId);
+            Number(
+              waste.barangId
+            );
 
           if (
             !outletBarangIds.has(
@@ -728,32 +1320,175 @@ export async function GET(req: NextRequest) {
           }
 
           const master =
-            outletMaster.find(
-              (x) =>
-                Number(x.barangId) ===
-                barangId
+            masterMap.get(
+              barangId
+            );
+
+          const barang =
+            master?.barang ??
+            waste.barang;
+
+          const category =
+            catKey(
+              barang?.category
+            );
+
+          if (!category) {
+            continue;
+          }
+
+          const wasteQty =
+            num(
+              waste.wasteQty
+            );
+
+          const unitCost =
+            num(
+              waste.unitCost
+            );
+
+          const calculatedCost =
+            wasteQty *
+            unitCost;
+
+          const wasteCost =
+            num(
+              waste.totalCost
+            ) > 0
+              ? num(
+                  waste.totalCost
+                )
+              : calculatedCost;
+
+          addAmount(
+            result,
+            category,
+            wasteCost
+          );
+        }
+
+        return result;
+      }
+
+      const weeks: any[] = [];
+
+      for (
+        let index = 0;
+        index <
+        weeklyOpnames.length;
+        index++
+      ) {
+        const so =
+          weeklyOpnames[index];
+
+        const periodStart =
+          index === 0
+            ? monthStart
+            : nextDay(
+                weeklyOpnames[
+                  index - 1
+                ].date
+              );
+
+        const periodEnd =
+          nextDay(
+            so.date
+          );
+
+        const openingByCat =
+          createCategoryMap();
+
+        for (const [
+          barangId,
+          qty,
+        ] of openingQtyMap.entries()) {
+          const master =
+            masterMap.get(
+              barangId
+            );
+
+          if (!master) {
+            continue;
+          }
+
+          const category =
+            catKey(
+              master.barang
+                ?.category
+            );
+
+          if (!category) {
+            continue;
+          }
+
+          const price =
+            itemPrice(
+              barangId,
+              master.barang
+            );
+
+          addAmount(
+            openingByCat,
+            category,
+            qty * price
+          );
+        }
+
+        const endingByCat =
+          createCategoryMap();
+
+        const currentSnapshot =
+          new Map<
+            number,
+            number
+          >();
+
+        for (const item of
+          so.items || []) {
+          const barangId =
+            Number(
+              item.barangId
+            );
+
+          if (
+            !outletBarangIds.has(
+              barangId
+            )
+          ) {
+            continue;
+          }
+
+          const master =
+            masterMap.get(
+              barangId
             );
 
           const barang =
             master?.barang ??
             item.barang;
 
-          const category = catKey(
-            barang?.category
-          );
+          const category =
+            catKey(
+              barang?.category
+            );
 
-          if (!category) continue;
-
-          const price = itemPrice(
-            barangId,
-            barang
-          );
+          if (!category) {
+            continue;
+          }
 
           const physicalQty =
-            num(item.physicalQty);
+            Math.max(
+              0,
+              num(
+                item.physicalQty
+              )
+            );
 
-          const difference =
-            num(item.difference);
+          const price =
+            itemPrice(
+              barangId,
+              barang
+            );
 
           currentSnapshot.set(
             barangId,
@@ -765,133 +1500,69 @@ export async function GET(req: NextRequest) {
             category,
             physicalQty * price
           );
-
-          /*
-           * Difference negatif =
-           * actual lebih kecil dari system.
-           */
-          if (difference < 0) {
-            addAmount(
-              wasteByCat,
-              category,
-              Math.abs(difference) *
-                price
-            );
-          }
         }
 
-        /*
-         * ---------------------------------------------------
-         * PURCHASE / RECEIPT
-         * ---------------------------------------------------
-         */
+        const receivedByCat =
+          calculateReceived(
+            periodStart,
+            periodEnd
+          );
 
-        const periodStart =
-          index === 0
-            ? monthStart
-            : nextDay(
-                opnames[index - 1].date
-              );
-
-        const periodEnd =
-          nextDay(so.date);
-
-        for (const receipt of receipts) {
-          const receiptDate =
-            new Date(
-              receipt.receiptDate
-            );
-
-          if (
-            receiptDate < periodStart ||
-            receiptDate >= periodEnd
-          ) {
-            continue;
-          }
-
-          for (const item of receipt.items || []) {
-            const barangId =
-              Number(item.barangId);
-
-            if (
-              !outletBarangIds.has(
-                barangId
-              )
-            ) {
-              continue;
-            }
-
-            const master =
-              outletMaster.find(
-                (x) =>
-                  Number(x.barangId) ===
-                  barangId
-              );
-
-            const barang =
-              master?.barang ??
-              item.barang;
-
-            const category = catKey(
-              barang?.category
-            );
-
-            if (!category) continue;
-
-            /*
-             * Gunakan subtotal receipt.
-             */
-            addAmount(
-              purchaseByCat,
-              category,
-              num(item.subtotal)
-            );
-          }
-        }
-
-        /*
-         * ---------------------------------------------------
-         * ROWS
-         * ---------------------------------------------------
-         */
+        const wasteByCat =
+          calculateWaste(
+            periodStart,
+            periodEnd
+          );
 
         const rows =
           COST_CATEGORIES.map(
             (category) => {
-              const opening = num(
-                openingByCat[category]
-              );
+              const opening =
+                num(
+                  openingByCat[
+                    category
+                  ]
+                );
 
-              const purchase = num(
-                purchaseByCat[category]
-              );
+              const received =
+                num(
+                  receivedByCat[
+                    category
+                  ]
+                );
 
-              const ending = num(
-                endingByCat[category]
-              );
+              const ending =
+                num(
+                  endingByCat[
+                    category
+                  ]
+                );
 
-              const waste = num(
-                wasteByCat[category]
-              );
+              const waste =
+                num(
+                  wasteByCat[
+                    category
+                  ]
+                );
 
-              /*
-               * Cost of Sale:
-               *
-               * Opening
-               * + Purchase
-               * - Ending
-               */
-              const cost = Math.max(
-                0,
+              const rawCost =
                 opening +
-                  purchase -
-                  ending
-              );
+                received -
+                ending -
+                waste;
+
+              const cost =
+                Math.max(
+                  0,
+                  rawCost
+                );
 
               return {
                 category,
                 opening,
-                purchase,
+                purchase:
+                  received,
+                received,
                 ending,
                 waste,
                 cost,
@@ -899,52 +1570,59 @@ export async function GET(req: NextRequest) {
             }
           );
 
-        /*
-         * ---------------------------------------------------
-         * SALES
-         * ---------------------------------------------------
-         */
-
         const outletSales =
           salesByOutlet[
-            String(outlet.id)
+            String(
+              outlet.id
+            )
           ] ??
           (allowedOutlet
             ? oldNetSales
             : 0);
-
-        /*
-         * ---------------------------------------------------
-         * TOTAL
-         * ---------------------------------------------------
-         */
 
         const totals =
           rows.reduce(
             (acc, row) => ({
               opening:
                 acc.opening +
-                row.opening,
+                num(
+                  row.opening
+                ),
 
               purchase:
                 acc.purchase +
-                row.purchase,
+                num(
+                  row.purchase
+                ),
+
+              received:
+                acc.received +
+                num(
+                  row.received
+                ),
 
               ending:
                 acc.ending +
-                row.ending,
+                num(
+                  row.ending
+                ),
 
               waste:
                 acc.waste +
-                row.waste,
+                num(
+                  row.waste
+                ),
 
               cost:
                 acc.cost +
-                row.cost,
+                num(
+                  row.cost
+                ),
             }),
             {
               opening: 0,
               purchase: 0,
+              received: 0,
               ending: 0,
               waste: 0,
               cost: 0,
@@ -958,14 +1636,10 @@ export async function GET(req: NextRequest) {
               100
             : 0;
 
-        /*
-         * ---------------------------------------------------
-         * BENCHMARK
-         * ---------------------------------------------------
-         */
-
         const benchmarkKey =
-          outletKey(outlet.name);
+          outletKey(
+            outlet.name
+          );
 
         const benchmarkRows =
           rows.map((row) => {
@@ -999,21 +1673,15 @@ export async function GET(req: NextRequest) {
 
             return {
               ...row,
-
               ratioFoodCost,
-
               ratioToSales,
-
               foodBenchmark,
-
               salesBenchmark,
-
               foodStatus:
                 benchmarkStatus(
                   ratioFoodCost,
                   foodBenchmark
                 ),
-
               salesStatus:
                 benchmarkStatus(
                   ratioToSales,
@@ -1021,12 +1689,6 @@ export async function GET(req: NextRequest) {
                 ),
             };
           });
-
-        /*
-         * ---------------------------------------------------
-         * NEXT OPENING
-         * ---------------------------------------------------
-         */
 
         openingQtyMap.clear();
 
@@ -1043,14 +1705,21 @@ export async function GET(req: NextRequest) {
         weeks.push({
           id: so.id,
           code: so.code,
+          type: so.type,
+          status: so.status,
           date: so.date,
           periodStart,
           periodEnd,
-
           rows: benchmarkRows,
 
           totals: {
             ...totals,
+
+            purchase:
+              totals.received,
+
+            received:
+              totals.received,
 
             foodCost:
               weeklyFoodCost,
@@ -1061,57 +1730,256 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      /*
-       * =====================================================
-       * MONTHLY
-       * =====================================================
-       */
+      let closingOpname: any =
+        monthlyOpnames.length > 0
+          ? monthlyOpnames[
+              monthlyOpnames.length - 1
+            ]
+          : weeklyOpnames.length > 0
+          ? weeklyOpnames[
+              weeklyOpnames.length - 1
+            ]
+          : null;
 
-      const monthlyOpening =
-        weeks.length > 0
-          ? weeks[0].totals.opening
-          : 0;
+      const monthlyOpeningByCat =
+        createCategoryMap();
 
-      const monthlyEnding =
-        weeks.length > 0
-          ? weeks[
-              weeks.length - 1
-            ].totals.ending
-          : 0;
+      if (previousOpname) {
+        for (const item of
+          previousOpname.items ||
+          []) {
+          const barangId =
+            Number(
+              item.barangId
+            );
 
-      const monthlyPurchase =
-        weeks.reduce(
-          (sum, week) =>
-            sum +
-            week.totals.purchase,
-          0
+          if (
+            !outletBarangIds.has(
+              barangId
+            )
+          ) {
+            continue;
+          }
+
+          const master =
+            masterMap.get(
+              barangId
+            );
+
+          const barang =
+            master?.barang ??
+            item.barang;
+
+          const category =
+            catKey(
+              barang?.category
+            );
+
+          if (!category) {
+            continue;
+          }
+
+          const qty =
+            num(
+              item.physicalQty
+            );
+
+          const price =
+            itemPrice(
+              barangId,
+              barang
+            );
+
+          addAmount(
+            monthlyOpeningByCat,
+            category,
+            qty * price
+          );
+        }
+      }
+
+      const monthlyEndingByCat =
+        createCategoryMap();
+
+      if (closingOpname) {
+        for (const item of
+          closingOpname.items ||
+          []) {
+          const barangId =
+            Number(
+              item.barangId
+            );
+
+          if (
+            !outletBarangIds.has(
+              barangId
+            )
+          ) {
+            continue;
+          }
+
+          const master =
+            masterMap.get(
+              barangId
+            );
+
+          const barang =
+            master?.barang ??
+            item.barang;
+
+          const category =
+            catKey(
+              barang?.category
+            );
+
+          if (!category) {
+            continue;
+          }
+
+          const qty =
+            Math.max(
+              0,
+              num(
+                item.physicalQty
+              )
+            );
+
+          const price =
+            itemPrice(
+              barangId,
+              barang
+            );
+
+          addAmount(
+            monthlyEndingByCat,
+            category,
+            qty * price
+          );
+        }
+      }
+
+      const monthlyReceivedByCat =
+        calculateReceived(
+          monthStart,
+          monthEnd
         );
 
-      const monthlyWaste =
-        weeks.reduce(
-          (sum, week) =>
-            sum +
-            week.totals.waste,
-          0
+      const monthlyWasteByCat =
+        calculateWaste(
+          monthStart,
+          monthEnd
         );
 
-      const monthlyCost =
-        Math.max(
-          0,
-          monthlyOpening +
-            monthlyPurchase -
-            monthlyEnding
+      const monthlyRows =
+        COST_CATEGORIES.map(
+          (category) => {
+            const opening =
+              num(
+                monthlyOpeningByCat[
+                  category
+                ]
+              );
+
+            const received =
+              num(
+                monthlyReceivedByCat[
+                  category
+                ]
+              );
+
+            const ending =
+              num(
+                monthlyEndingByCat[
+                  category
+                ]
+              );
+
+            const waste =
+              num(
+                monthlyWasteByCat[
+                  category
+                ]
+              );
+
+            const rawCost =
+              opening +
+              received -
+              ending -
+              waste;
+
+            const cost =
+              Math.max(
+                0,
+                rawCost
+              );
+
+            return {
+              category,
+              opening,
+              purchase:
+                received,
+              received,
+              ending,
+              waste,
+              cost,
+            };
+          }
         );
 
-      /*
-       * =====================================================
-       * MONTHLY SALES
-       * =====================================================
-       */
+      const monthly =
+        monthlyRows.reduce(
+          (acc, row) => ({
+            opening:
+              acc.opening +
+              num(
+                row.opening
+              ),
+
+            purchase:
+              acc.purchase +
+              num(
+                row.purchase
+              ),
+
+            received:
+              acc.received +
+              num(
+                row.received
+              ),
+
+            ending:
+              acc.ending +
+              num(
+                row.ending
+              ),
+
+            waste:
+              acc.waste +
+              num(
+                row.waste
+              ),
+
+            cost:
+              acc.cost +
+              num(
+                row.cost
+              ),
+          }),
+          {
+            opening: 0,
+            purchase: 0,
+            received: 0,
+            ending: 0,
+            waste: 0,
+            cost: 0,
+          }
+        );
 
       const outletNetSales =
         salesByOutlet[
-          String(outlet.id)
+          String(
+            outlet.id
+          )
         ] ??
         (allowedOutlet
           ? oldNetSales
@@ -1119,33 +1987,98 @@ export async function GET(req: NextRequest) {
 
       const foodCost =
         outletNetSales > 0
-          ? (monthlyCost /
+          ? (monthly.cost /
               outletNetSales) *
             100
           : 0;
 
-      /*
-       * =====================================================
-       * RESULT
-       * =====================================================
-       */
+      const benchmarkKey =
+        outletKey(
+          outlet.name
+        );
+
+      const monthlyBenchmarkRows =
+        monthlyRows.map(
+          (row) => {
+            const foodBenchmark =
+              BENCHMARKS[
+                benchmarkKey
+              ]?.food?.[
+                row.category
+              ] ?? null;
+
+            const salesBenchmark =
+              BENCHMARKS[
+                benchmarkKey
+              ]?.sales?.[
+                row.category
+              ] ?? null;
+
+            const ratioFoodCost =
+              monthly.cost > 0
+                ? (row.cost /
+                    monthly.cost) *
+                  100
+                : 0;
+
+            const ratioToSales =
+              outletNetSales > 0
+                ? (row.cost /
+                    outletNetSales) *
+                  100
+                : 0;
+
+            return {
+              ...row,
+              ratioFoodCost,
+              ratioToSales,
+              foodBenchmark,
+              salesBenchmark,
+              foodStatus:
+                benchmarkStatus(
+                  ratioFoodCost,
+                  foodBenchmark
+                ),
+              salesStatus:
+                benchmarkStatus(
+                  ratioToSales,
+                  salesBenchmark
+                ),
+            };
+          }
+        );
 
       results.push({
         outlet,
 
         benchmark:
-          outletKey(outlet.name),
+          benchmarkKey,
 
         benchmarks:
           BENCHMARKS[
-            outletKey(outlet.name)
+            benchmarkKey
           ],
 
         opnameCount:
-          opnames.length,
+          opnameRows.length,
+
+        weeklyOpnameCount:
+          weeklyOpnames.length,
+
+        monthlyOpnameCount:
+          monthlyOpnames.length,
 
         masterBarangCount:
           outletMaster.length,
+
+        receiptCount:
+          receipts.length,
+
+        transferCount:
+          transfers.length,
+
+        wasteCount:
+          outletWastes.length,
 
         masterCategories:
           Array.from(
@@ -1153,14 +2086,17 @@ export async function GET(req: NextRequest) {
               outletMaster
                 .map((item) =>
                   catKey(
-                    item.barang?.category
+                    item.barang
+                      ?.category
                   )
                 )
                 .filter(
                   (
                     value
                   ): value is CostCategory =>
-                    Boolean(value)
+                    Boolean(
+                      value
+                    )
                 )
             )
           ),
@@ -1169,19 +2105,22 @@ export async function GET(req: NextRequest) {
 
         monthly: {
           opening:
-            monthlyOpening,
+            monthly.opening,
 
           purchase:
-            monthlyPurchase,
+            monthly.purchase,
+
+          received:
+            monthly.received,
 
           ending:
-            monthlyEnding,
+            monthly.ending,
 
           waste:
-            monthlyWaste,
+            monthly.waste,
 
           cost:
-            monthlyCost,
+            monthly.cost,
 
           netSales:
             outletNetSales,
@@ -1190,46 +2129,89 @@ export async function GET(req: NextRequest) {
 
           ratioToSales:
             foodCost,
+
+          rows:
+            monthlyBenchmarkRows,
+
+          closingOpname:
+            closingOpname
+              ? {
+                  id:
+                    closingOpname.id,
+
+                  code:
+                    closingOpname.code,
+
+                  type:
+                    closingOpname.type,
+
+                  status:
+                    closingOpname.status,
+
+                  date:
+                    closingOpname.date,
+                }
+              : null,
         },
       });
     }
-
-    /*
-     * =======================================================
-     * TOTAL ALL OUTLET
-     * =======================================================
-     */
 
     const monthly =
       results.reduce(
         (acc, outlet) => ({
           opening:
             acc.opening +
-            outlet.monthly.opening,
+            num(
+              outlet.monthly
+                ?.opening
+            ),
 
           purchase:
             acc.purchase +
-            outlet.monthly.purchase,
+            num(
+              outlet.monthly
+                ?.purchase
+            ),
+
+          received:
+            acc.received +
+            num(
+              outlet.monthly
+                ?.received
+            ),
 
           ending:
             acc.ending +
-            outlet.monthly.ending,
+            num(
+              outlet.monthly
+                ?.ending
+            ),
 
           waste:
             acc.waste +
-            outlet.monthly.waste,
+            num(
+              outlet.monthly
+                ?.waste
+            ),
 
           cost:
             acc.cost +
-            outlet.monthly.cost,
+            num(
+              outlet.monthly
+                ?.cost
+            ),
 
           netSales:
             acc.netSales +
-            outlet.monthly.netSales,
+            num(
+              outlet.monthly
+                ?.netSales
+            ),
         }),
         {
           opening: 0,
           purchase: 0,
+          received: 0,
           ending: 0,
           waste: 0,
           cost: 0,
@@ -1244,12 +2226,6 @@ export async function GET(req: NextRequest) {
           100
         : 0;
 
-    /*
-     * =======================================================
-     * RESPONSE
-     * =======================================================
-     */
-
     return NextResponse.json({
       success: true,
 
@@ -1259,7 +2235,8 @@ export async function GET(req: NextRequest) {
         allOutlets:
           !allowedOutlet,
 
-        outlets: results,
+        outlets:
+          results,
 
         monthly: {
           opening:
@@ -1267,6 +2244,9 @@ export async function GET(req: NextRequest) {
 
           purchase:
             monthly.purchase,
+
+          received:
+            monthly.received,
 
           ending:
             monthly.ending,

@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import {
+  AlertTriangle,
   Boxes,
   FileDown,
   Printer,
   RefreshCw,
   Store,
   TrendingUp,
-  AlertTriangle,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -36,17 +36,7 @@ const pct = (n: number) =>
 
 /*
  * =========================================================
- * BENCHMARK PARSER
- *
- * API TIDAK DIUBAH.
- * Helper ini hanya membaca nilai benchmark yang sudah
- * diberikan oleh API.
- *
- * Mendukung:
- * 15
- * "15"
- * "15%"
- * "15.00%"
+ * BENCHMARK
  * =========================================================
  */
 
@@ -60,9 +50,7 @@ function parseBenchmark(value: any): number {
   }
 
   if (typeof value === "number") {
-    return Number.isFinite(value)
-      ? value
-      : 0;
+    return Number.isFinite(value) ? value : 0;
   }
 
   const parsed = Number(
@@ -72,23 +60,8 @@ function parseBenchmark(value: any): number {
       .trim()
   );
 
-  return Number.isFinite(parsed)
-    ? parsed
-    : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
 }
-
-/*
- * =========================================================
- * GET BENCHMARK
- *
- * Prioritas:
- * 1. row.benchmark
- * 2. row.benchmarkValue
- * 3. row.foodCostBenchmark
- * 4. outlet.benchmark
- * 5. outlet.foodCostBenchmark
- * =========================================================
- */
 
 function getBenchmark(
   row: any,
@@ -118,16 +91,6 @@ function getBenchmark(
 /*
  * =========================================================
  * STATUS
- *
- * NORMAL  : <= 90% benchmark
- * WARNING : > 90% benchmark dan <= benchmark
- * OVER    : > benchmark
- *
- * Contoh benchmark 15%:
- *
- * <= 13.50% -> NORMAL
- * > 13.50% sampai 15% -> WARNING
- * > 15% -> OVER
  * =========================================================
  */
 
@@ -140,24 +103,14 @@ function getCostStatus(
   ratioFoodCost: number,
   benchmark: number
 ): CostStatus {
-  const ratio = Number(
-    ratioFoodCost || 0
-  );
+  const ratio = Number(ratioFoodCost || 0);
+  const target = Number(benchmark || 0);
 
-  const target = Number(
-    benchmark || 0
-  );
-
-  /*
-   * Jika benchmark tidak tersedia,
-   * jangan mengarang status OVER/WARNING.
-   */
   if (target <= 0) {
     return "NORMAL";
   }
 
-  const warningLimit =
-    target * 0.9;
+  const warningLimit = target * 0.9;
 
   if (ratio > target) {
     return "OVER";
@@ -170,18 +123,8 @@ function getCostStatus(
   return "NORMAL";
 }
 
-/*
- * =========================================================
- * STATUS STYLE
- * =========================================================
- */
-
-function statusClass(
-  status: string
-) {
-  switch (
-    String(status).toUpperCase()
-  ) {
+function statusClass(status: string) {
+  switch (String(status).toUpperCase()) {
     case "OVER":
     case "CRITICAL":
       return "border-red-200 bg-red-100 text-red-700";
@@ -198,12 +141,8 @@ function statusClass(
   }
 }
 
-function statusDotClass(
-  status: string
-) {
-  switch (
-    String(status).toUpperCase()
-  ) {
+function statusDotClass(status: string) {
+  switch (String(status).toUpperCase()) {
     case "OVER":
     case "CRITICAL":
       return "bg-red-500";
@@ -220,18 +159,8 @@ function statusDotClass(
   }
 }
 
-/*
- * =========================================================
- * STATUS LABEL
- * =========================================================
- */
-
-function statusLabel(
-  status: string
-) {
-  switch (
-    String(status).toUpperCase()
-  ) {
+function statusLabel(status: string) {
+  switch (String(status).toUpperCase()) {
     case "OVER":
     case "CRITICAL":
       return "OVER";
@@ -248,19 +177,12 @@ function statusLabel(
   }
 }
 
-/*
- * =========================================================
- * STATUS BADGE
- * =========================================================
- */
-
 function StatusBadge({
   status,
 }: {
   status: string;
 }) {
-  const normalized =
-    statusLabel(status);
+  const normalized = statusLabel(status);
 
   return (
     <span
@@ -295,15 +217,6 @@ function StatusBadge({
 /*
  * =========================================================
  * CATEGORY GROUP
- *
- * API boleh mengirim:
- * row.group
- * row.section
- * row.type
- * row.categoryGroup
- *
- * Kalau API belum mengirim group, kita fallback:
- * kategori yang bernama OTHERS / OTHER dianggap OTHERS.
  * =========================================================
  */
 
@@ -340,23 +253,10 @@ function getCategoryGroup(
     return "OTHERS";
   }
 
-  /*
-   * Jika API tidak mengirim group,
-   * default tetap FOOD COST supaya data
-   * existing tidak hilang.
-   */
   return "FOOD COST";
 }
 
-/*
- * =========================================================
- * GROUP ROWS
- * =========================================================
- */
-
-function groupRows(
-  rows: any[]
-) {
+function groupRows(rows: any[]) {
   const foodCost: any[] = [];
   const others: any[] = [];
 
@@ -383,9 +283,7 @@ function groupRows(
  * =========================================================
  */
 
-function sumRows(
-  rows: any[]
-) {
+function sumRows(rows: any[]) {
   const opening = rows.reduce(
     (sum, row) =>
       sum + Number(row.opening || 0),
@@ -418,9 +316,10 @@ function sumRows(
 
   const sales = rows.reduce(
     (sum, row) =>
-      sum + Number(
-        row.sales ||
-          row.netSales ||
+      sum +
+      Number(
+        row.sales ??
+          row.netSales ??
           0
       ),
     0
@@ -431,9 +330,6 @@ function sumRows(
       ? (cost / sales) * 100
       : 0;
 
-  const ratioToSales =
-    ratioFoodCost;
-
   return {
     opening,
     purchase,
@@ -443,34 +339,25 @@ function sumRows(
     sales,
     ratioFoodCost,
     foodCost: ratioFoodCost,
-    ratioToSales,
+    ratioToSales: ratioFoodCost,
   };
 }
-
-/*
- * =========================================================
- * TOTAL STATUS
- * =========================================================
- */
 
 function getTotalStatus(
   rows: any[],
   outlet: any
 ) {
-  const totals =
-    sumRows(rows);
+  const totals = sumRows(rows);
 
-  const benchmark =
-    getBenchmark(
-      rows?.[0],
-      outlet
-    );
+  const benchmark = getBenchmark(
+    rows?.[0],
+    outlet
+  );
 
-  const status =
-    getCostStatus(
-      totals.ratioFoodCost,
-      benchmark
-    );
+  const status = getCostStatus(
+    totals.ratioFoodCost,
+    benchmark
+  );
 
   return {
     ...totals,
@@ -481,13 +368,11 @@ function getTotalStatus(
 
 /*
  * =========================================================
- * MONTH LABEL
+ * MONTH / DATE
  * =========================================================
  */
 
-function monthLabel(
-  month: string
-) {
+function monthLabel(month: string) {
   if (!month) return "";
 
   const date = new Date(
@@ -503,15 +388,7 @@ function monthLabel(
   );
 }
 
-/*
- * =========================================================
- * DATE LABEL
- * =========================================================
- */
-
-function dateLabel(
-  date: string
-) {
+function dateLabel(date: string) {
   if (!date) return "-";
 
   return new Date(
@@ -547,9 +424,7 @@ export default function CostControlPage() {
     );
 
   const [salesByOutlet, setSalesByOutlet] =
-    useState<
-      Record<string, string>
-    >({});
+    useState<Record<string, string>>({});
 
   const [data, setData] =
     useState<any>(null);
@@ -562,7 +437,7 @@ export default function CostControlPage() {
 
   /*
    * =======================================================
-   * LOAD OUTLET + USER
+   * INIT
    * =======================================================
    */
 
@@ -581,7 +456,7 @@ export default function CostControlPage() {
           await outletResponse.json();
 
         const outletData =
-          outletJson.data || [];
+          outletJson?.data || [];
 
         setOutlets(outletData);
 
@@ -618,7 +493,7 @@ export default function CostControlPage() {
 
   /*
    * =======================================================
-   * LOAD DATA
+   * LOAD WHEN FILTER CHANGES
    * =======================================================
    */
 
@@ -646,10 +521,7 @@ export default function CostControlPage() {
       const q =
         new URLSearchParams();
 
-      q.set(
-        "month",
-        month
-      );
+      q.set("month", month);
 
       if (outletId) {
         q.set(
@@ -680,14 +552,12 @@ export default function CostControlPage() {
       const json =
         await response.json();
 
-      if (json.success) {
-        setData(
-          json.data
-        );
+      if (json?.success) {
+        setData(json.data);
       } else {
         console.error(
           "COST CONTROL API:",
-          json.message
+          json?.message
         );
 
         setData(null);
@@ -706,7 +576,7 @@ export default function CostControlPage() {
 
   /*
    * =======================================================
-   * SALES INPUT
+   * SALES
    * =======================================================
    */
 
@@ -722,16 +592,8 @@ export default function CostControlPage() {
     );
   }
 
-  /*
-   * =======================================================
-   * HITUNG FOOD COST
-   * =======================================================
-   */
-
   function calculateFoodCost() {
-    load(
-      salesByOutlet
-    );
+    load(salesByOutlet);
   }
 
   /*
@@ -746,13 +608,11 @@ export default function CostControlPage() {
     setExporting(true);
 
     try {
-      const pdf =
-        new jsPDF({
-          orientation:
-            "landscape",
-          unit: "mm",
-          format: "a4",
-        });
+      const pdf = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4",
+      });
 
       const pageWidth =
         pdf.internal.pageSize.getWidth();
@@ -778,7 +638,6 @@ export default function CostControlPage() {
        */
 
       pdf.setFontSize(20);
-
       pdf.setFont(
         "helvetica",
         "bold"
@@ -791,7 +650,6 @@ export default function CostControlPage() {
       );
 
       pdf.setFontSize(10);
-
       pdf.setFont(
         "helvetica",
         "normal"
@@ -826,45 +684,31 @@ export default function CostControlPage() {
       const cards = [
         [
           "STOCK AWAL",
-          money(
-            summary.opening
-          ),
+          money(summary.opening),
         ],
         [
           "PEMBELIAN",
-          money(
-            summary.purchase
-          ),
+          money(summary.purchase),
         ],
         [
           "STOCK AKHIR",
-          money(
-            summary.ending
-          ),
+          money(summary.ending),
         ],
         [
           "WASTE / SPOILAGE",
-          money(
-            summary.waste
-          ),
+          money(summary.waste),
         ],
         [
           "COST OF SALE",
-          money(
-            summary.cost
-          ),
+          money(summary.cost),
         ],
         [
           "NET SALES",
-          money(
-            summary.netSales
-          ),
+          money(summary.netSales),
         ],
         [
           "FOOD COST",
-          pct(
-            summary.foodCost
-          ),
+          pct(summary.foodCost),
         ],
       ];
 
@@ -892,7 +736,6 @@ export default function CostControlPage() {
           );
 
           pdf.setFontSize(7);
-
           pdf.setFont(
             "helvetica",
             "normal"
@@ -905,7 +748,6 @@ export default function CostControlPage() {
           );
 
           pdf.setFontSize(8);
-
           pdf.setFont(
             "helvetica",
             "bold"
@@ -962,13 +804,11 @@ export default function CostControlPage() {
 
         const outletStatus =
           getCostStatus(
-            outlet?.monthly
-              ?.foodCost,
+            outlet?.monthly?.foodCost,
             outletBenchmark
           );
 
         pdf.setFontSize(14);
-
         pdf.setFont(
           "helvetica",
           "bold"
@@ -983,7 +823,6 @@ export default function CostControlPage() {
         currentY += 6;
 
         pdf.setFontSize(8);
-
         pdf.setFont(
           "helvetica",
           "normal"
@@ -991,8 +830,7 @@ export default function CostControlPage() {
 
         pdf.text(
           `Net Sales: ${money(
-            outlet.monthly
-              .netSales
+            outlet.monthly.netSales
           )} | Cost: ${money(
             outlet.monthly.cost
           )} | Food Cost: ${pct(
@@ -1028,7 +866,6 @@ export default function CostControlPage() {
           }
 
           pdf.setFontSize(9);
-
           pdf.setFont(
             "helvetica",
             "bold"
@@ -1066,8 +903,7 @@ export default function CostControlPage() {
             },
           ].filter(
             (group) =>
-              group.rows.length >
-              0
+              group.rows.length > 0
           );
 
           for (
@@ -1096,21 +932,11 @@ export default function CostControlPage() {
 
                   return [
                     row.category,
-                    money(
-                      row.opening
-                    ),
-                    money(
-                      row.purchase
-                    ),
-                    money(
-                      row.ending
-                    ),
-                    money(
-                      row.waste
-                    ),
-                    money(
-                      row.cost
-                    ),
+                    money(row.opening),
+                    money(row.purchase),
+                    money(row.ending),
+                    money(row.waste),
+                    money(row.cost),
                     pct(
                       row.ratioFoodCost
                     ),
@@ -1124,33 +950,18 @@ export default function CostControlPage() {
 
             rows.push([
               `TOTAL ${group.title}`,
-              money(
-                total.opening
-              ),
-              money(
-                total.purchase
-              ),
-              money(
-                total.ending
-              ),
-              money(
-                total.waste
-              ),
-              money(
-                total.cost
-              ),
-              pct(
-                total.ratioFoodCost
-              ),
-              pct(
-                total.ratioToSales
-              ),
+              money(total.opening),
+              money(total.purchase),
+              money(total.ending),
+              money(total.waste),
+              money(total.cost),
+              pct(total.ratioFoodCost),
+              pct(total.ratioToSales),
               total.status,
             ]);
 
             autoTable(pdf, {
-              startY:
-                currentY + 2,
+              startY: currentY + 2,
 
               head: [
                 [
@@ -1219,8 +1030,7 @@ export default function CostControlPage() {
         }
 
         if (
-          outlet.weeks.length ===
-          0
+          outlet.weeks.length === 0
         ) {
           pdf.setFontSize(8);
 
@@ -1251,7 +1061,6 @@ export default function CostControlPage() {
         pdf.setPage(page);
 
         pdf.setFontSize(7);
-
         pdf.setFont(
           "helvetica",
           "normal"
@@ -1285,9 +1094,7 @@ export default function CostControlPage() {
             : ""
         }.pdf`;
 
-      pdf.save(
-        filename
-      );
+      pdf.save(filename);
     } catch (error) {
       console.error(
         "EXPORT PDF ERROR:",
@@ -1310,13 +1117,10 @@ export default function CostControlPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
-
       {/* HEADER */}
 
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-
         <div className="flex items-center gap-3">
-
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100">
             <TrendingUp
               size={22}
@@ -1325,7 +1129,6 @@ export default function CostControlPage() {
           </div>
 
           <div>
-
             <div className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
               Inventory & Cost Management
             </div>
@@ -1337,13 +1140,10 @@ export default function CostControlPage() {
             <p className="mt-0.5 text-sm text-slate-500">
               Weekly Stock Opname → Monthly Recap
             </p>
-
           </div>
-
         </div>
 
         <div className="flex flex-wrap gap-2">
-
           <button
             type="button"
             onClick={() =>
@@ -1374,9 +1174,7 @@ export default function CostControlPage() {
 
           <button
             type="button"
-            onClick={
-              exportPDF
-            }
+            onClick={exportPDF}
             disabled={
               exporting ||
               !data
@@ -1406,17 +1204,13 @@ export default function CostControlPage() {
               ? "MEMBUAT PDF..."
               : "EXPORT PDF"}
           </button>
-
         </div>
-
       </div>
 
       {/* FILTER */}
 
       <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
         <div className="mb-4">
-
           <h2 className="font-semibold text-slate-800">
             Filter Report
           </h2>
@@ -1424,21 +1218,16 @@ export default function CostControlPage() {
           <p className="mt-0.5 text-sm text-slate-500">
             Pilih outlet dan periode laporan
           </p>
-
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-
           <div>
-
             <label className="mb-1.5 block text-sm font-medium text-slate-600">
               Outlet
             </label>
 
             <select
-              value={
-                outletId
-              }
+              value={outletId}
               onChange={(e) =>
                 setOutletId(
                   e.target.value
@@ -1468,34 +1257,24 @@ export default function CostControlPage() {
               {outlets.map(
                 (outlet) => (
                   <option
-                    key={
-                      outlet.id
-                    }
-                    value={
-                      outlet.id
-                    }
+                    key={outlet.id}
+                    value={outlet.id}
                   >
-                    {
-                      outlet.name
-                    }
+                    {outlet.name}
                   </option>
                 )
               )}
             </select>
-
           </div>
 
           <div>
-
             <label className="mb-1.5 block text-sm font-medium text-slate-600">
               Bulan
             </label>
 
             <input
               type="month"
-              value={
-                month
-              }
+              value={month}
               onChange={(e) =>
                 setMonth(
                   e.target.value
@@ -1518,19 +1297,15 @@ export default function CostControlPage() {
                 focus:ring-emerald-100
               "
             />
-
           </div>
 
           <div className="flex items-end">
-
             <button
               type="button"
               onClick={() =>
                 load()
               }
-              disabled={
-                loading
-              }
+              disabled={loading}
               className="
                 inline-flex
                 w-full
@@ -1564,21 +1339,15 @@ export default function CostControlPage() {
                 ? "MEMUAT..."
                 : "REFRESH DATA"}
             </button>
-
           </div>
-
         </div>
-
       </section>
 
       {/* SALES */}
 
       <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
           <div>
-
             <h2 className="font-semibold text-slate-800">
               Net Sales Per Outlet
             </h2>
@@ -1586,20 +1355,16 @@ export default function CostControlPage() {
             <p className="mt-0.5 text-sm text-slate-500">
               Masukkan Net Sales masing-masing outlet untuk menghitung Food Cost.
             </p>
-
           </div>
 
           <div className="rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-700">
             SALES BASE
           </div>
-
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-
           {outlets.map(
             (outlet) => {
-
               const visible =
                 !outletId ||
                 String(
@@ -1626,9 +1391,7 @@ export default function CostControlPage() {
 
               return (
                 <div
-                  key={
-                    outlet.id
-                  }
+                  key={outlet.id}
                   className="
                     rounded-xl
                     border
@@ -1637,9 +1400,7 @@ export default function CostControlPage() {
                     p-4
                   "
                 >
-
                   <div className="mb-3 flex items-center gap-2">
-
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100">
                       <Store
                         size={15}
@@ -1648,15 +1409,11 @@ export default function CostControlPage() {
                     </div>
 
                     <div className="text-sm font-bold text-slate-700">
-                      {
-                        outlet.name
-                      }
+                      {outlet.name}
                     </div>
-
                   </div>
 
                   <div className="relative">
-
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
                       Rp
                     </span>
@@ -1696,12 +1453,10 @@ export default function CostControlPage() {
                         focus:ring-emerald-100
                       "
                     />
-
                   </div>
 
                   {outletResult && (
                     <div className="mt-3 flex items-center justify-between">
-
                       <span className="text-xs font-semibold uppercase text-slate-400">
                         Food Cost
                       </span>
@@ -1713,27 +1468,21 @@ export default function CostControlPage() {
                             ?.foodCost
                         )}
                       </span>
-
                     </div>
                   )}
-
                 </div>
               );
             }
           )}
-
         </div>
 
         <div className="mt-4 flex justify-end">
-
           <button
             type="button"
             onClick={
               calculateFoodCost
             }
-            disabled={
-              loading
-            }
+            disabled={loading}
             className="
               inline-flex
               items-center
@@ -1759,17 +1508,13 @@ export default function CostControlPage() {
               ? "MENGHITUNG..."
               : "HITUNG FOOD COST"}
           </button>
-
         </div>
-
       </section>
 
       {/* LEGEND */}
 
       <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-
         <div className="flex flex-wrap items-center gap-3">
-
           <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
             Status Benchmark
           </span>
@@ -1783,7 +1528,7 @@ export default function CostControlPage() {
           <StatusBadge status="WARNING" />
 
           <span className="text-xs text-slate-400">
-            90% – 100% benchmark
+            &gt; 90% – 100% benchmark
           </span>
 
           <StatusBadge status="OVER" />
@@ -1791,23 +1536,19 @@ export default function CostControlPage() {
           <span className="text-xs text-slate-400">
             &gt; benchmark
           </span>
-
         </div>
-
       </section>
 
       {/* LOADING */}
 
       {loading && (
         <div className="mb-6 flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm font-semibold text-blue-700">
-
           <RefreshCw
             size={18}
             className="animate-spin"
           />
 
           Memuat data Cost Control...
-
         </div>
       )}
 
@@ -1815,41 +1556,28 @@ export default function CostControlPage() {
 
       {data && (
         <>
-
-          {/* TITLE */}
-
           <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
             <div>
-
               <h2 className="text-xl font-bold text-slate-900">
                 Recap Keseluruhan
               </h2>
 
               <p className="mt-0.5 text-sm text-slate-500">
-                {
-                  monthLabel(
-                    data.month
-                  )
-                }
+                {monthLabel(
+                  data.month
+                )}
               </p>
-
             </div>
 
             <div className="rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-700">
-              {
-                data.outlets
-                  .length
-              }{" "}
+              {data.outlets.length}{" "}
               OUTLET
             </div>
-
           </div>
 
           {/* SUMMARY */}
 
           <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-
             <SummaryCard
               title="Stock Awal"
               value={money(
@@ -1906,29 +1634,17 @@ export default function CostControlPage() {
               )}
               highlight
             />
-
           </section>
 
           {/* OUTLETS */}
 
           <div className="space-y-6">
-
             {data.outlets.map(
               (outlet: any) => {
-
-                /*
-                 * Ambil seluruh rows dari seluruh minggu
-                 * hanya untuk membaca benchmark dan
-                 * membuat status outlet.
-                 */
-
                 const allOutletRows =
                   outlet.weeks.flatMap(
-                    (
-                      week: any
-                    ) =>
-                      week.rows ||
-                      []
+                    (week: any) =>
+                      week.rows || []
                   );
 
                 const outletBenchmark =
@@ -1961,15 +1677,11 @@ export default function CostControlPage() {
                       shadow-sm
                     "
                   >
-
                     {/* OUTLET HEADER */}
 
                     <div className="border-b border-slate-200 px-5 py-5">
-
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-
                         <div className="flex items-center gap-3">
-
                           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100">
                             <Store
                               size={21}
@@ -1978,7 +1690,6 @@ export default function CostControlPage() {
                           </div>
 
                           <div>
-
                             <h2 className="text-xl font-bold text-slate-900">
                               {
                                 outlet
@@ -1988,7 +1699,6 @@ export default function CostControlPage() {
                             </h2>
 
                             <div className="mt-1 flex flex-wrap items-center gap-2">
-
                               <span className="text-xs text-slate-500">
                                 Benchmark:
                               </span>
@@ -2004,15 +1714,11 @@ export default function CostControlPage() {
                                   outletStatus
                                 }
                               />
-
                             </div>
-
                           </div>
-
                         </div>
 
                         <div className="flex flex-wrap gap-2">
-
                           <InfoBadge
                             label="NET SALES"
                             value={money(
@@ -2053,17 +1759,13 @@ export default function CostControlPage() {
                               outletStatus
                             }
                           />
-
                         </div>
-
                       </div>
-
                     </div>
 
                     {/* OUTLET SUMMARY */}
 
                     <div className="grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-5">
-
                       <MiniCard
                         label="Stock Awal"
                         value={money(
@@ -2108,17 +1810,14 @@ export default function CostControlPage() {
                             .cost
                         )}
                       />
-
                     </div>
 
                     {/* WEEKLY */}
 
                     <div className="p-5">
-
                       {outlet.weeks.length ===
                       0 ? (
                         <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-
                           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100">
                             <AlertTriangle
                               size={22}
@@ -2132,24 +1831,18 @@ export default function CostControlPage() {
 
                           <div className="mt-1 text-xs text-slate-500">
                             pada bulan{" "}
-                            {
-                              monthLabel(
-                                data.month
-                              )
-                            }
+                            {monthLabel(
+                              data.month
+                            )}
                           </div>
-
                         </div>
                       ) : (
-
                         <div className="space-y-8">
-
                           {outlet.weeks.map(
                             (
                               week: any,
                               index: number
                             ) => {
-
                               const grouped =
                                 groupRows(
                                   week.rows ||
@@ -2168,35 +1861,28 @@ export default function CostControlPage() {
                                   outlet
                                 );
 
-                              const subtotalRows =
-                                week.rows ||
-                                [];
-
                               const subtotal =
                                 getTotalStatus(
-                                  subtotalRows,
+                                  week.rows ||
+                                    [],
                                   outlet
                                 );
 
                               return (
                                 <div
                                   key={
-                                    week.id
+                                    week.id ??
+                                    `${outlet.outlet.id}-${index}`
                                   }
                                 >
-
                                   {/* WEEK HEADER */}
 
                                   <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-
                                     <div>
-
                                       <h3 className="font-bold text-slate-900">
                                         Week{" "}
-                                        {
-                                          index +
-                                          1
-                                        }{" "}
+                                        {index +
+                                          1}{" "}
                                         <span className="font-normal text-slate-400">
                                           •
                                         </span>{" "}
@@ -2206,17 +1892,13 @@ export default function CostControlPage() {
                                       </h3>
 
                                       <p className="mt-0.5 text-xs text-slate-500">
-                                        {
-                                          dateLabel(
-                                            week.date
-                                          )
-                                        }
+                                        {dateLabel(
+                                          week.date
+                                        )}
                                       </p>
-
                                     </div>
 
                                     <div className="flex flex-wrap gap-2">
-
                                       <InfoBadge
                                         label="COST"
                                         value={money(
@@ -2236,29 +1918,24 @@ export default function CostControlPage() {
                                       />
 
                                       <StatusBadge
-                                        status={
-                                          getCostStatus(
+                                        status={getCostStatus(
+                                          week
+                                            .totals
+                                            .foodCost,
+                                          getBenchmark(
                                             week
-                                              .totals
-                                              .foodCost,
-                                            getBenchmark(
-                                              week
-                                                .rows?.[0],
-                                              outlet
-                                            )
+                                              .rows?.[0],
+                                            outlet
                                           )
-                                        }
+                                        )}
                                       />
-
                                     </div>
-
                                   </div>
 
-                                  {/* =================================================
-                                      FOOD COST
-                                      ================================================= */}
+                                  {/* FOOD COST */}
 
-                                  {grouped.foodCost
+                                  {grouped
+                                    .foodCost
                                     .length >
                                     0 && (
                                     <CostGroupTable
@@ -2275,15 +1952,13 @@ export default function CostControlPage() {
                                     />
                                   )}
 
-                                  {/* =================================================
-                                      OTHERS
-                                      ================================================= */}
+                                  {/* OTHERS */}
 
-                                  {grouped.others
+                                  {grouped
+                                    .others
                                     .length >
                                     0 && (
                                     <div className="mt-5">
-
                                       <CostGroupTable
                                         title="OTHERS"
                                         rows={
@@ -2296,22 +1971,15 @@ export default function CostControlPage() {
                                           othersTotal
                                         }
                                       />
-
                                     </div>
                                   )}
 
-                                  {/* =================================================
-                                      SUB TOTAL
-                                      ================================================= */}
+                                  {/* SUB TOTAL */}
 
                                   <div className="mt-5 overflow-x-auto rounded-xl border-2 border-slate-300">
-
                                     <table className="w-full min-w-[1100px] text-xs">
-
                                       <thead>
-
                                         <tr className="border-b border-slate-300 bg-slate-100 text-left text-[10px] font-bold uppercase tracking-wide text-slate-700">
-
                                           <th className="px-3 py-3">
                                             SUB TOTAL
                                           </th>
@@ -2347,15 +2015,11 @@ export default function CostControlPage() {
                                           <th className="px-3 py-3 text-center">
                                             Status
                                           </th>
-
                                         </tr>
-
                                       </thead>
 
                                       <tbody>
-
                                         <tr className="bg-slate-50 font-bold">
-
                                           <td className="px-3 py-3 text-slate-800">
                                             SUB TOTAL
                                           </td>
@@ -2403,41 +2067,28 @@ export default function CostControlPage() {
                                           </td>
 
                                           <td className="px-3 py-3 text-center">
-
                                             <StatusBadge
                                               status={
                                                 subtotal.status
                                               }
                                             />
-
                                           </td>
-
                                         </tr>
-
                                       </tbody>
-
                                     </table>
-
                                   </div>
-
                                 </div>
                               );
                             }
                           )}
-
                         </div>
-
                       )}
-
                     </div>
-
                   </section>
                 );
               }
             )}
-
           </div>
-
         </>
       )}
 
@@ -2446,7 +2097,6 @@ export default function CostControlPage() {
       {!data &&
         !loading && (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
-
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
               <Boxes
                 size={27}
@@ -2461,10 +2111,8 @@ export default function CostControlPage() {
             <div className="mt-1 text-sm text-slate-500">
               Pilih outlet dan periode kemudian refresh data.
             </div>
-
           </div>
         )}
-
     </main>
   );
 }
@@ -2488,23 +2136,16 @@ function CostGroupTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200">
-
-      {/* GROUP HEADER */}
-
       <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
-
         <div className="flex items-center gap-2">
-
           <div className="h-2 w-2 rounded-full bg-emerald-500" />
 
           <span className="text-xs font-extrabold uppercase tracking-wide text-slate-800">
             {title}
           </span>
-
         </div>
 
         <div className="flex items-center gap-2">
-
           <span className="text-[10px] font-semibold text-slate-400">
             TOTAL RATIO
           </span>
@@ -2520,17 +2161,12 @@ function CostGroupTable({
               total.status
             }
           />
-
         </div>
-
       </div>
 
       <table className="w-full min-w-[1100px] text-xs">
-
         <thead>
-
           <tr className="border-b border-slate-200 bg-white text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
-
             <th className="px-3 py-3">
               Category
             </th>
@@ -2566,19 +2202,15 @@ function CostGroupTable({
             <th className="px-3 py-3 text-center">
               Status
             </th>
-
           </tr>
-
         </thead>
 
         <tbody>
-
           {rows.map(
             (
               row: any,
               index: number
             ) => {
-
               const benchmark =
                 getBenchmark(
                   row,
@@ -2601,11 +2233,8 @@ function CostGroupTable({
                     hover:bg-slate-50
                   "
                 >
-
                   <td className="px-3 py-3 font-semibold text-slate-700">
-                    {
-                      row.category
-                    }
+                    {row.category}
                   </td>
 
                   <td className="px-3 py-3 text-right text-slate-600">
@@ -2651,26 +2280,20 @@ function CostGroupTable({
                   </td>
 
                   <td className="px-3 py-3 text-center">
-
                     <StatusBadge
                       status={
                         status
                       }
                     />
-
                   </td>
-
                 </tr>
               );
             }
           )}
-
         </tbody>
 
         <tfoot>
-
           <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
-
             <td className="px-3 py-3 text-slate-800">
               TOTAL {title}
             </td>
@@ -2718,21 +2341,15 @@ function CostGroupTable({
             </td>
 
             <td className="px-3 py-3 text-center">
-
               <StatusBadge
                 status={
                   total.status
                 }
               />
-
             </td>
-
           </tr>
-
         </tfoot>
-
       </table>
-
     </div>
   );
 }
@@ -2766,7 +2383,6 @@ function SummaryCard({
         }
       `}
     >
-
       <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
         {title}
       </div>
@@ -2785,7 +2401,6 @@ function SummaryCard({
       >
         {value}
       </div>
-
     </div>
   );
 }
@@ -2805,7 +2420,6 @@ function MiniCard({
 }) {
   return (
     <div className="bg-white p-4">
-
       <div className="text-[10px] font-bold uppercase text-slate-400">
         {label}
       </div>
@@ -2813,7 +2427,6 @@ function MiniCard({
       <div className="mt-1 text-sm font-bold text-slate-800">
         {value}
       </div>
-
     </div>
   );
 }
@@ -2833,7 +2446,6 @@ function InfoBadge({
 }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
-
       <div className="text-[9px] font-bold uppercase text-slate-400">
         {label}
       </div>
@@ -2841,7 +2453,6 @@ function InfoBadge({
       <div className="text-xs font-bold text-slate-700">
         {value}
       </div>
-
     </div>
   );
 }

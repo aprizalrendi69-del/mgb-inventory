@@ -28,6 +28,8 @@ import {
   Settings,
   ChevronRight,
   TrendingUp,
+  ArrowDownCircle,
+  Trash2,
 } from "lucide-react";
 
 type Role =
@@ -167,10 +169,45 @@ const menus: Menu[] = [
   },
 
   {
+  title: "Transfer Outlet",
+  url: "/outlet/transfer",
+  roles: ["ADMIN", "OUTLET_ADMIN"],
+  icon: ArrowLeftRight,
+  },
+
+  {
+    title: "Barang Keluar Outlet",
+    url: "/outlet/barang-keluar",
+    roles: ["ADMIN", "OUTLET_ADMIN"],
+    icon: ArrowDownCircle,
+  },
+
+  {
+    title: "Waste Outlet",
+    url: "/outlet/waste",
+    roles: ["ADMIN", "OUTLET_ADMIN"],
+    icon: Trash2,
+  },
+
+  {
+    title: "Approval Waste Outlet",
+    url: "/outlet/waste/approval",
+    roles: ["ADMIN", "MANAGER"],
+    icon: ClipboardCheck,
+  },
+
+  {
     title: "Stock Outlet",
     url: "/outlet/stock",
     roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: Boxes,
+  },
+
+  {
+  title: "History Stock Outlet",
+  url: "/outlet/history-stock",
+  roles: ["ADMIN", "OUTLET_ADMIN"],
+  icon: FileClock,
   },
 
   {
@@ -377,7 +414,7 @@ const menus: Menu[] = [
   {
     title: "Cost Control",
     url: "/cost-control",
-    roles: ["ADMIN", "MANAGER"],
+    roles: ["ADMIN", "MANAGER", "OUTLET_ADMIN"],
     icon: TrendingUp,
   },
 
@@ -472,10 +509,6 @@ export default function Sidebar({
 
   const role = user?.role;
 
-  // =====================================================
-  // FILTER MENU
-  // =====================================================
-
   const visibleMenus = menus.filter((menu) => {
     if (menu.header) {
       return true;
@@ -489,10 +522,6 @@ export default function Sidebar({
       ? menu.roles.includes(role)
       : false;
   });
-
-  // =====================================================
-  // HAPUS HEADER KOSONG
-  // =====================================================
 
   const allowedMenus = visibleMenus.filter(
     (menu, index, array) => {
@@ -510,10 +539,6 @@ export default function Sidebar({
     }
   );
 
-  // =====================================================
-  // USER
-  // =====================================================
-
   const displayName =
     user?.fullname ||
     user?.username ||
@@ -526,10 +551,6 @@ export default function Sidebar({
     .map((word) => word.charAt(0))
     .join("")
     .toUpperCase();
-
-  // =====================================================
-  // RENDER
-  // =====================================================
 
   return (
     <aside
@@ -549,9 +570,7 @@ export default function Sidebar({
         shadow-[4px_0_20px_rgba(48,78,67,0.12)]
       "
     >
-      {/* =================================================
-          BRAND
-      ================================================= */}
+      {/* BRAND */}
 
       <div
         className="
@@ -564,8 +583,6 @@ export default function Sidebar({
         "
       >
         <div className="flex items-start gap-3">
-
-          {/* LOGO */}
 
           <div
             className="
@@ -586,8 +603,6 @@ export default function Sidebar({
               className="text-white"
             />
           </div>
-
-          {/* COMPANY */}
 
           <div className="min-w-0 pt-0.5">
             <h1
@@ -635,8 +650,6 @@ export default function Sidebar({
         >
           <div className="flex items-center gap-3">
 
-            {/* AVATAR */}
-
             <div
               className="
                 flex
@@ -654,8 +667,6 @@ export default function Sidebar({
             >
               {initials || "U"}
             </div>
-
-            {/* USER DETAIL */}
 
             <div className="min-w-0 flex-1">
               <p
@@ -684,8 +695,6 @@ export default function Sidebar({
               </p>
             </div>
 
-            {/* ONLINE */}
-
             <span
               className="
                 h-1.5
@@ -701,9 +710,7 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* =================================================
-          NAVIGATION
-      ================================================= */}
+      {/* NAVIGATION */}
 
       <nav
         className="
@@ -719,8 +726,6 @@ export default function Sidebar({
         "
       >
         {allowedMenus.map((menu, index) => {
-
-          // SECTION HEADER
 
           if (menu.header) {
             return (
@@ -742,8 +747,6 @@ export default function Sidebar({
               </div>
             );
           }
-
-          // ACTIVE
 
           const active =
             pathname === menu.url ||
@@ -784,8 +787,6 @@ export default function Sidebar({
               `}
             >
 
-              {/* ACTIVE BAR */}
-
               {active && (
                 <span
                   className="
@@ -800,8 +801,6 @@ export default function Sidebar({
                   "
                 />
               )}
-
-              {/* ICON */}
 
               <span
                 className={`
@@ -826,8 +825,6 @@ export default function Sidebar({
                 />
               </span>
 
-              {/* TEXT */}
-
               <span
                 className={`
                   ml-2.5
@@ -845,8 +842,6 @@ export default function Sidebar({
                 {menu.title}
               </span>
 
-              {/* ACTIVE ARROW */}
-
               {active && (
                 <ChevronRight
                   size={14}
@@ -863,9 +858,7 @@ export default function Sidebar({
         })}
       </nav>
 
-      {/* =================================================
-          FOOTER
-      ================================================= */}
+      {/* FOOTER */}
 
       <div
         className="

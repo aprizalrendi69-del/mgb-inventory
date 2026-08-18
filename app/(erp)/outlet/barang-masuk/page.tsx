@@ -18,9 +18,16 @@ type Outlet = {
   name: string;
 };
 
+type Supplier = {
+  id: number;
+  code: string;
+  name: string;
+};
+
 type BarangMasuk = {
   id: string;
-  sourceId?: number;
+
+  sourceId?: number | null;
   outletId?: number | null;
 
   sumber: "PURCHASE" | "TRANSFER";
@@ -34,11 +41,10 @@ type BarangMasuk = {
 
   outlet?: Outlet | null;
 
-  supplier?: {
-    id: number;
-    code: string;
-    name: string;
-  } | null;
+  sourceOutlet?: Outlet | null;
+  destinationOutlet?: Outlet | null;
+
+  supplier?: Supplier | null;
 };
 
 export default function OutletBarangMasukPage() {
@@ -53,9 +59,15 @@ export default function OutletBarangMasukPage() {
   // =====================================================
 
   const [role, setRole] = useState("");
+  const [userOutletId, setUserOutletId] =
+    useState<number | null>(null);
 
   const isAdminPusat =
-    role === "ADMIN";
+    role === "ADMIN" ||
+    role === "MANAGER";
+
+  const isOutletAdmin =
+    role === "OUTLET_ADMIN";
 
   // =====================================================
   // FILTER ADMIN PUSAT
@@ -79,7 +91,7 @@ export default function OutletBarangMasukPage() {
       setLoading(true);
 
       // =================================================
-      // AMBIL USER LOGIN
+      // CURRENT USER
       // =================================================
 
       const meRes = await fetch("/api/me", {
@@ -98,17 +110,28 @@ export default function OutletBarangMasukPage() {
         return;
       }
 
-      const loginUser = meJson.user;
+      const loginUser =
+        meJson.user;
 
       const loginRole =
         String(
           loginUser?.role || ""
         ).toUpperCase();
 
+      const loginOutletId =
+        loginUser?.outletId
+          ? Number(loginUser.outletId)
+          : null;
+
       setRole(loginRole);
+      setUserOutletId(
+        Number.isInteger(loginOutletId)
+          ? loginOutletId
+          : null
+      );
 
       // =================================================
-      // AMBIL BARANG MASUK
+      // BARANG MASUK OUTLET
       // =================================================
 
       const res = await fetch(
@@ -119,7 +142,8 @@ export default function OutletBarangMasukPage() {
         }
       );
 
-      const json = await res.json();
+      const json =
+        await res.json();
 
       console.log(
         "FRONTEND BARANG MASUK:",
@@ -142,15 +166,6 @@ export default function OutletBarangMasukPage() {
           : [];
 
       setData(rows);
-
-      // =================================================
-      // RESET FILTER SAAT REFRESH
-      // =================================================
-
-      setSelectedOutlet("ALL");
-      setDateFrom("");
-      setDateTo("");
-
     } catch (error) {
       console.error(
         "LOAD OUTLET BARANG MASUK ERROR:",
@@ -168,49 +183,62 @@ export default function OutletBarangMasukPage() {
   }, []);
 
   // =====================================================
-  // DAFTAR OUTLET
+  // OUTLET OPTIONS
   //
-  // Hanya digunakan oleh ADMIN PUSAT.
-  // Diambil dari data yang memang boleh dilihat API.
+  // Untuk ADMIN / MANAGER.
+  // Ambil outlet tujuan dari data.
   // =====================================================
 
-  const outletOptions = useMemo(() => {
-    const map = new Map<number, Outlet>();
+  const outletOptions =
+    useMemo(() => {
+      const map =
+        new Map<number, Outlet>();
 
-    data.forEach((item) => {
-      if (
-        item.outlet &&
-        item.outlet.id
-      ) {
-        map.set(
-          item.outlet.id,
-          item.outlet
-        );
-      }
-    });
+      data.forEach((item) => {
+        const outlet =
+          item.destinationOutlet ||
+          item.outlet;
 
-    return Array.from(
-      map.values()
-    ).sort((a, b) =>
-      `${a.code} ${a.name}`.localeCompare(
-        `${b.code} ${b.name}`,
-        "id"
-      )
-    );
-  }, [data]);
+        if (
+          outlet &&
+          outlet.id
+        ) {
+          map.set(
+            outlet.id,
+            outlet
+          );
+        }
+      });
+
+      return Array.from(
+        map.values()
+      ).sort((a, b) =>
+        `${a.code} ${a.name}`.localeCompare(
+          `${b.code} ${b.name}`,
+          "id"
+        )
+      );
+    }, [data]);
 
   // =====================================================
-  // FORMAT DATE UNTUK FILTER
+  // GET DATE ONLY
   // =====================================================
 
-  function getDateOnly(value: string) {
+  function getDateOnly(
+    value: string
+  ) {
     if (!value) {
       return "";
     }
 
-    const date = new Date(value);
+    const date =
+      new Date(value);
 
-    if (Number.isNaN(date.getTime())) {
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
       return "";
     }
 
@@ -234,122 +262,169 @@ export default function OutletBarangMasukPage() {
   // FILTER DATA
   // =====================================================
 
-  const filteredData = useMemo(() => {
-    const keyword =
-      search
-        .toLowerCase()
-        .trim();
+  const filteredData =
+    useMemo(() => {
+      const keyword =
+        search
+          .toLowerCase()
+          .trim();
 
-    return data.filter(
-      (item) => {
-        // -----------------------------------------------
-        // SEARCH
-        // -----------------------------------------------
+      return data.filter(
+        (item) => {
+          const destinationOutlet =
+            item.destinationOutlet ||
+            item.outlet;
 
-        if (keyword) {
-          const matchesSearch =
-            item.nomor
-              ?.toLowerCase()
-              .includes(keyword) ||
+          const sourceOutlet =
+            item.sourceOutlet;
 
-            item.status
-              ?.toLowerCase()
-              .includes(keyword) ||
-
-            item.sumber
-              ?.toLowerCase()
-              .includes(keyword) ||
-
-            item.outlet?.code
-              ?.toLowerCase()
-              .includes(keyword) ||
-
-            item.outlet?.name
-              ?.toLowerCase()
-              .includes(keyword) ||
-
-            item.supplier?.name
-              ?.toLowerCase()
-              .includes(keyword);
-
-          if (!matchesSearch) {
-            return false;
-          }
-        }
-
-        // -----------------------------------------------
-        // FILTER OUTLET
-        //
-        // Hanya ADMIN PUSAT
-        // -----------------------------------------------
-
-        if (
-          isAdminPusat &&
-          selectedOutlet !== "ALL"
-        ) {
-          if (
-            Number(
-              item.outlet?.id
-            ) !==
-            Number(
-              selectedOutlet
-            )
-          ) {
-            return false;
-          }
-        }
-
-        // -----------------------------------------------
-        // FILTER TANGGAL DARI
-        //
-        // Hanya ADMIN PUSAT
-        // -----------------------------------------------
-
-        if (isAdminPusat && dateFrom) {
-          const itemDate =
-            getDateOnly(
-              item.tanggal
-            );
+          // =============================================
+          // SECURITY CLIENT
+          //
+          // Outlet admin hanya outlet miliknya.
+          // API tetap menjadi security utama.
+          // =============================================
 
           if (
-            itemDate &&
-            itemDate < dateFrom
+            isOutletAdmin &&
+            userOutletId !== null
           ) {
-            return false;
+            if (
+              Number(
+                destinationOutlet?.id
+              ) !==
+              Number(
+                userOutletId
+              )
+            ) {
+              return false;
+            }
           }
-        }
 
-        // -----------------------------------------------
-        // FILTER TANGGAL SAMPAI
-        //
-        // Hanya ADMIN PUSAT
-        // -----------------------------------------------
+          // =============================================
+          // SEARCH
+          // =============================================
 
-        if (isAdminPusat && dateTo) {
-          const itemDate =
-            getDateOnly(
-              item.tanggal
-            );
+          if (keyword) {
+            const matchesSearch =
+              item.nomor
+                ?.toLowerCase()
+                .includes(keyword) ||
+
+              item.status
+                ?.toLowerCase()
+                .includes(keyword) ||
+
+              item.sumber
+                ?.toLowerCase()
+                .includes(keyword) ||
+
+              destinationOutlet?.code
+                ?.toLowerCase()
+                .includes(keyword) ||
+
+              destinationOutlet?.name
+                ?.toLowerCase()
+                .includes(keyword) ||
+
+              sourceOutlet?.code
+                ?.toLowerCase()
+                .includes(keyword) ||
+
+              sourceOutlet?.name
+                ?.toLowerCase()
+                .includes(keyword) ||
+
+              item.supplier?.code
+                ?.toLowerCase()
+                .includes(keyword) ||
+
+              item.supplier?.name
+                ?.toLowerCase()
+                .includes(keyword);
+
+            if (!matchesSearch) {
+              return false;
+            }
+          }
+
+          // =============================================
+          // FILTER OUTLET
+          //
+          // ADMIN / MANAGER
+          // =============================================
 
           if (
-            itemDate &&
-            itemDate > dateTo
+            isAdminPusat &&
+            selectedOutlet !== "ALL"
           ) {
-            return false;
+            if (
+              Number(
+                destinationOutlet?.id
+              ) !==
+              Number(
+                selectedOutlet
+              )
+            ) {
+              return false;
+            }
           }
-        }
 
-        return true;
-      }
-    );
-  }, [
-    data,
-    search,
-    isAdminPusat,
-    selectedOutlet,
-    dateFrom,
-    dateTo,
-  ]);
+          // =============================================
+          // FILTER TANGGAL DARI
+          // =============================================
+
+          if (
+            isAdminPusat &&
+            dateFrom
+          ) {
+            const itemDate =
+              getDateOnly(
+                item.tanggal
+              );
+
+            if (
+              itemDate &&
+              itemDate < dateFrom
+            ) {
+              return false;
+            }
+          }
+
+          // =============================================
+          // FILTER TANGGAL SAMPAI
+          // =============================================
+
+          if (
+            isAdminPusat &&
+            dateTo
+          ) {
+            const itemDate =
+              getDateOnly(
+                item.tanggal
+              );
+
+            if (
+              itemDate &&
+              itemDate > dateTo
+            ) {
+              return false;
+            }
+          }
+
+          return true;
+        }
+      );
+    }, [
+      data,
+      search,
+      isAdminPusat,
+      isOutletAdmin,
+      userOutletId,
+      selectedOutlet,
+      dateFrom,
+      dateTo,
+    ]);
 
   // =====================================================
   // RESET FILTER
@@ -363,7 +438,7 @@ export default function OutletBarangMasukPage() {
   }
 
   // =====================================================
-  // STATUS
+  // STATUS BADGE
   // =====================================================
 
   function statusBadge(
@@ -414,6 +489,16 @@ export default function OutletBarangMasukPage() {
       );
     }
 
+    if (
+      value === "DRAFT"
+    ) {
+      return (
+        <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+          Draft
+        </span>
+      );
+    }
+
     return (
       <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
         {status || "-"}
@@ -422,27 +507,48 @@ export default function OutletBarangMasukPage() {
   }
 
   // =====================================================
-  // SOURCE
+  // SOURCE BADGE
   // =====================================================
 
   function sourceBadge(
-    sumber: BarangMasuk["sumber"]
+    item: BarangMasuk
   ) {
     if (
-      sumber === "TRANSFER"
+      item.sumber ===
+      "TRANSFER"
     ) {
       return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-          <Truck size={13} />
-          Kiriman Gudang
-        </span>
+        <div className="flex flex-col items-start gap-1">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+            <Truck size={13} />
+            Kiriman Gudang
+          </span>
+
+          {item.sourceOutlet && (
+            <span className="text-xs text-gray-400">
+              Dari:{" "}
+              {item.sourceOutlet.code}{" "}
+              -{" "}
+              {item.sourceOutlet.name}
+            </span>
+          )}
+        </div>
       );
     }
 
     return (
-      <span className="inline-flex rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700">
-        Purchase Supplier
-      </span>
+      <div className="flex flex-col items-start gap-1">
+        <span className="inline-flex rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700">
+          Purchase Supplier
+        </span>
+
+        {item.supplier && (
+          <span className="text-xs text-gray-400">
+            {item.supplier.code} -{" "}
+            {item.supplier.name}
+          </span>
+        )}
+      </div>
     );
   }
 
@@ -514,7 +620,7 @@ export default function OutletBarangMasukPage() {
       </div>
 
       {/* =================================================
-          FILTER ADMIN PUSAT
+          FILTER ADMIN / MANAGER
       ================================================= */}
 
       {isAdminPusat && (
@@ -543,28 +649,15 @@ export default function OutletBarangMasukPage() {
               </label>
 
               <select
-                value={selectedOutlet}
+                value={
+                  selectedOutlet
+                }
                 onChange={(e) =>
                   setSelectedOutlet(
                     e.target.value
                   )
                 }
-                className="
-                  w-full
-                  rounded-xl
-                  border
-                  border-[#D5E5DC]
-                  bg-[#FAFCFB]
-                  px-4
-                  py-3
-                  text-sm
-                  font-medium
-                  text-[#35564C]
-                  outline-none
-                  focus:border-[#497F70]
-                  focus:ring-2
-                  focus:ring-[#497F70]/10
-                "
+                className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm font-medium text-[#35564C] outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
               >
 
                 <option value="ALL">
@@ -605,28 +698,16 @@ export default function OutletBarangMasukPage() {
                 <input
                   type="date"
                   value={dateFrom}
+                  max={
+                    dateTo ||
+                    undefined
+                  }
                   onChange={(e) =>
                     setDateFrom(
                       e.target.value
                     )
                   }
-                  className="
-                    w-full
-                    rounded-xl
-                    border
-                    border-[#D5E5DC]
-                    bg-[#FAFCFB]
-                    py-3
-                    pl-10
-                    pr-4
-                    text-sm
-                    font-medium
-                    text-[#35564C]
-                    outline-none
-                    focus:border-[#497F70]
-                    focus:ring-2
-                    focus:ring-[#497F70]/10
-                  "
+                  className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-10 pr-4 text-sm font-medium text-[#35564C] outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
                 />
 
               </div>
@@ -651,28 +732,16 @@ export default function OutletBarangMasukPage() {
                 <input
                   type="date"
                   value={dateTo}
+                  min={
+                    dateFrom ||
+                    undefined
+                  }
                   onChange={(e) =>
                     setDateTo(
                       e.target.value
                     )
                   }
-                  className="
-                    w-full
-                    rounded-xl
-                    border
-                    border-[#D5E5DC]
-                    bg-[#FAFCFB]
-                    py-3
-                    pl-10
-                    pr-4
-                    text-sm
-                    font-medium
-                    text-[#35564C]
-                    outline-none
-                    focus:border-[#497F70]
-                    focus:ring-2
-                    focus:ring-[#497F70]/10
-                  "
+                  className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-10 pr-4 text-sm font-medium text-[#35564C] outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
                 />
 
               </div>
@@ -683,28 +752,18 @@ export default function OutletBarangMasukPage() {
 
           {/* RESET */}
 
-          {(selectedOutlet !== "ALL" ||
+          {(selectedOutlet !==
+            "ALL" ||
             dateFrom ||
             dateTo) && (
             <div className="mt-4 flex justify-end">
 
               <button
                 type="button"
-                onClick={resetFilter}
-                className="
-                  inline-flex
-                  items-center
-                  gap-2
-                  rounded-lg
-                  px-3
-                  py-2
-                  text-xs
-                  font-semibold
-                  text-gray-500
-                  transition
-                  hover:bg-[#F5F8F6]
-                  hover:text-[#35564C]
-                "
+                onClick={
+                  resetFilter
+                }
+                className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-gray-500 transition hover:bg-[#F5F8F6] hover:text-[#35564C]"
               >
 
                 <X size={14} />
@@ -727,7 +786,7 @@ export default function OutletBarangMasukPage() {
 
         {/* SEARCH */}
 
-        <div className="border-b border-[#E5ECE9] p-5">
+        <div className="flex flex-col gap-3 border-b border-[#E5ECE9] p-5 md:flex-row md:items-center md:justify-between">
 
           <div className="relative max-w-md">
 
@@ -740,12 +799,26 @@ export default function OutletBarangMasukPage() {
               type="text"
               value={search}
               onChange={(e) =>
-                setSearch(e.target.value)
+                setSearch(
+                  e.target.value
+                )
               }
-              placeholder="Cari nomor, sumber, outlet, atau status..."
+              placeholder="Cari nomor, sumber, outlet, supplier, atau status..."
               className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-10 pr-4 text-sm outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
             />
 
+          </div>
+
+          <div className="text-xs text-gray-400">
+            Menampilkan{" "}
+            <span className="font-semibold text-[#35564C]">
+              {filteredData.length}
+            </span>{" "}
+            dari{" "}
+            <span className="font-semibold text-[#35564C]">
+              {data.length}
+            </span>{" "}
+            transaksi
           </div>
 
         </div>
@@ -754,7 +827,7 @@ export default function OutletBarangMasukPage() {
 
         <div className="overflow-x-auto">
 
-          <table className="min-w-[1000px] w-full text-sm">
+          <table className="min-w-[1100px] w-full text-sm">
 
             <thead className="bg-[#F5F8F6]">
 
@@ -777,7 +850,7 @@ export default function OutletBarangMasukPage() {
                 </th>
 
                 <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
-                  Outlet
+                  Outlet Tujuan
                 </th>
 
                 <th className="px-5 py-4 text-center font-semibold text-[#35564C]">
@@ -826,7 +899,8 @@ export default function OutletBarangMasukPage() {
 
                 </tr>
 
-              ) : filteredData.length === 0 ? (
+              ) : filteredData.length ===
+                0 ? (
 
                 <tr>
 
@@ -839,7 +913,9 @@ export default function OutletBarangMasukPage() {
 
                       <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#EAF3EF] text-[#497F70]">
 
-                        <PackageCheck size={25} />
+                        <PackageCheck
+                          size={25}
+                        />
 
                       </div>
 
@@ -860,15 +936,24 @@ export default function OutletBarangMasukPage() {
               ) : (
 
                 filteredData.map(
-                  (item, index) => {
+                  (
+                    item,
+                    index
+                  ) => {
 
                     const isTransfer =
                       item.sumber ===
                       "TRANSFER";
 
+                    const destinationOutlet =
+                      item.destinationOutlet ||
+                      item.outlet;
+
                     return (
                       <tr
-                        key={item.id}
+                        key={
+                          item.id
+                        }
                         className={`border-b border-[#EDF2EF] transition ${
                           isTransfer
                             ? "bg-blue-50/30 hover:bg-blue-50"
@@ -879,7 +964,8 @@ export default function OutletBarangMasukPage() {
                         {/* NO */}
 
                         <td className="px-5 py-4 text-gray-500">
-                          {index + 1}
+                          {index +
+                            1}
                         </td>
 
                         {/* NOMOR */}
@@ -887,14 +973,22 @@ export default function OutletBarangMasukPage() {
                         <td className="px-5 py-4">
 
                           <div className="font-semibold text-[#18352D]">
-                            {item.nomor}
+                            {
+                              item.nomor
+                            }
                           </div>
 
-                          {isTransfer && (
-                            <div className="mt-1 text-xs font-medium text-blue-600">
-                              Kiriman dari Gudang Pusat
-                            </div>
-                          )}
+                          {isTransfer &&
+                            item.sourceOutlet && (
+                              <div className="mt-1 text-xs font-medium text-blue-600">
+                                Dari{" "}
+                                {
+                                  item
+                                    .sourceOutlet
+                                    .name
+                                }
+                              </div>
+                            )}
 
                         </td>
 
@@ -902,7 +996,7 @@ export default function OutletBarangMasukPage() {
 
                         <td className="px-5 py-4">
                           {sourceBadge(
-                            item.sumber
+                            item
                           )}
                         </td>
 
@@ -917,8 +1011,10 @@ export default function OutletBarangMasukPage() {
                                 "id-ID",
                                 {
                                   day: "2-digit",
-                                  month: "2-digit",
-                                  year: "numeric",
+                                  month:
+                                    "2-digit",
+                                  year:
+                                    "numeric",
                                 }
                               )
                             : "-"}
@@ -930,13 +1026,19 @@ export default function OutletBarangMasukPage() {
                         <td className="px-5 py-4">
 
                           <div className="font-semibold text-[#18352D]">
-                            {item.outlet?.name ||
-                              "-"}
+                            {
+                              destinationOutlet
+                                ?.name ||
+                              "-"
+                            }
                           </div>
 
                           <div className="mt-1 text-xs text-gray-400">
-                            {item.outlet?.code ||
-                              "-"}
+                            {
+                              destinationOutlet
+                                ?.code ||
+                              "-"
+                            }
                           </div>
 
                         </td>
@@ -945,7 +1047,8 @@ export default function OutletBarangMasukPage() {
 
                         <td className="px-5 py-4 text-center font-semibold text-[#18352D]">
                           {Number(
-                            item.totalItem ?? 0
+                            item.totalItem ??
+                              0
                           ).toLocaleString(
                             "id-ID"
                           )}
@@ -955,7 +1058,8 @@ export default function OutletBarangMasukPage() {
 
                         <td className="px-5 py-4 text-center font-semibold text-[#497F70]">
                           {Number(
-                            item.totalReceived ?? 0
+                            item.totalReceived ??
+                              0
                           ).toLocaleString(
                             "id-ID"
                           )}
@@ -984,7 +1088,9 @@ export default function OutletBarangMasukPage() {
                             title="Lihat detail"
                           >
 
-                            <Eye size={16} />
+                            <Eye
+                              size={16}
+                            />
 
                           </button>
 

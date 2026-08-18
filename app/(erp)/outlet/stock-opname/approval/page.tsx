@@ -46,6 +46,7 @@ type StockOpname = {
   id: number;
   code: string;
   date: string;
+  type: string;
   status: string;
   createdBy?: number | null;
   approvedBy?: number | null;
@@ -64,40 +65,80 @@ type LoginUser = {
 
 export default function OutletStockOpnameApprovalPage() {
   const [data, setData] = useState<StockOpname[]>([]);
+
   const [outlets, setOutlets] = useState<Outlet[]>([]);
+
   const [outlet, setOutlet] = useState<Outlet | null>(null);
+
   const [user, setUser] = useState<LoginUser | null>(null);
 
   const [search, setSearch] = useState("");
 
-  const [outletFilter, setOutletFilter] =
-    useState("");
+  const [outletFilter, setOutletFilter] = useState("");
 
-  const [dateFrom, setDateFrom] =
-    useState("");
+  const [dateFrom, setDateFrom] = useState("");
 
-  const [dateTo, setDateTo] =
-    useState("");
+  const [dateTo, setDateTo] = useState("");
 
-  const [loading, setLoading] =
-    useState(true);
+  const [typeFilter, setTypeFilter] = useState("");
 
-  const [approving, setApproving] =
-    useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const [deleting, setDeleting] =
-    useState<number | null>(null);
+  const [approving, setApproving] = useState<number | null>(null);
 
-  const [selected, setSelected] =
-    useState<StockOpname | null>(null);
+  const [deleting, setDeleting] = useState<number | null>(null);
+
+  const [selected, setSelected] = useState<StockOpname | null>(null);
 
   // =====================================================
   // ROLE
   // =====================================================
 
-  const isAdminPusat =
-    String(user?.role || "").toUpperCase() ===
-    "ADMIN";
+  const currentRole = String(user?.role || "").toUpperCase();
+
+  const isAdminPusat = currentRole === "ADMIN";
+
+  const isManager = currentRole === "MANAGER";
+
+  const isOutletAdmin = currentRole === "OUTLET_ADMIN";
+
+  // =====================================================
+  // HELPER TYPE
+  // =====================================================
+
+  function isMonthly(opname: StockOpname) {
+    return String(opname.type || "").toUpperCase() === "MONTHLY";
+  }
+
+  function isWeekly(opname: StockOpname) {
+    return String(opname.type || "").toUpperCase() === "WEEKLY";
+  }
+
+  function typeLabel(type: string) {
+    switch (String(type || "").toUpperCase()) {
+      case "MONTHLY":
+        return "Bulanan";
+
+      case "WEEKLY":
+        return "Mingguan";
+
+      default:
+        return type || "-";
+    }
+  }
+
+  function typeClass(type: string) {
+    switch (String(type || "").toUpperCase()) {
+      case "MONTHLY":
+        return "bg-[#EAF3EF] text-[#497F70]";
+
+      case "WEEKLY":
+        return "bg-gray-100 text-gray-600";
+
+      default:
+        return "bg-gray-100 text-gray-500";
+    }
+  }
 
   // =====================================================
   // LOAD DATA
@@ -108,6 +149,7 @@ export default function OutletStockOpnameApprovalPage() {
       outletId?: string;
       dateFrom?: string;
       dateTo?: string;
+      type?: string;
     }
   ) {
     try {
@@ -115,47 +157,44 @@ export default function OutletStockOpnameApprovalPage() {
 
       const params = new URLSearchParams();
 
-      // -------------------------------------------------
-      // FILTER HANYA DIKIRIM ADMIN PUSAT
-      // -------------------------------------------------
+      // =================================================
+      // ADMIN / MANAGER
+      // =================================================
 
-      if (isAdminPusat) {
+      if (isAdminPusat || isManager) {
         const selectedOutlet =
-          customFilters?.outletId ??
-          outletFilter;
+          customFilters?.outletId ?? outletFilter;
 
         const selectedDateFrom =
-          customFilters?.dateFrom ??
-          dateFrom;
+          customFilters?.dateFrom ?? dateFrom;
 
         const selectedDateTo =
-          customFilters?.dateTo ??
-          dateTo;
+          customFilters?.dateTo ?? dateTo;
+
+        const selectedType =
+          customFilters?.type ?? typeFilter;
 
         if (selectedOutlet) {
-          params.set(
-            "outletId",
-            selectedOutlet
-          );
+          params.set("outletId", selectedOutlet);
         }
 
         if (selectedDateFrom) {
-          params.set(
-            "dateFrom",
-            selectedDateFrom
-          );
+          params.set("dateFrom", selectedDateFrom);
         }
 
         if (selectedDateTo) {
-          params.set(
-            "dateTo",
-            selectedDateTo
-          );
+          params.set("dateTo", selectedDateTo);
+        }
+
+        if (
+          selectedType === "WEEKLY" ||
+          selectedType === "MONTHLY"
+        ) {
+          params.set("type", selectedType);
         }
       }
 
-      const query =
-        params.toString();
+      const query = params.toString();
 
       const res = await fetch(
         query
@@ -175,26 +214,9 @@ export default function OutletStockOpnameApprovalPage() {
         );
       }
 
-      // -------------------------------------------------
-      // USER
-      // -------------------------------------------------
+      setUser(json.user || null);
 
-      setUser(
-        json.user || null
-      );
-
-      // -------------------------------------------------
-      // OUTLET USER
-      // -------------------------------------------------
-
-      setOutlet(
-        json.outlet || null
-      );
-
-      // -------------------------------------------------
-      // DROPDOWN OUTLET
-      // HANYA ADMIN PUSAT
-      // -------------------------------------------------
+      setOutlet(json.outlet || null);
 
       setOutlets(
         Array.isArray(json.outlets)
@@ -233,7 +255,7 @@ export default function OutletStockOpnameApprovalPage() {
   // =====================================================
 
   function handleApplyFilter() {
-    if (!isAdminPusat) {
+    if (!isAdminPusat && !isManager) {
       return;
     }
 
@@ -241,6 +263,7 @@ export default function OutletStockOpnameApprovalPage() {
       outletId: outletFilter,
       dateFrom,
       dateTo,
+      type: typeFilter,
     });
   }
 
@@ -249,28 +272,29 @@ export default function OutletStockOpnameApprovalPage() {
   // =====================================================
 
   function handleResetFilter() {
-    if (!isAdminPusat) {
+    if (!isAdminPusat && !isManager) {
       return;
     }
 
     setOutletFilter("");
     setDateFrom("");
     setDateTo("");
+    setTypeFilter("");
 
     loadData({
       outletId: "",
       dateFrom: "",
       dateTo: "",
+      type: "",
     });
   }
 
   // =====================================================
-  // FILTER SEARCH
+  // SEARCH
   // =====================================================
 
   const filteredData = useMemo(() => {
-    const keyword =
-      search.toLowerCase().trim();
+    const keyword = search.toLowerCase().trim();
 
     if (!keyword) {
       return data;
@@ -279,6 +303,8 @@ export default function OutletStockOpnameApprovalPage() {
     return data.filter((item) => {
       const text = [
         item.code,
+        item.type,
+        typeLabel(item.type),
         item.outlet?.code,
         item.outlet?.name,
 
@@ -299,17 +325,21 @@ export default function OutletStockOpnameApprovalPage() {
   // =====================================================
 
   function formatNumber(value: number) {
-    return Number(
-      value || 0
-    ).toLocaleString("id-ID");
+    return Number(value || 0).toLocaleString("id-ID");
   }
 
   function formatDate(value: string) {
-    if (!value) return "-";
+    if (!value) {
+      return "-";
+    }
 
-    return new Date(
-      value
-    ).toLocaleDateString("id-ID", {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+
+    return date.toLocaleDateString("id-ID", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -321,29 +351,31 @@ export default function OutletStockOpnameApprovalPage() {
   // =====================================================
 
   function statusLabel(status: string) {
-    switch (
-      String(status).toUpperCase()
-    ) {
+    switch (String(status).toUpperCase()) {
       case "COUNTING":
         return "Menunggu Approval";
+
+      case "COMPLETED":
+        return "Selesai";
 
       case "APPROVED":
         return "Approved";
 
       default:
-        return status;
+        return status || "-";
     }
   }
 
   function statusClass(status: string) {
-    switch (
-      String(status).toUpperCase()
-    ) {
+    switch (String(status).toUpperCase()) {
       case "APPROVED":
         return "bg-[#E8F4EC] text-[#2F7A4F]";
 
       case "COUNTING":
         return "bg-[#FFF4DD] text-[#9A6A18]";
+
+      case "COMPLETED":
+        return "bg-[#EAF3EF] text-[#497F70]";
 
       default:
         return "bg-gray-100 text-gray-600";
@@ -354,86 +386,72 @@ export default function OutletStockOpnameApprovalPage() {
   // SUMMARY
   // =====================================================
 
-  const totalOpname =
-    filteredData.length;
+  const totalOpname = filteredData.length;
 
-  const totalWaiting =
-    filteredData.filter(
-      (item) =>
-        String(item.status).toUpperCase() ===
-        "COUNTING"
-    ).length;
+  const totalWaiting = filteredData.filter(
+    (item) =>
+      isMonthly(item) &&
+      String(item.status).toUpperCase() === "COUNTING"
+  ).length;
 
-  const totalApproved =
-    filteredData.filter(
-      (item) =>
-        String(item.status).toUpperCase() ===
-        "APPROVED"
-    ).length;
+  const totalApproved = filteredData.filter(
+    (item) =>
+      String(item.status).toUpperCase() === "APPROVED"
+  ).length;
 
   // =====================================================
   // DETAIL SUMMARY
   // =====================================================
 
-  function getTotalSystem(
-    opname: StockOpname
-  ) {
+  function getTotalSystem(opname: StockOpname) {
     return opname.items.reduce(
       (sum, item) =>
-        sum +
-        Number(
-          item.systemQty || 0
-        ),
+        sum + Number(item.systemQty || 0),
       0
     );
   }
 
-  function getTotalPhysical(
-    opname: StockOpname
-  ) {
+  function getTotalPhysical(opname: StockOpname) {
     return opname.items.reduce(
       (sum, item) =>
-        sum +
-        Number(
-          item.physicalQty || 0
-        ),
+        sum + Number(item.physicalQty || 0),
       0
     );
   }
 
-  function getTotalDifference(
-    opname: StockOpname
-  ) {
+  function getTotalDifference(opname: StockOpname) {
     return opname.items.reduce(
       (sum, item) =>
-        sum +
-        Number(
-          item.difference || 0
-        ),
+        sum + Number(item.difference || 0),
       0
     );
   }
 
-  function getDifferenceCount(
-    opname: StockOpname
-  ) {
+  function getDifferenceCount(opname: StockOpname) {
     return opname.items.filter(
       (item) =>
-        Number(
-          item.difference || 0
-        ) !== 0
+        Number(item.difference || 0) !== 0
     ).length;
   }
 
   // =====================================================
   // APPROVE
+  //
   // HANYA ADMIN PUSAT
+  // HANYA MONTHLY
+  // HANYA COUNTING
   // =====================================================
 
-  async function handleApprove(
-    opname: StockOpname
-  ) {
+  async function handleApprove(opname: StockOpname) {
     if (!isAdminPusat) {
+      return;
+    }
+
+    if (!isMonthly(opname)) {
+      alert(
+        "Stock Opname Mingguan tidak memerlukan approval."
+      );
+
       return;
     }
 
@@ -449,8 +467,8 @@ export default function OutletStockOpnameApprovalPage() {
 
     const message =
       difference === 0
-        ? `Approve ${opname.code}?\n\nTidak ada selisih stock.`
-        : `Approve ${opname.code}?\n\nTotal selisih: ${
+        ? `Approve ${opname.code}?\n\nJenis: Stock Opname Bulanan\nTidak ada selisih stock.`
+        : `Approve ${opname.code}?\n\nJenis: Stock Opname Bulanan\nTotal selisih: ${
             difference > 0 ? "+" : ""
           }${formatNumber(
             difference
@@ -477,19 +495,14 @@ export default function OutletStockOpnameApprovalPage() {
           },
 
           body: JSON.stringify({
-            opnameId:
-              opname.id,
+            opnameId: opname.id,
           }),
         }
       );
 
-      const json =
-        await res.json();
+      const json = await res.json();
 
-      if (
-        !res.ok ||
-        !json.success
-      ) {
+      if (!res.ok || !json.success) {
         throw new Error(
           json.message ||
             "Gagal approve stock opname"
@@ -497,7 +510,7 @@ export default function OutletStockOpnameApprovalPage() {
       }
 
       alert(
-        "Stock Opname berhasil diapprove.\nStock outlet sudah diperbarui."
+        "Stock Opname Bulanan berhasil diapprove.\nStock outlet sudah diperbarui."
       );
 
       setSelected(null);
@@ -520,31 +533,45 @@ export default function OutletStockOpnameApprovalPage() {
 
   // =====================================================
   // DELETE
-  // HANYA ADMIN PUSAT
+  //
+  // ADMIN PUSAT BISA HAPUS SEMUA STATUS
+  //
+  // COUNTING
+  // COMPLETED
+  // APPROVED
+  //
+  // DELETE TIDAK MENGUBAH STOCK OUTLET
   // =====================================================
 
-  async function handleDelete(
-    opname: StockOpname
-  ) {
+  async function handleDelete(opname: StockOpname) {
     if (!isAdminPusat) {
       return;
     }
 
-    if (
-      String(opname.status).toUpperCase() !==
-      "COUNTING"
-    ) {
-      alert(
-        "Stock opname yang sudah diproses tidak dapat dihapus."
-      );
+    const status = String(
+      opname.status || ""
+    ).toUpperCase();
 
-      return;
+    let warning = "";
+
+    if (status === "APPROVED") {
+      warning =
+        "\n\nPERINGATAN: Stock Opname ini sudah APPROVED.";
+    } else if (status === "COMPLETED") {
+      warning =
+        "\n\nStock Opname ini sudah selesai diproses.";
+    } else if (status === "COUNTING") {
+      warning =
+        "\n\nStock Opname ini masih menunggu approval.";
     }
 
-    const confirmed =
-      window.confirm(
-        `Hapus Stock Opname ${opname.code}?\n\nData stock opname dan detail barang akan dihapus.\n\nStock outlet tidak akan berubah.`
-      );
+    const confirmed = window.confirm(
+      `Hapus Stock Opname ${opname.code}?\n\n` +
+        `Jenis: ${typeLabel(opname.type)}\n` +
+        `Status: ${statusLabel(opname.status)}` +
+        warning +
+        `\n\nData stock opname dan seluruh detail barang akan dihapus.\n\nStock outlet tidak akan berubah.\n\nTindakan ini tidak dapat dibatalkan.`
+    );
 
     if (!confirmed) {
       return;
@@ -560,13 +587,9 @@ export default function OutletStockOpnameApprovalPage() {
         }
       );
 
-      const json =
-        await res.json();
+      const json = await res.json();
 
-      if (
-        !res.ok ||
-        !json.success
-      ) {
+      if (!res.ok || !json.success) {
         throw new Error(
           json.message ||
             "Gagal menghapus stock opname"
@@ -578,10 +601,7 @@ export default function OutletStockOpnameApprovalPage() {
           "Stock Opname berhasil dihapus."
       );
 
-      if (
-        selected?.id ===
-        opname.id
-      ) {
+      if (selected?.id === opname.id) {
         setSelected(null);
       }
 
@@ -630,11 +650,22 @@ export default function OutletStockOpnameApprovalPage() {
               Persetujuan hasil stock opname outlet
             </p>
 
-            {outlet && (
+            {isOutletAdmin && outlet && (
               <p className="mt-1 text-xs font-semibold text-[#497F70]">
-                Outlet:{" "}
-                {outlet.code} -{" "}
+                Outlet: {outlet.code} -{" "}
                 {outlet.name}
+              </p>
+            )}
+
+            {isAdminPusat && (
+              <p className="mt-1 text-xs font-semibold text-[#497F70]">
+                Admin Pusat
+              </p>
+            )}
+
+            {isManager && (
+              <p className="mt-1 text-xs font-semibold text-[#497F70]">
+                Manager — Read Only
               </p>
             )}
 
@@ -644,9 +675,7 @@ export default function OutletStockOpnameApprovalPage() {
 
         <button
           type="button"
-          onClick={() =>
-            loadData()
-          }
+          onClick={() => loadData()}
           disabled={loading}
           className="
             inline-flex
@@ -667,7 +696,6 @@ export default function OutletStockOpnameApprovalPage() {
             disabled:opacity-50
           "
         >
-
           <RefreshCw
             size={16}
             className={
@@ -678,7 +706,6 @@ export default function OutletStockOpnameApprovalPage() {
           />
 
           Refresh
-
         </button>
 
       </div>
@@ -696,9 +723,7 @@ export default function OutletStockOpnameApprovalPage() {
           </p>
 
           <p className="mt-2 text-2xl font-bold text-[#18352D]">
-            {formatNumber(
-              totalOpname
-            )}
+            {formatNumber(totalOpname)}
           </p>
 
         </div>
@@ -714,9 +739,7 @@ export default function OutletStockOpnameApprovalPage() {
               </p>
 
               <p className="mt-2 text-2xl font-bold text-[#9A6A18]">
-                {formatNumber(
-                  totalWaiting
-                )}
+                {formatNumber(totalWaiting)}
               </p>
 
             </div>
@@ -741,9 +764,7 @@ export default function OutletStockOpnameApprovalPage() {
               </p>
 
               <p className="mt-2 text-2xl font-bold text-[#2F7A4F]">
-                {formatNumber(
-                  totalApproved
-                )}
+                {formatNumber(totalApproved)}
               </p>
 
             </div>
@@ -760,7 +781,7 @@ export default function OutletStockOpnameApprovalPage() {
       </div>
 
       {/* =================================================
-          TABLE CONTAINER
+          TABLE
       ================================================= */}
 
       <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
@@ -782,11 +803,11 @@ export default function OutletStockOpnameApprovalPage() {
                 </h2>
 
                 <p className="mt-1 text-xs text-gray-500">
-
                   {isAdminPusat
-                    ? "Admin Pusat dapat melakukan filter, approve, dan hapus."
-                    : "Anda hanya dapat melihat stock opname sesuai outlet Anda."}
-
+                    ? "Admin Pusat dapat filter, approve stock opname bulanan, dan menghapus semua stock opname."
+                    : isManager
+                    ? "Manager hanya dapat melihat data stock opname."
+                    : "Anda hanya dapat melihat stock opname outlet Anda."}
                 </p>
 
               </div>
@@ -826,10 +847,11 @@ export default function OutletStockOpnameApprovalPage() {
             </div>
 
             {/* =================================================
-                FILTER ADMIN PUSAT SAJA
+                FILTER ADMIN / MANAGER
             ================================================= */}
 
-            {isAdminPusat && (
+            {(isAdminPusat ||
+              isManager) && (
               <div className="rounded-xl border border-[#DDE9E4] bg-[#F8FBF9] p-4">
 
                 <div className="mb-3 flex items-center gap-2">
@@ -844,12 +866,14 @@ export default function OutletStockOpnameApprovalPage() {
                   </span>
 
                   <span className="rounded-full bg-[#EAF3EF] px-2 py-0.5 text-[10px] font-bold text-[#497F70]">
-                    ADMIN PUSAT
+                    {isAdminPusat
+                      ? "ADMIN PUSAT"
+                      : "MANAGER"}
                   </span>
 
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
 
                   {/* OUTLET */}
 
@@ -860,9 +884,7 @@ export default function OutletStockOpnameApprovalPage() {
                     </label>
 
                     <select
-                      value={
-                        outletFilter
-                      }
+                      value={outletFilter}
                       onChange={(e) =>
                         setOutletFilter(
                           e.target.value
@@ -890,12 +912,8 @@ export default function OutletStockOpnameApprovalPage() {
                       {outlets.map(
                         (item) => (
                           <option
-                            key={
-                              item.id
-                            }
-                            value={
-                              item.id
-                            }
+                            key={item.id}
+                            value={item.id}
                           >
                             {item.code} -{" "}
                             {item.name}
@@ -917,9 +935,7 @@ export default function OutletStockOpnameApprovalPage() {
 
                     <input
                       type="date"
-                      value={
-                        dateFrom
-                      }
+                      value={dateFrom}
                       onChange={(e) =>
                         setDateFrom(
                           e.target.value
@@ -952,9 +968,7 @@ export default function OutletStockOpnameApprovalPage() {
 
                     <input
                       type="date"
-                      value={
-                        dateTo
-                      }
+                      value={dateTo}
                       onChange={(e) =>
                         setDateTo(
                           e.target.value
@@ -977,6 +991,52 @@ export default function OutletStockOpnameApprovalPage() {
 
                   </div>
 
+                  {/* TYPE */}
+
+                  <div>
+
+                    <label className="mb-1.5 block text-xs font-semibold text-gray-500">
+                      Jenis Stock Opname
+                    </label>
+
+                    <select
+                      value={typeFilter}
+                      onChange={(e) =>
+                        setTypeFilter(
+                          e.target.value
+                        )
+                      }
+                      className="
+                        w-full
+                        rounded-xl
+                        border
+                        border-[#D5E5DC]
+                        bg-white
+                        px-3
+                        py-2.5
+                        text-sm
+                        text-[#35564C]
+                        outline-none
+                        focus:border-[#497F70]
+                      "
+                    >
+
+                      <option value="">
+                        Semua Jenis
+                      </option>
+
+                      <option value="WEEKLY">
+                        Mingguan
+                      </option>
+
+                      <option value="MONTHLY">
+                        Bulanan
+                      </option>
+
+                    </select>
+
+                  </div>
+
                   {/* BUTTON */}
 
                   <div className="flex items-end gap-2">
@@ -986,9 +1046,7 @@ export default function OutletStockOpnameApprovalPage() {
                       onClick={
                         handleApplyFilter
                       }
-                      disabled={
-                        loading
-                      }
+                      disabled={loading}
                       className="
                         flex-1
                         rounded-xl
@@ -1010,9 +1068,7 @@ export default function OutletStockOpnameApprovalPage() {
                       onClick={
                         handleResetFilter
                       }
-                      disabled={
-                        loading
-                      }
+                      disabled={loading}
                       className="
                         rounded-xl
                         border
@@ -1047,7 +1103,7 @@ export default function OutletStockOpnameApprovalPage() {
 
         <div className="overflow-x-auto">
 
-          <table className="min-w-[1100px] w-full text-sm">
+          <table className="min-w-[1200px] w-full text-sm">
 
             <thead className="bg-[#F5F8F6]">
 
@@ -1059,6 +1115,10 @@ export default function OutletStockOpnameApprovalPage() {
 
                 <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
                   Nomor Opname
+                </th>
+
+                <th className="px-5 py-4 text-center font-semibold text-[#35564C]">
+                  Jenis
                 </th>
 
                 <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
@@ -1100,7 +1160,7 @@ export default function OutletStockOpnameApprovalPage() {
                 <tr>
 
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="px-5 py-12 text-center"
                   >
 
@@ -1122,7 +1182,7 @@ export default function OutletStockOpnameApprovalPage() {
                 <tr>
 
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="px-5 py-12 text-center text-sm text-gray-400"
                   >
                     Belum ada stock opname
@@ -1156,16 +1216,15 @@ export default function OutletStockOpnameApprovalPage() {
                       );
 
                     const waiting =
+                      isMonthly(opname) &&
                       String(
                         opname.status
                       ).toUpperCase() ===
-                      "COUNTING";
+                        "COUNTING";
 
                     return (
                       <tr
-                        key={
-                          opname.id
-                        }
+                        key={opname.id}
                         className="
                           border-b
                           border-[#EDF2EF]
@@ -1176,13 +1235,11 @@ export default function OutletStockOpnameApprovalPage() {
                         {/* TANGGAL */}
 
                         <td className="px-5 py-4 align-top">
-
                           <span className="text-[#35564C]">
                             {formatDate(
                               opname.date
                             )}
                           </span>
-
                         </td>
 
                         {/* NOMOR */}
@@ -1190,10 +1247,40 @@ export default function OutletStockOpnameApprovalPage() {
                         <td className="px-5 py-4 align-top">
 
                           <div className="font-semibold text-[#18352D]">
-                            {
-                              opname.code
-                            }
+                            {opname.code}
                           </div>
+
+                        </td>
+
+                        {/* TYPE */}
+
+                        <td className="px-5 py-4 text-center align-top">
+
+                          <span
+                            className={`
+                              inline-flex
+                              items-center
+                              gap-1.5
+                              rounded-full
+                              px-3
+                              py-1
+                              text-xs
+                              font-semibold
+                              ${typeClass(
+                                opname.type
+                              )}
+                            `}
+                          >
+
+                            <CalendarDays
+                              size={13}
+                            />
+
+                            {typeLabel(
+                              opname.type
+                            )}
+
+                          </span>
 
                         </td>
 
@@ -1225,9 +1312,7 @@ export default function OutletStockOpnameApprovalPage() {
 
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EAF3EF] px-3 py-1 text-xs font-semibold text-[#497F70]">
 
-                            <Package
-                              size={13}
-                            />
+                            <Package size={13} />
 
                             {formatNumber(
                               opname
@@ -1239,7 +1324,7 @@ export default function OutletStockOpnameApprovalPage() {
 
                         </td>
 
-                        {/* SYSTEM */}
+                        {/* SISTEM */}
 
                         <td className="px-5 py-4 text-right align-top">
 
@@ -1251,7 +1336,7 @@ export default function OutletStockOpnameApprovalPage() {
 
                         </td>
 
-                        {/* PHYSICAL */}
+                        {/* FISIK */}
 
                         <td className="px-5 py-4 text-right align-top">
 
@@ -1263,24 +1348,21 @@ export default function OutletStockOpnameApprovalPage() {
 
                         </td>
 
-                        {/* DIFFERENCE */}
+                        {/* SELISIH */}
 
                         <td className="px-5 py-4 text-right align-top">
 
                           <div
                             className={`font-bold ${
-                              difference >
-                              0
+                              difference > 0
                                 ? "text-[#2F7A4F]"
-                                : difference <
-                                  0
+                                : difference < 0
                                 ? "text-[#C84B4B]"
                                 : "text-gray-400"
                             }`}
                           >
 
-                            {difference >
-                            0
+                            {difference > 0
                               ? "+"
                               : ""}
 
@@ -1327,15 +1409,11 @@ export default function OutletStockOpnameApprovalPage() {
                             ).toUpperCase() ===
                             "APPROVED" ? (
                               <CheckCircle2
-                                size={
-                                  13
-                                }
+                                size={13}
                               />
                             ) : (
                               <AlertTriangle
-                                size={
-                                  13
-                                }
+                                size={13}
                               />
                             )}
 
@@ -1353,8 +1431,8 @@ export default function OutletStockOpnameApprovalPage() {
 
                           <div className="flex items-center justify-center gap-2">
 
-                            {/* DETAIL
-                                SEMUA ROLE */}
+                            {/* DETAIL */}
+
                             <button
                               type="button"
                               onClick={() =>
@@ -1379,16 +1457,14 @@ export default function OutletStockOpnameApprovalPage() {
                               "
                             >
 
-                              <Eye
-                                size={14}
-                              />
+                              <Eye size={14} />
 
                               Detail
 
                             </button>
 
                             {/* APPROVE
-                                ADMIN PUSAT SAJA */}
+                                ADMIN + MONTHLY + COUNTING */}
 
                             {isAdminPusat &&
                               waiting && (
@@ -1424,16 +1500,12 @@ export default function OutletStockOpnameApprovalPage() {
                                   {approving ===
                                   opname.id ? (
                                     <RefreshCw
-                                      size={
-                                        14
-                                      }
+                                      size={14}
                                       className="animate-spin"
                                     />
                                   ) : (
                                     <CheckCircle2
-                                      size={
-                                        14
-                                      }
+                                      size={14}
                                     />
                                   )}
 
@@ -1443,57 +1515,55 @@ export default function OutletStockOpnameApprovalPage() {
                               )}
 
                             {/* DELETE
-                                ADMIN PUSAT SAJA */}
+                                ADMIN PUSAT
+                                SEMUA STATUS */}
 
-                            {isAdminPusat &&
-                              waiting && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleDelete(
-                                      opname
-                                    )
-                                  }
-                                  disabled={
-                                    deleting ===
-                                      opname.id ||
-                                    approving ===
-                                      opname.id
-                                  }
-                                  title="Hapus Stock Opname"
-                                  className="
-                                    inline-flex
-                                    items-center
-                                    justify-center
-                                    rounded-lg
-                                    border
-                                    border-[#F0CACA]
-                                    bg-[#FFF7F7]
-                                    p-2
-                                    text-[#C84B4B]
-                                    hover:bg-[#FDECEC]
-                                    disabled:opacity-50
-                                  "
-                                >
+                            {isAdminPusat && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDelete(
+                                    opname
+                                  )
+                                }
+                                disabled={
+                                  deleting ===
+                                    opname.id ||
+                                  approving ===
+                                    opname.id
+                                }
+                                title={`Hapus Stock Opname - ${statusLabel(
+                                  opname.status
+                                )}`}
+                                className="
+                                  inline-flex
+                                  items-center
+                                  justify-center
+                                  rounded-lg
+                                  border
+                                  border-[#F0CACA]
+                                  bg-[#FFF7F7]
+                                  p-2
+                                  text-[#C84B4B]
+                                  hover:bg-[#FDECEC]
+                                  disabled:opacity-50
+                                "
+                              >
 
-                                  {deleting ===
-                                  opname.id ? (
-                                    <RefreshCw
-                                      size={
-                                        14
-                                      }
-                                      className="animate-spin"
-                                    />
-                                  ) : (
-                                    <Trash2
-                                      size={
-                                        14
-                                      }
-                                    />
-                                  )}
+                                {deleting ===
+                                opname.id ? (
+                                  <RefreshCw
+                                    size={14}
+                                    className="animate-spin"
+                                  />
+                                ) : (
+                                  <Trash2
+                                    size={14}
+                                  />
+                                )}
 
-                                </button>
-                              )}
+                              </button>
+                            )}
 
                           </div>
 
@@ -1531,19 +1601,45 @@ export default function OutletStockOpnameApprovalPage() {
 
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
 
-                  <ClipboardCheck
-                    size={19}
-                  />
+                  <ClipboardCheck size={19} />
 
                 </div>
 
                 <div>
 
-                  <h2 className="font-bold text-[#18352D]">
-                    {
-                      selected.code
-                    }
-                  </h2>
+                  <div className="flex items-center gap-2">
+
+                    <h2 className="font-bold text-[#18352D]">
+                      {selected.code}
+                    </h2>
+
+                    <span
+                      className={`
+                        inline-flex
+                        items-center
+                        gap-1
+                        rounded-full
+                        px-2.5
+                        py-1
+                        text-[10px]
+                        font-bold
+                        ${typeClass(
+                          selected.type
+                        )}
+                      `}
+                    >
+
+                      <CalendarDays
+                        size={11}
+                      />
+
+                      {typeLabel(
+                        selected.type
+                      )}
+
+                    </span>
+
+                  </div>
 
                   <p className="text-xs text-gray-500">
                     {formatDate(
@@ -1558,15 +1654,11 @@ export default function OutletStockOpnameApprovalPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setSelected(
-                    null
-                  )
+                  setSelected(null)
                 }
                 className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
               >
-
                 <X size={20} />
-
               </button>
 
             </div>
@@ -1575,7 +1667,49 @@ export default function OutletStockOpnameApprovalPage() {
 
             <div className="border-b border-[#E5ECE9] bg-[#FAFCFB] px-6 py-4">
 
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
+
+                {/* TYPE */}
+
+                <div>
+
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Jenis
+                  </p>
+
+                  <div className="mt-1">
+
+                    <span
+                      className={`
+                        inline-flex
+                        items-center
+                        gap-1.5
+                        rounded-full
+                        px-2.5
+                        py-1
+                        text-xs
+                        font-semibold
+                        ${typeClass(
+                          selected.type
+                        )}
+                      `}
+                    >
+
+                      <CalendarDays
+                        size={12}
+                      />
+
+                      {typeLabel(
+                        selected.type
+                      )}
+
+                    </span>
+
+                  </div>
+
+                </div>
+
+                {/* OUTLET */}
 
                 <div>
 
@@ -1601,6 +1735,8 @@ export default function OutletStockOpnameApprovalPage() {
 
                 </div>
 
+                {/* BARANG */}
+
                 <div>
 
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
@@ -1616,6 +1752,8 @@ export default function OutletStockOpnameApprovalPage() {
                   </p>
 
                 </div>
+
+                {/* SISTEM */}
 
                 <div>
 
@@ -1633,6 +1771,8 @@ export default function OutletStockOpnameApprovalPage() {
 
                 </div>
 
+                {/* FISIK */}
+
                 <div>
 
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
@@ -1649,6 +1789,8 @@ export default function OutletStockOpnameApprovalPage() {
 
                 </div>
 
+                {/* SELISIH */}
+
                 <div>
 
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
@@ -1660,6 +1802,10 @@ export default function OutletStockOpnameApprovalPage() {
                       getTotalDifference(
                         selected
                       ) === 0
+                        ? "text-[#2F7A4F]"
+                        : getTotalDifference(
+                            selected
+                          ) > 0
                         ? "text-[#2F7A4F]"
                         : "text-[#C84B4B]"
                     }`}
@@ -1740,13 +1886,12 @@ export default function OutletStockOpnameApprovalPage() {
 
                       return (
                         <tr
-                          key={
-                            item.id
-                          }
+                          key={item.id}
                           className="border-b border-[#EDF2EF]"
                         >
 
                           <td className="px-5 py-3">
+
                             <span className="font-semibold text-[#35564C]">
                               {
                                 item
@@ -1754,9 +1899,11 @@ export default function OutletStockOpnameApprovalPage() {
                                   ?.code
                               }
                             </span>
+
                           </td>
 
                           <td className="px-5 py-3">
+
                             <span className="font-semibold text-[#18352D]">
                               {
                                 item
@@ -1764,6 +1911,7 @@ export default function OutletStockOpnameApprovalPage() {
                                   ?.name
                               }
                             </span>
+
                           </td>
 
                           <td className="px-5 py-3 text-center text-gray-500">
@@ -1790,18 +1938,15 @@ export default function OutletStockOpnameApprovalPage() {
 
                             <span
                               className={`font-bold ${
-                                difference >
-                                0
+                                difference > 0
                                   ? "text-[#2F7A4F]"
-                                  : difference <
-                                    0
+                                  : difference < 0
                                   ? "text-[#C84B4B]"
                                   : "text-gray-400"
                               }`}
                             >
 
-                              {difference >
-                              0
+                              {difference > 0
                                 ? "+"
                                 : ""}
 
@@ -1814,10 +1959,7 @@ export default function OutletStockOpnameApprovalPage() {
                           </td>
 
                           <td className="px-5 py-3 text-gray-500">
-                            {
-                              item.note ||
-                              "-"
-                            }
+                            {item.note || "-"}
                           </td>
 
                         </tr>
@@ -1864,12 +2006,12 @@ export default function OutletStockOpnameApprovalPage() {
 
               <div className="flex items-center gap-2">
 
+                {/* TUTUP */}
+
                 <button
                   type="button"
                   onClick={() =>
-                    setSelected(
-                      null
-                    )
+                    setSelected(null)
                   }
                   className="
                     rounded-xl
@@ -1887,10 +2029,11 @@ export default function OutletStockOpnameApprovalPage() {
                   Tutup
                 </button>
 
-                {/* APPROVE MODAL
-                    ADMIN PUSAT SAJA */}
+                {/* APPROVE
+                    ADMIN + MONTHLY + COUNTING */}
 
                 {isAdminPusat &&
+                  isMonthly(selected) &&
                   String(
                     selected.status
                   ).toUpperCase() ===
@@ -1927,16 +2070,12 @@ export default function OutletStockOpnameApprovalPage() {
                       {approving ===
                       selected.id ? (
                         <RefreshCw
-                          size={
-                            16
-                          }
+                          size={16}
                           className="animate-spin"
                         />
                       ) : (
                         <CheckCircle2
-                          size={
-                            16
-                          }
+                          size={16}
                         />
                       )}
 
@@ -1945,65 +2084,58 @@ export default function OutletStockOpnameApprovalPage() {
                     </button>
                   )}
 
-                {/* DELETE MODAL
-                    ADMIN PUSAT SAJA */}
+                {/* DELETE
+                    ADMIN PUSAT
+                    SEMUA STATUS */}
 
-                {isAdminPusat &&
-                  String(
-                    selected.status
-                  ).toUpperCase() ===
-                    "COUNTING" && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleDelete(
-                          selected
-                        )
-                      }
-                      disabled={
-                        deleting ===
-                          selected.id ||
-                        approving ===
-                          selected.id
-                      }
-                      className="
-                        inline-flex
-                        items-center
-                        gap-2
-                        rounded-xl
-                        border
-                        border-[#F0CACA]
-                        bg-[#FFF7F7]
-                        px-4
-                        py-2.5
-                        text-sm
-                        font-semibold
-                        text-[#C84B4B]
-                        hover:bg-[#FDECEC]
-                        disabled:opacity-50
-                      "
-                    >
+                {isAdminPusat && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleDelete(
+                        selected
+                      )
+                    }
+                    disabled={
+                      deleting ===
+                        selected.id ||
+                      approving ===
+                        selected.id
+                    }
+                    className="
+                      inline-flex
+                      items-center
+                      gap-2
+                      rounded-xl
+                      border
+                      border-[#F0CACA]
+                      bg-[#FFF7F7]
+                      px-4
+                      py-2.5
+                      text-sm
+                      font-semibold
+                      text-[#C84B4B]
+                      hover:bg-[#FDECEC]
+                      disabled:opacity-50
+                    "
+                  >
 
-                      {deleting ===
-                      selected.id ? (
-                        <RefreshCw
-                          size={
-                            16
-                          }
-                          className="animate-spin"
-                        />
-                      ) : (
-                        <Trash2
-                          size={
-                            16
-                          }
-                        />
-                      )}
+                    {deleting ===
+                    selected.id ? (
+                      <RefreshCw
+                        size={16}
+                        className="animate-spin"
+                      />
+                    ) : (
+                      <Trash2
+                        size={16}
+                      />
+                    )}
 
-                      Hapus
+                    Hapus
 
-                    </button>
-                  )}
+                  </button>
+                )}
 
               </div>
 

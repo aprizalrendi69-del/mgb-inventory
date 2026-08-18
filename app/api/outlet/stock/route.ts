@@ -5,6 +5,9 @@ import { cookies } from "next/headers";
 /*
  * =========================================================
  * GET STOCK OUTLET
+ * =========================================================
+ *
+ * ROLE:
  *
  * ADMIN
  * -> bisa melihat semua outlet
@@ -15,11 +18,68 @@ import { cookies } from "next/headers";
  * -> bisa filter outletId
  *
  * OUTLET_ADMIN
- * -> HANYA outlet miliknya
+ * -> hanya bisa melihat outlet miliknya
+ * -> outletId dari URL DIABAIKAN
  *
- * PENTING:
- * -> stock diambil dari OutletStock
- * -> TIDAK mengambil Barang.stock
+ * =========================================================
+ * SUMBER DATA
+ * =========================================================
+ *
+ * STOCK SISTEM:
+ * -> OutletStock.stock
+ *
+ * STOCK OPNAME:
+ * -> hanya informasi / audit
+ *
+ * Endpoint ini READ ONLY.
+ *
+ * TIDAK ADA:
+ * -> update OutletStock
+ * -> adjustment stock
+ * -> perubahan stock karena SO
+ *
+ * =========================================================
+ * RESPONSE PER STOCK
+ * =========================================================
+ *
+ * {
+ *   ...stock,
+ *
+ *   lastOpname: {
+ *      opnameId,
+ *      code,
+ *      date,
+ *      status,
+ *      systemQty,
+ *      physicalQty,
+ *      difference,
+ *      note
+ *   },
+ *
+ *   opnameHistory: [
+ *      {
+ *        opnameId,
+ *        code,
+ *        date,
+ *        status,
+ *        systemQty,
+ *        physicalQty,
+ *        difference,
+ *        note
+ *      }
+ *   ]
+ * }
+ *
+ * Dengan demikian halaman Stock Outlet cukup memakai
+ * SATU API ini untuk:
+ *
+ * -> Stock Sistem
+ * -> SO Terakhir
+ * -> Fisik
+ * -> Selisih
+ * -> Status SO
+ * -> History SO
+ *
  * =========================================================
  */
 
@@ -66,10 +126,7 @@ export async function GET(req: NextRequest) {
 
     const userId = Number(sessionData?.id);
 
-    if (
-      !Number.isInteger(userId) ||
-      userId <= 0
-    ) {
+    if (!Number.isInteger(userId) || userId <= 0) {
       return NextResponse.json(
         {
           success: false,
@@ -122,7 +179,7 @@ export async function GET(req: NextRequest) {
     }
 
     // =====================================================
-    // 4. USER HARUS AKTIF
+    // 4. USER AKTIF
     // =====================================================
 
     if (!user.active) {
@@ -138,7 +195,7 @@ export async function GET(req: NextRequest) {
     }
 
     // =====================================================
-    // 5. ROLE
+    // 5. ROLE ACCESS
     // =====================================================
 
     const allowedRoles = [
@@ -164,8 +221,7 @@ export async function GET(req: NextRequest) {
     // 6. QUERY PARAMETER
     // =====================================================
 
-    const { searchParams } =
-      new URL(req.url);
+    const { searchParams } = new URL(req.url);
 
     const outletIdParam =
       searchParams.get("outletId");
@@ -175,15 +231,9 @@ export async function GET(req: NextRequest) {
     // =====================================================
     // 7. OUTLET ADMIN
     //
-    // OUTLET_ADMIN TIDAK BOLEH MENGGUNAKAN
-    // outletId DARI URL.
+    // WAJIB menggunakan outletId dari session.
     //
-    // Contoh:
-    //
-    // /api/outlet-stock?outletId=1
-    //
-    // Jika user sebenarnya outlet 2,
-    // tetap akan menggunakan outlet 2.
+    // outletId dari URL diabaikan.
     // =====================================================
 
     if (user.role === "OUTLET_ADMIN") {
@@ -210,16 +260,10 @@ export async function GET(req: NextRequest) {
     // =====================================================
     // 8. ADMIN / MANAGER
     //
-    // Bisa:
-    //
-    // /api/outlet-stock
-    //
+    // Tanpa outletId:
     // -> semua outlet
     //
-    // atau:
-    //
-    // /api/outlet-stock?outletId=2
-    //
+    // Dengan outletId:
     // -> outlet tertentu
     // =====================================================
 
@@ -252,10 +296,7 @@ export async function GET(req: NextRequest) {
     }
 
     // =====================================================
-    // 9. VALIDASI OUTLET SCOPE
-    //
-    // Jika outletId sudah ditentukan,
-    // pastikan outlet benar-benar ada dan aktif.
+    // 9. VALIDASI OUTLET
     // =====================================================
 
     if (outletId !== null) {
@@ -277,8 +318,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            message:
-              "Outlet tidak ditemukan",
+            message: "Outlet tidak ditemukan",
           },
           {
             status: 404,
@@ -290,8 +330,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            message:
-              "Outlet sedang tidak aktif",
+            message: "Outlet sedang tidak aktif",
           },
           {
             status: 400,
@@ -301,35 +340,32 @@ export async function GET(req: NextRequest) {
     }
 
     // =====================================================
-    // 10. WHERE
+    // 10. WHERE STOCK
     // =====================================================
 
-    const where: {
+    const stockWhere: {
       outletId?: number;
     } = {};
 
     if (outletId !== null) {
-      where.outletId = outletId;
+      stockWhere.outletId = outletId;
     }
 
     // =====================================================
-    // 11. AMBIL STOCK OUTLET
+    // 11. AMBIL OUTLET STOCK
     //
-    // PENTING:
+    // STOCK SISTEM HANYA DARI:
     //
-    // stock = OutletStock.stock
+    // OutletStock.stock
     //
-    // BUKAN:
+    // TIDAK menggunakan:
     //
     // Barang.stock
-    //
-    // Dengan begitu stock outlet tidak akan bercampur
-    // dengan stock pusat.
     // =====================================================
 
     const stocks =
       await prisma.outletStock.findMany({
-        where,
+        where: stockWhere,
 
         select: {
           id: true,
@@ -353,13 +389,8 @@ export async function GET(req: NextRequest) {
               code: true,
               name: true,
               unit: true,
+              barcode: true,
 
-              /*
-               * Data harga master pusat hanya untuk
-               * informasi/reference.
-               *
-               * Tidak pernah diubah dari endpoint ini.
-               */
               purchasePrice: true,
               sellingPrice: true,
               minimumStock: true,
@@ -382,7 +413,272 @@ export async function GET(req: NextRequest) {
       });
 
     // =====================================================
-    // 12. RESPONSE
+    // 12. AMBIL SEMUA STOCK OPNAME YANG RELEVAN
+    //
+    // Kita ambil history lengkap.
+    //
+    // Urutan:
+    // terbaru -> terlama
+    //
+    // Ini membuat item pertama yang ditemukan
+    // menjadi SO terakhir untuk barang tersebut.
+    // =====================================================
+
+    const opnameWhere: {
+      outletId?: number;
+    } = {};
+
+    if (outletId !== null) {
+      opnameWhere.outletId = outletId;
+    }
+
+    const opnameList =
+      await prisma.stockOpname.findMany({
+        where: opnameWhere,
+
+        orderBy: [
+          {
+            date: "desc",
+          },
+          {
+            id: "desc",
+          },
+        ],
+
+        select: {
+          id: true,
+          code: true,
+          outletId: true,
+          date: true,
+          status: true,
+          createdAt: true,
+          approvedBy: true,
+
+          outlet: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+
+          items: {
+            select: {
+              id: true,
+              barangId: true,
+              systemQty: true,
+              physicalQty: true,
+              difference: true,
+              note: true,
+
+              barang: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  unit: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+    // =====================================================
+    // 13. MAP HISTORY PER OUTLET + BARANG
+    //
+    // Struktur:
+    //
+    // outletId-barangId
+    //
+    // -> semua history SO barang tersebut
+    // =====================================================
+
+    type OpnameHistoryItem = {
+      opnameId: number;
+      code: string;
+      outletId: number;
+      date: Date;
+      status: string;
+      createdAt: Date;
+      approvedBy: number | null;
+
+      systemQty: number;
+      physicalQty: number;
+      difference: number;
+      note: string | null;
+
+      barang: {
+        id: number;
+        code: string;
+        name: string;
+        unit: string;
+      } | null;
+    };
+
+    const opnameHistoryByBarang =
+      new Map<
+        string,
+        OpnameHistoryItem[]
+      >();
+
+    // =====================================================
+    // 14. BANGUN HISTORY
+    // =====================================================
+
+    for (const opname of opnameList) {
+      for (const item of opname.items) {
+        const key =
+          `${opname.outletId}-${item.barangId}`;
+
+        const history =
+          opnameHistoryByBarang.get(key) || [];
+
+        history.push({
+          opnameId: opname.id,
+          code: opname.code,
+          outletId: opname.outletId,
+          date: opname.date,
+          status: opname.status,
+          createdAt: opname.createdAt,
+          approvedBy:
+            opname.approvedBy ?? null,
+
+          systemQty: Number(
+            item.systemQty ?? 0
+          ),
+
+          physicalQty: Number(
+            item.physicalQty ?? 0
+          ),
+
+          difference: Number(
+            item.difference ?? 0
+          ),
+
+          note: item.note ?? null,
+
+          barang: item.barang
+            ? {
+                id: item.barang.id,
+                code: item.barang.code,
+                name: item.barang.name,
+                unit: item.barang.unit,
+              }
+            : null,
+        });
+
+        opnameHistoryByBarang.set(
+          key,
+          history
+        );
+      }
+    }
+
+    // =====================================================
+    // 15. GABUNGKAN STOCK + LAST OPNAME + HISTORY
+    // =====================================================
+
+    const data = stocks.map(
+      (stock) => {
+        const key =
+          `${stock.outletId}-${stock.barangId}`;
+
+        const opnameHistory =
+          opnameHistoryByBarang.get(key) || [];
+
+        /*
+         * Karena opnameList sudah diurutkan
+         * terbaru -> terlama,
+         *
+         * history[0] = SO terakhir.
+         */
+
+        const lastOpname =
+          opnameHistory.length > 0
+            ? opnameHistory[0]
+            : null;
+
+        return {
+          ...stock,
+
+          // =================================================
+          // NORMALISASI NUMBER
+          // =================================================
+
+          stock: Number(
+            stock.stock ?? 0
+          ),
+
+          minimumStock: Number(
+            stock.minimumStock ?? 0
+          ),
+
+          averageCost: Number(
+            stock.averageCost ?? 0
+          ),
+
+          // =================================================
+          // SO TERAKHIR
+          // =================================================
+
+          lastOpname,
+
+          // =================================================
+          // HISTORY SO LENGKAP
+          // =================================================
+
+          opnameHistory,
+        };
+      }
+    );
+
+    // =====================================================
+    // 16. SUMMARY
+    // =====================================================
+
+    const totalStockQty =
+      data.reduce(
+        (total, item) =>
+          total +
+          Number(item.stock || 0),
+        0
+      );
+
+    const itemsWithOpname =
+      data.filter(
+        (item) =>
+          item.lastOpname !== null
+      ).length;
+
+    const itemsWithoutOpname =
+      data.length -
+      itemsWithOpname;
+
+    const approvedOpnameCount =
+      opnameList.filter(
+        (item) =>
+          String(
+            item.status
+          ).toUpperCase() === "APPROVED"
+      ).length;
+
+    const pendingOpnameCount =
+      opnameList.filter(
+        (item) =>
+          [
+            "COUNTING",
+            "PENDING",
+            "WAITING",
+          ].includes(
+            String(
+              item.status
+            ).toUpperCase()
+          )
+      ).length;
+
+    // =====================================================
+    // 17. RESPONSE
     // =====================================================
 
     return NextResponse.json({
@@ -400,7 +696,51 @@ export async function GET(req: NextRequest) {
         outletId: user.outletId,
       },
 
-      data: stocks,
+      /*
+       * ===================================================
+       * DATA UTAMA
+       * ===================================================
+       *
+       * stock:
+       * -> OutletStock.stock
+       *
+       * lastOpname:
+       * -> SO terakhir barang
+       *
+       * opnameHistory:
+       * -> seluruh history SO barang
+       */
+
+      data,
+
+      // ===================================================
+      // META
+      // ===================================================
+
+      meta: {
+        totalStockItems: data.length,
+
+        totalStockQty,
+
+        itemsWithOpname,
+
+        itemsWithoutOpname,
+
+        opnameLoaded: opnameList.length,
+
+        approvedOpnameCount,
+
+        pendingOpnameCount,
+
+        stockSource:
+          "OutletStock.stock",
+
+        stockLocked: true,
+
+        opnameIsInformational: true,
+
+        adjustmentRequiresApproval: true,
+      },
     });
   } catch (error: any) {
     console.error(

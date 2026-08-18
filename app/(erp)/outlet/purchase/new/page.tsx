@@ -51,8 +51,18 @@ type PurchaseItem = {
   subtotal: number;
 };
 
+type Me = {
+  id: number;
+  username: string;
+  fullname: string;
+  role: string;
+  outletId?: number | null;
+};
+
 export default function PurchaseOutletNewPage() {
   const router = useRouter();
+
+  const [me, setMe] = useState<Me | null>(null);
 
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -85,7 +95,18 @@ export default function PurchaseOutletNewPage() {
   const [saving, setSaving] = useState(false);
 
   // =========================================================
-  // LOAD OUTLET + SUPPLIER
+  // ROLE
+  // =========================================================
+
+  const isAdminPusat =
+    me?.role === "ADMIN";
+
+  const isOutletUser =
+    !!me &&
+    me.role !== "ADMIN";
+
+  // =========================================================
+  // LOAD USER + MASTER
   // =========================================================
 
   useEffect(() => {
@@ -96,9 +117,9 @@ export default function PurchaseOutletNewPage() {
     try {
       setLoading(true);
 
-      const [outletRes, supplierRes] =
+      const [meRes, supplierRes] =
         await Promise.all([
-          fetch("/api/outlet", {
+          fetch("/api/me", {
             cache: "no-store",
           }),
 
@@ -107,15 +128,88 @@ export default function PurchaseOutletNewPage() {
           }),
         ]);
 
-      const outletJson = await outletRes.json();
-      const supplierJson = await supplierRes.json();
+      let meJson: any = null;
 
-      if (outletJson.success) {
-        setOutlets(outletJson.data || []);
+      try {
+        meJson = await meRes.json();
+      } catch {
+        meJson = null;
       }
 
+      const supplierJson =
+        await supplierRes.json();
+
+      let currentUser: Me | null = null;
+
+      if (meJson?.success && meJson?.data) {
+        currentUser = meJson.data;
+      } else if (meJson?.data) {
+        currentUser = meJson.data;
+      } else if (meJson?.user) {
+        currentUser = meJson.user;
+      }
+
+      if (!currentUser) {
+        alert("Data user tidak ditemukan");
+        router.push("/outlet/purchase");
+        return;
+      }
+
+      setMe(currentUser);
+
+      // =====================================================
+      // SUPPLIER
+      // =====================================================
+
       if (supplierJson.success) {
-        setSuppliers(supplierJson.data || []);
+        setSuppliers(
+          supplierJson.data || []
+        );
+      }
+
+      // =====================================================
+      // ADMIN PUSAT
+      // =====================================================
+
+      if (currentUser.role === "ADMIN") {
+        const outletRes = await fetch(
+          "/api/outlet",
+          {
+            cache: "no-store",
+          }
+        );
+
+        const outletJson =
+          await outletRes.json();
+
+        if (outletJson.success) {
+          setOutlets(
+            outletJson.data || []
+          );
+        }
+
+        // Admin pusat belum memilih outlet
+        setOutletId("");
+      }
+
+      // =====================================================
+      // USER OUTLET
+      // =====================================================
+
+      else {
+        if (!currentUser.outletId) {
+          alert(
+            "User Anda belum terhubung ke outlet."
+          );
+
+          router.push("/outlet/purchase");
+          return;
+        }
+
+        // Otomatis gunakan outlet user
+        setOutletId(
+          String(currentUser.outletId)
+        );
       }
     } catch (error) {
       console.error(
@@ -123,7 +217,9 @@ export default function PurchaseOutletNewPage() {
         error
       );
 
-      alert("Gagal mengambil data master");
+      alert(
+        "Gagal mengambil data master"
+      );
     } finally {
       setLoading(false);
     }
@@ -154,14 +250,25 @@ export default function PurchaseOutletNewPage() {
         );
       })
       .slice(0, 50);
-  }, [suppliers, supplierSearch]);
+  }, [
+    suppliers,
+    supplierSearch,
+  ]);
+
+  // =========================================================
+  // SELECTED SUPPLIER
+  // =========================================================
 
   const selectedSupplier = useMemo(() => {
     return suppliers.find(
       (supplier) =>
-        supplier.id === Number(supplierId)
+        supplier.id ===
+        Number(supplierId)
     );
-  }, [suppliers, supplierId]);
+  }, [
+    suppliers,
+    supplierId,
+  ]);
 
   // =========================================================
   // PILIH SUPPLIER
@@ -170,7 +277,9 @@ export default function PurchaseOutletNewPage() {
   function handleSelectSupplier(
     supplier: Supplier
   ) {
-    setSupplierId(String(supplier.id));
+    setSupplierId(
+      String(supplier.id)
+    );
 
     setSupplierSearch(
       `${supplier.code} - ${supplier.name}`
@@ -208,7 +317,8 @@ export default function PurchaseOutletNewPage() {
     try {
       setLoadingBarang(true);
 
-      const params = new URLSearchParams();
+      const params =
+        new URLSearchParams();
 
       params.set(
         "outletId",
@@ -222,7 +332,8 @@ export default function PurchaseOutletNewPage() {
         }
       );
 
-      const json = await res.json();
+      const json =
+        await res.json();
 
       if (!json.success) {
         setOutletBarang([]);
@@ -241,13 +352,17 @@ export default function PurchaseOutletNewPage() {
             item.aktif === true
         );
 
-      setOutletBarang(activeBarang);
+      setOutletBarang(
+        activeBarang
+      );
 
       setSelectedBarangId("");
       setBarangSearch("");
       setBarangOpen(false);
       setPrice("");
 
+      // Ketika outlet berganti,
+      // item PO sebelumnya harus dikosongkan.
       setItems([]);
     } catch (error) {
       console.error(
@@ -275,12 +390,16 @@ export default function PurchaseOutletNewPage() {
       .trim();
 
     if (!keyword) {
-      return outletBarang.slice(0, 50);
+      return outletBarang.slice(
+        0,
+        50
+      );
     }
 
     return outletBarang
       .filter((item) => {
-        const barang = item.barang;
+        const barang =
+          item.barang;
 
         return (
           barang.code
@@ -295,7 +414,10 @@ export default function PurchaseOutletNewPage() {
         );
       })
       .slice(0, 50);
-  }, [outletBarang, barangSearch]);
+  }, [
+    outletBarang,
+    barangSearch,
+  ]);
 
   // =========================================================
   // BARANG TERPILIH
@@ -329,7 +451,9 @@ export default function PurchaseOutletNewPage() {
     );
 
     setPrice(
-      String(Number(item.harga || 0))
+      String(
+        Number(item.harga || 0)
+      )
     );
 
     setBarangOpen(false);
@@ -348,12 +472,16 @@ export default function PurchaseOutletNewPage() {
 
   function addItem() {
     if (!outletId) {
-      alert("Pilih outlet terlebih dahulu");
+      alert(
+        "Outlet belum ditentukan"
+      );
       return;
     }
 
     if (!selectedBarangId) {
-      alert("Pilih barang terlebih dahulu");
+      alert(
+        "Pilih barang terlebih dahulu"
+      );
       return;
     }
 
@@ -361,7 +489,9 @@ export default function PurchaseOutletNewPage() {
       outletBarang.find(
         (item) =>
           item.barang.id ===
-          Number(selectedBarangId)
+          Number(
+            selectedBarangId
+          )
       );
 
     if (!selected) {
@@ -371,16 +501,29 @@ export default function PurchaseOutletNewPage() {
       return;
     }
 
-    const itemQty = Number(qty);
-    const itemPrice = Number(price);
+    const itemQty =
+      Number(qty);
 
-    if (!itemQty || itemQty <= 0) {
-      alert("Qty harus lebih dari 0");
+    const itemPrice =
+      Number(price);
+
+    if (
+      !itemQty ||
+      itemQty <= 0
+    ) {
+      alert(
+        "Qty harus lebih dari 0"
+      );
       return;
     }
 
-    if (!itemPrice || itemPrice <= 0) {
-      alert("Harga harus lebih dari 0");
+    if (
+      !itemPrice ||
+      itemPrice <= 0
+    ) {
+      alert(
+        "Harga harus lebih dari 0"
+      );
       return;
     }
 
@@ -392,18 +535,25 @@ export default function PurchaseOutletNewPage() {
       );
 
     if (existingIndex >= 0) {
-      const updated = [...items];
+      const updated =
+        [...items];
 
       const newQty =
-        updated[existingIndex].qty +
-        itemQty;
+        updated[
+          existingIndex
+        ].qty + itemQty;
 
-      updated[existingIndex] = {
-        ...updated[existingIndex],
+      updated[
+        existingIndex
+      ] = {
+        ...updated[
+          existingIndex
+        ],
         qty: newQty,
         price: itemPrice,
         subtotal:
-          newQty * itemPrice,
+          newQty *
+          itemPrice,
       };
 
       setItems(updated);
@@ -411,12 +561,15 @@ export default function PurchaseOutletNewPage() {
       setItems([
         ...items,
         {
-          barangId: selected.barang.id,
-          barang: selected.barang,
+          barangId:
+            selected.barang.id,
+          barang:
+            selected.barang,
           qty: itemQty,
           price: itemPrice,
           subtotal:
-            itemQty * itemPrice,
+            itemQty *
+            itemPrice,
         },
       ]);
     }
@@ -433,24 +586,28 @@ export default function PurchaseOutletNewPage() {
     barangId: number,
     value: string
   ) {
-    const newQty = Number(value);
+    const newQty =
+      Number(value);
 
     setItems((current) =>
-      current.map((item) => {
-        if (
-          item.barangId !==
-          barangId
-        ) {
-          return item;
-        }
+      current.map(
+        (item) => {
+          if (
+            item.barangId !==
+            barangId
+          ) {
+            return item;
+          }
 
-        return {
-          ...item,
-          qty: newQty,
-          subtotal:
-            newQty * item.price,
-        };
-      })
+          return {
+            ...item,
+            qty: newQty,
+            subtotal:
+              newQty *
+              item.price,
+          };
+        }
+      )
     );
   }
 
@@ -462,24 +619,28 @@ export default function PurchaseOutletNewPage() {
     barangId: number,
     value: string
   ) {
-    const newPrice = Number(value);
+    const newPrice =
+      Number(value);
 
     setItems((current) =>
-      current.map((item) => {
-        if (
-          item.barangId !==
-          barangId
-        ) {
-          return item;
-        }
+      current.map(
+        (item) => {
+          if (
+            item.barangId !==
+            barangId
+          ) {
+            return item;
+          }
 
-        return {
-          ...item,
-          price: newPrice,
-          subtotal:
-            item.qty * newPrice,
-        };
-      })
+          return {
+            ...item,
+            price: newPrice,
+            subtotal:
+              item.qty *
+              newPrice,
+          };
+        }
+      )
     );
   }
 
@@ -506,7 +667,9 @@ export default function PurchaseOutletNewPage() {
   const total = useMemo(() => {
     return items.reduce(
       (sum, item) =>
-        sum + item.subtotal,
+        sum +
+        Number(item.qty) *
+          Number(item.price),
       0
     );
   }, [items]);
@@ -520,7 +683,9 @@ export default function PurchaseOutletNewPage() {
   ) {
     return Number(
       value || 0
-    ).toLocaleString("id-ID");
+    ).toLocaleString(
+      "id-ID"
+    );
   }
 
   // =========================================================
@@ -532,34 +697,72 @@ export default function PurchaseOutletNewPage() {
   ) {
     e.preventDefault();
 
+    // =======================================================
+    // VALIDASI OUTLET
+    // =======================================================
+
     if (!outletId) {
-      alert("Outlet wajib dipilih");
+      alert(
+        isAdminPusat
+          ? "Outlet wajib dipilih"
+          : "Outlet user belum ditentukan"
+      );
+
       return;
     }
 
-    if (!supplierId) {
-      alert("Supplier wajib dipilih");
+    // User outlet harus memakai outlet dari session.
+    if (
+      isOutletUser &&
+      me?.outletId &&
+      Number(outletId) !==
+        Number(me.outletId)
+    ) {
+      alert(
+        "Outlet Purchase Order tidak sesuai dengan outlet user"
+      );
+
       return;
     }
+
+    // =======================================================
+    // VALIDASI SUPPLIER
+    // =======================================================
+
+    if (!supplierId) {
+      alert(
+        "Supplier wajib dipilih"
+      );
+
+      return;
+    }
+
+    // =======================================================
+    // VALIDASI ITEM
+    // =======================================================
 
     if (items.length === 0) {
       alert(
         "Minimal tambahkan 1 barang"
       );
+
       return;
     }
 
     const invalidItem =
       items.find(
         (item) =>
-          item.qty <= 0 ||
-          item.price <= 0
+          Number(item.qty) <=
+            0 ||
+          Number(item.price) <=
+            0
       );
 
     if (invalidItem) {
       alert(
         "Qty dan harga semua barang harus valid"
       );
+
       return;
     }
 
@@ -567,41 +770,56 @@ export default function PurchaseOutletNewPage() {
       "Simpan Purchase Order Outlet ini?"
     );
 
-    if (!ok) return;
+    if (!ok) {
+      return;
+    }
 
     try {
       setSaving(true);
 
-      const res = await fetch(
-        "/api/outlet/purchase",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            outletId:
-              Number(outletId),
+      const res =
+        await fetch(
+          "/api/outlet/purchase",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              outletId:
+                Number(
+                  outletId
+                ),
 
-            supplierId:
-              Number(supplierId),
+              supplierId:
+                Number(
+                  supplierId
+                ),
 
-            remarks:
-              remarks.trim() ||
-              null,
+              remarks:
+                remarks.trim() ||
+                null,
 
-            items: items.map(
-              (item) => ({
-                barangId:
-                  item.barangId,
-                qty: item.qty,
-                price: item.price,
-              })
-            ),
-          }),
-        }
-      );
+              items: items.map(
+                (item) => ({
+                  barangId:
+                    item.barangId,
+
+                  qty:
+                    Number(
+                      item.qty
+                    ),
+
+                  price:
+                    Number(
+                      item.price
+                    ),
+                })
+              ),
+            }),
+          }
+        );
 
       const json =
         await res.json();
@@ -614,6 +832,7 @@ export default function PurchaseOutletNewPage() {
           json.message ||
             "Gagal membuat Purchase Order Outlet"
         );
+
         return;
       }
 
@@ -668,7 +887,9 @@ export default function PurchaseOutletNewPage() {
   return (
     <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
 
-      {/* HEADER */}
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
 
       <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
@@ -687,7 +908,9 @@ export default function PurchaseOutletNewPage() {
           </button>
 
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#497F70] text-white shadow-sm">
-            <ShoppingCart size={23} />
+            <ShoppingCart
+              size={23}
+            />
           </div>
 
           <div>
@@ -705,11 +928,15 @@ export default function PurchaseOutletNewPage() {
       </div>
 
       <form
-        onSubmit={handleSubmit}
+        onSubmit={
+          handleSubmit
+        }
         className="space-y-6"
       >
 
-        {/* INFORMASI PO */}
+        {/* ===================================================
+            INFORMASI PO
+        =================================================== */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
@@ -720,55 +947,74 @@ export default function PurchaseOutletNewPage() {
             </h2>
 
             <p className="mt-1 text-sm text-gray-500">
-              Tentukan outlet dan supplier
+              {isAdminPusat
+                ? "Tentukan outlet dan supplier"
+                : "Tentukan supplier untuk Purchase Order outlet"}
             </p>
 
           </div>
 
-          <div className="grid grid-cols-1 gap-5 p-5 md:grid-cols-2">
+          <div
+            className={`grid grid-cols-1 gap-5 p-5 ${
+              isAdminPusat
+                ? "md:grid-cols-2"
+                : "md:grid-cols-1"
+            }`}
+          >
 
-            {/* OUTLET */}
+            {/* =================================================
+                OUTLET
+                HANYA ADMIN PUSAT
+            ================================================= */}
 
-            <div>
+            {isAdminPusat && (
+              <div>
 
-              <label className="mb-2 block text-sm font-semibold text-gray-700">
-                Outlet
-                <span className="ml-1 text-red-500">
-                  *
-                </span>
-              </label>
+                <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  Outlet
+                  <span className="ml-1 text-red-500">
+                    *
+                  </span>
+                </label>
 
-              <select
-                value={outletId}
-                onChange={(e) =>
-                  setOutletId(
-                    e.target.value
-                  )
-                }
-                className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
-              >
+                <select
+                  value={outletId}
+                  onChange={(e) =>
+                    setOutletId(
+                      e.target.value
+                    )
+                  }
+                  className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                >
 
-                <option value="">
-                  Pilih Outlet
-                </option>
+                  <option value="">
+                    Pilih Outlet
+                  </option>
 
-                {outlets.map(
-                  (outlet) => (
-                    <option
-                      key={outlet.id}
-                      value={outlet.id}
-                    >
-                      {outlet.code} -{" "}
-                      {outlet.name}
-                    </option>
-                  )
-                )}
+                  {outlets.map(
+                    (outlet) => (
+                      <option
+                        key={
+                          outlet.id
+                        }
+                        value={
+                          outlet.id
+                        }
+                      >
+                        {outlet.code} -{" "}
+                        {outlet.name}
+                      </option>
+                    )
+                  )}
 
-              </select>
+                </select>
 
-            </div>
+              </div>
+            )}
 
-            {/* SUPPLIER SEARCHABLE DROPDOWN */}
+            {/* =================================================
+                SUPPLIER
+            ================================================= */}
 
             <div className="relative">
 
@@ -788,16 +1034,27 @@ export default function PurchaseOutletNewPage() {
 
                 <input
                   type="text"
-                  value={supplierSearch}
+                  value={
+                    supplierSearch
+                  }
                   onFocus={() =>
-                    setSupplierOpen(true)
+                    setSupplierOpen(
+                      true
+                    )
                   }
                   onChange={(e) => {
                     setSupplierSearch(
-                      e.target.value
+                      e.target
+                        .value
                     );
-                    setSupplierId("");
-                    setSupplierOpen(true);
+
+                    setSupplierId(
+                      ""
+                    );
+
+                    setSupplierOpen(
+                      true
+                    );
                   }}
                   placeholder="Ketik kode / nama supplier..."
                   className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-10 pr-10 text-sm outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
@@ -820,7 +1077,9 @@ export default function PurchaseOutletNewPage() {
                   <div
                     className="fixed inset-0 z-20"
                     onClick={() =>
-                      setSupplierOpen(false)
+                      setSupplierOpen(
+                        false
+                      )
                     }
                   />
 
@@ -833,7 +1092,9 @@ export default function PurchaseOutletNewPage() {
                       </div>
                     ) : (
                       filteredSuppliers.map(
-                        (supplier) => (
+                        (
+                          supplier
+                        ) => (
                           <button
                             key={
                               supplier.id
@@ -868,7 +1129,9 @@ export default function PurchaseOutletNewPage() {
                                 supplier.id
                               ) && (
                               <Check
-                                size={18}
+                                size={
+                                  18
+                                }
                                 className="text-[#497F70]"
                               />
                             )}
@@ -886,14 +1149,21 @@ export default function PurchaseOutletNewPage() {
               {selectedSupplier && (
                 <p className="mt-1 text-xs text-[#497F70]">
                   Supplier dipilih:{" "}
-                  {selectedSupplier.code} -{" "}
-                  {selectedSupplier.name}
+                  {
+                    selectedSupplier.code
+                  }{" "}
+                  -{" "}
+                  {
+                    selectedSupplier.name
+                  }
                 </p>
               )}
 
             </div>
 
-            {/* KETERANGAN */}
+            {/* =================================================
+                KETERANGAN
+            ================================================= */}
 
             <div className="md:col-span-2">
 
@@ -902,7 +1172,9 @@ export default function PurchaseOutletNewPage() {
               </label>
 
               <textarea
-                value={remarks}
+                value={
+                  remarks
+                }
                 onChange={(e) =>
                   setRemarks(
                     e.target.value
@@ -919,7 +1191,9 @@ export default function PurchaseOutletNewPage() {
 
         </div>
 
-        {/* TAMBAH BARANG */}
+        {/* =====================================================
+            TAMBAH BARANG
+        ===================================================== */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
@@ -969,7 +1243,8 @@ export default function PurchaseOutletNewPage() {
 
               </div>
 
-            ) : outletBarang.length === 0 ? (
+            ) : outletBarang.length ===
+              0 ? (
 
               <div className="rounded-xl border border-dashed border-[#CFE0D7] bg-[#F8FBF9] p-8 text-center">
 
@@ -992,7 +1267,7 @@ export default function PurchaseOutletNewPage() {
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
 
-                {/* BARANG SEARCHABLE DROPDOWN */}
+                {/* BARANG */}
 
                 <div className="relative lg:col-span-5">
 
@@ -1009,20 +1284,27 @@ export default function PurchaseOutletNewPage() {
 
                     <input
                       type="text"
-                      value={barangSearch}
+                      value={
+                        barangSearch
+                      }
                       onFocus={() =>
-                        setBarangOpen(true)
+                        setBarangOpen(
+                          true
+                        )
                       }
                       onChange={(e) => {
                         setBarangSearch(
-                          e.target.value
+                          e.target
+                            .value
                         );
 
                         setSelectedBarangId(
                           ""
                         );
 
-                        setPrice("");
+                        setPrice(
+                          ""
+                        );
 
                         setBarangOpen(
                           true
@@ -1049,7 +1331,9 @@ export default function PurchaseOutletNewPage() {
                       <div
                         className="fixed inset-0 z-20"
                         onClick={() =>
-                          setBarangOpen(false)
+                          setBarangOpen(
+                            false
+                          )
                         }
                       />
 
@@ -1065,10 +1349,14 @@ export default function PurchaseOutletNewPage() {
                         ) : (
 
                           filteredBarang.map(
-                            (item) => (
+                            (
+                              item
+                            ) => (
                               <button
                                 key={
-                                  item.barang.id
+                                  item
+                                    .barang
+                                    .id
                                 }
                                 type="button"
                                 onClick={() =>
@@ -1143,7 +1431,8 @@ export default function PurchaseOutletNewPage() {
                                     Rp{" "}
                                     {formatRupiah(
                                       Number(
-                                        item.harga ||
+                                        item
+                                          .harga ||
                                           0
                                       )
                                     )}
@@ -1158,7 +1447,9 @@ export default function PurchaseOutletNewPage() {
                                       .id
                                   ) && (
                                   <Check
-                                    size={18}
+                                    size={
+                                      18
+                                    }
                                     className="ml-2 shrink-0 text-[#497F70]"
                                   />
                                 )}
@@ -1175,7 +1466,10 @@ export default function PurchaseOutletNewPage() {
                   )}
 
                   <p className="mt-1 text-xs text-gray-400">
-                    {outletBarang.length} barang tersedia
+                    {
+                      outletBarang.length
+                    }{" "}
+                    barang tersedia
                   </p>
 
                 </div>
@@ -1195,7 +1489,8 @@ export default function PurchaseOutletNewPage() {
                     value={qty}
                     onChange={(e) =>
                       setQty(
-                        e.target.value
+                        e.target
+                          .value
                       )
                     }
                     className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm outline-none focus:border-[#497F70]"
@@ -1218,7 +1513,8 @@ export default function PurchaseOutletNewPage() {
                     value={price}
                     onChange={(e) =>
                       setPrice(
-                        e.target.value
+                        e.target
+                          .value
                       )
                     }
                     placeholder="0"
@@ -1245,10 +1541,14 @@ export default function PurchaseOutletNewPage() {
 
                   <button
                     type="button"
-                    onClick={addItem}
+                    onClick={
+                      addItem
+                    }
                     className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#497F70] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#3D6D60]"
                   >
-                    <Plus size={17} />
+                    <Plus
+                      size={17}
+                    />
                     Tambah
                   </button>
 
@@ -1262,7 +1562,9 @@ export default function PurchaseOutletNewPage() {
 
         </div>
 
-        {/* ITEM TABLE */}
+        {/* =====================================================
+            DETAIL BARANG
+        ===================================================== */}
 
         <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
@@ -1275,7 +1577,10 @@ export default function PurchaseOutletNewPage() {
               </h2>
 
               <p className="mt-1 text-sm text-gray-500">
-                {items.length} barang ditambahkan
+                {
+                  items.length
+                }{" "}
+                barang ditambahkan
               </p>
 
             </div>
@@ -1288,7 +1593,9 @@ export default function PurchaseOutletNewPage() {
 
               <p className="text-xl font-bold text-[#18352D]">
                 Rp{" "}
-                {formatRupiah(total)}
+                {formatRupiah(
+                  total
+                )}
               </p>
 
             </div>
@@ -1337,12 +1644,15 @@ export default function PurchaseOutletNewPage() {
 
               <tbody>
 
-                {items.length === 0 ? (
+                {items.length ===
+                0 ? (
 
                   <tr>
 
                     <td
-                      colSpan={7}
+                      colSpan={
+                        7
+                      }
                       className="px-5 py-14 text-center"
                     >
 
@@ -1351,7 +1661,9 @@ export default function PurchaseOutletNewPage() {
                         <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#EAF3EF] text-[#497F70]">
 
                           <ShoppingCart
-                            size={25}
+                            size={
+                              25
+                            }
                           />
 
                         </div>
@@ -1373,7 +1685,10 @@ export default function PurchaseOutletNewPage() {
                 ) : (
 
                   items.map(
-                    (item, index) => (
+                    (
+                      item,
+                      index
+                    ) => (
 
                       <tr
                         key={
@@ -1383,7 +1698,10 @@ export default function PurchaseOutletNewPage() {
                       >
 
                         <td className="px-5 py-4 text-gray-500">
-                          {index + 1}
+                          {
+                            index +
+                            1
+                          }
                         </td>
 
                         <td className="px-5 py-4">
@@ -1429,7 +1747,8 @@ export default function PurchaseOutletNewPage() {
                             ) =>
                               updateQty(
                                 item.barangId,
-                                e.target
+                                e
+                                  .target
                                   .value
                               )
                             }
@@ -1452,7 +1771,8 @@ export default function PurchaseOutletNewPage() {
                             ) =>
                               updatePrice(
                                 item.barangId,
-                                e.target
+                                e
+                                  .target
                                   .value
                               )
                             }
@@ -1464,7 +1784,12 @@ export default function PurchaseOutletNewPage() {
                         <td className="px-5 py-4 text-right font-semibold text-[#18352D]">
                           Rp{" "}
                           {formatRupiah(
-                            item.subtotal
+                            Number(
+                              item.qty
+                            ) *
+                              Number(
+                                item.price
+                              )
                           )}
                         </td>
 
@@ -1481,7 +1806,9 @@ export default function PurchaseOutletNewPage() {
                             title="Hapus barang"
                           >
                             <Trash2
-                              size={16}
+                              size={
+                                16
+                              }
                             />
                           </button>
 
@@ -1496,14 +1823,17 @@ export default function PurchaseOutletNewPage() {
 
               </tbody>
 
-              {items.length > 0 && (
+              {items.length >
+                0 && (
 
                 <tfoot>
 
                   <tr className="bg-[#F5F8F6]">
 
                     <td
-                      colSpan={5}
+                      colSpan={
+                        5
+                      }
                       className="px-5 py-5 text-right font-bold text-[#18352D]"
                     >
                       TOTAL
@@ -1530,7 +1860,9 @@ export default function PurchaseOutletNewPage() {
 
         </div>
 
-        {/* ACTION */}
+        {/* =====================================================
+            ACTION
+        ===================================================== */}
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
 
@@ -1541,7 +1873,9 @@ export default function PurchaseOutletNewPage() {
                 "/outlet/purchase"
               )
             }
-            disabled={saving}
+            disabled={
+              saving
+            }
             className="rounded-xl border border-[#D5E5DC] bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:bg-[#F5F8F6] disabled:opacity-50"
           >
             Batal
@@ -1569,7 +1903,9 @@ export default function PurchaseOutletNewPage() {
               </>
             ) : (
               <>
-                <Save size={17} />
+                <Save
+                  size={17}
+                />
 
                 Simpan Purchase Outlet
               </>

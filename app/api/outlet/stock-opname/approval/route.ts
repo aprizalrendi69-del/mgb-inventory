@@ -80,14 +80,13 @@ async function getLoginUser() {
   const role = String(user.role).toUpperCase();
 
   // =====================================================
-  // ROLE
+  // ROLE YANG BOLEH AKSES
   // =====================================================
 
   if (
     role !== "ADMIN" &&
     role !== "MANAGER" &&
-    role !== "OUTLET_ADMIN" &&
-    role !== "ADMIN_OUTLET"
+    role !== "OUTLET_ADMIN"
   ) {
     return {
       error:
@@ -96,13 +95,12 @@ async function getLoginUser() {
     } as const;
   }
 
-  // =====================================================
-  // ADMIN OUTLET WAJIB PUNYA OUTLET
-  // =====================================================
-
   const isOutletAdmin =
-    role === "OUTLET_ADMIN" ||
-    role === "ADMIN_OUTLET";
+    role === "OUTLET_ADMIN";
+
+  // =====================================================
+  // OUTLET ADMIN WAJIB TERHUBUNG OUTLET
+  // =====================================================
 
   if (
     isOutletAdmin &&
@@ -127,16 +125,16 @@ async function getLoginUser() {
 //
 // ADMIN
 // -> semua outlet
-// -> bisa filter outlet
-// -> bisa filter tanggal
-// -> mendapatkan daftar outlet
+// -> filter outlet
+// -> filter tanggal
+// -> filter type
+// -> filter status
 //
 // MANAGER
 // -> semua outlet
-// -> bisa filter outlet
-// -> bisa filter tanggal
+// -> read only
 //
-// OUTLET_ADMIN / ADMIN_OUTLET
+// OUTLET_ADMIN
 // -> hanya outlet sendiri
 // =====================================================
 
@@ -183,6 +181,22 @@ export async function GET(
       searchParams.get("dateTo")?.trim() ||
       "";
 
+    const requestedType =
+      searchParams
+        .get("type")
+        ?.trim()
+        .toUpperCase() || "";
+
+    const requestedStatus =
+      searchParams
+        .get("status")
+        ?.trim()
+        .toUpperCase() || "";
+
+    // =================================================
+    // WHERE
+    // =================================================
+
     const where: any = {
       outletId: {
         not: null,
@@ -194,9 +208,8 @@ export async function GET(
     // =================================================
 
     if (isOutletAdmin) {
-      where.outletId = Number(
-        user.outletId
-      );
+      where.outletId =
+        Number(user.outletId);
     }
 
     // =================================================
@@ -216,10 +229,30 @@ export async function GET(
     }
 
     // =================================================
-    // FILTER TANGGAL
-    //
-    // dateFrom = awal hari
-    // dateTo   = akhir hari
+    // TYPE
+    // =================================================
+
+    if (
+      requestedType === "WEEKLY" ||
+      requestedType === "MONTHLY"
+    ) {
+      where.type = requestedType;
+    }
+
+    // =================================================
+    // STATUS
+    // =================================================
+
+    if (
+      requestedStatus === "COUNTING" ||
+      requestedStatus === "COMPLETED" ||
+      requestedStatus === "APPROVED"
+    ) {
+      where.status = requestedStatus;
+    }
+
+    // =================================================
+    // DATE FILTER
     // =================================================
 
     if (dateFrom || dateTo) {
@@ -246,15 +279,14 @@ export async function GET(
       }
 
       if (
-        Object.keys(where.date).length ===
-        0
+        Object.keys(where.date).length === 0
       ) {
         delete where.date;
       }
     }
 
     // =================================================
-    // DATA OPNAME
+    // DATA
     // =================================================
 
     const data =
@@ -299,9 +331,6 @@ export async function GET(
 
     // =================================================
     // LIST OUTLET
-    //
-    // Hanya Admin Pusat / Manager.
-    // Frontend akan menggunakan ini untuk dropdown.
     // =================================================
 
     let outlets: any[] = [];
@@ -331,16 +360,20 @@ export async function GET(
         outletId: user.outletId,
       },
 
-      // Outlet user sendiri
       outlet:
         isOutletAdmin
           ? user.outlet || null
           : null,
 
-      // Dropdown outlet
       outlets,
 
       data,
+
+      meta: {
+        approvalType: "MONTHLY",
+        weeklyRequiresApproval: false,
+        adminCanDeleteAll: true,
+      },
     });
   } catch (error: any) {
     console.error(
@@ -365,13 +398,17 @@ export async function GET(
 // =====================================================
 // POST APPROVE
 //
-// COUNTING
-//      ↓
-// APPROVED
-//      ↓
-// UPDATE OutletStock
+// HANYA MONTHLY
 //
-// TIDAK UPDATE Barang.stock PUSAT
+// COUNTING
+//   ↓
+// APPROVED
+//   ↓
+// outletStock.stock = physicalQty
+//
+// WEEKLY
+//   ↓
+// TIDAK BOLEH APPROVE
 // =====================================================
 
 export async function POST(
@@ -394,9 +431,12 @@ export async function POST(
 
     const {
       user,
-      role,
       isOutletAdmin,
     } = login;
+
+    // =================================================
+    // BODY
+    // =================================================
 
     let body: any;
 
@@ -433,6 +473,10 @@ export async function POST(
         }
       );
     }
+
+    // =================================================
+    // AMBIL OPNAME
+    // =================================================
 
     const opname =
       await prisma.stockOpname.findUnique({
@@ -478,6 +522,10 @@ export async function POST(
         }
       );
     }
+
+    // =================================================
+    // WAJIB OUTLET
+    // =================================================
 
     if (!opname.outletId) {
       return NextResponse.json(
@@ -529,18 +577,42 @@ export async function POST(
     }
 
     // =================================================
+    // TYPE
+    // =================================================
+
+    const opnameType =
+      String(
+        opname.type
+      ).toUpperCase();
+
+    if (opnameType !== "MONTHLY") {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Stock Opname Mingguan tidak memerlukan approval",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =================================================
     // STATUS
     // =================================================
 
     const currentStatus =
-      String(opname.status).toUpperCase();
+      String(
+        opname.status
+      ).toUpperCase();
 
     if (currentStatus === "APPROVED") {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Stock opname ini sudah disetujui",
+            "Stock Opname Bulanan ini sudah disetujui",
         },
         {
           status: 400,
@@ -553,13 +625,17 @@ export async function POST(
         {
           success: false,
           message:
-            `Stock opname tidak dapat diapprove karena status saat ini ${opname.status}`,
+            `Stock Opname Bulanan tidak dapat diapprove karena status saat ini ${opname.status}`,
         },
         {
           status: 400,
         }
       );
     }
+
+    // =================================================
+    // VALIDASI ITEM
+    // =================================================
 
     if (
       !opname.items ||
@@ -576,10 +652,6 @@ export async function POST(
         }
       );
     }
-
-    // =================================================
-    // VALIDASI ITEM
-    // =================================================
 
     const barangIdSet =
       new Set<number>();
@@ -604,7 +676,9 @@ export async function POST(
         );
       }
 
-      if (barangIdSet.has(barangId)) {
+      if (
+        barangIdSet.has(barangId)
+      ) {
         return NextResponse.json(
           {
             success: false,
@@ -619,9 +693,10 @@ export async function POST(
 
       barangIdSet.add(barangId);
 
-      const physicalQty = Number(
-        item.physicalQty ?? 0
-      );
+      const physicalQty =
+        Number(
+          item.physicalQty ?? 0
+        );
 
       if (
         !Number.isFinite(
@@ -633,7 +708,10 @@ export async function POST(
           {
             success: false,
             message:
-              `Qty fisik barang ${item.barang?.name || item.barangId} tidak valid`,
+              `Qty fisik barang ${
+                item.barang?.name ||
+                item.barangId
+              } tidak valid`,
           },
           {
             status: 400,
@@ -707,12 +785,23 @@ export async function POST(
 
           if (
             String(
+              currentOpname.type
+            ).toUpperCase() !==
+            "MONTHLY"
+          ) {
+            throw new Error(
+              "Stock Opname Mingguan tidak memerlukan approval"
+            );
+          }
+
+          if (
+            String(
               currentOpname.status
             ).toUpperCase() !==
             "COUNTING"
           ) {
             throw new Error(
-              "Stock opname sudah diproses"
+              "Stock Opname Bulanan sudah diproses"
             );
           }
 
@@ -724,6 +813,10 @@ export async function POST(
               "Stock opname tidak memiliki barang"
             );
           }
+
+          // =========================================
+          // UPDATE STOCK OUTLET
+          // =========================================
 
           for (
             const item of currentOpname.items
@@ -780,6 +873,10 @@ export async function POST(
             });
           }
 
+          // =========================================
+          // APPROVED
+          // =========================================
+
           return await tx.stockOpname.update({
             where: {
               id: currentOpname.id,
@@ -818,10 +915,20 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
+
       message:
-        "Stock Opname berhasil disetujui dan stock outlet telah diperbarui",
+        "Stock Opname Bulanan berhasil disetujui dan stock outlet telah diperbarui",
+
       data: result,
+
       outlet: result.outlet,
+
+      meta: {
+        type: "MONTHLY",
+        status: "APPROVED",
+        stockChanged: true,
+        centralStockChanged: false,
+      },
     });
   } catch (error: any) {
     console.error(
@@ -848,7 +955,10 @@ export async function POST(
 //
 // HANYA ADMIN PUSAT
 //
-// HANYA STATUS COUNTING
+// ADMIN PUSAT BOLEH HAPUS:
+// -> COUNTING
+// -> COMPLETED
+// -> APPROVED
 //
 // DELETE TIDAK MENGUBAH STOCK OUTLET
 // =====================================================
@@ -871,7 +981,10 @@ export async function DELETE(
       );
     }
 
-    const { user, role } = login;
+    const {
+      user,
+      role,
+    } = login;
 
     // =================================================
     // HANYA ADMIN PUSAT
@@ -894,7 +1007,9 @@ export async function DELETE(
       new URL(req.url);
 
     const opnameId = Number(
-      searchParams.get("opnameId") ?? 0
+      searchParams.get(
+        "opnameId"
+      ) ?? 0
     );
 
     if (
@@ -926,6 +1041,7 @@ export async function DELETE(
         select: {
           id: true,
           code: true,
+          type: true,
           status: true,
           outletId: true,
         },
@@ -945,31 +1061,16 @@ export async function DELETE(
     }
 
     // =================================================
-    // JANGAN HAPUS APPROVED
-    // =================================================
-
-    if (
-      String(opname.status).toUpperCase() !==
-      "COUNTING"
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Stock opname yang sudah diproses tidak dapat dihapus",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    // =================================================
     // DELETE
     //
-    // Jika relasi StockOpnameItem sudah memakai
-    // onDelete: Cascade, delete parent akan sekaligus
-    // menghapus detail.
+    // TIDAK ADA LAGI PEMBATASAN STATUS.
+    //
+    // ADMIN PUSAT BOLEH HAPUS:
+    // COUNTING
+    // COMPLETED
+    // APPROVED
+    //
+    // Stock outlet tidak disentuh.
     // =================================================
 
     await prisma.stockOpname.delete({
@@ -979,11 +1080,12 @@ export async function DELETE(
     });
 
     console.log(
-      `STOCK OPNAME DELETED: ${opname.code} by user ${user.id}`
+      `STOCK OPNAME DELETED: ${opname.code} (${opname.type}/${opname.status}) by user ${user.id}`
     );
 
     return NextResponse.json({
       success: true,
+
       message:
         `Stock Opname ${opname.code} berhasil dihapus`,
     });

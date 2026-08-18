@@ -8,6 +8,7 @@ import { cookies } from "next/headers";
 
 async function getLoginUser() {
   const cookieStore = await cookies();
+
   const session = cookieStore.get("erp-session");
 
   if (!session) {
@@ -79,14 +80,13 @@ async function getLoginUser() {
 
   const role = String(user.role).toUpperCase();
 
-  // =====================================================
-  // ROLE YANG BOLEH AKSES
-  // =====================================================
+  const isAdminPusat = role === "ADMIN";
 
-  if (
-    role !== "OUTLET_ADMIN" &&
-    role !== "ADMIN"
-  ) {
+  const isAdminOutlet =
+    role === "ADMIN_OUTLET" ||
+    role === "OUTLET_ADMIN";
+
+  if (!isAdminPusat && !isAdminOutlet) {
     return {
       error:
         "Anda tidak memiliki akses stock opname outlet",
@@ -94,12 +94,8 @@ async function getLoginUser() {
     } as const;
   }
 
-  // =====================================================
-  // OUTLET ADMIN WAJIB TERHUBUNG OUTLET
-  // =====================================================
-
   if (
-    role === "OUTLET_ADMIN" &&
+    isAdminOutlet &&
     (!user.outletId || !user.outlet)
   ) {
     return {
@@ -116,20 +112,16 @@ async function getLoginUser() {
 }
 
 // =====================================================
-// GET STOCK OUTLET UNTUK OPNAME
+// GET STOCK OUTLET
 //
 // ADMIN
-// -> bisa melihat semua outlet
-// -> bisa filter outletId
+// -> dapat pilih outlet
 //
-// OUTLET_ADMIN
+// ADMIN_OUTLET / OUTLET_ADMIN
 // -> hanya outlet sendiri
-// -> tidak bisa mengganti outlet
 // =====================================================
 
-export async function GET(
-  req: NextRequest
-) {
+export async function GET(req: NextRequest) {
   try {
     const login = await getLoginUser();
 
@@ -147,8 +139,8 @@ export async function GET(
 
     const { user, role } = login;
 
-    const { searchParams } =
-      new URL(req.url);
+    const searchParams =
+      new URL(req.url).searchParams;
 
     const requestedOutletId = Number(
       searchParams.get("outletId") ?? 0
@@ -157,28 +149,25 @@ export async function GET(
     const where: any = {};
 
     // =================================================
-    // OUTLET ADMIN
+    // ADMIN OUTLET
     // =================================================
 
-    if (role === "OUTLET_ADMIN") {
-      where.outletId = Number(
-        user.outletId
-      );
+    if (
+      role === "ADMIN_OUTLET" ||
+      role === "OUTLET_ADMIN"
+    ) {
+      where.outletId = Number(user.outletId);
     }
 
     // =================================================
     // ADMIN PUSAT
-    // =================================================
-    // Admin boleh melihat semua outlet.
-    // Jika outletId dikirim, filter berdasarkan outlet.
     // =================================================
 
     if (
       role === "ADMIN" &&
       requestedOutletId > 0
     ) {
-      where.outletId =
-        requestedOutletId;
+      where.outletId = requestedOutletId;
     }
 
     const stocks =
@@ -212,7 +201,6 @@ export async function GET(
               name: "asc",
             },
           },
-
           {
             barang: {
               name: "asc",
@@ -220,6 +208,41 @@ export async function GET(
           },
         ],
       });
+
+    let activeOutlet = null;
+
+    // =================================================
+    // OUTLET ADMIN
+    // =================================================
+
+    if (
+      role === "ADMIN_OUTLET" ||
+      role === "OUTLET_ADMIN"
+    ) {
+      activeOutlet = user.outlet || null;
+    }
+
+    // =================================================
+    // ADMIN PUSAT
+    // =================================================
+
+    if (
+      role === "ADMIN" &&
+      requestedOutletId > 0
+    ) {
+      activeOutlet =
+        await prisma.outlet.findUnique({
+          where: {
+            id: requestedOutletId,
+          },
+
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        });
+    }
 
     return NextResponse.json({
       success: true,
@@ -231,12 +254,7 @@ export async function GET(
         outletId: user.outletId,
       },
 
-      // Admin pusat mendapatkan null karena
-      // outlet bisa dipilih dari filter.
-      outlet:
-        role === "OUTLET_ADMIN"
-          ? user.outlet || null
-          : null,
+      outlet: activeOutlet,
 
       data: stocks,
     });
@@ -251,7 +269,7 @@ export async function GET(
         success: false,
         message:
           error?.message ||
-          "Gagal mengambil stock opname",
+          "Gagal mengambil stock outlet",
       },
       {
         status: 500,
@@ -263,19 +281,18 @@ export async function GET(
 // =====================================================
 // POST CREATE STOCK OPNAME
 //
-// ADMIN
-// -> wajib memilih outlet
+// WEEKLY
+// -> COMPLETED
+// -> snapshot fisik mingguan
+// -> tidak mengubah stock
 //
-// OUTLET_ADMIN
-// -> otomatis menggunakan outlet session
-// -> tidak perlu mengirim outletId
-//
-// CREATE = COUNTING
+// MONTHLY
+// -> COUNTING
+// -> menunggu approval
+// -> tidak mengubah stock sebelum approval
 // =====================================================
 
-export async function POST(
-  req: NextRequest
-) {
+export async function POST(req: NextRequest) {
   try {
     const login = await getLoginUser();
 
@@ -305,7 +322,8 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message: "Body request tidak valid",
+          message:
+            "Body request tidak valid",
         },
         {
           status: 400,
@@ -317,9 +335,33 @@ export async function POST(
       body?.outletId ?? 0
     );
 
+    const type = String(
+      body?.type ?? ""
+    ).toUpperCase();
+
     const items = Array.isArray(body?.items)
       ? body.items
       : [];
+
+    // =================================================
+    // VALIDASI TYPE
+    // =================================================
+
+    if (
+      type !== "WEEKLY" &&
+      type !== "MONTHLY"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Jenis stock opname wajib dipilih: WEEKLY atau MONTHLY",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
     // =================================================
     // VALIDASI ITEMS
@@ -344,17 +386,12 @@ export async function POST(
 
     let outletId: number;
 
-    // -------------------------------------------------
-    // OUTLET ADMIN
-    // -------------------------------------------------
-    // Tidak peduli body mengirim outletId atau tidak.
-    // Outlet selalu berasal dari session.
-    // -------------------------------------------------
+    const isAdminOutlet =
+      role === "ADMIN_OUTLET" ||
+      role === "OUTLET_ADMIN";
 
-    if (role === "OUTLET_ADMIN") {
-      outletId = Number(
-        user.outletId
-      );
+    if (isAdminOutlet) {
+      outletId = Number(user.outletId);
 
       if (
         !Number.isInteger(outletId) ||
@@ -372,8 +409,9 @@ export async function POST(
         );
       }
 
-      // Jika mencoba mengirim outlet lain
-      // tetap ditolak.
+      // Admin outlet hanya boleh opname
+      // outlet miliknya sendiri.
+
       if (
         requestedOutletId > 0 &&
         requestedOutletId !== outletId
@@ -389,13 +427,11 @@ export async function POST(
           }
         );
       }
-    }
+    } else {
+      // =================================================
+      // ADMIN PUSAT
+      // =================================================
 
-    // -------------------------------------------------
-    // ADMIN PUSAT
-    // -------------------------------------------------
-
-    else {
       if (
         !Number.isInteger(
           requestedOutletId
@@ -414,8 +450,7 @@ export async function POST(
         );
       }
 
-      outletId =
-        requestedOutletId;
+      outletId = requestedOutletId;
     }
 
     // =================================================
@@ -432,6 +467,7 @@ export async function POST(
           id: true,
           code: true,
           name: true,
+          active: true,
         },
       });
 
@@ -444,6 +480,19 @@ export async function POST(
         },
         {
           status: 404,
+        }
+      );
+    }
+
+    if (!outlet.active) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Outlet sedang tidak aktif",
+        },
+        {
+          status: 400,
         }
       );
     }
@@ -466,6 +515,7 @@ export async function POST(
           index,
           stockId,
           physicalQty,
+
           note:
             item?.note !== undefined &&
             item?.note !== null
@@ -493,7 +543,9 @@ export async function POST(
         {
           success: false,
           message:
-            `Stock ID pada item ke-${invalidStock.index + 1} tidak valid`,
+            `Stock ID pada item ke-${
+              invalidStock.index + 1
+            } tidak valid`,
         },
         {
           status: 400,
@@ -502,7 +554,7 @@ export async function POST(
     }
 
     // =================================================
-    // VALIDASI PHYSICAL QTY
+    // VALIDASI QTY
     // =================================================
 
     const invalidQty =
@@ -519,7 +571,9 @@ export async function POST(
         {
           success: false,
           message:
-            `Qty fisik pada item ke-${invalidQty.index + 1} tidak valid`,
+            `Qty fisik pada item ke-${
+              invalidQty.index + 1
+            } tidak valid`,
         },
         {
           status: 400,
@@ -528,7 +582,7 @@ export async function POST(
     }
 
     // =================================================
-    // CEK DUPLIKAT STOCK
+    // DUPLIKAT STOCK
     // =================================================
 
     const stockIdSet = new Set(
@@ -557,7 +611,7 @@ export async function POST(
       Array.from(stockIdSet);
 
     // =================================================
-    // AMBIL STOCK BERDASARKAN OUTLET
+    // AMBIL STOCK
     // =================================================
 
     const stocks =
@@ -604,11 +658,10 @@ export async function POST(
     // BARANG ID UNIK
     // =================================================
 
-    const barangIds =
-      stocks.map(
-        (stock) =>
-          Number(stock.barangId)
-      );
+    const barangIds = stocks.map(
+      (stock) =>
+        Number(stock.barangId)
+    );
 
     const barangIdSet =
       new Set(barangIds);
@@ -625,6 +678,65 @@ export async function POST(
         },
         {
           status: 400,
+        }
+      );
+    }
+
+    // =================================================
+    // CEGAH OPNAME GANDA DI HARI YANG SAMA
+    //
+    // Supaya satu outlet tidak memiliki dua
+    // snapshot WEEKLY / MONTHLY pada hari yang sama.
+    // =================================================
+
+    const todayStart = new Date();
+
+    todayStart.setHours(
+      0,
+      0,
+      0,
+      0
+    );
+
+    const tomorrow = new Date(
+      todayStart
+    );
+
+    tomorrow.setDate(
+      tomorrow.getDate() + 1
+    );
+
+    const existingToday =
+      await prisma.stockOpname.findFirst({
+        where: {
+          outletId,
+          type:
+            type as
+              | "WEEKLY"
+              | "MONTHLY",
+          date: {
+            gte: todayStart,
+            lt: tomorrow,
+          },
+        },
+
+        select: {
+          id: true,
+          code: true,
+          status: true,
+        },
+      });
+
+    if (existingToday) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            `Stock Opname ${type} untuk outlet ini sudah dibuat hari ini (${existingToday.code})`,
+          data: existingToday,
+        },
+        {
+          status: 409,
         }
       );
     }
@@ -655,31 +767,27 @@ export async function POST(
       );
 
     // =================================================
-    // CREATE
+    // STATUS
+    // =================================================
+
+    const initialStatus =
+      type === "WEEKLY"
+        ? "COMPLETED"
+        : "COUNTING";
+
+    // =================================================
+    // CREATE STOCK OPNAME
+    //
+    // PENTING:
+    // Tidak mengubah outletStock.stock.
+    //
+    // Stock tetap merupakan system stock.
+    // Opname hanya menyimpan snapshot fisik.
     // =================================================
 
     const result =
       await prisma.$transaction(
         async (tx) => {
-          const currentOutlet =
-            await tx.outlet.findUnique({
-              where: {
-                id: outletId,
-              },
-
-              select: {
-                id: true,
-                code: true,
-                name: true,
-              },
-            });
-
-          if (!currentOutlet) {
-            throw new Error(
-              "Outlet tidak ditemukan"
-            );
-          }
-
           const currentStocks =
             await tx.outletStock.findMany({
               where: {
@@ -716,7 +824,9 @@ export async function POST(
               }
             >();
 
-          for (const item of parsedItems) {
+          for (
+            const item of parsedItems
+          ) {
             inputMap.set(
               item.stockId,
               {
@@ -731,10 +841,21 @@ export async function POST(
             await tx.stockOpname.create({
               data: {
                 code,
+
                 outletId,
+
                 date: new Date(),
-                status: "COUNTING",
-                createdBy: user.id,
+
+                type:
+                  type as
+                    | "WEEKLY"
+                    | "MONTHLY",
+
+                status:
+                  initialStatus,
+
+                createdBy:
+                  user.id,
 
                 items: {
                   create:
@@ -754,8 +875,7 @@ export async function POST(
                           Math.max(
                             0,
                             Number(
-                              input
-                                ?.physicalQty ??
+                              input?.physicalQty ??
                                 0
                             )
                           );
@@ -811,16 +931,36 @@ export async function POST(
         }
       );
 
+    // =================================================
+    // RESPONSE
+    // =================================================
+
     return NextResponse.json(
       {
         success: true,
 
         message:
-          "Stock Opname berhasil dibuat dan menunggu approval",
+          type === "WEEKLY"
+            ? "Stock Opname Mingguan berhasil disimpan"
+            : "Stock Opname Bulanan berhasil dibuat dan menunggu approval",
 
         data: result,
 
         outlet,
+
+        meta: {
+          type,
+
+          status:
+            initialStatus,
+
+          requiresApproval:
+            type === "MONTHLY",
+
+          stockChanged: false,
+
+          snapshotOnly: true,
+        },
       },
       {
         status: 201,

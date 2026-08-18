@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
+  CalendarDays,
 } from "lucide-react";
 
 type Outlet = {
@@ -49,21 +50,22 @@ type LoginUser = {
   outletId: number | null;
 };
 
+type StockOpnameType = "WEEKLY" | "MONTHLY";
+
 export default function OutletStockOpnamePage() {
   const [data, setData] = useState<CountItem[]>([]);
-  const [outlet, setOutlet] =
-    useState<Outlet | null>(null);
+  const [outlet, setOutlet] = useState<Outlet | null>(null);
 
-  const [outlets, setOutlets] =
-    useState<Outlet[]>([]);
+  const [outlets, setOutlets] = useState<Outlet[]>([]);
+  const [selectedOutletId, setSelectedOutletId] = useState<number>(0);
 
-  const [selectedOutletId, setSelectedOutletId] =
-    useState<number>(0);
+  const [user, setUser] = useState<LoginUser | null>(null);
 
-  const [user, setUser] =
-    useState<LoginUser | null>(null);
+  const [opnameType, setOpnameType] =
+    useState<StockOpnameType>("WEEKLY");
 
   const [search, setSearch] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingOutlets, setLoadingOutlets] =
@@ -73,13 +75,13 @@ export default function OutletStockOpnamePage() {
   // ROLE
   // =====================================================
 
-  const isAdminPusat =
-    String(user?.role || "").toUpperCase() ===
-    "ADMIN";
+  const role = String(user?.role || "").toUpperCase();
+
+  const isAdminPusat = role === "ADMIN";
 
   const isAdminOutlet =
-    String(user?.role || "").toUpperCase() ===
-    "ADMIN_OUTLET";
+    role === "ADMIN_OUTLET" ||
+    role === "OUTLET_ADMIN";
 
   // =====================================================
   // LOAD OUTLET
@@ -90,12 +92,9 @@ export default function OutletStockOpnamePage() {
     try {
       setLoadingOutlets(true);
 
-      const res = await fetch(
-        "/api/outlet",
-        {
-          cache: "no-store",
-        }
-      );
+      const res = await fetch("/api/outlet", {
+        cache: "no-store",
+      });
 
       const json = await res.json();
 
@@ -113,7 +112,6 @@ export default function OutletStockOpnamePage() {
         : [];
 
       setOutlets(list);
-
     } catch (error: any) {
       console.error(
         "LOAD OUTLETS ERROR:",
@@ -181,7 +179,25 @@ export default function OutletStockOpnamePage() {
       // OUTLET AKTIF
       // =================================================
 
-      setOutlet(json.outlet || null);
+      if (json.outlet) {
+        setOutlet(json.outlet);
+      } else if (
+        isAdminPusat &&
+        outletId > 0
+      ) {
+        const selectedOutlet =
+          outlets.find(
+            (item) =>
+              Number(item.id) ===
+              Number(outletId)
+          );
+
+        setOutlet(
+          selectedOutlet || null
+        );
+      } else {
+        setOutlet(null);
+      }
 
       // =================================================
       // STOCK
@@ -201,7 +217,6 @@ export default function OutletStockOpnamePage() {
           note: "",
         }))
       );
-
     } catch (error: any) {
       console.error(
         "LOAD OUTLET STOCK OPNAME ERROR:",
@@ -234,23 +249,26 @@ export default function OutletStockOpnamePage() {
   useEffect(() => {
     if (!user) return;
 
-    const role =
+    const currentRole =
       String(user.role || "").toUpperCase();
 
-    // -----------------------------------------------
+    // =================================================
     // ADMIN PUSAT
-    // -----------------------------------------------
+    // =================================================
 
-    if (role === "ADMIN") {
+    if (currentRole === "ADMIN") {
       loadOutlets();
       return;
     }
 
-    // -----------------------------------------------
+    // =================================================
     // ADMIN OUTLET
-    // -----------------------------------------------
+    // =================================================
 
-    if (role === "ADMIN_OUTLET") {
+    if (
+      currentRole === "ADMIN_OUTLET" ||
+      currentRole === "OUTLET_ADMIN"
+    ) {
       if (user.outletId) {
         setSelectedOutletId(
           Number(user.outletId)
@@ -258,6 +276,25 @@ export default function OutletStockOpnamePage() {
       }
     }
   }, [user]);
+
+  // =====================================================
+  // KETIKA ADMIN OUTLET SUDAH MENDAPAT OUTLET ID
+  // =====================================================
+
+  useEffect(() => {
+    if (!user) return;
+
+    const currentRole =
+      String(user.role || "").toUpperCase();
+
+    if (
+      (currentRole === "ADMIN_OUTLET" ||
+        currentRole === "OUTLET_ADMIN") &&
+      Number(user.outletId || 0) > 0
+    ) {
+      loadData(Number(user.outletId));
+    }
+  }, [user?.outletId]);
 
   // =====================================================
   // CHANGE OUTLET
@@ -278,7 +315,27 @@ export default function OutletStockOpnamePage() {
       return;
     }
 
+    const selected =
+      outlets.find(
+        (item) =>
+          Number(item.id) === id
+      );
+
+    setOutlet(selected || null);
+
     await loadData(id);
+  }
+
+  // =====================================================
+  // CHANGE TYPE
+  // =====================================================
+
+  function handleTypeChange(
+    type: StockOpnameType
+  ) {
+    if (saving) return;
+
+    setOpnameType(type);
   }
 
   // =====================================================
@@ -360,9 +417,9 @@ export default function OutletStockOpnamePage() {
   // =====================================================
 
   function formatNumber(value: number) {
-    return Number(value || 0).toLocaleString(
-      "id-ID"
-    );
+    return Number(
+      value || 0
+    ).toLocaleString("id-ID");
   }
 
   // =====================================================
@@ -392,7 +449,8 @@ export default function OutletStockOpnamePage() {
 
   const totalPhysicalQty = data.reduce(
     (sum, item) =>
-      sum + Number(item.physicalQty || 0),
+      sum +
+      Number(item.physicalQty || 0),
     0
   );
 
@@ -402,10 +460,11 @@ export default function OutletStockOpnamePage() {
     0
   );
 
-  const totalSelisihBarang = data.filter(
-    (item) =>
-      getDifference(item) !== 0
-  ).length;
+  const totalSelisihBarang =
+    data.filter(
+      (item) =>
+        getDifference(item) !== 0
+    ).length;
 
   // =====================================================
   // SAVE
@@ -433,6 +492,10 @@ export default function OutletStockOpnamePage() {
       return;
     }
 
+    // =================================================
+    // ADMIN OUTLET
+    // =================================================
+
     if (
       isAdminOutlet &&
       (!user?.outletId ||
@@ -444,13 +507,28 @@ export default function OutletStockOpnamePage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Simpan Stock Opname${
-        outlet
-          ? ` untuk ${outlet.code} - ${outlet.name}`
-          : ""
-      }?`
-    );
+    // =================================================
+    // KONFIRMASI
+    // =================================================
+
+    const typeLabel =
+      opnameType === "WEEKLY"
+        ? "MINGGUAN"
+        : "BULANAN";
+
+    const approvalLabel =
+      opnameType === "MONTHLY"
+        ? "\n\nStock Opname Bulanan akan masuk ke Approval dan belum mengubah stock outlet."
+        : "\n\nStock Opname Mingguan langsung selesai dan tidak memerlukan approval.";
+
+    const confirmed =
+      window.confirm(
+        `Buat Stock Opname ${typeLabel}${
+          outlet
+            ? ` untuk ${outlet.code} - ${outlet.name}`
+            : ""
+        }?${approvalLabel}`
+      );
 
     if (!confirmed) {
       return;
@@ -460,12 +538,15 @@ export default function OutletStockOpnamePage() {
       setSaving(true);
 
       const payload: any = {
+        type: opnameType,
+
         items: data.map((item) => ({
           stockId: item.id,
-          physicalQty:
-            Number(
-              item.physicalQty || 0
-            ),
+
+          physicalQty: Number(
+            item.physicalQty || 0
+          ),
+
           note:
             item.note || null,
         })),
@@ -473,8 +554,6 @@ export default function OutletStockOpnamePage() {
 
       // =================================================
       // ADMIN PUSAT
-      // =================================================
-      // Kirim outletId yang dipilih.
       // =================================================
 
       if (isAdminPusat) {
@@ -484,19 +563,20 @@ export default function OutletStockOpnamePage() {
 
       // =================================================
       // ADMIN OUTLET
-      // =================================================
-      // JANGAN kirim outletId.
-      // Backend mengambil dari session.
+      // outletId TIDAK perlu dikirim
+      // backend ambil dari session
       // =================================================
 
       const res = await fetch(
         "/api/outlet/stock-opname",
         {
           method: "POST",
+
           headers: {
             "Content-Type":
               "application/json",
           },
+
           body:
             JSON.stringify(payload),
         }
@@ -512,15 +592,18 @@ export default function OutletStockOpnamePage() {
       }
 
       alert(
-        "Stock Opname berhasil disimpan dan menunggu approval"
+        opnameType === "WEEKLY"
+          ? "Stock Opname Mingguan berhasil disimpan."
+          : "Stock Opname Bulanan berhasil dibuat dan menunggu approval."
       );
 
       await loadData(
         isAdminPusat
           ? selectedOutletId
+          : user?.outletId
+          ? Number(user.outletId)
           : undefined
       );
-
     } catch (error: any) {
       console.error(
         "SAVE OUTLET STOCK OPNAME ERROR:",
@@ -586,6 +669,10 @@ export default function OutletStockOpnamePage() {
                 loadData(
                   isAdminPusat
                     ? selectedOutletId
+                    : user?.outletId
+                    ? Number(
+                        user.outletId
+                      )
                     : undefined
                 )
               }
@@ -612,6 +699,7 @@ export default function OutletStockOpnamePage() {
                 disabled:opacity-50
               "
             >
+
               <RefreshCw
                 size={16}
                 className={
@@ -622,6 +710,7 @@ export default function OutletStockOpnamePage() {
               />
 
               Refresh
+
             </button>
 
             <button
@@ -651,6 +740,7 @@ export default function OutletStockOpnamePage() {
                 disabled:opacity-50
               "
             >
+
               {saving ? (
                 <RefreshCw
                   size={16}
@@ -661,6 +751,7 @@ export default function OutletStockOpnamePage() {
               )}
 
               Simpan Opname
+
             </button>
 
           </div>
@@ -668,102 +759,258 @@ export default function OutletStockOpnamePage() {
         </div>
 
         {/* =================================================
-            DROPDOWN OUTLET
-            HANYA ADMIN PUSAT
+            CONTROL PANEL
         ================================================= */}
 
-        {isAdminPusat && (
-          <div className="rounded-2xl border border-[#DDE9E4] bg-white p-4 shadow-sm">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          {/* =================================================
+              PILIH OUTLET
+          ================================================= */}
 
-              <div>
+          {isAdminPusat && (
+            <div className="rounded-2xl border border-[#DDE9E4] bg-white p-4 shadow-sm">
 
-                <p className="text-sm font-semibold text-[#18352D]">
-                  Pilih Outlet
-                </p>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 
-                <p className="mt-1 text-xs text-gray-500">
-                  Admin Pusat dapat melakukan
-                  stock opname untuk outlet yang
-                  dipilih.
-                </p>
+                <div>
+
+                  <p className="text-sm font-semibold text-[#18352D]">
+                    Pilih Outlet
+                  </p>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    Pilih outlet yang akan dilakukan stock opname.
+                  </p>
+
+                </div>
+
+                <div className="relative w-full md:w-80">
+
+                  <select
+                    value={
+                      selectedOutletId
+                    }
+                    onChange={(e) =>
+                      handleOutletChange(
+                        e.target.value
+                      )
+                    }
+                    disabled={
+                      loadingOutlets ||
+                      loading ||
+                      saving
+                    }
+                    className="
+                      w-full
+                      appearance-none
+                      rounded-xl
+                      border
+                      border-[#CFE0D7]
+                      bg-[#FAFCFB]
+                      px-4
+                      py-3
+                      pr-10
+                      text-sm
+                      font-semibold
+                      text-[#18352D]
+                      outline-none
+                      focus:border-[#497F70]
+                      focus:ring-2
+                      focus:ring-[#497F70]/10
+                      disabled:opacity-50
+                    "
+                  >
+
+                    <option value={0}>
+                      {loadingOutlets
+                        ? "Memuat outlet..."
+                        : "Pilih outlet..."}
+                    </option>
+
+                    {outlets.map(
+                      (item) => (
+                        <option
+                          key={item.id}
+                          value={item.id}
+                        >
+                          {item.code} -{" "}
+                          {item.name}
+                        </option>
+                      )
+                    )}
+
+                  </select>
+
+                  <ChevronDown
+                    size={17}
+                    className="
+                      pointer-events-none
+                      absolute
+                      right-3
+                      top-1/2
+                      -translate-y-1/2
+                      text-gray-400
+                    "
+                  />
+
+                </div>
 
               </div>
 
-              <div className="relative w-full md:w-96">
+            </div>
+          )}
 
-                <select
-                  value={selectedOutletId}
-                  onChange={(e) =>
-                    handleOutletChange(
-                      e.target.value
+          {/* =================================================
+              JENIS STOCK OPNAME
+          ================================================= */}
+
+          <div
+            className={`
+              rounded-2xl
+              border
+              border-[#DDE9E4]
+              bg-white
+              p-4
+              shadow-sm
+              ${
+                !isAdminPusat
+                  ? "lg:col-span-2"
+                  : ""
+              }
+            `}
+          >
+
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+
+              <div className="flex items-start gap-3">
+
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EDF5F1] text-[#497F70]">
+                  <CalendarDays size={19} />
+                </div>
+
+                <div>
+
+                  <p className="text-sm font-semibold text-[#18352D]">
+                    Jenis Stock Opname
+                  </p>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    Tentukan periode pemeriksaan stock.
+                  </p>
+
+                </div>
+
+              </div>
+
+              <div className="flex w-full gap-2 md:w-auto">
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleTypeChange(
+                      "WEEKLY"
                     )
                   }
-                  disabled={
-                    loadingOutlets ||
-                    loading ||
-                    saving
-                  }
-                  className="
-                    w-full
-                    appearance-none
+                  disabled={saving}
+                  className={`
+                    flex-1
                     rounded-xl
                     border
-                    border-[#CFE0D7]
-                    bg-[#FAFCFB]
-                    px-4
+                    px-5
                     py-3
-                    pr-10
                     text-sm
                     font-semibold
-                    text-[#18352D]
-                    outline-none
-                    focus:border-[#497F70]
-                    focus:ring-2
-                    focus:ring-[#497F70]/10
-                    disabled:opacity-50
-                  "
+                    transition
+                    md:min-w-[150px]
+                    ${
+                      opnameType ===
+                      "WEEKLY"
+                        ? "border-[#497F70] bg-[#497F70] text-white shadow-sm"
+                        : "border-[#CFE0D7] bg-white text-[#35564C] hover:bg-[#F5F8F6]"
+                    }
+                  `}
                 >
+                  Mingguan
+                </button>
 
-                  <option value={0}>
-                    {loadingOutlets
-                      ? "Memuat outlet..."
-                      : "Pilih outlet..."}
-                  </option>
-
-                  {outlets.map(
-                    (item) => (
-                      <option
-                        key={item.id}
-                        value={item.id}
-                      >
-                        {item.code} -{" "}
-                        {item.name}
-                      </option>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleTypeChange(
+                      "MONTHLY"
                     )
-                  )}
-
-                </select>
-
-                <ChevronDown
-                  size={17}
-                  className="
-                    pointer-events-none
-                    absolute
-                    right-3
-                    top-1/2
-                    -translate-y-1/2
-                    text-gray-400
-                  "
-                />
+                  }
+                  disabled={saving}
+                  className={`
+                    flex-1
+                    rounded-xl
+                    border
+                    px-5
+                    py-3
+                    text-sm
+                    font-semibold
+                    transition
+                    md:min-w-[150px]
+                    ${
+                      opnameType ===
+                      "MONTHLY"
+                        ? "border-[#497F70] bg-[#497F70] text-white shadow-sm"
+                        : "border-[#CFE0D7] bg-white text-[#35564C] hover:bg-[#F5F8F6]"
+                    }
+                  `}
+                >
+                  Bulanan
+                </button>
 
               </div>
 
             </div>
 
+            {/* =================================================
+                INFO TYPE
+            ================================================= */}
+
+            <div
+              className={`
+                mt-3
+                rounded-xl
+                px-4
+                py-3
+                text-xs
+                ${
+                  opnameType ===
+                  "WEEKLY"
+                    ? "bg-[#EDF7F0] text-[#39714E]"
+                    : "bg-[#FFF7E5] text-[#8A671F]"
+                }
+              `}
+            >
+
+              {opnameType ===
+              "WEEKLY" ? (
+                <>
+                  <span className="font-semibold">
+                    Stock Opname Mingguan:
+                  </span>{" "}
+                  hasil opname langsung selesai dan
+                  tidak memerlukan approval.
+                </>
+              ) : (
+                <>
+                  <span className="font-semibold">
+                    Stock Opname Bulanan:
+                  </span>{" "}
+                  hasil opname akan masuk ke approval
+                  sebelum stock outlet diperbarui.
+                </>
+              )}
+
+            </div>
+
           </div>
-        )}
+
+        </div>
 
       </div>
 
@@ -789,9 +1036,9 @@ export default function OutletStockOpnamePage() {
                 </p>
 
                 <p className="mt-1 text-sm text-[#8C6D27]">
-                  Silakan pilih outlet terlebih
-                  dahulu untuk menampilkan stock
-                  dan melakukan Stock Opname.
+                  Silakan pilih outlet terlebih dahulu
+                  untuk menampilkan stock dan melakukan
+                  Stock Opname.
                 </p>
 
               </div>
@@ -1156,8 +1403,7 @@ export default function OutletStockOpnamePage() {
 
                         <td className="px-5 py-4 text-center align-top">
 
-                          {difference ===
-                          0 ? (
+                          {difference === 0 ? (
 
                             <span className="
                               inline-flex
@@ -1171,10 +1417,13 @@ export default function OutletStockOpnamePage() {
                               font-semibold
                               text-[#2F7A4F]
                             ">
+
                               <CheckCircle2
                                 size={13}
                               />
+
                               Sesuai
+
                             </span>
 
                           ) : (
@@ -1191,10 +1440,13 @@ export default function OutletStockOpnamePage() {
                               font-semibold
                               text-[#9A6A18]
                             ">
+
                               <AlertTriangle
                                 size={13}
                               />
+
                               Selisih
+
                             </span>
 
                           )}
@@ -1298,7 +1550,14 @@ export default function OutletStockOpnamePage() {
                       Selisih
                     </p>
 
-                    <p className="font-bold text-[#18352D]">
+                    <p className={`font-bold ${
+                      totalDifference === 0
+                        ? "text-[#2F7A4F]"
+                        : "text-[#C84B4B]"
+                    }`}>
+                      {totalDifference > 0
+                        ? "+"
+                        : ""}
                       {formatNumber(
                         totalDifference
                       )}
