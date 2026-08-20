@@ -16,6 +16,13 @@ type Barang = {
   unit?: string;
 };
 
+type PaymentMethod =
+  | "CASH"
+  | "TRANSFER"
+  | "COD"
+  | "CBD"
+  | "TEMPO";
+
 type PurchaseItem = {
   barangId: string;
   qty: number;
@@ -58,6 +65,10 @@ export default function NewPurchasePage() {
     purchaseDate: new Date()
       .toISOString()
       .substring(0, 10),
+
+    paymentMethod: "CASH" as PaymentMethod,
+
+    description: "",
 
     items: [
       {
@@ -623,6 +634,76 @@ export default function NewPurchasePage() {
                         e.target.value,
                     })
                   }
+                />
+
+              </div>
+
+              {/* PAYMENT METHOD */}
+
+              <div>
+
+                <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  Metode Pembayaran
+                </label>
+
+                <select
+                  value={
+                    form.paymentMethod
+                  }
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      paymentMethod:
+                        e.target.value as PaymentMethod,
+                    })
+                  }
+                  className="w-full rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm font-medium text-gray-700 outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                >
+                  <option value="CASH">
+                    Cash
+                  </option>
+
+                  <option value="TRANSFER">
+                    Transfer
+                  </option>
+
+                  <option value="COD">
+                    COD
+                  </option>
+
+                  <option value="CBD">
+                    CBD
+                  </option>
+
+                  <option value="TEMPO">
+                    Tempo
+                  </option>
+                </select>
+
+              </div>
+
+              {/* KETERANGAN */}
+
+              <div>
+
+                <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  Keterangan
+                </label>
+
+                <textarea
+                  rows={1}
+                  value={
+                    form.description
+                  }
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      description:
+                        e.target.value,
+                    })
+                  }
+                  placeholder="Tambahkan keterangan Purchase Order..."
+                  className="min-h-[48px] w-full resize-none rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
                 />
 
               </div>

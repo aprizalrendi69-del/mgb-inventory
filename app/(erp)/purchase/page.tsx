@@ -14,9 +14,9 @@ import {
   Clock3,
   Eye,
   Printer,
-  Check,
   Truck,
   Store,
+  Trash2,
 } from "lucide-react";
 
 type PurchaseRow = {
@@ -79,20 +79,27 @@ export default function PurchasePage() {
       }
 
       /*
+       * =========================================================
        * NORMALISASI DATA
+       * =========================================================
        *
-       * Kalau source dari API ada -> pakai.
-       * Kalau tidak ada tapi ada outletId -> otomatis OUTLET.
+       * Kalau API mengirim source -> gunakan source tersebut.
+       *
+       * Kalau tidak ada source tetapi ada outletId
+       * -> otomatis dianggap OUTLET.
+       *
        * Selain itu -> PUSAT.
+       *
        */
+
       const normalized: PurchaseRow[] = json.data.map(
         (item: any) => ({
           ...item,
 
           source:
             item.source === "OUTLET" ||
-            item.outletId !== null &&
-              item.outletId !== undefined
+            (item.outletId !== null &&
+              item.outletId !== undefined)
               ? "OUTLET"
               : "PUSAT",
         })
@@ -107,46 +114,87 @@ export default function PurchasePage() {
     }
   }
 
-  async function approvePurchase(id: number) {
+  /* =========================================================
+     DELETE PURCHASE
+  ========================================================= */
+
+  async function deletePurchase(
+    id: number,
+    number: string,
+    purchaseSource: "PUSAT" | "OUTLET"
+  ) {
+    const sourceLabel =
+      purchaseSource === "OUTLET"
+        ? "Purchase Order Outlet"
+        : "Purchase Order Pusat";
+
     const ok = confirm(
-      "Approve Purchase Order ini?"
+      `Hapus ${sourceLabel} ${number || ""}?\n\n` +
+        `Purchase Order yang masih DRAFT akan dihapus permanen.`
     );
 
     if (!ok) return;
 
     try {
+      /*
+       * =======================================================
+       * PENTING
+       *
+       * ID Purchase Pusat dan ID Purchase Outlet
+       * bisa sama.
+       *
+       * Karena itu source wajib dikirim ke API.
+       *
+       * PUSAT:
+       * /api/purchase/9?source=PUSAT
+       *
+       * OUTLET:
+       * /api/purchase/9?source=OUTLET
+       * =======================================================
+       */
+
       const res = await fetch(
-        `/api/purchase/${id}/approve`,
+        `/api/purchase/${id}?source=${purchaseSource}`,
         {
-          method: "POST",
+          method: "DELETE",
         }
       );
 
       const json = await res.json();
 
+      console.log(
+        "DELETE PURCHASE RESPONSE:",
+        json
+      );
+
       if (json.success) {
         alert(
-          "Purchase Order berhasil di-Approve"
+          json.message ||
+            `${sourceLabel} berhasil dihapus.`
         );
 
         await loadPurchase();
       } else {
         alert(
           json.message ||
-            "Gagal approve Purchase Order"
+            `Gagal menghapus ${sourceLabel}.`
         );
       }
     } catch (error) {
       console.error(
-        "APPROVE PURCHASE ERROR:",
+        "DELETE PURCHASE ERROR:",
         error
       );
 
       alert(
-        "Terjadi kesalahan saat approve Purchase Order"
+        `Terjadi kesalahan saat menghapus ${sourceLabel}.`
       );
     }
   }
+
+  /* =========================================================
+     RECEIVE PURCHASE
+  ========================================================= */
 
   async function receivePurchase(id: number) {
     const ok = confirm(
@@ -167,6 +215,7 @@ export default function PurchasePage() {
 
       if (json.success) {
         alert("Barang berhasil diterima");
+
         await loadPurchase();
       } else {
         alert(
@@ -185,6 +234,10 @@ export default function PurchasePage() {
       );
     }
   }
+
+  /* =========================================================
+     FILTER
+  ========================================================= */
 
   const filteredPurchase = useMemo(() => {
     const keyword =
@@ -250,6 +303,10 @@ export default function PurchasePage() {
     source,
   ]);
 
+  /* =========================================================
+     SUMMARY
+  ========================================================= */
+
   const totalPurchase =
     purchase.length;
 
@@ -291,6 +348,10 @@ export default function PurchasePage() {
       0
     );
 
+  /* =========================================================
+     FORMAT
+  ========================================================= */
+
   function formatRupiah(value: any) {
     return Number(
       value || 0
@@ -319,6 +380,10 @@ export default function PurchasePage() {
       }
     );
   }
+
+  /* =========================================================
+     STATUS BADGE
+  ========================================================= */
 
   function StatusBadge({
     status,
@@ -417,8 +482,11 @@ export default function PurchasePage() {
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
+
           <div className="flex items-center justify-between">
+
             <div>
+
               <p className="text-sm text-gray-500">
                 Total Purchase
               </p>
@@ -426,17 +494,23 @@ export default function PurchasePage() {
               <p className="mt-1 text-2xl font-bold text-[#18352D]">
                 {totalPurchase}
               </p>
+
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
               <FileText size={21} />
             </div>
+
           </div>
+
         </div>
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
+
           <div className="flex items-center justify-between">
+
             <div>
+
               <p className="text-sm text-gray-500">
                 Purchase Pusat
               </p>
@@ -444,17 +518,23 @@ export default function PurchasePage() {
               <p className="mt-1 text-2xl font-bold text-[#497F70]">
                 {totalPusat}
               </p>
+
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
               <ShoppingCart size={21} />
             </div>
+
           </div>
+
         </div>
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
+
           <div className="flex items-center justify-between">
+
             <div>
+
               <p className="text-sm text-gray-500">
                 Purchase Outlet
               </p>
@@ -462,17 +542,23 @@ export default function PurchasePage() {
               <p className="mt-1 text-2xl font-bold text-blue-600">
                 {totalOutlet}
               </p>
+
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <Store size={21} />
             </div>
+
           </div>
+
         </div>
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
+
           <div className="flex items-center justify-between">
+
             <div>
+
               <p className="text-sm text-gray-500">
                 Barang Diterima
               </p>
@@ -480,12 +566,15 @@ export default function PurchasePage() {
               <p className="mt-1 text-2xl font-bold text-green-600">
                 {totalReceived}
               </p>
+
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-50 text-green-600">
               <PackageCheck size={21} />
             </div>
+
           </div>
+
         </div>
 
       </div>
@@ -495,12 +584,15 @@ export default function PurchasePage() {
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
+
           <div className="flex items-center gap-3">
+
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
               <Clock3 size={19} />
             </div>
 
             <div>
+
               <p className="text-sm text-gray-500">
                 Draft
               </p>
@@ -508,17 +600,23 @@ export default function PurchasePage() {
               <p className="text-xl font-bold text-amber-600">
                 {totalDraft}
               </p>
+
             </div>
+
           </div>
+
         </div>
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
+
           <div className="flex items-center gap-3">
+
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <CheckCircle2 size={19} />
             </div>
 
             <div>
+
               <p className="text-sm text-gray-500">
                 Approved
               </p>
@@ -526,11 +624,15 @@ export default function PurchasePage() {
               <p className="text-xl font-bold text-blue-600">
                 {totalApproved}
               </p>
+
             </div>
+
           </div>
+
         </div>
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
+
           <p className="text-sm text-gray-500">
             Total Nilai Purchase
           </p>
@@ -538,6 +640,7 @@ export default function PurchasePage() {
           <p className="mt-1 text-xl font-bold text-[#18352D]">
             Rp {formatRupiah(totalValue)}
           </p>
+
         </div>
 
       </div>
@@ -726,6 +829,7 @@ export default function PurchasePage() {
                     className="px-5 py-14 text-center"
                   >
                     <div className="flex flex-col items-center gap-3 text-gray-500">
+
                       <RefreshCw
                         size={25}
                         className="animate-spin text-[#497F70]"
@@ -734,6 +838,7 @@ export default function PurchasePage() {
                       <span>
                         Loading Purchase Order...
                       </span>
+
                     </div>
                   </td>
                 </tr>
@@ -771,9 +876,25 @@ export default function PurchasePage() {
                     const isOutlet =
                       item.source === "OUTLET";
 
+                    /*
+                     * =====================================================
+                     * SOURCE FINAL
+                     *
+                     * Jangan hanya menggunakan item.source langsung
+                     * karena kita ingin memastikan hanya dua nilai ini.
+                     * =====================================================
+                     */
+
+                    const purchaseSource:
+                      | "PUSAT"
+                      | "OUTLET" =
+                      isOutlet
+                        ? "OUTLET"
+                        : "PUSAT";
+
                     return (
                       <tr
-                        key={`${isOutlet ? "OUTLET" : "PUSAT"}-${item.id}`}
+                        key={`${purchaseSource}-${item.id}`}
                         className="border-b border-[#EDF2EF] transition hover:bg-[#FAFCFB]"
                       >
 
@@ -902,11 +1023,13 @@ export default function PurchasePage() {
                         {/* STATUS */}
 
                         <td className="px-5 py-4 text-center">
+
                           <StatusBadge
                             status={
                               item.status
                             }
                           />
+
                         </td>
 
                         {/* AKSI */}
@@ -930,31 +1053,47 @@ export default function PurchasePage() {
                               Detail
                             </Link>
 
-                            {/* PUSAT */}
+                            {/* =================================================
+                                DRAFT -> DELETE
+                            ================================================= */}
 
-                            {!isOutlet &&
-                              item.status ===
-                                "DRAFT" && (
+                            {item.status ===
+                              "DRAFT" && (
 
-                                <button
-                                  onClick={() =>
-                                    approvePurchase(
-                                      item.id
-                                    )
-                                  }
-                                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-600"
-                                >
-                                  <Check size={14} />
-                                  Approve
-                                </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  deletePurchase(
+                                    item.id,
+                                    item.number,
+                                    purchaseSource
+                                  )
+                                }
+                                title={
+                                  isOutlet
+                                    ? "Hapus Purchase Outlet Draft"
+                                    : "Hapus Purchase Pusat Draft"
+                                }
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
+                              >
+                                <Trash2
+                                  size={14}
+                                />
+                                Delete
+                              </button>
 
-                              )}
+                            )}
+
+                            {/* =================================================
+                                APPROVED -> RECEIVE
+                            ================================================= */}
 
                             {!isOutlet &&
                               item.status ===
                                 "APPROVED" && (
 
                                 <button
+                                  type="button"
                                   onClick={() =>
                                     receivePurchase(
                                       item.id
@@ -967,22 +1106,6 @@ export default function PurchasePage() {
                                   />
                                   Receive
                                 </button>
-
-                              )}
-
-                            {/* OUTLET */}
-
-                            {isOutlet &&
-                              item.status ===
-                                "DRAFT" && (
-
-                                <Link
-                                  href={`/outlet/purchase/${item.id}`}
-                                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-600"
-                                >
-                                  <Check size={14} />
-                                  Proses
-                                </Link>
 
                               )}
 

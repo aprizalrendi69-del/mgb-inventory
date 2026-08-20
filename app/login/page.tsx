@@ -82,11 +82,11 @@ export default function LoginPage() {
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-8">
 
         <h1 className="text-3xl font-bold text-center mb-2">
-          ERP Inventory
+          PT.MITRA GARAM BOGATAMA
         </h1>
 
         <p className="text-center text-gray-500 mb-8">
-          Silakan login untuk melanjutkan
+          Silakan login untuk melanjutkan...
         </p>
 
         <input

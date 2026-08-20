@@ -394,7 +394,7 @@ export async function GET(req: NextRequest) {
 
     /* =====================================================
        8. GRAFIK INVENTORY
-       
+
        7 / 30 / 90 HARI
     ===================================================== */
 
@@ -433,7 +433,7 @@ export async function GET(req: NextRequest) {
 
     /* =====================================================
        SIAPKAN SEMUA TANGGAL
-       
+
        Tanggal tanpa transaksi tetap muncul.
     ===================================================== */
 
@@ -508,7 +508,7 @@ export async function GET(req: NextRequest) {
 
     /* =====================================================
        FORMAT CHART
-       
+
        id dibuat unik berdasarkan tanggal lengkap.
        Frontend bisa menggunakan item.id sebagai React key.
     ===================================================== */
@@ -541,7 +541,84 @@ export async function GET(req: NextRequest) {
       );
 
     /* =====================================================
-       9. RESPONSE
+       9. USER ONLINE
+
+       User dianggap ONLINE apabila heartbeat terakhir
+       masih dalam 2 menit terakhir.
+
+       Heartbeat:
+       POST /api/me/heartbeat
+
+       Data menggunakan:
+       User.lastSeen
+    ===================================================== */
+
+    const onlineThreshold = new Date(
+      Date.now() - 2 * 60 * 1000
+    );
+
+    const onlineUsers =
+      await prisma.user.findMany({
+        where: {
+          active: true,
+
+          lastSeen: {
+            gte: onlineThreshold,
+          },
+        },
+
+        select: {
+          id: true,
+          username: true,
+          fullname: true,
+          role: true,
+          lastSeen: true,
+
+          outlet: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+        },
+
+        orderBy: {
+          lastSeen: "desc",
+        },
+      });
+
+    /* =====================================================
+       FORMAT USER ONLINE
+    ===================================================== */
+
+    const formattedOnlineUsers =
+      onlineUsers.map((user) => ({
+        id: user.id,
+
+        username: user.username,
+
+        fullname:
+          user.fullname ||
+          user.username,
+
+        role: user.role,
+
+        outlet: user.outlet
+          ? {
+              id: user.outlet.id,
+              code: user.outlet.code,
+              name: user.outlet.name,
+            }
+          : null,
+
+        lastSeen: user.lastSeen,
+
+        status: "ONLINE" as const,
+      }));
+
+    /* =====================================================
+       10. RESPONSE
     ===================================================== */
 
     return NextResponse.json({
@@ -590,7 +667,15 @@ export async function GET(req: NextRequest) {
           deliveryTrend: 0,
 
           stockTrend: 0,
+
+          /* JUMLAH USER ONLINE */
+          onlineUserCount:
+            formattedOnlineUsers.length,
         },
+
+        /* USER ONLINE */
+        onlineUsers:
+          formattedOnlineUsers,
 
         stockAlerts,
 

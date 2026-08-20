@@ -24,37 +24,38 @@ async function getCurrentUser() {
   // DATABASE SESSION
   // ===================================================
 
-  const dbSession =
-    await prisma.session.findUnique({
-      where: {
-        token: sessionCookie.value,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            fullname: true,
-            role: true,
-            active: true,
-            outletId: true,
+  const dbSession = await prisma.session.findUnique({
+    where: {
+      token: sessionCookie.value,
+    },
 
-            outlet: {
-              select: {
-                id: true,
-                code: true,
-                name: true,
-              },
+    include: {
+      user: {
+        select: {
+          id: true,
+          fullname: true,
+          role: true,
+          active: true,
+          outletId: true,
+
+          outlet: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
             },
           },
         },
       },
-    });
+    },
+  });
 
   if (dbSession) {
-    if (
-      dbSession.expiresAt <
-      new Date()
-    ) {
+    if (dbSession.expiresAt < new Date()) {
+      return null;
+    }
+
+    if (!dbSession.user.active) {
       return null;
     }
 
@@ -65,9 +66,7 @@ async function getCurrentUser() {
     // =================================================
 
     try {
-      const parsed = JSON.parse(
-        sessionCookie.value
-      );
+      const parsed = JSON.parse(sessionCookie.value);
 
       userId = Number(
         parsed?.user?.id ??
@@ -90,28 +89,27 @@ async function getCurrentUser() {
   // USER
   // ===================================================
 
-  const user =
-    await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
+  const user = await prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
 
-      select: {
-        id: true,
-        fullname: true,
-        role: true,
-        active: true,
-        outletId: true,
+    select: {
+      id: true,
+      fullname: true,
+      role: true,
+      active: true,
+      outletId: true,
 
-        outlet: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
+      outlet: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
         },
       },
-    });
+    },
+  });
 
   if (!user) {
     return null;
@@ -135,6 +133,10 @@ async function getCurrentUser() {
 // MANAGER
 // -> boleh semua outlet
 //
+// PURCHASING
+// -> boleh semua Purchase Outlet
+// -> tidak harus memiliki outletId
+//
 // OUTLET_ADMIN
 // -> hanya outlet sendiri
 //
@@ -142,13 +144,28 @@ async function getCurrentUser() {
 // -> tidak boleh akses endpoint
 // =====================================================
 
-function canAccessPurchase(
-  role: Role
-) {
+function canAccessPurchase(role: Role) {
   return (
     role === Role.ADMIN ||
     role === Role.MANAGER ||
+    role === Role.PURCHASING ||
     role === Role.OUTLET_ADMIN
+  );
+}
+
+// =====================================================
+// CENTRAL ROLE
+// =====================================================
+//
+// Role pusat boleh mengelola Purchase Outlet
+// dari semua outlet.
+//
+
+function isCentralPurchaseRole(role: Role) {
+  return (
+    role === Role.ADMIN ||
+    role === Role.MANAGER ||
+    role === Role.PURCHASING
   );
 }
 
@@ -160,9 +177,10 @@ function getOutletFilter(user: {
   role: Role;
   outletId: number | null;
 }) {
-  if (
-    user.role === Role.OUTLET_ADMIN
-  ) {
+  // OUTLET ADMIN
+  // hanya boleh melihat outlet miliknya
+
+  if (user.role === Role.OUTLET_ADMIN) {
     if (!user.outletId) {
       return null;
     }
@@ -172,6 +190,9 @@ function getOutletFilter(user: {
     };
   }
 
+  // ADMIN / MANAGER / PURCHASING
+  // boleh semua outlet
+
   return {};
 }
 
@@ -179,9 +200,7 @@ function getOutletFilter(user: {
 // VALIDATE PURCHASE ID
 // =====================================================
 
-function getPurchaseId(
-  value: string
-) {
+function getPurchaseId(value: string) {
   const id = Number(value);
 
   if (
@@ -192,6 +211,33 @@ function getPurchaseId(
   }
 
   return id;
+}
+
+// =====================================================
+// VALIDATE OUTLET
+// =====================================================
+
+async function validateOutlet(outletId: number) {
+  if (
+    !Number.isInteger(outletId) ||
+    outletId <= 0
+  ) {
+    return null;
+  }
+
+  const outlet = await prisma.outlet.findUnique({
+    where: {
+      id: outletId,
+    },
+
+    select: {
+      id: true,
+      code: true,
+      name: true,
+    },
+  });
+
+  return outlet;
 }
 
 // =====================================================
@@ -211,8 +257,7 @@ export async function GET(
     // USER
     // =================================================
 
-    const user =
-      await getCurrentUser();
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
@@ -230,9 +275,7 @@ export async function GET(
     // ROLE
     // =================================================
 
-    if (
-      !canAccessPurchase(user.role)
-    ) {
+    if (!canAccessPurchase(user.role)) {
       return NextResponse.json(
         {
           success: false,
@@ -250,8 +293,7 @@ export async function GET(
     // =================================================
 
     if (
-      user.role ===
-        Role.OUTLET_ADMIN &&
+      user.role === Role.OUTLET_ADMIN &&
       !user.outletId
     ) {
       return NextResponse.json(
@@ -270,11 +312,9 @@ export async function GET(
     // ID
     // =================================================
 
-    const { id } =
-      await context.params;
+    const { id } = await context.params;
 
-    const purchaseId =
-      getPurchaseId(id);
+    const purchaseId = getPurchaseId(id);
 
     if (!purchaseId) {
       return NextResponse.json(
@@ -293,8 +333,7 @@ export async function GET(
     // FILTER OUTLET
     // =================================================
 
-    const outletFilter =
-      getOutletFilter(user);
+    const outletFilter = getOutletFilter(user);
 
     if (outletFilter === null) {
       return NextResponse.json(
@@ -357,8 +396,9 @@ export async function GET(
 
       access: {
         role: user.role,
-        outletId:
-          user.outletId,
+        outletId: user.outletId,
+        isCentral:
+          isCentralPurchaseRole(user.role),
       },
     });
   } catch (error: any) {
@@ -398,8 +438,7 @@ export async function PATCH(
     // USER
     // =================================================
 
-    const user =
-      await getCurrentUser();
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
@@ -417,9 +456,7 @@ export async function PATCH(
     // ROLE
     // =================================================
 
-    if (
-      !canAccessPurchase(user.role)
-    ) {
+    if (!canAccessPurchase(user.role)) {
       return NextResponse.json(
         {
           success: false,
@@ -437,8 +474,7 @@ export async function PATCH(
     // =================================================
 
     if (
-      user.role ===
-        Role.OUTLET_ADMIN &&
+      user.role === Role.OUTLET_ADMIN &&
       !user.outletId
     ) {
       return NextResponse.json(
@@ -457,11 +493,9 @@ export async function PATCH(
     // ID
     // =================================================
 
-    const { id } =
-      await context.params;
+    const { id } = await context.params;
 
-    const purchaseId =
-      getPurchaseId(id);
+    const purchaseId = getPurchaseId(id);
 
     if (!purchaseId) {
       return NextResponse.json(
@@ -497,14 +531,52 @@ export async function PATCH(
       );
     }
 
-    const supplierId =
-      Number(body?.supplierId);
+    // =================================================
+    // OUTLET
+    // =================================================
+
+    const requestedOutletId = Number(
+      body?.outletId
+    );
+
+    if (
+      !Number.isInteger(
+        requestedOutletId
+      ) ||
+      requestedOutletId <= 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Outlet wajib dipilih",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =================================================
+    // SUPPLIER
+    // =================================================
+
+    const supplierId = Number(
+      body?.supplierId
+    );
+
+    // =================================================
+    // REMARKS
+    // =================================================
 
     const remarks =
-      typeof body?.remarks ===
-      "string"
+      typeof body?.remarks === "string"
         ? body.remarks.trim()
         : null;
+
+    // =================================================
+    // ITEMS
+    // =================================================
 
     const items = Array.isArray(
       body?.items
@@ -609,8 +681,7 @@ export async function PATCH(
     // =================================================
 
     if (
-      existing.status !==
-      "DRAFT"
+      existing.status !== "DRAFT"
     ) {
       return NextResponse.json(
         {
@@ -620,6 +691,53 @@ export async function PATCH(
         },
         {
           status: 400,
+        }
+      );
+    }
+
+    // =================================================
+    // OUTLET ADMIN
+    // =================================================
+    //
+    // Outlet Admin tidak boleh memindahkan PO
+    // ke outlet lain.
+    //
+
+    if (
+      user.role === Role.OUTLET_ADMIN &&
+      requestedOutletId !==
+        user.outletId
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Outlet Admin hanya dapat mengubah Purchase Outlet milik outlet sendiri",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    // =================================================
+    // VALIDASI OUTLET
+    // =================================================
+
+    const outlet =
+      await validateOutlet(
+        requestedOutletId
+      );
+
+    if (!outlet) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Outlet tidak ditemukan",
+        },
+        {
+          status: 404,
         }
       );
     }
@@ -702,7 +820,7 @@ export async function PATCH(
       }
 
       // ===============================================
-      // CEGAH DUPLIKAT BARANG
+      // DUPLIKAT BARANG
       // ===============================================
 
       if (
@@ -731,7 +849,9 @@ export async function PATCH(
       // ===============================================
 
       if (
-        !Number.isFinite(qty) ||
+        !Number.isFinite(
+          qty
+        ) ||
         qty <= 0
       ) {
         return NextResponse.json(
@@ -751,7 +871,9 @@ export async function PATCH(
       // ===============================================
 
       if (
-        !Number.isFinite(price) ||
+        !Number.isFinite(
+          price
+        ) ||
         price < 0
       ) {
         return NextResponse.json(
@@ -851,7 +973,9 @@ export async function PATCH(
     // =================================================
 
     if (
-      !Number.isFinite(total) ||
+      !Number.isFinite(
+        total
+      ) ||
       total < 0
     ) {
       return NextResponse.json(
@@ -898,7 +1022,7 @@ export async function PATCH(
           }
 
           // ===========================================
-          // CEK OUTLET ULANG
+          // SECURITY OUTLET
           // ===========================================
 
           if (
@@ -913,7 +1037,7 @@ export async function PATCH(
           }
 
           // ===========================================
-          // CEK STATUS ULANG
+          // STATUS
           // ===========================================
 
           if (
@@ -922,6 +1046,24 @@ export async function PATCH(
           ) {
             throw new Error(
               "Purchase Outlet sudah diproses dan tidak dapat diedit"
+            );
+          }
+
+          // ===========================================
+          // OUTLET FINAL
+          // ===========================================
+
+          const finalOutletId =
+            user.role ===
+              Role.OUTLET_ADMIN
+              ? user.outletId
+              : requestedOutletId;
+
+          if (
+            !finalOutletId
+          ) {
+            throw new Error(
+              "Outlet tidak valid"
             );
           }
 
@@ -948,10 +1090,8 @@ export async function PATCH(
               },
 
               data: {
-                // Tidak pernah mengambil
-                // outletId dari frontend.
                 outletId:
-                  current.outletId,
+                  finalOutletId,
 
                 supplierId,
 
@@ -1073,7 +1213,9 @@ export async function DELETE(
     // =================================================
 
     if (
-      !canAccessPurchase(user.role)
+      !canAccessPurchase(
+        user.role
+      )
     ) {
       return NextResponse.json(
         {

@@ -2,7 +2,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "MGB ERP",
+  title: "PT.MITRA GARAM BOGATAMA",
   description: "PT. Mitra Garam Bogatama ERP",
 };
 

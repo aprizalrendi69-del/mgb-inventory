@@ -11,6 +11,9 @@ import {
   Users,
   RefreshCw,
   Circle,
+  Pencil,
+  X,
+  Save,
 } from "lucide-react";
 
 type Outlet = {
@@ -36,10 +39,19 @@ export default function UserPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [onlineLoading, setOnlineLoading] = useState(false);
+  const [onlineLoading, setOnlineLoading] =
+    useState(false);
 
   const [search, setSearch] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword] =
+    useState(false);
+
+  // =====================================================
+  // EDIT MODE
+  // =====================================================
+
+  const [editingUserId, setEditingUserId] =
+    useState<number | null>(null);
 
   const [form, setForm] = useState({
     username: "",
@@ -47,7 +59,12 @@ export default function UserPage() {
     password: "",
     role: "ADMIN",
     outletId: "",
+    active: true,
   });
+
+  // =====================================================
+  // LOAD USER
+  // =====================================================
 
   async function load() {
     try {
@@ -62,26 +79,42 @@ export default function UserPage() {
       if (json.success) {
         setData(json.data ?? []);
       } else {
-        alert(json.message ?? "Gagal mengambil data user");
+        alert(
+          json.message ??
+            "Gagal mengambil data user"
+        );
       }
     } catch (error) {
-      console.error("Load user error:", error);
+      console.error(
+        "Load user error:",
+        error
+      );
+
       alert("Gagal mengambil data user");
     } finally {
       setLoading(false);
     }
   }
 
+  // =====================================================
+  // LOAD ONLINE STATUS
+  // =====================================================
+
   async function loadOnlineStatus() {
     try {
       setOnlineLoading(true);
 
-      const res = await fetch("/api/user/online", {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        "/api/user/online",
+        {
+          cache: "no-store",
+        }
+      );
 
       if (!res.ok) {
-        throw new Error("Gagal mengambil status online");
+        throw new Error(
+          "Gagal mengambil status online"
+        );
       }
 
       const json = await res.json();
@@ -90,13 +123,16 @@ export default function UserPage() {
         return;
       }
 
-      const onlineUsers = json.users ?? [];
+      const onlineUsers =
+        json.users ?? [];
 
       setData((currentUsers) =>
         currentUsers.map((user) => {
-          const onlineUser = onlineUsers.find(
-            (item: any) => item.id === user.id
-          );
+          const onlineUser =
+            onlineUsers.find(
+              (item: any) =>
+                item.id === user.id
+            );
 
           if (!onlineUser) {
             return {
@@ -108,8 +144,12 @@ export default function UserPage() {
 
           return {
             ...user,
-            online: Boolean(onlineUser.online),
-            lastSeen: onlineUser.lastSeen ?? null,
+            online: Boolean(
+              onlineUser.online
+            ),
+            lastSeen:
+              onlineUser.lastSeen ??
+              null,
           };
         })
       );
@@ -123,18 +163,18 @@ export default function UserPage() {
     }
   }
 
-  async function loadAll() {
-    await Promise.all([
-      load(),
-      loadOutlets(),
-    ]);
-  }
+  // =====================================================
+  // LOAD OUTLET
+  // =====================================================
 
   async function loadOutlets() {
     try {
-      const res = await fetch("/api/outlet", {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        "/api/outlet",
+        {
+          cache: "no-store",
+        }
+      );
 
       const json = await res.json();
 
@@ -144,13 +184,35 @@ export default function UserPage() {
         console.error(json.message);
       }
     } catch (error) {
-      console.error("Load outlet error:", error);
+      console.error(
+        "Load outlet error:",
+        error
+      );
     }
   }
+
+  // =====================================================
+  // LOAD ALL
+  // =====================================================
+
+  async function loadAll() {
+    await Promise.all([
+      load(),
+      loadOutlets(),
+    ]);
+  }
+
+  // =====================================================
+  // INITIAL LOAD
+  // =====================================================
 
   useEffect(() => {
     loadAll();
   }, []);
+
+  // =====================================================
+  // ONLINE REFRESH
+  // =====================================================
 
   useEffect(() => {
     loadOnlineStatus();
@@ -164,6 +226,62 @@ export default function UserPage() {
     };
   }, []);
 
+  // =====================================================
+  // RESET FORM
+  // =====================================================
+
+  function resetForm() {
+    setForm({
+      username: "",
+      fullname: "",
+      password: "",
+      role: "ADMIN",
+      outletId: "",
+      active: true,
+    });
+
+    setEditingUserId(null);
+    setShowPassword(false);
+  }
+
+  // =====================================================
+  // MULAI EDIT
+  // =====================================================
+
+  function mulaiEdit(user: User) {
+    setEditingUserId(user.id);
+
+    setForm({
+      username: user.username ?? "",
+      fullname: user.fullname ?? "",
+      password: "",
+      role: user.role ?? "ADMIN",
+      outletId: user.outletId
+        ? String(user.outletId)
+        : "",
+      active: user.active,
+    });
+
+    setShowPassword(false);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+
+  // =====================================================
+  // BATAL EDIT
+  // =====================================================
+
+  function batalEdit() {
+    resetForm();
+  }
+
+  // =====================================================
+  // SIMPAN / UPDATE USER
+  // =====================================================
+
   async function simpan() {
     if (!form.username.trim()) {
       alert("Username wajib diisi");
@@ -175,12 +293,20 @@ export default function UserPage() {
       return;
     }
 
-    if (!form.password.trim()) {
+    // Password wajib hanya saat tambah
+    if (
+      editingUserId === null &&
+      !form.password.trim()
+    ) {
       alert("Password wajib diisi");
       return;
     }
 
-    if (form.password.length < 6) {
+    // Password jika diisi saat edit
+    if (
+      form.password.trim() &&
+      form.password.length < 6
+    ) {
       alert("Password minimal 6 karakter");
       return;
     }
@@ -189,57 +315,92 @@ export default function UserPage() {
       form.role === "OUTLET_ADMIN" &&
       !form.outletId
     ) {
-      alert("Outlet wajib dipilih untuk OUTLET ADMIN");
+      alert(
+        "Outlet wajib dipilih untuk OUTLET ADMIN"
+      );
       return;
     }
 
     try {
       setSaving(true);
 
-      const res = await fetch("/api/user", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...form,
-          outletId:
-            form.role === "OUTLET_ADMIN"
-              ? Number(form.outletId)
-              : null,
-        }),
-      });
+      const isEdit =
+        editingUserId !== null;
+
+      const body = {
+        ...(isEdit
+          ? {
+              id: editingUserId,
+            }
+          : {}),
+        username:
+          form.username.trim(),
+        fullname:
+          form.fullname.trim(),
+        password:
+          form.password,
+        role: form.role,
+        outletId:
+          form.role === "OUTLET_ADMIN"
+            ? Number(form.outletId)
+            : null,
+        active: form.active,
+      };
+
+      const res = await fetch(
+        "/api/user",
+        {
+          method: isEdit
+            ? "PUT"
+            : "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify(body),
+        }
+      );
 
       const json = await res.json();
 
       if (json.success) {
-        alert("User berhasil dibuat");
+        alert(
+          isEdit
+            ? "User berhasil diperbarui"
+            : "User berhasil dibuat"
+        );
 
-        setForm({
-          username: "",
-          fullname: "",
-          password: "",
-          role: "ADMIN",
-          outletId: "",
-        });
-
-        setShowPassword(false);
+        resetForm();
 
         await load();
         await loadOnlineStatus();
       } else {
-        alert(json.message ?? "Gagal membuat user");
+        alert(
+          json.message ??
+            "Gagal menyimpan user"
+        );
       }
     } catch (error) {
-      console.error("Simpan user error:", error);
-      alert("Terjadi kesalahan saat membuat user");
+      console.error(
+        "Simpan user error:",
+        error
+      );
+
+      alert(
+        "Terjadi kesalahan saat menyimpan user"
+      );
     } finally {
       setSaving(false);
     }
   }
 
+  // =====================================================
+  // FILTER
+  // =====================================================
+
   const filteredUsers = useMemo(() => {
-    const keyword = search.toLowerCase().trim();
+    const keyword =
+      search.toLowerCase().trim();
 
     if (!keyword) {
       return data;
@@ -263,9 +424,19 @@ export default function UserPage() {
     });
   }, [data, search]);
 
+  // =====================================================
+  // ONLINE COUNT
+  // =====================================================
+
   const onlineCount = useMemo(() => {
-    return data.filter((user) => user.online).length;
+    return data.filter(
+      (user) => user.online
+    ).length;
   }, [data]);
+
+  // =====================================================
+  // ROLE CLASS
+  // =====================================================
 
   function getRoleClass(role: string) {
     switch (role) {
@@ -289,27 +460,39 @@ export default function UserPage() {
     }
   }
 
-  function formatLastSeen(lastSeen?: string | null) {
+  // =====================================================
+  // LAST SEEN
+  // =====================================================
+
+  function formatLastSeen(
+    lastSeen?: string | null
+  ) {
     if (!lastSeen) {
       return "Belum pernah aktif";
     }
 
-    return new Date(lastSeen).toLocaleString(
-      "id-ID",
-      {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }
-    );
+    return new Date(
+      lastSeen
+    ).toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
+
+  // =====================================================
+  // RENDER
+  // =====================================================
 
   return (
     <div className="min-h-full bg-[#F5F8F6] p-6 md:p-8">
 
-      {/* HEADER */}
+      {/* =================================================
+          HEADER
+      ================================================= */}
+
       <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
         <div>
@@ -337,7 +520,11 @@ export default function UserPage() {
             await loadAll();
             await loadOnlineStatus();
           }}
-          disabled={loading || onlineLoading}
+          disabled={
+            loading ||
+            onlineLoading ||
+            saving
+          }
           className="
             inline-flex
             items-center
@@ -360,7 +547,8 @@ export default function UserPage() {
           <RefreshCw
             size={17}
             className={
-              loading || onlineLoading
+              loading ||
+              onlineLoading
                 ? "animate-spin"
                 : ""
             }
@@ -371,10 +559,16 @@ export default function UserPage() {
 
       </div>
 
-      {/* SUMMARY */}
+      {/* =================================================
+          SUMMARY
+      ================================================= */}
+
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
 
+        {/* TOTAL */}
+
         <div className="rounded-2xl border border-[#DCE9E2] bg-white p-5 shadow-sm">
+
           <div className="flex items-center justify-between">
 
             <div>
@@ -392,9 +586,11 @@ export default function UserPage() {
             </div>
 
           </div>
+
         </div>
 
         {/* ONLINE */}
+
         <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
 
           <div className="flex items-center justify-between">
@@ -425,6 +621,8 @@ export default function UserPage() {
 
         </div>
 
+        {/* SEARCH */}
+
         <div className="rounded-2xl border border-[#DCE9E2] bg-white p-5 shadow-sm">
 
           <div className="flex items-center justify-between">
@@ -449,37 +647,111 @@ export default function UserPage() {
 
       </div>
 
+      {/* =================================================
+          MAIN
+      ================================================= */}
+
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_1fr]">
 
-        {/* FORM USER */}
-        <div className="rounded-2xl border border-[#DCE9E2] bg-white shadow-sm">
+        {/* =================================================
+            FORM USER
+        ================================================= */}
+
+        <div
+          className={`
+            rounded-2xl
+            border
+            bg-white
+            shadow-sm
+            ${
+              editingUserId !== null
+                ? "border-blue-200"
+                : "border-[#DCE9E2]"
+            }
+          `}
+        >
+
+          {/* FORM HEADER */}
 
           <div className="border-b border-[#E5ECE8] p-5">
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between">
 
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E8F2ED] text-[#497F70]">
-                <UserPlus size={20} />
+              <div className="flex items-center gap-3">
+
+                <div
+                  className={`
+                    flex
+                    h-10
+                    w-10
+                    items-center
+                    justify-center
+                    rounded-xl
+                    ${
+                      editingUserId !== null
+                        ? "bg-blue-50 text-blue-600"
+                        : "bg-[#E8F2ED] text-[#497F70]"
+                    }
+                  `}
+                >
+                  {editingUserId !== null ? (
+                    <Pencil size={20} />
+                  ) : (
+                    <UserPlus size={20} />
+                  )}
+                </div>
+
+                <div>
+
+                  <h2 className="font-semibold text-slate-800">
+                    {editingUserId !== null
+                      ? "Edit User"
+                      : "Tambah User"}
+                  </h2>
+
+                  <p className="text-xs text-slate-500">
+                    {editingUserId !== null
+                      ? "Ubah data pengguna"
+                      : "Buat akun pengguna baru"}
+                  </p>
+
+                </div>
+
               </div>
 
-              <div>
-                <h2 className="font-semibold text-slate-800">
-                  Tambah User
-                </h2>
-
-                <p className="text-xs text-slate-500">
-                  Buat akun pengguna baru
-                </p>
-              </div>
+              {editingUserId !== null && (
+                <button
+                  type="button"
+                  onClick={batalEdit}
+                  className="
+                    flex
+                    h-8
+                    w-8
+                    items-center
+                    justify-center
+                    rounded-lg
+                    text-slate-400
+                    hover:bg-slate-100
+                    hover:text-slate-700
+                  "
+                  title="Batal edit"
+                >
+                  <X size={18} />
+                </button>
+              )}
 
             </div>
 
           </div>
 
+          {/* FORM BODY */}
+
           <div className="space-y-5 p-5">
 
             {/* USERNAME */}
+
             <div>
+
               <label className="text-sm font-medium text-slate-700">
                 Username
               </label>
@@ -491,7 +763,8 @@ export default function UserPage() {
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    username: e.target.value,
+                    username:
+                      e.target.value,
                   })
                 }
                 className="
@@ -511,10 +784,13 @@ export default function UserPage() {
                   focus:ring-[#497F70]/10
                 "
               />
+
             </div>
 
             {/* NAMA */}
+
             <div>
+
               <label className="text-sm font-medium text-slate-700">
                 Nama Lengkap
               </label>
@@ -526,7 +802,8 @@ export default function UserPage() {
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    fullname: e.target.value,
+                    fullname:
+                      e.target.value,
                   })
                 }
                 className="
@@ -546,24 +823,42 @@ export default function UserPage() {
                   focus:ring-[#497F70]/10
                 "
               />
+
             </div>
 
             {/* PASSWORD */}
+
             <div>
+
               <label className="text-sm font-medium text-slate-700">
                 Password
               </label>
 
+              {editingUserId !== null && (
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Kosongkan jika password tidak ingin diubah.
+                </p>
+              )}
+
               <div className="relative mt-2">
 
                 <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Minimal 6 karakter"
+                  type={
+                    showPassword
+                      ? "text"
+                      : "password"
+                  }
+                  placeholder={
+                    editingUserId !== null
+                      ? "Kosongkan jika tidak diubah"
+                      : "Minimal 6 karakter"
+                  }
                   value={form.password}
                   onChange={(e) =>
                     setForm({
                       ...form,
-                      password: e.target.value,
+                      password:
+                        e.target.value,
                     })
                   }
                   className="
@@ -587,7 +882,9 @@ export default function UserPage() {
                 <button
                   type="button"
                   onClick={() =>
-                    setShowPassword(!showPassword)
+                    setShowPassword(
+                      !showPassword
+                    )
                   }
                   className="
                     absolute
@@ -606,10 +903,13 @@ export default function UserPage() {
                 </button>
 
               </div>
+
             </div>
 
             {/* ROLE */}
+
             <div>
+
               <label className="text-sm font-medium text-slate-700">
                 Role
               </label>
@@ -619,7 +919,8 @@ export default function UserPage() {
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    role: e.target.value,
+                    role:
+                      e.target.value,
                     outletId:
                       e.target.value ===
                       "OUTLET_ADMIN"
@@ -643,6 +944,7 @@ export default function UserPage() {
                   focus:ring-[#497F70]/10
                 "
               >
+
                 <option value="ADMIN">
                   ADMIN
                 </option>
@@ -662,22 +964,30 @@ export default function UserPage() {
                 <option value="OUTLET_ADMIN">
                   OUTLET ADMIN
                 </option>
+
               </select>
+
             </div>
 
             {/* OUTLET */}
-            {form.role === "OUTLET_ADMIN" && (
+
+            {form.role ===
+              "OUTLET_ADMIN" && (
               <div>
+
                 <label className="text-sm font-medium text-slate-700">
                   Outlet
                 </label>
 
                 <select
-                  value={form.outletId}
+                  value={
+                    form.outletId
+                  }
                   onChange={(e) =>
                     setForm({
                       ...form,
-                      outletId: e.target.value,
+                      outletId:
+                        e.target.value,
                     })
                   }
                   className="
@@ -696,81 +1006,198 @@ export default function UserPage() {
                     focus:ring-[#497F70]/10
                   "
                 >
+
                   <option value="">
                     Pilih Outlet
                   </option>
 
-                  {outlets.map((outlet) => (
-                    <option
-                      key={outlet.id}
-                      value={outlet.id}
-                    >
-                      {outlet.name}
-                    </option>
-                  ))}
+                  {outlets.map(
+                    (outlet) => (
+                      <option
+                        key={outlet.id}
+                        value={
+                          outlet.id
+                        }
+                      >
+                        {outlet.name}
+                      </option>
+                    )
+                  )}
+
                 </select>
 
-                {outlets.length === 0 && (
+                {outlets.length ===
+                  0 && (
                   <p className="mt-2 text-xs text-amber-600">
                     Belum ada outlet yang tersedia.
                   </p>
                 )}
+
+              </div>
+            )}
+
+            {/* STATUS */}
+
+            {editingUserId !== null && (
+              <div>
+
+                <label className="text-sm font-medium text-slate-700">
+                  Status Akun
+                </label>
+
+                <select
+                  value={
+                    form.active
+                      ? "true"
+                      : "false"
+                  }
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      active:
+                        e.target.value ===
+                        "true",
+                    })
+                  }
+                  className="
+                    mt-2
+                    w-full
+                    rounded-xl
+                    border
+                    border-[#D5E5DC]
+                    bg-white
+                    px-4
+                    py-3
+                    text-sm
+                    outline-none
+                    focus:border-[#497F70]
+                    focus:ring-2
+                    focus:ring-[#497F70]/10
+                  "
+                >
+
+                  <option value="true">
+                    Aktif
+                  </option>
+
+                  <option value="false">
+                    Nonaktif
+                  </option>
+
+                </select>
+
               </div>
             )}
 
             {/* BUTTON */}
-            <button
-              onClick={simpan}
-              disabled={saving}
-              className="
-                flex
-                w-full
-                items-center
-                justify-center
-                gap-2
-                rounded-xl
-                bg-[#497F70]
-                px-5
-                py-3
-                text-sm
-                font-semibold
-                text-white
-                shadow-sm
-                transition
-                hover:bg-[#3F6F62]
-                disabled:cursor-not-allowed
-                disabled:opacity-60
-              "
-            >
-              {saving ? (
-                <>
-                  <RefreshCw
-                    size={17}
-                    className="animate-spin"
-                  />
 
-                  Menyimpan...
-                </>
-              ) : (
-                <>
-                  <Plus size={18} />
+            <div className="space-y-2">
 
-                  Simpan User
-                </>
+              <button
+                onClick={simpan}
+                disabled={saving}
+                className={`
+                  flex
+                  w-full
+                  items-center
+                  justify-center
+                  gap-2
+                  rounded-xl
+                  px-5
+                  py-3
+                  text-sm
+                  font-semibold
+                  text-white
+                  shadow-sm
+                  transition
+                  disabled:cursor-not-allowed
+                  disabled:opacity-60
+                  ${
+                    editingUserId !==
+                    null
+                      ? "bg-blue-600 hover:bg-blue-700"
+                      : "bg-[#497F70] hover:bg-[#3F6F62]"
+                  }
+                `}
+              >
+
+                {saving ? (
+                  <>
+                    <RefreshCw
+                      size={17}
+                      className="animate-spin"
+                    />
+
+                    Menyimpan...
+                  </>
+                ) : editingUserId !==
+                  null ? (
+                  <>
+                    <Save size={17} />
+
+                    Simpan Perubahan
+                  </>
+                ) : (
+                  <>
+                    <Plus size={18} />
+
+                    Simpan User
+                  </>
+                )}
+
+              </button>
+
+              {editingUserId !==
+                null && (
+                <button
+                  type="button"
+                  onClick={batalEdit}
+                  disabled={saving}
+                  className="
+                    flex
+                    w-full
+                    items-center
+                    justify-center
+                    gap-2
+                    rounded-xl
+                    border
+                    border-slate-200
+                    bg-white
+                    px-5
+                    py-3
+                    text-sm
+                    font-medium
+                    text-slate-600
+                    hover:bg-slate-50
+                    disabled:opacity-50
+                  "
+                >
+                  <X size={17} />
+
+                  Batal Edit
+                </button>
               )}
-            </button>
+
+            </div>
 
           </div>
+
         </div>
 
-        {/* TABLE USER */}
+        {/* =================================================
+            TABLE USER
+        ================================================= */}
+
         <div className="overflow-hidden rounded-2xl border border-[#DCE9E2] bg-white shadow-sm">
+
+          {/* TABLE HEADER */}
 
           <div className="border-b border-[#E5ECE8] p-5">
 
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
               <div>
+
                 <h2 className="font-semibold text-slate-800">
                   Daftar User
                 </h2>
@@ -778,6 +1205,7 @@ export default function UserPage() {
                 <p className="mt-1 text-xs text-slate-500">
                   Semua akun pengguna yang terdaftar
                 </p>
+
               </div>
 
               <div className="relative w-full md:w-72">
@@ -798,7 +1226,9 @@ export default function UserPage() {
                   placeholder="Cari user..."
                   value={search}
                   onChange={(e) =>
-                    setSearch(e.target.value)
+                    setSearch(
+                      e.target.value
+                    )
                   }
                   className="
                     w-full
@@ -822,11 +1252,14 @@ export default function UserPage() {
 
           </div>
 
+          {/* TABLE */}
+
           <div className="overflow-x-auto">
 
-            <table className="w-full min-w-[900px]">
+            <table className="w-full min-w-[1050px]">
 
               <thead className="bg-[#F7FAF8]">
+
                 <tr>
 
                   <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -853,7 +1286,12 @@ export default function UserPage() {
                     Online
                   </th>
 
+                  <th className="px-5 py-4 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Aksi
+                  </th>
+
                 </tr>
+
               </thead>
 
               <tbody className="divide-y divide-[#E8EEE9]">
@@ -861,192 +1299,189 @@ export default function UserPage() {
                 {loading ? (
 
                   <tr>
+
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="px-5 py-12 text-center text-sm text-slate-500"
                     >
+
                       <div className="flex justify-center">
+
                         <RefreshCw
                           size={22}
                           className="animate-spin text-[#497F70]"
                         />
+
                       </div>
 
                       <p className="mt-3">
                         Memuat data user...
                       </p>
+
                     </td>
+
                   </tr>
 
-                ) : filteredUsers.length === 0 ? (
+                ) : filteredUsers.length ===
+                  0 ? (
 
                   <tr>
+
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="px-5 py-12 text-center text-sm text-slate-500"
                     >
+
                       <Users
                         size={32}
                         className="mx-auto mb-3 text-slate-300"
                       />
 
-                      Tidak ada user ditemukan.
+                      Tidak ada user
+                      ditemukan.
+
                     </td>
+
                   </tr>
 
                 ) : (
 
-                  filteredUsers.map((user) => (
+                  filteredUsers.map(
+                    (user) => (
 
-                    <tr
-                      key={user.id}
-                      className="transition hover:bg-[#FAFCFB]"
-                    >
+                      <tr
+                        key={user.id}
+                        className={`
+                          transition
+                          hover:bg-[#FAFCFB]
+                          ${
+                            editingUserId ===
+                            user.id
+                              ? "bg-blue-50/40"
+                              : ""
+                          }
+                        `}
+                      >
 
-                      {/* USER */}
-                      <td className="px-5 py-4">
+                        {/* USER */}
 
-                        <div className="flex items-center gap-3">
+                        <td className="px-5 py-4">
 
-                          <div className="relative">
+                          <div className="flex items-center gap-3">
 
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E8F2ED] font-semibold text-[#497F70]">
-                              {user.fullname
-                                ?.charAt(0)
-                                ?.toUpperCase() ||
-                                "U"}
+                            <div className="relative">
+
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E8F2ED] font-semibold text-[#497F70]">
+
+                                {user.fullname
+                                  ?.charAt(
+                                    0
+                                  )
+                                  ?.toUpperCase() ||
+                                  "U"}
+
+                              </div>
+
+                              <span
+                                className={`
+                                  absolute
+                                  bottom-0
+                                  right-0
+                                  h-3
+                                  w-3
+                                  rounded-full
+                                  border-2
+                                  border-white
+                                  ${
+                                    user.online
+                                      ? "bg-emerald-500"
+                                      : "bg-slate-300"
+                                  }
+                                `}
+                              />
+
                             </div>
 
-                            {/* ONLINE DOT */}
-                            <span
-                              className={`
-                                absolute
-                                bottom-0
-                                right-0
-                                h-3
-                                w-3
-                                rounded-full
-                                border-2
-                                border-white
-                                ${
-                                  user.online
-                                    ? "bg-emerald-500"
-                                    : "bg-slate-300"
-                                }
-                              `}
-                            />
+                            <div>
+
+                              <p className="font-medium text-slate-800">
+                                {user.fullname ||
+                                  "-"}
+                              </p>
+
+                              <p className="text-xs text-slate-400">
+                                ID #{user.id}
+                              </p>
+
+                            </div>
 
                           </div>
 
-                          <div>
+                        </td>
 
-                            <p className="font-medium text-slate-800">
-                              {user.fullname || "-"}
-                            </p>
+                        {/* USERNAME */}
 
-                            <p className="text-xs text-slate-400">
-                              ID #{user.id}
-                            </p>
+                        <td className="px-5 py-4 text-sm text-slate-600">
+                          @{user.username}
+                        </td>
 
-                          </div>
+                        {/* ROLE */}
 
-                        </div>
-
-                      </td>
-
-                      {/* USERNAME */}
-                      <td className="px-5 py-4 text-sm text-slate-600">
-                        @{user.username}
-                      </td>
-
-                      {/* ROLE */}
-                      <td className="px-5 py-4">
-
-                        <span
-                          className={`
-                            inline-flex
-                            items-center
-                            gap-1.5
-                            rounded-full
-                            border
-                            px-3
-                            py-1
-                            text-xs
-                            font-semibold
-                            ${getRoleClass(user.role)}
-                          `}
-                        >
-                          <ShieldCheck size={13} />
-
-                          {user.role ===
-                          "OUTLET_ADMIN"
-                            ? "OUTLET ADMIN"
-                            : user.role}
-                        </span>
-
-                      </td>
-
-                      {/* OUTLET */}
-                      <td className="px-5 py-4 text-sm text-slate-600">
-
-                        {user.outlet?.name ? (
-                          <span className="font-medium text-slate-700">
-                            {user.outlet.name}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">
-                            Pusat
-                          </span>
-                        )}
-
-                      </td>
-
-                      {/* ACCOUNT STATUS */}
-                      <td className="px-5 py-4 text-center">
-
-                        <span
-                          className={`
-                            inline-flex
-                            items-center
-                            gap-1.5
-                            rounded-full
-                            px-3
-                            py-1
-                            text-xs
-                            font-medium
-                            ${
-                              user.active
-                                ? "bg-green-50 text-green-700"
-                                : "bg-red-50 text-red-700"
-                            }
-                          `}
-                        >
+                        <td className="px-5 py-4">
 
                           <span
                             className={`
-                              h-1.5
-                              w-1.5
+                              inline-flex
+                              items-center
+                              gap-1.5
                               rounded-full
-                              ${
-                                user.active
-                                  ? "bg-green-500"
-                                  : "bg-red-500"
-                              }
+                              border
+                              px-3
+                              py-1
+                              text-xs
+                              font-semibold
+                              ${getRoleClass(
+                                user.role
+                              )}
                             `}
-                          />
+                          >
 
-                          {user.active
-                            ? "Aktif"
-                            : "Nonaktif"}
+                            <ShieldCheck
+                              size={13}
+                            />
 
-                        </span>
+                            {user.role ===
+                            "OUTLET_ADMIN"
+                              ? "OUTLET ADMIN"
+                              : user.role}
 
-                      </td>
+                          </span>
 
-                      {/* ONLINE */}
-                      <td className="px-5 py-4 text-center">
+                        </td>
 
-                        <div className="flex flex-col items-center">
+                        {/* OUTLET */}
+
+                        <td className="px-5 py-4 text-sm text-slate-600">
+
+                          {user.outlet?.name ? (
+                            <span className="font-medium text-slate-700">
+                              {
+                                user
+                                  .outlet
+                                  .name
+                              }
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">
+                              Pusat
+                            </span>
+                          )}
+
+                        </td>
+
+                        {/* STATUS */}
+
+                        <td className="px-5 py-4 text-center">
 
                           <span
                             className={`
@@ -1057,50 +1492,137 @@ export default function UserPage() {
                               px-3
                               py-1
                               text-xs
-                              font-semibold
+                              font-medium
                               ${
-                                user.online
-                                  ? "bg-emerald-50 text-emerald-700"
-                                  : "bg-slate-100 text-slate-500"
+                                user.active
+                                  ? "bg-green-50 text-green-700"
+                                  : "bg-red-50 text-red-700"
                               }
                             `}
                           >
 
                             <span
                               className={`
-                                h-2
-                                w-2
+                                h-1.5
+                                w-1.5
                                 rounded-full
                                 ${
-                                  user.online
-                                    ? "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]"
-                                    : "bg-slate-300"
+                                  user.active
+                                    ? "bg-green-500"
+                                    : "bg-red-500"
                                 }
                               `}
                             />
 
-                            {user.online
-                              ? "Online"
-                              : "Offline"}
+                            {user.active
+                              ? "Aktif"
+                              : "Nonaktif"}
 
                           </span>
 
-                          {!user.online &&
-                            user.lastSeen && (
-                              <span className="mt-1 text-[9px] text-slate-400">
-                                {formatLastSeen(
-                                  user.lastSeen
-                                )}
-                              </span>
-                            )}
+                        </td>
 
-                        </div>
+                        {/* ONLINE */}
 
-                      </td>
+                        <td className="px-5 py-4 text-center">
 
-                    </tr>
+                          <div className="flex flex-col items-center">
 
-                  ))
+                            <span
+                              className={`
+                                inline-flex
+                                items-center
+                                gap-1.5
+                                rounded-full
+                                px-3
+                                py-1
+                                text-xs
+                                font-semibold
+                                ${
+                                  user.online
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "bg-slate-100 text-slate-500"
+                                }
+                              `}
+                            >
+
+                              <span
+                                className={`
+                                  h-2
+                                  w-2
+                                  rounded-full
+                                  ${
+                                    user.online
+                                      ? "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]"
+                                      : "bg-slate-300"
+                                  }
+                                `}
+                              />
+
+                              {user.online
+                                ? "Online"
+                                : "Offline"}
+
+                            </span>
+
+                            {!user.online &&
+                              user.lastSeen && (
+                                <span className="mt-1 text-[9px] text-slate-400">
+                                  {formatLastSeen(
+                                    user.lastSeen
+                                  )}
+                                </span>
+                              )}
+
+                          </div>
+
+                        </td>
+
+                        {/* AKSI */}
+
+                        <td className="px-5 py-4 text-center">
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              mulaiEdit(
+                                user
+                              )
+                            }
+                            className="
+                              inline-flex
+                              items-center
+                              justify-center
+                              gap-1.5
+                              rounded-lg
+                              border
+                              border-blue-200
+                              bg-blue-50
+                              px-3
+                              py-2
+                              text-xs
+                              font-semibold
+                              text-blue-600
+                              transition
+                              hover:bg-blue-100
+                            "
+                            title="Edit user"
+                          >
+
+                            <Pencil
+                              size={14}
+                            />
+
+                            Edit
+
+                          </button>
+
+                        </td>
+
+                      </tr>
+
+                    )
+                  )
 
                 )}
 

@@ -12,6 +12,7 @@ import {
   RefreshCw,
   CheckCircle2,
   FileText,
+  MessageSquare,
 } from "lucide-react";
 
 import { exportPurchasePDF } from "@/lib/exportPurchasePdf";
@@ -117,6 +118,10 @@ export default function PurchaseOutletDetailPage() {
 
   const [supplierId, setSupplierId] =
     useState("");
+
+  // =====================================================
+  // COMMENT / KETERANGAN PO
+  // =====================================================
 
   const [remarks, setRemarks] =
     useState("");
@@ -388,6 +393,16 @@ export default function PurchaseOutletDetailPage() {
       value || 0
     ).toLocaleString(
       "id-ID"
+    );
+  }
+
+  // =====================================================
+  // OPEN COMMENT
+  // =====================================================
+
+  function handleOpenComment() {
+    router.push(
+      `/outlet/purchase/${id}/comment`
     );
   }
 
@@ -664,19 +679,6 @@ export default function PurchaseOutletDetailPage() {
   // =====================================================
   // EXPORT PDF
   // =====================================================
-  //
-  // Export hanya membaca state.
-  // Tidak mengubah:
-  // - items
-  // - supplier
-  // - outlet
-  // - status
-  // - saving
-  // - approving
-  // - deleting
-  //
-  // Jadi aman digunakan saat edit.
-  // =====================================================
 
   async function handleExportPDF() {
     if (!purchase) {
@@ -693,10 +695,6 @@ export default function PurchaseOutletDetailPage() {
 
     try {
       setExporting(true);
-
-      // =================================================
-      // SNAPSHOT DATA
-      // =================================================
 
       const currentOutlet =
         purchase.outlet ||
@@ -716,10 +714,6 @@ export default function PurchaseOutletDetailPage() {
         ) ||
         null;
 
-      // =================================================
-      // DATA PDF
-      // =================================================
-
       const pdfData = {
         ...purchase,
 
@@ -728,6 +722,9 @@ export default function PurchaseOutletDetailPage() {
 
         supplier:
           currentSupplier,
+
+        remarks:
+          remarks,
 
         items: items.map(
           (item) => ({
@@ -746,10 +743,6 @@ export default function PurchaseOutletDetailPage() {
         total:
           total,
       };
-
-      // =================================================
-      // EXPORT
-      // =================================================
 
       await Promise.resolve(
         exportPurchasePDF(
@@ -1179,9 +1172,29 @@ export default function PurchaseOutletDetailPage() {
             {purchase.status}
           </span>
 
-          {/* =================================================
-              EXPORT PDF HEADER
-          ================================================= */}
+          {/* COMMENT */}
+
+          <button
+            type="button"
+            onClick={
+              handleOpenComment
+            }
+            disabled={
+              saving ||
+              deleting ||
+              approving ||
+              exporting
+            }
+            className="inline-flex items-center gap-2 rounded-xl bg-[#497F70] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3D6D60] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <MessageSquare
+              size={17}
+            />
+
+            Comment
+          </button>
+
+          {/* EXPORT PDF */}
 
           <button
             type="button"
@@ -1425,12 +1438,14 @@ export default function PurchaseOutletDetailPage() {
               </select>
             </div>
 
-            {/* REMARKS */}
+            {/* =================================================
+                COMMENT / KETERANGAN
+            ================================================= */}
 
             <div className="md:col-span-2">
 
               <label className="mb-2 block text-sm font-semibold text-gray-700">
-                Keterangan
+                Comment / Keterangan PO
               </label>
 
               <textarea
@@ -1446,8 +1461,14 @@ export default function PurchaseOutletDetailPage() {
                   )
                 }
                 rows={3}
-                className="w-full resize-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm outline-none focus:border-[#497F70] disabled:bg-gray-100"
+                placeholder="Tambahkan komentar atau keterangan untuk Purchase Order..."
+                className="w-full resize-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm outline-none transition focus:border-[#497F70] disabled:bg-gray-100 disabled:text-gray-500"
               />
+
+              <p className="mt-1.5 text-xs text-gray-400">
+                Keterangan ini merupakan remarks PO.
+                Untuk diskusi/komentar antar user gunakan tombol Comment.
+              </p>
 
             </div>
 
@@ -1577,7 +1598,7 @@ export default function PurchaseOutletDetailPage() {
                           .value
                       )
                     }
-                    className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm outline-none focus:border-[#497F70]"
+                    className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-3 py-3 text-sm outline-none focus:border-[#497F70]"
                   />
 
                 </div>
@@ -1605,7 +1626,7 @@ export default function PurchaseOutletDetailPage() {
                           .value
                       )
                     }
-                    className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm outline-none focus:border-[#497F70]"
+                    className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-3 py-3 text-sm outline-none focus:border-[#497F70]"
                   />
 
                   {selectedBarang && (
@@ -1693,32 +1714,32 @@ export default function PurchaseOutletDetailPage() {
 
                 <tr className="border-b border-[#E5ECE9]">
 
-                  <th className="px-5 py-4 text-left">
+                  <th className="w-12 px-3 py-3 text-left">
                     No
                   </th>
 
-                  <th className="px-5 py-4 text-left">
+                  <th className="px-3 py-3 text-left">
                     Barang
                   </th>
 
-                  <th className="px-5 py-4 text-left">
+                  <th className="w-20 px-3 py-3 text-left">
                     Satuan
                   </th>
 
-                  <th className="px-5 py-4 text-right">
+                  <th className="w-24 px-3 py-3 text-right">
                     Qty
                   </th>
 
-                  <th className="px-5 py-4 text-right">
+                  <th className="w-36 px-3 py-3 text-right">
                     Harga
                   </th>
 
-                  <th className="px-5 py-4 text-right">
+                  <th className="w-40 px-3 py-3 text-right">
                     Subtotal
                   </th>
 
                   {isDraft && (
-                    <th className="px-5 py-4 text-center">
+                    <th className="w-16 px-3 py-3 text-center">
                       Aksi
                     </th>
                   )}
@@ -1741,13 +1762,13 @@ export default function PurchaseOutletDetailPage() {
                       className="border-b border-[#EDF2EF]"
                     >
 
-                      <td className="px-5 py-4">
+                      <td className="px-3 py-3 text-gray-500">
                         {
                           index + 1
                         }
                       </td>
 
-                      <td className="px-5 py-4">
+                      <td className="px-3 py-3">
 
                         <div className="font-semibold text-[#18352D]">
                           {
@@ -1767,7 +1788,7 @@ export default function PurchaseOutletDetailPage() {
 
                       </td>
 
-                      <td className="px-5 py-4">
+                      <td className="px-3 py-3 text-gray-600">
                         {
                           item
                             .barang
@@ -1775,7 +1796,9 @@ export default function PurchaseOutletDetailPage() {
                         }
                       </td>
 
-                      <td className="px-5 py-4 text-right">
+                      {/* QTY INLINE KECIL */}
+
+                      <td className="px-3 py-3 text-right">
 
                         {isDraft ? (
                           <input
@@ -1795,7 +1818,7 @@ export default function PurchaseOutletDetailPage() {
                                   .value
                               )
                             }
-                            className="w-24 rounded-lg border border-[#D5E5DC] px-3 py-2 text-right"
+                            className="h-8 w-16 rounded-md border border-[#D5E5DC] bg-white px-2 text-right text-xs outline-none focus:border-[#497F70] focus:ring-1 focus:ring-[#497F70]/20"
                           />
                         ) : (
                           item.qty
@@ -1803,7 +1826,9 @@ export default function PurchaseOutletDetailPage() {
 
                       </td>
 
-                      <td className="px-5 py-4 text-right">
+                      {/* HARGA INLINE KECIL */}
+
+                      <td className="px-3 py-3 text-right">
 
                         {isDraft ? (
                           <input
@@ -1823,7 +1848,7 @@ export default function PurchaseOutletDetailPage() {
                                   .value
                               )
                             }
-                            className="w-36 rounded-lg border border-[#D5E5DC] px-3 py-2 text-right"
+                            className="h-8 w-28 rounded-md border border-[#D5E5DC] bg-white px-2 text-right text-xs outline-none focus:border-[#497F70] focus:ring-1 focus:ring-[#497F70]/20"
                           />
                         ) : (
                           `Rp ${formatRupiah(
@@ -1833,7 +1858,7 @@ export default function PurchaseOutletDetailPage() {
 
                       </td>
 
-                      <td className="px-5 py-4 text-right font-semibold">
+                      <td className="whitespace-nowrap px-3 py-3 text-right font-semibold">
                         Rp{" "}
                         {formatRupiah(
                           Number(
@@ -1846,7 +1871,7 @@ export default function PurchaseOutletDetailPage() {
                       </td>
 
                       {isDraft && (
-                        <td className="px-5 py-4 text-center">
+                        <td className="px-3 py-3 text-center">
 
                           <button
                             type="button"
@@ -1855,11 +1880,11 @@ export default function PurchaseOutletDetailPage() {
                                 item.barangId
                               )
                             }
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100"
                           >
                             <Trash2
                               size={
-                                16
+                                15
                               }
                             />
                           </button>
@@ -1895,12 +1920,12 @@ export default function PurchaseOutletDetailPage() {
 
                   <td
                     colSpan={5}
-                    className="px-5 py-5 text-right font-bold"
+                    className="px-3 py-4 text-right font-bold"
                   >
                     TOTAL
                   </td>
 
-                  <td className="px-5 py-5 text-right text-lg font-bold text-[#18352D]">
+                  <td className="whitespace-nowrap px-3 py-4 text-right text-lg font-bold text-[#18352D]">
                     Rp{" "}
                     {formatRupiah(
                       total
@@ -1921,6 +1946,46 @@ export default function PurchaseOutletDetailPage() {
         </div>
 
         {/* =================================================
+            COMMENT / KETERANGAN PREVIEW
+        ================================================= */}
+
+        {remarks.trim() && (
+          <div className="rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
+
+            <div className="flex items-center justify-between border-b border-[#E5ECE9] px-5 py-4">
+
+              <h2 className="font-semibold text-[#18352D]">
+                Comment / Keterangan PO
+              </h2>
+
+              <button
+                type="button"
+                onClick={
+                  handleOpenComment
+                }
+                className="inline-flex items-center gap-2 rounded-lg bg-[#497F70] px-3 py-2 text-xs font-semibold text-white hover:bg-[#3D6D60]"
+              >
+                <MessageSquare
+                  size={15}
+                />
+
+                Buka Comment
+              </button>
+
+            </div>
+
+            <div className="px-5 py-4">
+
+              <div className="rounded-xl bg-[#F5F8F6] px-4 py-3 text-sm leading-6 text-gray-700 whitespace-pre-wrap">
+                {remarks}
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* =================================================
             BOTTOM ACTION
         ================================================= */}
 
@@ -1938,6 +2003,22 @@ export default function PurchaseOutletDetailPage() {
             className="rounded-xl border border-[#D5E5DC] bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-[#F5F8F6]"
           >
             Kembali
+          </button>
+
+          {/* COMMENT */}
+
+          <button
+            type="button"
+            onClick={
+              handleOpenComment
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#497F70] bg-white px-5 py-3 text-sm font-semibold text-[#497F70] hover:bg-[#F0F6F3]"
+          >
+            <MessageSquare
+              size={17}
+            />
+
+            Comment
           </button>
 
           {/* EXPORT PDF */}

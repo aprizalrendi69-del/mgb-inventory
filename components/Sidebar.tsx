@@ -30,6 +30,8 @@ import {
   TrendingUp,
   ArrowDownCircle,
   Trash2,
+  CreditCard,
+  WalletCards,
 } from "lucide-react";
 
 type Role =
@@ -62,21 +64,36 @@ const menus: Menu[] = [
   {
     title: "Dashboard",
     url: "/dashboard",
-    roles: ["ADMIN", "MANAGER", "PURCHASING", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+      "PURCHASING",
+      "GUDANG",
+    ],
     icon: LayoutDashboard,
   },
 
   {
     title: "Attendance",
     url: "/attendance",
-    roles: ["ADMIN", "MANAGER", "GUDANG", "OUTLET_ADMIN"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+      "GUDANG",
+      "OUTLET_ADMIN",
+    ],
     icon: CalendarCheck,
   },
 
   {
     title: "Riwayat Absensi",
     url: "/attendance/history",
-    roles: ["ADMIN", "MANAGER", "GUDANG", "OUTLET_ADMIN"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+      "GUDANG",
+      "OUTLET_ADMIN",
+    ],
     icon: History,
   },
 
@@ -92,173 +109,58 @@ const menus: Menu[] = [
   {
     title: "Master Barang",
     url: "/master-barang",
-    roles: ["ADMIN", "PURCHASING"],
+    roles: [
+      "ADMIN",
+      "PURCHASING",
+    ],
     icon: Package,
   },
 
   {
     title: "Master Supplier",
     url: "/supplier",
-    roles: ["ADMIN", "PURCHASING"],
+    roles: [
+      "ADMIN",
+      "PURCHASING",
+    ],
     icon: Truck,
   },
 
   {
     title: "Master Customer",
     url: "/customer",
-    roles: ["ADMIN"],
+    roles: [
+      "ADMIN",
+    ],
     icon: Users,
   },
 
   {
     title: "Master User",
     url: "/master/user",
-    roles: ["ADMIN"],
+    roles: [
+      "ADMIN",
+    ],
     icon: UserCog,
   },
 
   {
     title: "Master Outlet",
     url: "/master/outlet",
-    roles: ["ADMIN"],
+    roles: [
+      "ADMIN",
+    ],
     icon: Warehouse,
   },
 
   {
     title: "Master Karyawan",
     url: "/employee",
-    roles: ["ADMIN", "MANAGER"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+    ],
     icon: UserRound,
-  },
-
-  // =====================================================
-  // OUTLET
-  // =====================================================
-
-  {
-    title: "OUTLET",
-    header: true,
-  },
-
-  {
-    title: "Dashboard Outlet",
-    url: "/outlet",
-    roles: ["OUTLET_ADMIN"],
-    icon: LayoutDashboard,
-  },
-
-  {
-    title: "Master Barang Outlet",
-    url: "/outlet/master-barang",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: Package,
-  },
-
-  {
-    title: "Purchase Outlet",
-    url: "/outlet/purchase",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: ShoppingCart,
-  },
-
-  {
-    title: "Barang Masuk Outlet",
-    url: "/outlet/barang-masuk",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: ArrowDownToLine,
-  },
-
-  {
-  title: "Transfer Outlet",
-  url: "/outlet/transfer",
-  roles: ["ADMIN", "OUTLET_ADMIN"],
-  icon: ArrowLeftRight,
-  },
-
-  {
-    title: "Barang Keluar Outlet",
-    url: "/outlet/barang-keluar",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: ArrowDownCircle,
-  },
-
-  {
-    title: "Waste Outlet",
-    url: "/outlet/waste",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: Trash2,
-  },
-
-  {
-    title: "Approval Waste Outlet",
-    url: "/outlet/waste/approval",
-    roles: ["ADMIN", "MANAGER"],
-    icon: ClipboardCheck,
-  },
-
-  {
-    title: "Stock Outlet",
-    url: "/outlet/stock",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: Boxes,
-  },
-
-  {
-  title: "History Stock Outlet",
-  url: "/outlet/history-stock",
-  roles: ["ADMIN", "OUTLET_ADMIN"],
-  icon: FileClock,
-  },
-
-  {
-    title: "Stock Awal Outlet",
-    url: "/outlet/stock-awal",
-    roles: ["ADMIN"],
-    icon: Warehouse,
-  },
-
-  {
-    title: "Stock Opname Outlet",
-    url: "/outlet/stock-opname",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: ClipboardList,
-  },
-
-  {
-    title: "Approval Stock Opname",
-    url: "/outlet/stock-opname/approval",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: ClipboardCheck,
-  },
-
-  // =====================================================
-  // LAPORAN OUTLET
-  // =====================================================
-
-  {
-    title: "LAPORAN OUTLET",
-    header: true,
-  },
-
-  {
-    title: "Laporan Purchase Order",
-    url: "/outlet/laporan/purchase",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: FileText,
-  },
-
-  {
-    title: "Laporan Delivery Order",
-    url: "/outlet/laporan/delivery",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: FileText,
-  },
-
-  {
-    title: "Laporan Stock Outlet",
-    url: "/outlet/laporan/stock",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: FileText,
   },
 
   // =====================================================
@@ -273,28 +175,41 @@ const menus: Menu[] = [
   {
     title: "Purchase Order",
     url: "/purchase",
-    roles: ["ADMIN", "PURCHASING"],
+    roles: [
+      "ADMIN",
+    ],
     icon: ShoppingCart,
   },
 
   {
     title: "Master Harga",
     url: "/master-harga",
-    roles: ["ADMIN", "MANAGER", "PURCHASING"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+      "PURCHASING",
+    ],
     icon: Tag,
   },
 
   {
     title: "Approval Purchase",
     url: "/purchase/approve",
-    roles: ["ADMIN", "MANAGER"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+      "PURCHASING",
+    ],
     icon: ClipboardCheck,
   },
 
   {
     title: "Barang Masuk",
     url: "/barang-masuk",
-    roles: ["ADMIN", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "GUDANG",
+    ],
     icon: ArrowDownToLine,
   },
 
@@ -308,58 +223,92 @@ const menus: Menu[] = [
   },
 
   {
+    title: "Stock Pusat",
+    url: "/stock",
+    roles: [
+      "ADMIN",
+      "GUDANG",
+    ],
+    icon: Warehouse,
+  },
+
+  {
     title: "Kartu Stok",
     url: "/gudang/stock-card",
-    roles: ["ADMIN", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "GUDANG",
+    ],
     icon: Warehouse,
   },
 
   {
     title: "Expired Barang",
     url: "/expired",
-    roles: ["ADMIN", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "GUDANG",
+    ],
     icon: Package,
   },
 
   {
     title: "Barang Keluar",
     url: "/barang-keluar",
-    roles: ["ADMIN", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "GUDANG",
+    ],
     icon: PackageMinus,
   },
 
   {
     title: "Stock Card",
     url: "/stock-card",
-    roles: ["ADMIN", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "GUDANG",
+    ],
     icon: Boxes,
   },
 
   {
     title: "Mutasi Stock",
     url: "/mutasi-stock",
-    roles: ["ADMIN", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "GUDANG",
+    ],
     icon: ArrowLeftRight,
   },
 
   {
     title: "Stock Opname",
     url: "/stock-opname",
-    roles: ["ADMIN", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "GUDANG",
+    ],
     icon: ClipboardList,
   },
 
   {
     title: "Adjustment Stock",
     url: "/adjustment",
-    roles: ["ADMIN", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "GUDANG",
+    ],
     icon: SlidersHorizontal,
   },
 
   {
     title: "History Stock",
     url: "/history",
-    roles: ["ADMIN", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "GUDANG",
+    ],
     icon: FileClock,
   },
 
@@ -375,14 +324,19 @@ const menus: Menu[] = [
   {
     title: "Delivery Order",
     url: "/pengiriman",
-    roles: ["ADMIN"],
+    roles: [
+      "ADMIN",
+    ],
     icon: Send,
   },
 
   {
     title: "Surat Jalan",
     url: "/surat-jalan",
-    roles: ["ADMIN", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "GUDANG",
+    ],
     icon: FileText,
   },
 
@@ -398,7 +352,11 @@ const menus: Menu[] = [
   {
     title: "Inventory",
     url: "/inventory",
-    roles: ["ADMIN", "MANAGER", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+      "GUDANG",
+    ],
     icon: Boxes,
   },
 
@@ -414,12 +372,285 @@ const menus: Menu[] = [
   {
     title: "Cost Control",
     url: "/cost-control",
-    roles: ["ADMIN", "MANAGER", "OUTLET_ADMIN"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+      "OUTLET_ADMIN",
+    ],
     icon: TrendingUp,
   },
 
   // =====================================================
-  // LAPORAN
+  // FINANCE
+  // =====================================================
+
+  {
+    title: "FINANCE",
+    header: true,
+  },
+
+  /*
+   * PAYMENT
+   *
+   * SATU MENU UNTUK PUSAT + OUTLET
+   *
+   * ADMIN
+   * -> dapat melihat semua Payment
+   *
+   * MANAGER
+   * -> dapat melihat Payment sesuai hak akses
+   *
+   * OUTLET_ADMIN
+   * -> tidak ditampilkan di sidebar
+   * -> karena Payment outlet diproses melalui
+   *    flow yang dikontrol API/session
+   *
+   * Tidak ada lagi:
+   * /outlet/payment
+   */
+
+  {
+    title: "Payment",
+    url: "/payment",
+    roles: [
+      "ADMIN",
+      "MANAGER",
+    ],
+    icon: CreditCard,
+  },
+
+  {
+  title: "Master Account",
+  url: "/petty-cash/accounts",
+  roles: [
+    "ADMIN",
+  ],
+  icon: WalletCards,
+  },
+
+  /*
+   * PURCHASE PAYABLE
+   *
+   * Satu halaman untuk hutang PO pusat/outlet.
+   */
+
+  {
+    title: "Purchase Payable / Hutang",
+    url: "/purchase-payable",
+    roles: [
+      "ADMIN",
+      "MANAGER",
+    ],
+    icon: FileClock,
+  },
+
+  /*
+   * PETTY CASH
+   *
+   * SATU MENU UNTUK PUSAT + OUTLET
+   *
+   * ADMIN
+   * -> semua Petty Cash
+   *
+   * MANAGER
+   * -> Petty Cash sesuai hak akses
+   *
+   * OUTLET_ADMIN
+   * -> hanya Petty Cash outlet sendiri
+   *
+   * Tidak ada lagi:
+   * /outlet/petty-cash
+   */
+
+  {
+    title: "Petty Cash",
+    url: "/petty-cash",
+    roles: [
+      "ADMIN",
+      "MANAGER",
+      "OUTLET_ADMIN",
+    ],
+    icon: WalletCards,
+  },
+
+  // =====================================================
+  // OUTLET
+  // =====================================================
+
+  {
+    title: "OUTLET",
+    header: true,
+  },
+
+  {
+    title: "Dashboard Outlet",
+    url: "/outlet",
+    roles: [
+      "OUTLET_ADMIN",
+    ],
+    icon: LayoutDashboard,
+  },
+
+  {
+    title: "Master Barang Outlet",
+    url: "/outlet/master-barang",
+    roles: [
+      "ADMIN",
+      "OUTLET_ADMIN",
+    ],
+    icon: Package,
+  },
+
+  {
+    title: "Purchase Outlet",
+    url: "/outlet/purchase",
+    roles: [
+      "ADMIN",
+      "OUTLET_ADMIN",
+    ],
+    icon: ShoppingCart,
+  },
+
+  {
+    title: "Barang Masuk Outlet",
+    url: "/outlet/barang-masuk",
+    roles: [
+      "ADMIN",
+      "OUTLET_ADMIN",
+    ],
+    icon: ArrowDownToLine,
+  },
+
+  {
+    title: "Transfer Outlet",
+    url: "/outlet/transfer",
+    roles: [
+      "ADMIN",
+      "OUTLET_ADMIN",
+    ],
+    icon: ArrowLeftRight,
+  },
+
+  {
+    title: "Barang Keluar Outlet",
+    url: "/outlet/barang-keluar",
+    roles: [
+      "ADMIN",
+      "OUTLET_ADMIN",
+    ],
+    icon: ArrowDownCircle,
+  },
+
+  {
+    title: "Waste Outlet",
+    url: "/outlet/waste",
+    roles: [
+      "ADMIN",
+      "OUTLET_ADMIN",
+    ],
+    icon: Trash2,
+  },
+
+  {
+    title: "Approval Waste Outlet",
+    url: "/outlet/waste/approval",
+    roles: [
+      "ADMIN",
+      "MANAGER",
+    ],
+    icon: ClipboardCheck,
+  },
+
+  {
+    title: "Stock Outlet",
+    url: "/outlet/stock",
+    roles: [
+      "ADMIN",
+      "OUTLET_ADMIN",
+    ],
+    icon: Boxes,
+  },
+
+  {
+    title: "History Stock Outlet",
+    url: "/outlet/history-stock",
+    roles: [
+      "ADMIN",
+      "OUTLET_ADMIN",
+    ],
+    icon: FileClock,
+  },
+
+  {
+    title: "Stock Awal Outlet",
+    url: "/outlet/stock-awal",
+    roles: [
+      "ADMIN",
+    ],
+    icon: Warehouse,
+  },
+
+  {
+    title: "Stock Opname Outlet",
+    url: "/outlet/stock-opname",
+    roles: [
+      "ADMIN",
+      "OUTLET_ADMIN",
+    ],
+    icon: ClipboardList,
+  },
+
+  {
+    title: "Approval Stock Opname",
+    url: "/outlet/stock-opname/approval",
+    roles: [
+      "ADMIN",
+      "OUTLET_ADMIN",
+    ],
+    icon: ClipboardCheck,
+  },
+
+  // =====================================================
+  // LAPORAN OUTLET
+  // =====================================================
+
+  {
+    title: "LAPORAN OUTLET",
+    header: true,
+  },
+
+  {
+    title: "Laporan Purchase Outlet",
+    url: "/outlet/laporan/purchase",
+    roles: [
+      "ADMIN",
+      "OUTLET_ADMIN",
+    ],
+    icon: FileText,
+  },
+
+  {
+    title: "Laporan Delivery Outlet",
+    url: "/outlet/laporan/delivery",
+    roles: [
+      "ADMIN",
+      "OUTLET_ADMIN",
+    ],
+    icon: FileText,
+  },
+
+  {
+    title: "Laporan Stock Outlet",
+    url: "/outlet/laporan/stock",
+    roles: [
+      "ADMIN",
+      "OUTLET_ADMIN",
+    ],
+    icon: FileText,
+  },
+
+  // =====================================================
+  // LAPORAN PUSAT
   // =====================================================
 
   {
@@ -430,56 +661,86 @@ const menus: Menu[] = [
   {
     title: "Laporan Purchase",
     url: "/laporan/purchase",
-    roles: ["ADMIN", "MANAGER", "PURCHASING"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+      "PURCHASING",
+    ],
     icon: FileText,
   },
 
   {
     title: "Laporan Barang Masuk",
     url: "/laporan/barang-masuk",
-    roles: ["ADMIN", "MANAGER", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+      "GUDANG",
+    ],
     icon: FileText,
   },
 
   {
     title: "Laporan Barang Keluar",
     url: "/laporan/barang-keluar",
-    roles: ["ADMIN", "MANAGER", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+      "GUDANG",
+    ],
     icon: FileText,
   },
 
   {
     title: "Laporan Inventory",
     url: "/laporan/inventory",
-    roles: ["ADMIN", "MANAGER"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+    ],
     icon: FileText,
   },
 
   {
     title: "Laporan Supplier",
     url: "/laporan/supplier",
-    roles: ["ADMIN", "MANAGER", "PURCHASING"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+      "PURCHASING",
+    ],
     icon: FileText,
   },
 
   {
     title: "Laporan Customer",
     url: "/laporan/customer",
-    roles: ["ADMIN", "MANAGER", "PURCHASING"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+      "PURCHASING",
+    ],
     icon: FileText,
   },
 
   {
     title: "Laporan Attendance",
     url: "/laporan/attendance",
-    roles: ["ADMIN", "MANAGER"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+    ],
     icon: FileText,
   },
 
   {
     title: "Laporan Stock Opname",
     url: "/laporan/stock-opname",
-    roles: ["ADMIN", "MANAGER", "GUDANG"],
+    roles: [
+      "ADMIN",
+      "MANAGER",
+      "GUDANG",
+    ],
     icon: FileText,
   },
 
@@ -495,7 +756,9 @@ const menus: Menu[] = [
   {
     title: "Pengaturan",
     url: "/pengaturan",
-    roles: ["ADMIN"],
+    roles: [
+      "ADMIN",
+    ],
     icon: Settings,
   },
 ];
@@ -508,6 +771,12 @@ export default function Sidebar({
   const pathname = usePathname();
 
   const role = user?.role;
+
+  /*
+  =========================================================
+  FILTER MENU BERDASARKAN ROLE
+  =========================================================
+  */
 
   const visibleMenus = menus.filter((menu) => {
     if (menu.header) {
@@ -522,6 +791,12 @@ export default function Sidebar({
       ? menu.roles.includes(role)
       : false;
   });
+
+  /*
+  =========================================================
+  HILANGKAN HEADER KOSONG
+  =========================================================
+  */
 
   const allowedMenus = visibleMenus.filter(
     (menu, index, array) => {
@@ -539,6 +814,12 @@ export default function Sidebar({
     }
   );
 
+  /*
+  =========================================================
+  USER DISPLAY
+  =========================================================
+  */
+
   const displayName =
     user?.fullname ||
     user?.username ||
@@ -548,7 +829,9 @@ export default function Sidebar({
     .split(" ")
     .filter(Boolean)
     .slice(0, 2)
-    .map((word) => word.charAt(0))
+    .map((word) =>
+      word.charAt(0)
+    )
     .join("")
     .toUpperCase();
 
@@ -570,7 +853,9 @@ export default function Sidebar({
         shadow-[4px_0_20px_rgba(48,78,67,0.12)]
       "
     >
-      {/* BRAND */}
+      {/* =================================================
+          BRAND
+          ================================================= */}
 
       <div
         className="
@@ -583,7 +868,6 @@ export default function Sidebar({
         "
       >
         <div className="flex items-start gap-3">
-
           <div
             className="
               flex
@@ -632,7 +916,6 @@ export default function Sidebar({
               ERP Inventory System
             </p>
           </div>
-
         </div>
 
         {/* USER CARD */}
@@ -649,7 +932,6 @@ export default function Sidebar({
           "
         >
           <div className="flex items-center gap-3">
-
             <div
               className="
                 flex
@@ -705,12 +987,13 @@ export default function Sidebar({
                 shadow-[0_0_6px_rgba(183,211,197,0.4)]
               "
             />
-
           </div>
         </div>
       </div>
 
-      {/* NAVIGATION */}
+      {/* =================================================
+          NAVIGATION
+          ================================================= */}
 
       <nav
         className="
@@ -725,140 +1008,143 @@ export default function Sidebar({
           [&::-webkit-scrollbar-thumb]:bg-[#6A8D80]
         "
       >
-        {allowedMenus.map((menu, index) => {
+        {allowedMenus.map(
+          (menu, index) => {
+            if (menu.header) {
+              return (
+                <div
+                  key={`header-${index}`}
+                  className="
+                    mb-2
+                    mt-5
+                    px-3
+                    pt-1
+                    text-[10px]
+                    font-bold
+                    uppercase
+                    tracking-[0.16em]
+                    text-[#CFE0D8]
+                  "
+                >
+                  {menu.title}
+                </div>
+              );
+            }
 
-          if (menu.header) {
+            const active =
+              pathname === menu.url ||
+              pathname.startsWith(
+                `${menu.url}/`
+              );
+
+            const Icon =
+              menu.icon || Package;
+
             return (
-              <div
-                key={`header-${index}`}
-                className="
-                  mb-2
-                  mt-5
+              <Link
+                key={menu.url}
+                href={menu.url!}
+                className={`
+                  group
+                  relative
+                  mb-1
+                  flex
+                  h-[42px]
+                  items-center
+                  rounded-[10px]
                   px-3
-                  pt-1
-                  text-[10px]
-                  font-bold
-                  uppercase
-                  tracking-[0.16em]
-                  text-[#CFE0D8]
-                "
+                  transition-all
+                  duration-150
+
+                  ${
+                    active
+                      ? `
+                        bg-[#6F9384]
+                        text-white
+                        shadow-[0_5px_14px_rgba(42,69,59,0.15)]
+                      `
+                      : `
+                        text-[#DFEAE5]
+                        hover:bg-[#486D60]
+                        hover:text-white
+                      `
+                  }
+                `}
               >
-                {menu.title}
-              </div>
+                {active && (
+                  <span
+                    className="
+                      absolute
+                      left-0
+                      top-1/2
+                      h-5
+                      w-[3px]
+                      -translate-y-1/2
+                      rounded-r-full
+                      bg-[#E4EFEA]
+                    "
+                  />
+                )}
+
+                <span
+                  className={`
+                    flex
+                    h-7
+                    w-7
+                    shrink-0
+                    items-center
+                    justify-center
+                    rounded-lg
+
+                    ${
+                      active
+                        ? "text-white"
+                        : "text-[#C2D7CE] group-hover:text-white"
+                    }
+                  `}
+                >
+                  <Icon
+                    size={17}
+                    strokeWidth={1.8}
+                  />
+                </span>
+
+                <span
+                  className={`
+                    ml-2.5
+                    truncate
+                    text-[12px]
+                    leading-none
+
+                    ${
+                      active
+                        ? "font-bold text-white"
+                        : "font-semibold text-inherit"
+                    }
+                  `}
+                >
+                  {menu.title}
+                </span>
+
+                {active && (
+                  <ChevronRight
+                    size={14}
+                    strokeWidth={1.9}
+                    className="
+                      ml-auto
+                      text-white/70
+                    "
+                  />
+                )}
+              </Link>
             );
           }
-
-          const active =
-            pathname === menu.url ||
-            pathname.startsWith(`${menu.url}/`);
-
-          const Icon =
-            menu.icon || Package;
-
-          return (
-            <Link
-              key={menu.url}
-              href={menu.url!}
-              className={`
-                group
-                relative
-                mb-1
-                flex
-                h-[42px]
-                items-center
-                rounded-[10px]
-                px-3
-                transition-all
-                duration-150
-
-                ${
-                  active
-                    ? `
-                      bg-[#6F9384]
-                      text-white
-                      shadow-[0_5px_14px_rgba(42,69,59,0.15)]
-                    `
-                    : `
-                      text-[#DFEAE5]
-                      hover:bg-[#486D60]
-                      hover:text-white
-                    `
-                }
-              `}
-            >
-
-              {active && (
-                <span
-                  className="
-                    absolute
-                    left-0
-                    top-1/2
-                    h-5
-                    w-[3px]
-                    -translate-y-1/2
-                    rounded-r-full
-                    bg-[#E4EFEA]
-                  "
-                />
-              )}
-
-              <span
-                className={`
-                  flex
-                  h-7
-                  w-7
-                  shrink-0
-                  items-center
-                  justify-center
-                  rounded-lg
-
-                  ${
-                    active
-                      ? "text-white"
-                      : "text-[#C2D7CE] group-hover:text-white"
-                  }
-                `}
-              >
-                <Icon
-                  size={17}
-                  strokeWidth={1.8}
-                />
-              </span>
-
-              <span
-                className={`
-                  ml-2.5
-                  truncate
-                  text-[12px]
-                  leading-none
-
-                  ${
-                    active
-                      ? "font-bold text-white"
-                      : "font-semibold text-inherit"
-                  }
-                `}
-              >
-                {menu.title}
-              </span>
-
-              {active && (
-                <ChevronRight
-                  size={14}
-                  strokeWidth={1.9}
-                  className="
-                    ml-auto
-                    text-white/70
-                  "
-                />
-              )}
-
-            </Link>
-          );
-        })}
+        )}
       </nav>
 
-      {/* FOOTER */}
+      {/* =================================================
+          FOOTER
+          ================================================= */}
 
       <div
         className="
@@ -870,7 +1156,6 @@ export default function Sidebar({
         "
       >
         <div className="flex items-center justify-between">
-
           <div>
             <p
               className="
@@ -929,10 +1214,8 @@ export default function Sidebar({
               ONLINE
             </span>
           </div>
-
         </div>
       </div>
-
     </aside>
   );
 }

@@ -1,68 +1,255 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+/*
+ * =========================================================
+ * GET - HISTORY STOCK PUSAT
+ * =========================================================
+ *
+ * SUMBER UTAMA:
+ *
+ * StockCard
+ *
+ * STOCK PUSAT:
+ *
+ * warehouse = MAIN
+ *
+ * Tidak menggunakan:
+ *
+ * - OutletStock
+ * - OutletReceiptItem
+ * - OutletStockOut
+ * - OutletTransfer
+ *
+ * =========================================================
+ */
 
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } =
+      new URL(req.url);
 
-export async function GET(){
+    /*
+     * =====================================================
+     * FILTER
+     * =====================================================
+     */
 
+    const search =
+      searchParams.get("search")?.trim() || "";
 
-try{
+    const barangIdParam =
+      searchParams.get("barangId");
 
+    const trxType =
+      searchParams.get("trxType")?.trim() || "";
 
-const data =
-await prisma.history.findMany({
+    /*
+     * =====================================================
+     * BARANG ID
+     * =====================================================
+     */
 
-include:{
+    let barangId: number | undefined =
+      undefined;
 
+    if (barangIdParam) {
+      const parsed = Number(barangIdParam);
 
-user:true
+      if (
+        Number.isInteger(parsed) &&
+        parsed > 0
+      ) {
+        barangId = parsed;
+      }
+    }
 
+    /*
+     * =====================================================
+     * WHERE
+     * =====================================================
+     *
+     * Stock Pusat:
+     *
+     * warehouse = MAIN
+     *
+     * =====================================================
+     */
 
-},
+    const where: any = {
+      warehouse: "MAIN",
+    };
 
+    if (barangId) {
+      where.barangId = barangId;
+    }
 
-orderBy:{
+    if (trxType) {
+      where.trxType = trxType;
+    }
 
+    /*
+     * =====================================================
+     * SEARCH BARANG
+     * =====================================================
+     */
 
-createdAt:"desc"
+    if (search) {
+      where.barang = {
+        OR: [
+          {
+            code: {
+              contains: search,
+            },
+          },
+          {
+            name: {
+              contains: search,
+            },
+          },
+          {
+            barcode: {
+              contains: search,
+            },
+          },
+        ],
+      };
+    }
 
+    /*
+     * =====================================================
+     * GET STOCK CARD
+     * =====================================================
+     */
 
-}
+    const stockCards =
+      await prisma.stockCard.findMany({
+        where,
 
+        include: {
+          barang: true,
+        },
 
-});
+        orderBy: [
+          {
+            trxDate: "desc",
+          },
+          {
+            id: "desc",
+          },
+        ],
+      });
 
+    /*
+     * =====================================================
+     * FORMAT
+     * =====================================================
+     */
 
+    const data = stockCards.map(
+      (item, index) => ({
+        id: item.id,
 
-return NextResponse.json({
+        no: index + 1,
 
-success:true,
+        barangId: item.barangId,
 
-data:data
+        kodeBarang:
+          item.barang?.code ?? "-",
 
-});
+        barcode:
+          item.barang?.barcode ?? null,
 
+        barang:
+          item.barang?.name ?? "-",
 
-}
-catch(error){
+        namaBarang:
+          item.barang?.name ?? "-",
 
+        satuan:
+          item.barang?.unit ?? "-",
 
-console.log(error);
+        tanggal: item.trxDate,
 
+        trxDate: item.trxDate,
 
+        tipe: item.trxType,
 
-return NextResponse.json({
+        trxType: item.trxType,
 
-success:false,
+        nomor:
+          item.trxNumber ?? "-",
 
-message:"Gagal mengambil history"
+        trxNumber:
+          item.trxNumber ?? "-",
 
-},{
-status:500
-});
+        referenceId:
+          item.referenceId ?? null,
 
+        warehouse:
+          item.warehouse ?? "MAIN",
 
-}
+        qtyIn:
+          Number(item.qtyIn || 0),
 
+        qtyOut:
+          Number(item.qtyOut || 0),
 
+        balance:
+          Number(item.balance || 0),
+
+        unitPrice:
+          Number(item.unitPrice || 0),
+
+        totalValue:
+          Number(item.totalValue || 0),
+
+        note:
+          item.note ?? null,
+
+        description:
+          item.note ?? null,
+
+        createdAt:
+          item.createdAt,
+      })
+    );
+
+    /*
+     * =====================================================
+     * RESPONSE
+     * =====================================================
+     */
+
+    return NextResponse.json({
+      success: true,
+
+      data,
+
+      meta: {
+        warehouse: "MAIN",
+
+        outletId: null,
+
+        total: data.length,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "GET HISTORY STOCK PUSAT ERROR:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+
+        message:
+          "Gagal mengambil History Stock Pusat",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
 }

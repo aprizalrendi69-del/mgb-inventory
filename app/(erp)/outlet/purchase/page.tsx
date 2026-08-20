@@ -9,6 +9,7 @@ import {
   ShoppingCart,
   Eye,
   ChevronDown,
+  CreditCard,
 } from "lucide-react";
 
 type Outlet = {
@@ -65,10 +66,14 @@ type UserInfo = {
 export default function OutletPurchasePage() {
   const router = useRouter();
 
-  const [data, setData] = useState<OutletPurchase[]>([]);
-  const [search, setSearch] = useState("");
+  const [data, setData] =
+    useState<OutletPurchase[]>([]);
 
-  const [loading, setLoading] = useState(true);
+  const [search, setSearch] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(true);
 
   // =====================================================
   // FILTER
@@ -112,25 +117,10 @@ export default function OutletPurchasePage() {
         return;
       }
 
-      /*
-       * Beberapa API /api/me bisa mengembalikan:
-       *
-       * {
-       *   success: true,
-       *   user: {...}
-       * }
-       *
-       * atau langsung:
-       *
-       * {
-       *   id,
-       *   role,
-       *   ...
-       * }
-       */
-
       const currentUser =
-        json?.user ?? json?.data ?? json;
+        json?.user ??
+        json?.data ??
+        json;
 
       if (currentUser?.id) {
         setUser(currentUser);
@@ -207,13 +197,6 @@ export default function OutletPurchasePage() {
       user?.role || ""
     ).toUpperCase();
 
-  /*
-   * ADMIN PUSAT
-   *
-   * Sesuai permintaan:
-   * hanya ADMIN yang melihat dropdown outlet.
-   */
-
   const isAdminPusat =
     role === "ADMIN";
 
@@ -264,10 +247,6 @@ export default function OutletPurchasePage() {
 
       return data.filter(
         (item) => {
-          // ---------------------------------------------
-          // SEARCH
-          // ---------------------------------------------
-
           const matchesSearch =
             !keyword ||
             item.number
@@ -295,8 +274,6 @@ export default function OutletPurchasePage() {
 
           // ---------------------------------------------
           // FILTER OUTLET
-          //
-          // Hanya aktif untuk ADMIN pusat.
           // ---------------------------------------------
 
           if (
@@ -329,9 +306,7 @@ export default function OutletPurchasePage() {
             }
 
             const itemDate =
-              new Date(
-                dateValue
-              );
+              new Date(dateValue);
 
             if (
               Number.isNaN(
@@ -340,12 +315,6 @@ export default function OutletPurchasePage() {
             ) {
               return false;
             }
-
-            /*
-             * Ambil tanggal lokal YYYY-MM-DD
-             * supaya filter tidak bergeser
-             * karena timezone.
-             */
 
             const year =
               itemDate.getFullYear();
@@ -401,7 +370,9 @@ export default function OutletPurchasePage() {
   ) {
     return Number(
       value || 0
-    ).toLocaleString("id-ID");
+    ).toLocaleString(
+      "id-ID"
+    );
   }
 
   function formatDate(
@@ -478,6 +449,18 @@ export default function OutletPurchasePage() {
   }
 
   // =====================================================
+  // PAYMENT
+  // =====================================================
+
+  function handlePayment(
+    purchaseId: number
+  ) {
+    router.push(
+      `/outlet/purchase/${purchaseId}/payment`
+    );
+  }
+
+  // =====================================================
   // RENDER
   // =====================================================
 
@@ -538,6 +521,7 @@ export default function OutletPurchasePage() {
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#497F70] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3D6D60]"
           >
             <Plus size={17} />
+
             Purchase Baru
           </button>
 
@@ -552,7 +536,7 @@ export default function OutletPurchasePage() {
       <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
         {/* =================================================
-            FILTER AREA
+            FILTER
         ================================================= */}
 
         <div className="border-b border-[#E5ECE9] p-5">
@@ -602,10 +586,7 @@ export default function OutletPurchasePage() {
 
             </div>
 
-            {/* =================================================
-                DROPDOWN OUTLET
-                HANYA ADMIN PUSAT
-            ================================================= */}
+            {/* OUTLET */}
 
             {isAdminPusat && (
               <div>
@@ -660,10 +641,7 @@ export default function OutletPurchasePage() {
               </div>
             )}
 
-            {/* =================================================
-                TANGGAL MULAI
-                HANYA ADMIN PUSAT
-            ================================================= */}
+            {/* TANGGAL MULAI */}
 
             {isAdminPusat && (
               <div>
@@ -688,10 +666,7 @@ export default function OutletPurchasePage() {
               </div>
             )}
 
-            {/* =================================================
-                TANGGAL SELESAI
-                HANYA ADMIN PUSAT
-            ================================================= */}
+            {/* TANGGAL SELESAI */}
 
             {isAdminPusat && (
               <div>
@@ -717,10 +692,6 @@ export default function OutletPurchasePage() {
             )}
 
           </div>
-
-          {/* =================================================
-              INFO FILTER ADMIN
-          ================================================= */}
 
           {isAdminPusat && (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -764,7 +735,7 @@ export default function OutletPurchasePage() {
 
         <div className="overflow-x-auto">
 
-          <table className="min-w-[1100px] w-full text-sm">
+          <table className="min-w-[1180px] w-full text-sm">
 
             <thead className="bg-[#F5F8F6]">
 
@@ -892,7 +863,7 @@ export default function OutletPurchasePage() {
                         {index + 1}
                       </td>
 
-                      {/* NOMOR */}
+                      {/* NOMOR PO */}
 
                       <td className="px-5 py-4">
 
@@ -989,26 +960,52 @@ export default function OutletPurchasePage() {
                         )}
                       </td>
 
-                      {/* AKSI */}
+                      {/* =================================================
+                          AKSI
+                      ================================================= */}
 
-                      <td className="px-5 py-4 text-center">
+                      <td className="px-5 py-4">
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            router.push(
-                              `/outlet/purchase/${item.id}`
-                            )
-                          }
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70] transition hover:bg-[#DDEDE6]"
-                          title="Lihat Detail"
-                        >
+                        <div className="flex items-center justify-center gap-2">
 
-                          <Eye
-                            size={17}
-                          />
+                          {/* DETAIL */}
 
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              router.push(
+                                `/outlet/purchase/${item.id}`
+                              )
+                            }
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70] transition hover:bg-[#DDEDE6]"
+                            title="Lihat Detail"
+                          >
+                            <Eye
+                              size={17}
+                            />
+                          </button>
+
+                          {/* PAYMENT */}
+
+                          {item.status ===
+                            "APPROVED" && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handlePayment(
+                                  item.id
+                                )
+                              }
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition hover:bg-blue-100"
+                              title="Payment"
+                            >
+                              <CreditCard
+                                size={17}
+                              />
+                            </button>
+                          )}
+
+                        </div>
 
                       </td>
 
@@ -1042,9 +1039,7 @@ export default function OutletPurchasePage() {
                     {filteredData.length}
                   </td>
 
-                  <td
-                    colSpan={3}
-                  />
+                  <td colSpan={3} />
 
                 </tr>
 
