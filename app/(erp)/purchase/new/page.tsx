@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Supplier = {
@@ -119,20 +119,18 @@ export default function NewPurchasePage() {
   }
 
   /* =========================================================
-     SUPPLIER SEARCH
+     SUPPLIER
   ========================================================= */
 
-  const filteredSupplier = supplier.filter((item) => {
-    const keyword = supplierSearch
-      .trim()
-      .toLowerCase();
+  const filteredSupplier = useMemo(() => {
+    const keyword = supplierSearch.trim().toLowerCase();
 
-    if (!keyword) return true;
+    if (!keyword) return supplier;
 
-    return item.name
-      .toLowerCase()
-      .includes(keyword);
-  });
+    return supplier.filter((item) =>
+      item.name.toLowerCase().includes(keyword)
+    );
+  }, [supplier, supplierSearch]);
 
   function selectedSupplierName() {
     const selected = supplier.find(
@@ -144,17 +142,17 @@ export default function NewPurchasePage() {
   }
 
   function selectSupplier(item: Supplier) {
-    setForm({
-      ...form,
+    setForm((prev) => ({
+      ...prev,
       supplierId: String(item.id),
-    });
+    }));
 
     setSupplierSearch(item.name);
     setSupplierOpen(false);
   }
 
   /* =========================================================
-     BARANG SEARCH
+     BARANG
   ========================================================= */
 
   function getFilteredBarang(index: number) {
@@ -202,9 +200,7 @@ export default function NewPurchasePage() {
         String(item.id) === barangId
     );
 
-    if (!selected) return "";
-
-    return selected.name;
+    return selected?.name ?? "";
   }
 
   function selectBarang(
@@ -240,18 +236,18 @@ export default function NewPurchasePage() {
   ========================================================= */
 
   function addItem() {
-    setForm({
-      ...form,
+    setForm((prev) => ({
+      ...prev,
 
       items: [
-        ...form.items,
+        ...prev.items,
         {
           barangId: "",
           qty: 1,
           price: 0,
         },
       ],
-    });
+    }));
   }
 
   function removeItem(index: number) {
@@ -266,10 +262,10 @@ export default function NewPurchasePage() {
 
     arr.splice(index, 1);
 
-    setForm({
-      ...form,
+    setForm((prev) => ({
+      ...prev,
       items: arr,
-    });
+    }));
 
     setBarangSearch((prev) => {
       const next = {
@@ -307,16 +303,18 @@ export default function NewPurchasePage() {
     field: keyof PurchaseItem,
     value: any
   ) {
-    const arr = [...form.items];
+    setForm((prev) => {
+      const arr = [...prev.items];
 
-    arr[index] = {
-      ...arr[index],
-      [field]: value,
-    };
+      arr[index] = {
+        ...arr[index],
+        [field]: value,
+      };
 
-    setForm({
-      ...form,
-      items: arr,
+      return {
+        ...prev,
+        items: arr,
+      };
     });
   }
 
@@ -328,9 +326,7 @@ export default function NewPurchasePage() {
     index: number,
     barangId: string
   ) {
-    if (!barangId) {
-      return;
-    }
+    if (!barangId) return;
 
     try {
       const res = await fetch(
@@ -346,21 +342,21 @@ export default function NewPurchasePage() {
         json.success &&
         json.data
       ) {
-        const arr = [...form.items];
+        setForm((prev) => {
+          const arr = [...prev.items];
 
-        arr[index] = {
-          ...arr[index],
+          arr[index] = {
+            ...arr[index],
+            barangId,
+            price: Number(
+              json.data.hargaTerakhir ?? 0
+            ),
+          };
 
-          barangId,
-
-          price: Number(
-            json.data.hargaTerakhir ?? 0
-          ),
-        };
-
-        setForm({
-          ...form,
-          items: arr,
+          return {
+            ...prev,
+            items: arr,
+          };
         });
       }
     } catch (error) {
@@ -417,6 +413,16 @@ export default function NewPurchasePage() {
             [index]: json.data,
           })
         );
+      } else {
+        setPriceWarning((prev) => {
+          const next = {
+            ...prev,
+          };
+
+          delete next[index];
+
+          return next;
+        });
       }
     } catch (error) {
       console.error(
@@ -424,6 +430,26 @@ export default function NewPurchasePage() {
         error
       );
     }
+  }
+
+  /* =========================================================
+     TOTAL
+  ========================================================= */
+
+  const grandTotal = useMemo(() => {
+    return form.items.reduce(
+      (total, item) =>
+        total +
+        Number(item.qty || 0) *
+          Number(item.price || 0),
+      0
+    );
+  }, [form.items]);
+
+  function formatRupiah(value: number) {
+    return Number(value || 0).toLocaleString(
+      "id-ID"
+    );
   }
 
   /* =========================================================
@@ -509,202 +535,278 @@ export default function NewPurchasePage() {
   }
 
   return (
-    <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
+    <div className="min-h-full bg-[#F5F7F6]">
 
-      <div className="mx-auto max-w-6xl">
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
 
-        {/* HEADER */}
+      <div className="border-b border-[#DDE7E2] bg-white">
 
-        <div className="mb-6">
+        <div className="mx-auto max-w-7xl px-5 py-5 lg:px-7">
 
-          <h1 className="text-3xl font-bold text-[#18352D]">
-            Purchase Order Baru
-          </h1>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
-          <p className="mt-1 text-sm text-gray-500">
-            Buat Purchase Order kepada supplier.
-          </p>
+            <div>
+              <div className="flex items-center gap-3">
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(
+                      "/purchase"
+                    )
+                  }
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#D9E4DF] bg-white text-gray-500 transition hover:bg-[#F4F7F5] hover:text-[#497F70]"
+                  title="Kembali"
+                >
+                  ←
+                </button>
+
+                <div>
+                  <h1 className="text-xl font-bold tracking-tight text-[#18352D]">
+                    Purchase Order Baru
+                  </h1>
+
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    Buat Purchase Order kepada supplier.
+                  </p>
+                </div>
+
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+
+              <div className="rounded-lg border border-[#DDE7E2] bg-[#F8FAF9] px-3 py-2 text-xs text-gray-500">
+                Status
+                <span className="ml-2 font-semibold text-[#497F70]">
+                  DRAFT
+                </span>
+              </div>
+
+            </div>
+
+          </div>
 
         </div>
 
-        <div className="space-y-6">
+      </div>
+
+      {/* =====================================================
+          CONTENT
+      ===================================================== */}
+
+      <div className="mx-auto max-w-7xl px-5 py-5 lg:px-7">
+
+        <div className="space-y-5">
 
           {/* =================================================
-              INFORMASI PURCHASE
+              INFORMASI PO
           ================================================= */}
 
-          <div className="rounded-2xl border border-[#DDE9E4] bg-white p-6 shadow-sm">
+          <div className="rounded-xl border border-[#DDE7E2] bg-white shadow-sm">
 
-            <h2 className="mb-5 text-lg font-bold text-[#18352D]">
-              Informasi Purchase Order
-            </h2>
+            <div className="border-b border-[#E7ECEA] px-5 py-4">
 
-            <div className="grid gap-5 md:grid-cols-2">
+              <div className="flex items-center gap-3">
 
-              {/* SUPPLIER */}
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#EAF2EE] text-[#497F70]">
+                  📋
+                </div>
 
-              <div className="relative">
+                <div>
+                  <h2 className="text-sm font-bold text-[#18352D]">
+                    Informasi Purchase Order
+                  </h2>
 
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
-                  Supplier
-                </label>
+                  <p className="text-xs text-gray-500">
+                    Lengkapi informasi utama PO.
+                  </p>
+                </div>
 
-                <input
-                  type="text"
-                  value={
-                    supplierOpen
-                      ? supplierSearch
-                      : selectedSupplierName()
-                  }
-                  placeholder="Ketik nama supplier..."
-                  onFocus={() => {
-                    setSupplierOpen(true);
+              </div>
 
-                    setSupplierSearch(
-                      selectedSupplierName()
-                    );
-                  }}
-                  onChange={(e) => {
-                    setSupplierSearch(
-                      e.target.value
-                    );
+            </div>
 
-                    setSupplierOpen(
-                      true
-                    );
-                  }}
-                  className="w-full rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
-                />
+            <div className="p-5">
 
-                {supplierOpen && (
-                  <div className="absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-[#D5E5DC] bg-white shadow-xl">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 
-                    {filteredSupplier.length === 0 ? (
+                {/* SUPPLIER */}
 
-                      <div className="px-4 py-3 text-sm text-gray-500">
-                        Supplier tidak ditemukan.
-                      </div>
+                <div className="relative lg:col-span-2">
 
-                    ) : (
+                  <label className="mb-1.5 block text-xs font-semibold text-gray-600">
+                    Supplier
+                    <span className="ml-1 text-red-500">
+                      *
+                    </span>
+                  </label>
 
-                      filteredSupplier.map(
-                        (item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() =>
-                              selectSupplier(
-                                item
-                              )
-                            }
-                            className="block w-full border-b border-gray-100 px-4 py-3 text-left text-sm hover:bg-[#F5F8F6]"
-                          >
-                            <div className="font-semibold text-gray-700">
-                              {item.name}
-                            </div>
-                          </button>
+                  <input
+                    type="text"
+                    value={
+                      supplierOpen
+                        ? supplierSearch
+                        : selectedSupplierName()
+                    }
+                    placeholder="Cari supplier..."
+                    onFocus={() => {
+                      setSupplierOpen(true);
+
+                      setSupplierSearch(
+                        selectedSupplierName()
+                      );
+                    }}
+                    onChange={(e) => {
+                      setSupplierSearch(
+                        e.target.value
+                      );
+
+                      setSupplierOpen(
+                        true
+                      );
+                    }}
+                    className="h-10 w-full rounded-lg border border-[#D5E1DC] bg-white px-3 text-sm text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                  />
+
+                  {supplierOpen && (
+                    <div className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-60 overflow-y-auto rounded-lg border border-[#D5E1DC] bg-white shadow-xl">
+
+                      {filteredSupplier.length ===
+                      0 ? (
+
+                        <div className="px-3 py-3 text-xs text-gray-500">
+                          Supplier tidak ditemukan.
+                        </div>
+
+                      ) : (
+
+                        filteredSupplier.map(
+                          (item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() =>
+                                selectSupplier(
+                                  item
+                                )
+                              }
+                              className="block w-full border-b border-gray-100 px-3 py-2.5 text-left text-sm transition last:border-0 hover:bg-[#F4F8F6]"
+                            >
+                              <div className="font-medium text-gray-700">
+                                {item.name}
+                              </div>
+                            </button>
+                          )
                         )
-                      )
 
-                    )}
+                      )}
 
-                  </div>
-                )}
+                    </div>
+                  )}
 
-              </div>
+                </div>
 
-              {/* TANGGAL */}
+                {/* TANGGAL */}
 
-              <div>
+                <div>
 
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
-                  Tanggal PO
-                </label>
+                  <label className="mb-1.5 block text-xs font-semibold text-gray-600">
+                    Tanggal PO
+                    <span className="ml-1 text-red-500">
+                      *
+                    </span>
+                  </label>
 
-                <input
-                  type="date"
-                  className="w-full rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
-                  value={
-                    form.purchaseDate
-                  }
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      purchaseDate:
-                        e.target.value,
-                    })
-                  }
-                />
+                  <input
+                    type="date"
+                    value={
+                      form.purchaseDate
+                    }
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        purchaseDate:
+                          e.target.value,
+                      }))
+                    }
+                    className="h-10 w-full rounded-lg border border-[#D5E1DC] bg-white px-3 text-sm text-gray-700 outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                  />
 
-              </div>
+                </div>
 
-              {/* PAYMENT METHOD */}
+                {/* PAYMENT */}
 
-              <div>
+                <div>
 
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
-                  Metode Pembayaran
-                </label>
+                  <label className="mb-1.5 block text-xs font-semibold text-gray-600">
+                    Metode Pembayaran
+                  </label>
 
-                <select
-                  value={
-                    form.paymentMethod
-                  }
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      paymentMethod:
-                        e.target.value as PaymentMethod,
-                    })
-                  }
-                  className="w-full rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm font-medium text-gray-700 outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
-                >
-                  <option value="CASH">
-                    Cash
-                  </option>
+                  <select
+                    value={
+                      form.paymentMethod
+                    }
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        paymentMethod:
+                          e.target
+                            .value as PaymentMethod,
+                      }))
+                    }
+                    className="h-10 w-full rounded-lg border border-[#D5E1DC] bg-white px-3 text-sm font-medium text-gray-700 outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                  >
+                    <option value="CASH">
+                      Cash
+                    </option>
 
-                  <option value="TRANSFER">
-                    Transfer
-                  </option>
+                    <option value="TRANSFER">
+                      Transfer
+                    </option>
 
-                  <option value="COD">
-                    COD
-                  </option>
+                    <option value="COD">
+                      COD
+                    </option>
 
-                  <option value="CBD">
-                    CBD
-                  </option>
+                    <option value="CBD">
+                      CBD
+                    </option>
 
-                  <option value="TEMPO">
-                    Tempo
-                  </option>
-                </select>
+                    <option value="TEMPO">
+                      Tempo
+                    </option>
+                  </select>
 
-              </div>
+                </div>
 
-              {/* KETERANGAN */}
+                {/* KETERANGAN */}
 
-              <div>
+                <div className="lg:col-span-4">
 
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
-                  Keterangan
-                </label>
+                  <label className="mb-1.5 block text-xs font-semibold text-gray-600">
+                    Keterangan
+                  </label>
 
-                <textarea
-                  rows={1}
-                  value={
-                    form.description
-                  }
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      description:
-                        e.target.value,
-                    })
-                  }
-                  placeholder="Tambahkan keterangan Purchase Order..."
-                  className="min-h-[48px] w-full resize-none rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
-                />
+                  <textarea
+                    rows={2}
+                    value={
+                      form.description
+                    }
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        description:
+                          e.target.value,
+                      }))
+                    }
+                    placeholder="Tambahkan keterangan Purchase Order..."
+                    className="w-full resize-none rounded-lg border border-[#D5E1DC] bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                  />
+
+                </div>
 
               </div>
 
@@ -716,342 +818,459 @@ export default function NewPurchasePage() {
               DETAIL BARANG
           ================================================= */}
 
-          <div className="overflow-visible rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
+          <div className="overflow-visible rounded-xl border border-[#DDE7E2] bg-white shadow-sm">
 
-            <div className="border-b border-[#E5ECE9] px-6 py-5">
+            <div className="border-b border-[#E7ECEA] px-5 py-4">
 
-              <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
-                <div>
+                <div className="flex items-center gap-3">
 
-                  <h2 className="text-lg font-bold text-[#18352D]">
-                    Detail Barang
-                  </h2>
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#EAF2EE] text-[#497F70]">
+                    📦
+                  </div>
 
-                  <p className="text-sm text-gray-500">
-                    Ketik nama, kode, barcode, atau satuan untuk mencari barang.
-                  </p>
+                  <div>
+                    <h2 className="text-sm font-bold text-[#18352D]">
+                      Detail Barang
+                    </h2>
 
+                    <p className="text-xs text-gray-500">
+                      Tambahkan barang yang akan dibeli.
+                    </p>
+                  </div>
+
+                </div>
+
+                <div className="rounded-lg bg-[#F5F8F6] px-3 py-2 text-xs text-gray-500">
+                  {form.items.length}{" "}
+                  item
+                  {form.items.length !==
+                  1
+                    ? "s"
+                    : ""}
                 </div>
 
               </div>
 
             </div>
 
-            <div className="overflow-x-auto p-6">
+            <div className="p-5">
 
-              <div className="min-w-[900px]">
+              {/* TABLE */}
 
-                {/* HEADER TABLE */}
+              <div className="overflow-x-auto">
 
-                <div className="mb-3 grid grid-cols-[minmax(320px,2fr)_120px_180px_100px] gap-4 px-1">
+                <div className="min-w-[780px]">
 
-                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Barang
+                  {/* HEADER */}
+
+                  <div className="grid grid-cols-[minmax(280px,1fr)_100px_170px_70px] gap-3 border-b border-[#E7ECEA] px-1 pb-2">
+
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                      Barang
+                    </div>
+
+                    <div className="text-center text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                      Qty
+                    </div>
+
+                    <div className="text-right text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                      Harga Satuan
+                    </div>
+
+                    <div />
+
                   </div>
 
-                  <div className="text-center text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Qty
-                  </div>
+                  {/* ITEMS */}
 
-                  <div className="text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Harga
-                  </div>
+                  <div className="pt-2">
 
-                  <div />
+                    {form.items.map(
+                      (row, index) => {
 
-                </div>
+                        const subtotal =
+                          Number(
+                            row.qty || 0
+                          ) *
+                          Number(
+                            row.price || 0
+                          );
 
-                {form.items.map(
-                  (row, index) => (
+                        return (
+                          <div
+                            key={index}
+                            className="border-b border-[#EEF2F0] py-3 last:border-b-0"
+                          >
 
-                    <div
-                      key={index}
-                      className="mb-4"
-                    >
+                            <div className="grid grid-cols-[minmax(280px,1fr)_100px_170px_70px] items-start gap-3">
 
-                      <div className="grid grid-cols-[minmax(320px,2fr)_120px_180px_100px] items-start gap-4">
+                              {/* BARANG */}
 
-                        {/* BARANG SEARCH */}
+                              <div className="relative">
 
-                        <div className="relative">
-
-                          <input
-                            type="text"
-                            value={
-                              barangOpen[index]
-                                ? (
-                                    barangSearch[
+                                <input
+                                  type="text"
+                                  value={
+                                    barangOpen[
                                       index
-                                    ] ?? ""
+                                    ]
+                                      ? (
+                                          barangSearch[
+                                            index
+                                          ] ??
+                                          ""
+                                        )
+                                      : selectedBarangName(
+                                          row.barangId
+                                        )
+                                  }
+                                  placeholder="Cari nama / kode / barcode..."
+                                  onFocus={() => {
+                                    setBarangOpen(
+                                      (prev) => ({
+                                        ...prev,
+                                        [index]:
+                                          true,
+                                      })
+                                    );
+
+                                    setBarangSearch(
+                                      (prev) => ({
+                                        ...prev,
+                                        [index]:
+                                          selectedBarangName(
+                                            row.barangId
+                                          ),
+                                      })
+                                    );
+                                  }}
+                                  onChange={(e) => {
+                                    setBarangSearch(
+                                      (prev) => ({
+                                        ...prev,
+                                        [index]:
+                                          e.target
+                                            .value,
+                                      })
+                                    );
+
+                                    setBarangOpen(
+                                      (prev) => ({
+                                        ...prev,
+                                        [index]:
+                                          true,
+                                      })
+                                    );
+                                  }}
+                                  className="h-10 w-full rounded-lg border border-[#D5E1DC] bg-white px-3 text-sm text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                                />
+
+                                {barangOpen[
+                                  index
+                                ] && (
+
+                                  <div className="absolute left-0 top-full z-[100] mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-[#D5E1DC] bg-white shadow-xl">
+
+                                    {getFilteredBarang(
+                                      index
+                                    ).length ===
+                                    0 ? (
+
+                                      <div className="px-3 py-3 text-xs text-gray-500">
+                                        Barang tidak ditemukan.
+                                      </div>
+
+                                    ) : (
+
+                                      getFilteredBarang(
+                                        index
+                                      ).map(
+                                        (
+                                          item
+                                        ) => (
+                                          <button
+                                            key={
+                                              item.id
+                                            }
+                                            type="button"
+                                            onClick={() =>
+                                              selectBarang(
+                                                index,
+                                                item
+                                              )
+                                            }
+                                            className="block w-full border-b border-gray-100 px-3 py-2.5 text-left transition last:border-0 hover:bg-[#F4F8F6]"
+                                          >
+
+                                            <div className="text-sm font-semibold text-gray-700">
+                                              {
+                                                item.name
+                                              }
+                                            </div>
+
+                                            <div className="mt-0.5 text-[10px] text-gray-400">
+
+                                              {item.code && (
+                                                <>
+                                                  Kode:{" "}
+                                                  {
+                                                    item.code
+                                                  }
+                                                </>
+                                              )}
+
+                                              {item.barcode && (
+                                                <>
+                                                  {" • "}
+                                                  Barcode:{" "}
+                                                  {
+                                                    item.barcode
+                                                  }
+                                                </>
+                                              )}
+
+                                              {item.unit && (
+                                                <>
+                                                  {" • "}
+                                                  {
+                                                    item.unit
+                                                  }
+                                                </>
+                                              )}
+
+                                            </div>
+
+                                          </button>
+                                        )
+                                      )
+
+                                    )}
+
+                                  </div>
+
+                                )}
+
+                              </div>
+
+                              {/* QTY */}
+
+                              <input
+                                type="number"
+                                min="1"
+                                value={
+                                  row.qty
+                                }
+                                onChange={(
+                                  e
+                                ) =>
+                                  updateItem(
+                                    index,
+                                    "qty",
+                                    Number(
+                                      e.target
+                                        .value
+                                    )
                                   )
-                                : selectedBarangName(
-                                    row.barangId
-                                  )
-                            }
-                            placeholder="Ketik nama / kode / barcode barang..."
-                            onFocus={() => {
-                              setBarangOpen(
-                                (prev) => ({
-                                  ...prev,
-                                  [index]:
-                                    true,
-                                })
-                              );
+                                }
+                                className="h-10 w-full rounded-lg border border-[#D5E1DC] px-2 text-center text-sm outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                              />
 
-                              setBarangSearch(
-                                (prev) => ({
-                                  ...prev,
-                                  [index]:
-                                    selectedBarangName(
-                                      row.barangId
-                                    ),
-                                })
-                              );
-                            }}
-                            onChange={(e) => {
-                              setBarangSearch(
-                                (prev) => ({
-                                  ...prev,
-                                  [index]:
-                                    e.target.value,
-                                })
-                              );
+                              {/* HARGA */}
 
-                              setBarangOpen(
-                                (prev) => ({
-                                  ...prev,
-                                  [index]:
-                                    true,
-                                })
-                              );
-                            }}
-                            className="w-full rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
-                          />
+                              <div>
 
-                          {barangOpen[index] && (
+                                <div className="relative">
 
-                            <div className="absolute left-0 top-full z-50 mt-2 max-h-72 w-full overflow-y-auto rounded-xl border border-[#D5E5DC] bg-white shadow-xl">
+                                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                                    Rp
+                                  </span>
 
-                              {getFilteredBarang(
-                                index
-                              ).length === 0 ? (
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={
+                                      row.price
+                                    }
+                                    onChange={(
+                                      e
+                                    ) => {
+                                      const value =
+                                        Number(
+                                          e.target
+                                            .value
+                                        );
 
-                                <div className="px-4 py-3 text-sm text-gray-500">
-                                  Barang tidak ditemukan.
+                                      updateItem(
+                                        index,
+                                        "price",
+                                        value
+                                      );
+
+                                      checkPrice(
+                                        index,
+                                        row.barangId,
+                                        value
+                                      );
+                                    }}
+                                    className="h-10 w-full rounded-lg border border-[#D5E1DC] pl-9 pr-2 text-right text-sm outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                                  />
+
                                 </div>
 
-                              ) : (
+                                <div className="mt-1 text-right text-[10px] text-gray-400">
+                                  Subtotal:{" "}
+                                  <span className="font-semibold text-gray-600">
+                                    Rp{" "}
+                                    {formatRupiah(
+                                      subtotal
+                                    )}
+                                  </span>
+                                </div>
 
-                                getFilteredBarang(
-                                  index
-                                ).map(
-                                  (item) => (
-                                    <button
-                                      key={
-                                        item.id
-                                      }
-                                      type="button"
-                                      onClick={() =>
-                                        selectBarang(
-                                          index,
-                                          item
-                                        )
-                                      }
-                                      className="block w-full border-b border-gray-100 px-4 py-3 text-left transition hover:bg-[#F5F8F6]"
-                                    >
+                              </div>
 
-                                      <div className="font-semibold text-gray-700">
-                                        {item.name}
-                                      </div>
+                              {/* HAPUS */}
 
-                                      <div className="mt-1 text-xs text-gray-400">
-
-                                        {item.code && (
-                                          <>
-                                            Kode:{" "}
-                                            {
-                                              item.code
-                                            }
-                                          </>
-                                        )}
-
-                                        {item.barcode && (
-                                          <>
-                                            {" • "}
-                                            Barcode:{" "}
-                                            {
-                                              item.barcode
-                                            }
-                                          </>
-                                        )}
-
-                                        {item.unit && (
-                                          <>
-                                            {" • "}
-                                            {item.unit}
-                                          </>
-                                        )}
-
-                                      </div>
-
-                                    </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  removeItem(
+                                    index
                                   )
-                                )
-
-                              )}
+                                }
+                                className="flex h-10 w-full items-center justify-center rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-600 transition hover:bg-red-100"
+                                title="Hapus barang"
+                              >
+                                Hapus
+                              </button>
 
                             </div>
 
-                          )}
+                            {/* WARNING */}
 
-                        </div>
-
-                        {/* QTY */}
-
-                        <input
-                          type="number"
-                          min="1"
-                          className="w-full rounded-xl border border-[#D5E5DC] px-3 py-3 text-center outline-none focus:border-[#497F70]"
-                          placeholder="Qty"
-                          value={row.qty}
-                          onChange={(e) =>
-                            updateItem(
-                              index,
-                              "qty",
-                              Number(
-                                e.target.value
-                              )
-                            )
-                          }
-                        />
-
-                        {/* HARGA */}
-
-                        <input
-                          type="number"
-                          min="1"
-                          className="w-full rounded-xl border border-[#D5E5DC] px-3 py-3 text-right outline-none focus:border-[#497F70]"
-                          placeholder="Harga terakhir"
-                          value={row.price}
-                          onChange={(e) => {
-                            const value =
-                              Number(
-                                e.target.value
-                              );
-
-                            updateItem(
-                              index,
-                              "price",
-                              value
-                            );
-
-                            checkPrice(
-                              index,
-                              row.barangId,
-                              value
-                            );
-                          }}
-                        />
-
-                        {/* HAPUS */}
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            removeItem(
+                            {priceWarning[
                               index
-                            )
-                          }
-                          className="rounded-xl bg-red-600 px-3 py-3 text-sm font-semibold text-white hover:bg-red-700"
-                        >
-                          Hapus
-                        </button>
+                            ] && (
 
-                      </div>
+                              <div className="mt-2 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2.5">
 
-                      {/* PRICE WARNING */}
+                                <div className="flex flex-wrap items-start gap-x-4 gap-y-1 text-xs text-yellow-800">
 
-                      {priceWarning[index] && (
+                                  <span className="font-semibold">
+                                    ⚠ Harga berubah
+                                  </span>
 
-                        <div className="mt-3 rounded-xl bg-yellow-50 p-4 text-sm text-yellow-800">
+                                  <span>
+                                    Lama:{" "}
+                                    <strong>
+                                      Rp{" "}
+                                      {formatRupiah(
+                                        priceWarning[
+                                          index
+                                        ]
+                                          .hargaLama
+                                      )}
+                                    </strong>
+                                  </span>
 
-                          ⚠ Harga berubah dari{" "}
+                                  <span>
+                                    Baru:{" "}
+                                    <strong>
+                                      Rp{" "}
+                                      {formatRupiah(
+                                        priceWarning[
+                                          index
+                                        ]
+                                          .hargaBaru
+                                      )}
+                                    </strong>
+                                  </span>
 
-                          <strong>
-                            Rp{" "}
-                            {Number(
-                              priceWarning[
-                                index
-                              ]
-                                .hargaLama ??
-                                0
-                            ).toLocaleString(
-                              "id-ID"
+                                  <span>
+                                    Perubahan:{" "}
+                                    <strong>
+                                      {Number(
+                                        priceWarning[
+                                          index
+                                        ]
+                                          .persen ??
+                                          0
+                                      ).toFixed(
+                                        2
+                                      )}
+                                      %
+                                    </strong>
+                                  </span>
+
+                                  <span>
+                                    Supplier terakhir:{" "}
+                                    <strong>
+                                      {
+                                        priceWarning[
+                                          index
+                                        ]
+                                          .supplier ??
+                                          "-"
+                                      }
+                                    </strong>
+                                  </span>
+
+                                </div>
+
+                              </div>
+
                             )}
-                          </strong>
 
-                          {" "}menjadi{" "}
+                          </div>
+                        );
+                      }
+                    )}
 
-                          <strong>
-                            Rp{" "}
-                            {Number(
-                              priceWarning[
-                                index
-                              ]
-                                .hargaBaru ??
-                                0
-                            ).toLocaleString(
-                              "id-ID"
-                            )}
-                          </strong>
+                  </div>
 
-                          <br />
+                </div>
 
-                          Perubahan:{" "}
+              </div>
 
-                          <strong>
-                            {Number(
-                              priceWarning[
-                                index
-                              ]
-                                .persen ??
-                                0
-                            ).toFixed(2)}
-                            %
-                          </strong>
+              {/* ADD ITEM + TOTAL */}
 
-                          <br />
-
-                          Supplier terakhir:{" "}
-
-                          <strong>
-                            {
-                              priceWarning[
-                                index
-                              ].supplier ??
-                              "-"
-                            }
-                          </strong>
-
-                        </div>
-
-                      )}
-
-                    </div>
-
-                  )
-                )}
-
-                {/* TAMBAH BARANG */}
+              <div className="mt-4 flex flex-col gap-4 border-t border-[#E7ECEA] pt-4 sm:flex-row sm:items-center sm:justify-between">
 
                 <button
                   type="button"
                   onClick={addItem}
-                  className="mt-2 rounded-xl bg-[#497F70] px-5 py-3 text-sm font-semibold text-white hover:bg-[#3D6D60]"
+                  className="w-fit rounded-lg bg-[#497F70] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#3D6D60]"
                 >
                   + Tambah Barang
                 </button>
+
+                <div className="flex items-center justify-between gap-8 rounded-lg bg-[#F5F8F6] px-4 py-3 sm:min-w-[300px]">
+
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                      Total PO
+                    </div>
+
+                    <div className="text-xs text-gray-500">
+                      {form.items.length}{" "}
+                      item
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+
+                    <div className="text-lg font-bold text-[#18352D]">
+                      Rp{" "}
+                      {formatRupiah(
+                        grandTotal
+                      )}
+                    </div>
+
+                  </div>
+
+                </div>
 
               </div>
 
@@ -1060,33 +1279,59 @@ export default function NewPurchasePage() {
           </div>
 
           {/* =================================================
-              FOOTER
+              FOOTER ACTION
           ================================================= */}
 
-          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <div className="sticky bottom-0 z-40 -mx-5 border-t border-[#DDE7E2] bg-[#F5F7F6]/95 px-5 py-4 backdrop-blur lg:-mx-7 lg:px-7">
 
-            <button
-              type="button"
-              onClick={() =>
-                router.push(
-                  "/purchase"
-                )
-              }
-              className="rounded-xl border border-[#D5E5DC] bg-white px-6 py-3 text-sm font-semibold text-gray-700 hover:bg-[#F5F8F6]"
-            >
-              Batal
-            </button>
+            <div className="mx-auto flex max-w-7xl flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
 
-            <button
-              type="button"
-              onClick={savePurchase}
-              disabled={saving}
-              className="rounded-xl bg-[#497F70] px-7 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#3D6D60] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {saving
-                ? "Menyimpan..."
-                : "Simpan Purchase Order"}
-            </button>
+              <div className="text-xs text-gray-500">
+
+                {form.supplierId ? (
+                  <>
+                    Supplier:{" "}
+                    <span className="font-semibold text-gray-700">
+                      {
+                        selectedSupplierName()
+                      }
+                    </span>
+                  </>
+                ) : (
+                  "Supplier belum dipilih"
+                )}
+
+              </div>
+
+              <div className="flex gap-2">
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(
+                      "/purchase"
+                    )
+                  }
+                  disabled={saving}
+                  className="rounded-lg border border-[#D5E1DC] bg-white px-5 py-2.5 text-xs font-semibold text-gray-600 transition hover:bg-[#F4F7F5] disabled:opacity-50"
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="button"
+                  onClick={savePurchase}
+                  disabled={saving}
+                  className="rounded-lg bg-[#497F70] px-6 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#3D6D60] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {saving
+                    ? "Menyimpan..."
+                    : "Simpan Purchase Order"}
+                </button>
+
+              </div>
+
+            </div>
 
           </div>
 

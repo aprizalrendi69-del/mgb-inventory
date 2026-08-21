@@ -11,6 +11,8 @@ import {
   PaymentMethod,
   PaymentStatus,
   Role,
+  PettyCashStatus,
+  PettyCashType,
 } from "@prisma/client";
 
 /*
@@ -21,33 +23,45 @@ PAYMENT API
 PO PUSAT
 Purchase
    ↓
-Payment
+Payment PENDING
    ↓
-Approve
+Approve Payment
+   ↓
+CASH / TRANSFER / COD / CBD
    ↓
 Petty Cash Pusat
+
+TEMPO
+   ↓
+PurchasePayable
+   ↓
+TIDAK memotong Petty Cash
+
 
 PO OUTLET
 OutletPurchase
    ↓
-Payment
+Payment PENDING
    ↓
-Approve
+Approve Payment
    ↓
-Petty Cash Outlet tersebut
+CASH / TRANSFER / COD / CBD
+   ↓
+Petty Cash Outlet
 
+TEMPO
+   ↓
+PurchasePayable
+   ↓
+TIDAK memotong Petty Cash
 ===========================================================
 */
 
 async function getCurrentUser() {
   try {
-    const cookieStore =
-      await cookies();
+    const cookieStore = await cookies();
 
-    const session =
-      cookieStore.get(
-        "erp-session"
-      );
+    const session = cookieStore.get("erp-session");
 
     if (!session?.value) {
       return null;
@@ -56,10 +70,7 @@ async function getCurrentUser() {
     let sessionData: any;
 
     try {
-      sessionData =
-        JSON.parse(
-          session.value
-        );
+      sessionData = JSON.parse(session.value);
     } catch {
       return null;
     }
@@ -68,15 +79,12 @@ async function getCurrentUser() {
       sessionData?.user ??
       sessionData;
 
-    const userId =
-      Number(
-        sessionUser?.id
-      );
+    const userId = Number(
+      sessionUser?.id
+    );
 
     if (
-      !Number.isInteger(
-        userId
-      ) ||
+      !Number.isInteger(userId) ||
       userId <= 0
     ) {
       return null;
@@ -98,10 +106,7 @@ async function getCurrentUser() {
         },
       });
 
-    if (
-      !user ||
-      !user.active
-    ) {
+    if (!user || !user.active) {
       return null;
     }
 
@@ -114,6 +119,23 @@ async function getCurrentUser() {
 
     return null;
   }
+}
+
+/*
+===========================================================
+HELPER
+===========================================================
+*/
+
+function isCashPaymentMethod(
+  method: PaymentMethod
+) {
+  return (
+    method === PaymentMethod.CASH ||
+    method === PaymentMethod.TRANSFER ||
+    method === PaymentMethod.COD ||
+    method === PaymentMethod.CBD
+  );
 }
 
 /*
@@ -133,8 +155,7 @@ export async function GET(
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Unauthorized",
+          message: "Unauthorized",
         },
         {
           status: 401,
@@ -144,35 +165,27 @@ export async function GET(
 
     const {
       searchParams,
-    } =
-      new URL(req.url);
+    } = new URL(req.url);
 
     const status =
-      searchParams.get(
-        "status"
-      );
+      searchParams.get("status");
 
     const supplierIdParam =
-      searchParams.get(
-        "supplierId"
-      );
+      searchParams.get("supplierId");
 
     const purchaseIdParam =
-      searchParams.get(
-        "purchaseId"
-      );
+      searchParams.get("purchaseId");
 
     const outletPurchaseIdParam =
       searchParams.get(
         "outletPurchaseId"
       );
 
-    const where: any =
-      {};
+    const where: any = {};
 
     /*
     ========================================================
-    FILTER
+    FILTER STATUS
     ========================================================
     */
 
@@ -188,13 +201,15 @@ export async function GET(
         status as PaymentStatus;
     }
 
-    if (
-      supplierIdParam
-    ) {
+    /*
+    ========================================================
+    FILTER SUPPLIER
+    ========================================================
+    */
+
+    if (supplierIdParam) {
       const supplierId =
-        Number(
-          supplierIdParam
-        );
+        Number(supplierIdParam);
 
       if (
         Number.isInteger(
@@ -207,13 +222,15 @@ export async function GET(
       }
     }
 
-    if (
-      purchaseIdParam
-    ) {
+    /*
+    ========================================================
+    FILTER PO PUSAT
+    ========================================================
+    */
+
+    if (purchaseIdParam) {
       const purchaseId =
-        Number(
-          purchaseIdParam
-        );
+        Number(purchaseIdParam);
 
       if (
         Number.isInteger(
@@ -226,9 +243,13 @@ export async function GET(
       }
     }
 
-    if (
-      outletPurchaseIdParam
-    ) {
+    /*
+    ========================================================
+    FILTER PO OUTLET
+    ========================================================
+    */
+
+    if (outletPurchaseIdParam) {
       const outletPurchaseId =
         Number(
           outletPurchaseIdParam
@@ -238,8 +259,7 @@ export async function GET(
         Number.isInteger(
           outletPurchaseId
         ) &&
-        outletPurchaseId >
-          0
+        outletPurchaseId > 0
       ) {
         where.outletPurchaseId =
           outletPurchaseId;
@@ -248,7 +268,7 @@ export async function GET(
 
     /*
     ========================================================
-    OUTLET ADMIN
+    ACCESS OUTLET
     ========================================================
     */
 
@@ -299,6 +319,8 @@ export async function GET(
               purchaseDate: true,
               status: true,
               total: true,
+              paymentMethod: true,
+              payable: true,
             },
           },
 
@@ -309,6 +331,7 @@ export async function GET(
               purchaseDate: true,
               status: true,
               total: true,
+              paymentMethod: true,
 
               outlet: {
                 select: {
@@ -317,6 +340,8 @@ export async function GET(
                   name: true,
                 },
               },
+
+              payable: true,
             },
           },
         },
@@ -372,8 +397,7 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Unauthorized",
+          message: "Unauthorized",
         },
         {
           status: 401,
@@ -428,28 +452,22 @@ export async function POST(
         undefined &&
       purchaseId !== null &&
       purchaseId !== ""
-        ? Number(
-            purchaseId
-          )
+        ? Number(purchaseId)
         : null;
 
     const outletPurchaseIdValue =
       outletPurchaseId !==
         undefined &&
-      outletPurchaseId !==
-        null &&
-      outletPurchaseId !==
-        ""
+      outletPurchaseId !== null &&
+      outletPurchaseId !== ""
         ? Number(
             outletPurchaseId
           )
         : null;
 
     if (
-      pusatPurchaseId ===
-        null &&
-      outletPurchaseIdValue ===
-        null
+      pusatPurchaseId === null &&
+      outletPurchaseIdValue === null
     ) {
       return NextResponse.json(
         {
@@ -464,10 +482,8 @@ export async function POST(
     }
 
     if (
-      pusatPurchaseId !==
-        null &&
-      outletPurchaseIdValue !==
-        null
+      pusatPurchaseId !== null &&
+      outletPurchaseIdValue !== null
     ) {
       return NextResponse.json(
         {
@@ -510,11 +526,8 @@ export async function POST(
       );
     }
 
-    let purchase: any =
-      null;
-
-    let outletPurchase:
-      any = null;
+    let purchase: any = null;
+    let outletPurchase: any = null;
 
     /*
     ========================================================
@@ -523,15 +536,13 @@ export async function POST(
     */
 
     if (
-      pusatPurchaseId !==
-      null
+      pusatPurchaseId !== null
     ) {
       if (
         !Number.isInteger(
           pusatPurchaseId
         ) ||
-        pusatPurchaseId <=
-          0
+        pusatPurchaseId <= 0
       ) {
         return NextResponse.json(
           {
@@ -548,8 +559,7 @@ export async function POST(
       purchase =
         await prisma.purchase.findUnique({
           where: {
-            id:
-              pusatPurchaseId,
+            id: pusatPurchaseId,
           },
 
           include: {
@@ -588,11 +598,6 @@ export async function POST(
         );
       }
 
-      /*
-      OUTLET ADMIN TIDAK BOLEH
-      MEMBUAT PAYMENT PO PUSAT
-      */
-
       if (
         user.role ===
         Role.OUTLET_ADMIN
@@ -617,15 +622,13 @@ export async function POST(
     */
 
     if (
-      outletPurchaseIdValue !==
-      null
+      outletPurchaseIdValue !== null
     ) {
       if (
         !Number.isInteger(
           outletPurchaseIdValue
         ) ||
-        outletPurchaseIdValue <=
-          0
+        outletPurchaseIdValue <= 0
       ) {
         return NextResponse.json(
           {
@@ -716,18 +719,14 @@ export async function POST(
       outletPurchase?.supplierId ??
       (
         supplierId
-          ? Number(
-              supplierId
-            )
+          ? Number(supplierId)
           : null
       );
 
     if (
       !actualSupplierId ||
       !Number.isInteger(
-        Number(
-          actualSupplierId
-        )
+        Number(actualSupplierId)
       )
     ) {
       return NextResponse.json(
@@ -745,10 +744,9 @@ export async function POST(
     const supplier =
       await prisma.supplier.findUnique({
         where: {
-          id:
-            Number(
-              actualSupplierId
-            ),
+          id: Number(
+            actualSupplierId
+          ),
         },
       });
 
@@ -774,8 +772,7 @@ export async function POST(
     const existingPayments =
       await prisma.payment.aggregate({
         where:
-          pusatPurchaseId !==
-          null
+          pusatPurchaseId !== null
             ? {
                 purchaseId:
                   pusatPurchaseId,
@@ -809,8 +806,7 @@ export async function POST(
     const alreadyPaid =
       Number(
         existingPayments
-          ._sum.amount ??
-          0
+          ._sum.amount ?? 0
       );
 
     const poTotal =
@@ -823,8 +819,7 @@ export async function POST(
     const outstanding =
       Math.max(
         0,
-        poTotal -
-          alreadyPaid
+        poTotal - alreadyPaid
       );
 
     if (
@@ -849,21 +844,14 @@ export async function POST(
     ========================================================
     */
 
-    const now =
-      new Date();
+    const now = new Date();
 
     const datePart =
       `${now.getFullYear()}${String(
         now.getMonth() + 1
-      ).padStart(
-        2,
-        "0"
-      )}${String(
+      ).padStart(2, "0")}${String(
         now.getDate()
-      ).padStart(
-        2,
-        "0"
-      )}`;
+      ).padStart(2, "0")}`;
 
     const todayStart =
       new Date(
@@ -883,10 +871,8 @@ export async function POST(
       await prisma.payment.count({
         where: {
           createdAt: {
-            gte:
-              todayStart,
-            lt:
-              tomorrowStart,
+            gte: todayStart,
+            lt: tomorrowStart,
           },
         },
       });
@@ -894,14 +880,11 @@ export async function POST(
     const number =
       `PAY-${datePart}-${String(
         count + 1
-      ).padStart(
-        4,
-        "0"
-      )}`;
+      ).padStart(4, "0")}`;
 
     /*
     ========================================================
-    CREATE
+    CREATE PAYMENT
     ========================================================
     */
 
@@ -923,9 +906,7 @@ export async function POST(
 
           paymentDate:
             paymentDate
-              ? new Date(
-                  paymentDate
-                )
+              ? new Date(paymentDate)
               : new Date(),
 
           amount:
@@ -961,6 +942,7 @@ export async function POST(
 
         include: {
           supplier: true,
+
           purchase: true,
 
           outletPurchase: {
@@ -990,7 +972,7 @@ export async function POST(
             purchase?.number ??
             outletPurchase?.number ??
             "-"
-          } sebesar ${paymentAmount}`,
+          } sebesar ${paymentAmount} dengan metode ${paymentMethod}`,
 
         userId:
           user.id,
@@ -1019,6 +1001,1112 @@ export async function POST(
         success: false,
         message:
           "Gagal membuat payment",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
+/*
+===========================================================
+PATCH PAYMENT
+===========================================================
+
+ACTION:
+approve
+reject
+cancel
+
+APPROVE:
+CASH      → Petty Cash OUT
+TRANSFER  → Petty Cash OUT
+COD       → Petty Cash OUT
+CBD       → Petty Cash OUT
+TEMPO     → PurchasePayable
+
+===========================================================
+*/
+
+export async function PATCH(
+  req: NextRequest
+) {
+  try {
+    const user =
+      await getCurrentUser();
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Unauthorized",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
+    /*
+    ========================================================
+    ONLY ADMIN / MANAGER
+    ========================================================
+    */
+
+    if (
+      user.role !== Role.ADMIN &&
+      user.role !== Role.MANAGER
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Anda tidak memiliki hak untuk approval payment",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    const body =
+      await req.json();
+
+    const paymentId =
+      Number(body.paymentId);
+
+    const action =
+      String(
+        body.action ?? "approve"
+      )
+        .trim()
+        .toLowerCase();
+
+    if (
+      !Number.isInteger(
+        paymentId
+      ) ||
+      paymentId <= 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Payment ID tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+    ========================================================
+    GET PAYMENT
+    ========================================================
+    */
+
+    const payment =
+      await prisma.payment.findUnique({
+        where: {
+          id: paymentId,
+        },
+
+        include: {
+          supplier: true,
+
+          purchase: {
+            include: {
+              payable: true,
+            },
+          },
+
+          outletPurchase: {
+            include: {
+              outlet: true,
+              payable: true,
+            },
+          },
+        },
+      });
+
+    if (!payment) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Payment tidak ditemukan",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    /*
+    ========================================================
+    REJECT
+    ========================================================
+    */
+
+    if (action === "reject") {
+      if (
+        payment.status !==
+        PaymentStatus.PENDING
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Payment hanya dapat ditolak saat status PENDING",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      const rejected =
+        await prisma.payment.update({
+          where: {
+            id: payment.id,
+          },
+
+          data: {
+            status:
+              PaymentStatus.REJECTED,
+          },
+
+          include: {
+            supplier: true,
+            purchase: true,
+
+            outletPurchase: {
+              include: {
+                outlet: true,
+              },
+            },
+          },
+        });
+
+      await prisma.history.create({
+        data: {
+          transactionType:
+            "PURCHASE",
+
+          referenceNumber:
+            payment.number,
+
+          description:
+            `Payment ${payment.number} ditolak oleh ${user.fullname}`,
+
+          userId:
+            user.id,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message:
+          "Payment berhasil ditolak",
+        data: rejected,
+      });
+    }
+
+    /*
+    ========================================================
+    CANCEL
+    ========================================================
+    */
+
+    if (action === "cancel") {
+      if (
+        payment.status ===
+        PaymentStatus.PAID
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Payment yang sudah PAID tidak dapat dibatalkan",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      if (
+        payment.status ===
+        PaymentStatus.CANCELLED
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Payment sudah CANCELLED",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      const cancelled =
+        await prisma.payment.update({
+          where: {
+            id: payment.id,
+          },
+
+          data: {
+            status:
+              PaymentStatus.CANCELLED,
+          },
+
+          include: {
+            supplier: true,
+            purchase: true,
+
+            outletPurchase: {
+              include: {
+                outlet: true,
+              },
+            },
+          },
+        });
+
+      await prisma.history.create({
+        data: {
+          transactionType:
+            "PURCHASE",
+
+          referenceNumber:
+            payment.number,
+
+          description:
+            `Payment ${payment.number} dibatalkan oleh ${user.fullname}`,
+
+          userId:
+            user.id,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message:
+          "Payment berhasil dibatalkan",
+        data: cancelled,
+      });
+    }
+
+    /*
+    ========================================================
+    APPROVE
+    ========================================================
+    */
+
+    if (action !== "approve") {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Action tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      payment.status !==
+      PaymentStatus.PENDING
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            `Payment tidak dapat di-approve karena status saat ini ${payment.status}`,
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+    ========================================================
+    VALIDASI SUMBER PO
+    ========================================================
+    */
+
+    const isCentral =
+      !!payment.purchaseId;
+
+    const isOutlet =
+      !!payment.outletPurchaseId;
+
+    if (!isCentral && !isOutlet) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Payment tidak memiliki sumber PO",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+    ========================================================
+    OUTLET ID
+    ========================================================
+    */
+
+    const outletId =
+      payment.outletPurchase
+        ?.outletId ??
+      null;
+
+    /*
+    ========================================================
+    APPROVAL DALAM TRANSACTION
+    ========================================================
+    */
+
+    const result =
+      await prisma.$transaction(
+        async (tx) => {
+          /*
+          ==================================================
+          CEK ULANG PAYMENT
+          ==================================================
+          */
+
+          const currentPayment =
+            await tx.payment.findUnique({
+              where: {
+                id: payment.id,
+              },
+            });
+
+          if (!currentPayment) {
+            throw new Error(
+              "PAYMENT_NOT_FOUND"
+            );
+          }
+
+          if (
+            currentPayment.status !==
+            PaymentStatus.PENDING
+          ) {
+            throw new Error(
+              "PAYMENT_ALREADY_PROCESSED"
+            );
+          }
+
+          /*
+          ==================================================
+          TEMPO
+          ==================================================
+
+          TEMPO TIDAK MENYENTUH PETTY CASH.
+
+          TEMPO masuk PurchasePayable.
+          */
+
+          if (
+            currentPayment.method ===
+            PaymentMethod.TEMPO
+          ) {
+            const invoiceNumber =
+              String(
+                body.invoiceNumber ??
+                  currentPayment.referenceNumber ??
+                  currentPayment.number
+              ).trim();
+
+            const invoiceDate =
+              body.invoiceDate
+                ? new Date(
+                    body.invoiceDate
+                  )
+                : currentPayment.paymentDate;
+
+            const dueDate =
+              body.dueDate
+                ? new Date(
+                    body.dueDate
+                  )
+                : null;
+
+            if (isCentral) {
+              const purchaseId =
+                currentPayment.purchaseId!;
+
+              const existingPayable =
+                await tx.purchasePayable.findUnique(
+                  {
+                    where: {
+                      purchaseId,
+                    },
+                  }
+                );
+
+              if (
+                existingPayable
+              ) {
+                const newAmount =
+                  existingPayable.amount +
+                  currentPayment.amount;
+
+                const newOutstanding =
+                  Math.max(
+                    0,
+                    newAmount -
+                      existingPayable.paidAmount
+                  );
+
+                await tx.purchasePayable.update(
+                  {
+                    where: {
+                      id:
+                        existingPayable.id,
+                    },
+
+                    data: {
+                      amount:
+                        newAmount,
+
+                      outstanding:
+                        newOutstanding,
+
+                      invoiceNumber,
+
+                      invoiceDate,
+
+                      dueDate,
+
+                      status:
+                        newOutstanding <=
+                        0
+                          ? "PAID"
+                          : "OUTSTANDING",
+                    },
+                  }
+                );
+              } else {
+                await tx.purchasePayable.create(
+                  {
+                    data: {
+                      purchaseId,
+
+                      supplierId:
+                        currentPayment.supplierId,
+
+                      outletId: null,
+
+                      invoiceNumber,
+
+                      invoiceDate,
+
+                      dueDate,
+
+                      amount:
+                        currentPayment.amount,
+
+                      paidAmount: 0,
+
+                      outstanding:
+                        currentPayment.amount,
+
+                      status:
+                        "OUTSTANDING",
+                    },
+                  }
+                );
+              }
+            }
+
+            if (isOutlet) {
+              const outletPurchaseId =
+                currentPayment
+                  .outletPurchaseId!;
+
+              const outletPurchase =
+                await tx.outletPurchase.findUnique(
+                  {
+                    where: {
+                      id:
+                        outletPurchaseId,
+                    },
+                  }
+                );
+
+              if (!outletPurchase) {
+                throw new Error(
+                  "OUTLET_PURCHASE_NOT_FOUND"
+                );
+              }
+
+              const existingPayable =
+                await tx.purchasePayable.findUnique(
+                  {
+                    where: {
+                      outletPurchaseId,
+                    },
+                  }
+                );
+
+              if (
+                existingPayable
+              ) {
+                const newAmount =
+                  existingPayable.amount +
+                  currentPayment.amount;
+
+                const newOutstanding =
+                  Math.max(
+                    0,
+                    newAmount -
+                      existingPayable.paidAmount
+                  );
+
+                await tx.purchasePayable.update(
+                  {
+                    where: {
+                      id:
+                        existingPayable.id,
+                    },
+
+                    data: {
+                      amount:
+                        newAmount,
+
+                      outstanding:
+                        newOutstanding,
+
+                      invoiceNumber,
+
+                      invoiceDate,
+
+                      dueDate,
+
+                      status:
+                        newOutstanding <=
+                        0
+                          ? "PAID"
+                          : "OUTSTANDING",
+                    },
+                  }
+                );
+              } else {
+                await tx.purchasePayable.create(
+                  {
+                    data: {
+                      outletPurchaseId,
+
+                      supplierId:
+                        currentPayment.supplierId,
+
+                      outletId:
+                        outletPurchase.outletId,
+
+                      invoiceNumber,
+
+                      invoiceDate,
+
+                      dueDate,
+
+                      amount:
+                        currentPayment.amount,
+
+                      paidAmount: 0,
+
+                      outstanding:
+                        currentPayment.amount,
+
+                      status:
+                        "OUTSTANDING",
+                    },
+                  }
+                );
+              }
+            }
+
+            const approved =
+              await tx.payment.update({
+                where: {
+                  id:
+                    currentPayment.id,
+                },
+
+                data: {
+                  status:
+                    PaymentStatus.APPROVED,
+
+                  approvedBy:
+                    user.id,
+
+                  approvedAt:
+                    new Date(),
+                },
+              });
+
+            return {
+              payment:
+                approved,
+
+              pettyCash: null,
+
+              payable: true,
+            };
+          }
+
+          /*
+          ==================================================
+          CASH / TRANSFER / COD / CBD
+          ==================================================
+          */
+
+          if (
+            !isCashPaymentMethod(
+              currentPayment.method
+            )
+          ) {
+            throw new Error(
+              "INVALID_PAYMENT_METHOD"
+            );
+          }
+
+          /*
+          ==================================================
+          CARI AKUN PETTY CASH
+          ==================================================
+
+          PUSAT:
+          outletId = NULL
+
+          OUTLET:
+          outletId = outletPurchase.outletId
+          */
+
+          const pettyCashAccount =
+            await tx.pettyCashAccount.findFirst(
+              {
+                where: {
+                  outletId:
+                    outletId,
+
+                  isActive: true,
+                },
+
+                orderBy: {
+                  id: "asc",
+                },
+              }
+            );
+
+          if (!pettyCashAccount) {
+            throw new Error(
+              outletId
+                ? "PETTY_CASH_OUTLET_ACCOUNT_NOT_FOUND"
+                : "PETTY_CASH_CENTER_ACCOUNT_NOT_FOUND"
+            );
+          }
+
+          /*
+          ==================================================
+          CEK SALDO
+          ==================================================
+          */
+
+          const balanceBefore =
+            Number(
+              pettyCashAccount.currentBalance
+            );
+
+          const paymentAmount =
+            Number(
+              currentPayment.amount
+            );
+
+          if (
+            balanceBefore <
+            paymentAmount
+          ) {
+            throw new Error(
+              `PETTY_CASH_INSUFFICIENT:${balanceBefore}`
+            );
+          }
+
+          const balanceAfter =
+            balanceBefore -
+            paymentAmount;
+
+          /*
+          ==================================================
+          GENERATE PETTY CASH NUMBER
+          ==================================================
+          */
+
+          const now =
+            new Date();
+
+          const datePart =
+            `${now.getFullYear()}${String(
+              now.getMonth() + 1
+            ).padStart(
+              2,
+              "0"
+            )}${String(
+              now.getDate()
+            ).padStart(
+              2,
+              "0"
+            )}`;
+
+          const pettyCount =
+            await tx.pettyCash.count({
+              where: {
+                createdAt: {
+                  gte:
+                    new Date(
+                      now.getFullYear(),
+                      now.getMonth(),
+                      now.getDate()
+                    ),
+
+                  lt:
+                    new Date(
+                      now.getFullYear(),
+                      now.getMonth(),
+                      now.getDate() + 1
+                    ),
+                },
+              },
+            });
+
+          const pettyNumber =
+            `PC-${datePart}-${String(
+              pettyCount + 1
+            ).padStart(
+              4,
+              "0"
+            )}`;
+
+          /*
+          ==================================================
+          CREATE PETTY CASH OUT
+          ==================================================
+          */
+
+          const pettyCash =
+            await tx.pettyCash.create({
+              data: {
+                number:
+                  pettyNumber,
+
+                trxDate:
+                  new Date(),
+
+                type:
+                  PettyCashType.OUT,
+
+                category:
+                  "PAYMENT",
+
+                description:
+                  `Payment ${currentPayment.number} - ${
+                    currentPayment.method
+                  } - ${
+                    isCentral
+                      ? payment.purchase?.number ??
+                        "PO Pusat"
+                      : payment
+                          .outletPurchase
+                          ?.number ??
+                        "PO Outlet"
+                  } - Supplier ${
+                    currentPayment
+                      .supplierId
+                  }`,
+
+                amount:
+                  paymentAmount,
+
+                balanceBefore,
+
+                balanceAfter,
+
+                accountId:
+                  pettyCashAccount.id,
+
+                paymentId:
+                  currentPayment.id,
+
+                outletId:
+                  outletId,
+
+                createdBy:
+                  user.id,
+
+                approvedBy:
+                  user.id,
+
+                status:
+                  PettyCashStatus.APPROVED,
+
+                approvedAt:
+                  new Date(),
+              },
+            });
+
+          /*
+          ==================================================
+          UPDATE PETTY CASH ACCOUNT
+          ==================================================
+          */
+
+          await tx.pettyCashAccount.update(
+            {
+              where: {
+                id:
+                  pettyCashAccount.id,
+              },
+
+              data: {
+                currentBalance:
+                  balanceAfter,
+              },
+            }
+          );
+
+          /*
+          ==================================================
+          PAYMENT APPROVED
+          ==================================================
+          */
+
+          const approved =
+            await tx.payment.update({
+              where: {
+                id:
+                  currentPayment.id,
+              },
+
+              data: {
+                status:
+                  PaymentStatus.PAID,
+
+                approvedBy:
+                  user.id,
+
+                approvedAt:
+                  new Date(),
+              },
+            });
+
+          return {
+            payment:
+              approved,
+
+            pettyCash,
+
+            payable: false,
+          };
+        }
+      );
+
+    /*
+    ========================================================
+    HISTORY
+    ========================================================
+    */
+
+    await prisma.history.create({
+      data: {
+        transactionType:
+          "PURCHASE",
+
+        referenceNumber:
+          payment.number,
+
+        description:
+          payment.method ===
+          PaymentMethod.TEMPO
+            ? `Payment ${payment.number} disetujui sebagai TEMPO dan masuk Purchase Payable`
+            : `Payment ${payment.number} disetujui dan ${
+                result.pettyCash
+                  ? `memotong Petty Cash sebesar ${payment.amount}`
+                  : "diproses"
+              }`,
+
+        userId:
+          user.id,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+
+      message:
+        payment.method ===
+        PaymentMethod.TEMPO
+          ? "Payment TEMPO berhasil disetujui dan masuk Purchase Payable"
+          : `Payment berhasil disetujui dan Petty Cash ${
+              outletId
+                ? "outlet"
+                : "pusat"
+            } telah dipotong`,
+
+      data: {
+        payment:
+          result.payment,
+
+        pettyCash:
+          result.pettyCash,
+
+        payable:
+          result.payable,
+      },
+    });
+  } catch (error: any) {
+    console.error(
+      "PATCH PAYMENT ERROR:",
+      error
+    );
+
+    const message =
+      String(
+        error?.message ?? ""
+      );
+
+    if (
+      message ===
+      "PAYMENT_NOT_FOUND"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Payment tidak ditemukan",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    if (
+      message ===
+      "PAYMENT_ALREADY_PROCESSED"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Payment sudah diproses sebelumnya",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      message ===
+      "PETTY_CASH_CENTER_ACCOUNT_NOT_FOUND"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Akun Petty Cash Pusat belum tersedia atau tidak aktif",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      message ===
+      "PETTY_CASH_OUTLET_ACCOUNT_NOT_FOUND"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Akun Petty Cash Outlet belum tersedia atau tidak aktif",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      message.startsWith(
+        "PETTY_CASH_INSUFFICIENT:"
+      )
+    ) {
+      const balance =
+        message.split(":")[1];
+
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            `Saldo Petty Cash tidak mencukupi. Saldo saat ini: ${balance}`,
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      message ===
+      "OUTLET_PURCHASE_NOT_FOUND"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "PO outlet tidak ditemukan",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    if (
+      message ===
+      "INVALID_PAYMENT_METHOD"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Metode payment tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "Gagal memproses payment",
       },
       {
         status: 500,

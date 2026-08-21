@@ -228,6 +228,14 @@ export async function GET(
  *
  * HANYA DRAFT
  *
+ * PAYMENT METHOD:
+ *
+ * TRANSFER
+ * COD
+ * CBD
+ *
+ * CASH TIDAK DIGUNAKAN.
+ *
  * =========================================================
  */
 
@@ -256,13 +264,28 @@ export async function PUT(
       );
     }
 
+    /*
+     * =====================================================
+     * BODY
+     * =====================================================
+     */
+
     const body = await req.json();
 
     const {
       supplierId,
+      purchaseDate,
+      paymentMethod,
+      description,
       remarks,
       items,
     } = body;
+
+    /*
+     * =====================================================
+     * VALIDASI SUPPLIER
+     * =====================================================
+     */
 
     if (!supplierId) {
       return NextResponse.json(
@@ -276,6 +299,12 @@ export async function PUT(
         }
       );
     }
+
+    /*
+     * =====================================================
+     * VALIDASI ITEM
+     * =====================================================
+     */
 
     if (
       !Array.isArray(items) ||
@@ -292,6 +321,99 @@ export async function PUT(
         }
       );
     }
+
+    /*
+     * =====================================================
+     * VALIDASI PAYMENT METHOD
+     * =====================================================
+     *
+     * HANYA:
+     *
+     * TRANSFER
+     * COD
+     * CBD
+     *
+     * Tidak ada CASH.
+     *
+     * =====================================================
+     */
+
+    const allowedPaymentMethods = [
+      "TRANSFER",
+      "COD",
+      "CBD",
+    ];
+
+    const selectedPaymentMethod =
+      String(
+        paymentMethod || ""
+      )
+        .trim()
+        .toUpperCase();
+
+    if (
+      !selectedPaymentMethod ||
+      !allowedPaymentMethods.includes(
+        selectedPaymentMethod
+      )
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Metode pembayaran wajib dipilih. Pilihan: Transfer, COD, atau CBD.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+     * =====================================================
+     * VALIDASI TANGGAL
+     * =====================================================
+     */
+
+    let finalPurchaseDate: Date;
+
+    if (purchaseDate) {
+      const parsedDate =
+        new Date(purchaseDate);
+
+      if (
+        Number.isNaN(
+          parsedDate.getTime()
+        )
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Tanggal Purchase Order tidak valid",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      finalPurchaseDate =
+        parsedDate;
+    } else {
+      /*
+       * Kalau frontend tidak mengirim tanggal,
+       * pertahankan tanggal lama.
+       */
+      finalPurchaseDate =
+        new Date();
+    }
+
+    /*
+     * =====================================================
+     * CARI PURCHASE
+     * =====================================================
+     */
 
     const purchase =
       await prisma.purchase.findUnique({
@@ -313,6 +435,12 @@ export async function PUT(
       );
     }
 
+    /*
+     * =====================================================
+     * HANYA DRAFT
+     * =====================================================
+     */
+
     if (
       purchase.status !==
       PurchaseStatus.DRAFT
@@ -328,6 +456,12 @@ export async function PUT(
         }
       );
     }
+
+    /*
+     * =====================================================
+     * CEK SUPPLIER
+     * =====================================================
+     */
 
     const supplier =
       await prisma.supplier.findUnique({
@@ -348,6 +482,12 @@ export async function PUT(
         }
       );
     }
+
+    /*
+     * =====================================================
+     * VALIDASI ITEM + TOTAL
+     * =====================================================
+     */
 
     let total = 0;
 
@@ -398,14 +538,23 @@ export async function PUT(
         );
       }
 
-      total += qty * price;
+      total +=
+        qty * price;
     }
+
+    /*
+     * =====================================================
+     * TRANSACTION
+     * =====================================================
+     */
 
     const result =
       await prisma.$transaction(
         async (tx) => {
           /*
+           * =================================================
            * HAPUS ITEM LAMA
+           * =================================================
            */
 
           await tx.purchaseItem.deleteMany({
@@ -416,7 +565,9 @@ export async function PUT(
           });
 
           /*
+           * =================================================
            * UPDATE PURCHASE
+           * =================================================
            */
 
           const update =
@@ -429,10 +580,48 @@ export async function PUT(
                 supplierId:
                   Number(supplierId),
 
+                /*
+                 * TANGGAL PO
+                 */
+
+                purchaseDate:
+                  purchaseDate
+                    ? finalPurchaseDate
+                    : purchase.purchaseDate,
+
+                /*
+                 * PAYMENT METHOD
+                 *
+                 * HANYA:
+                 * TRANSFER
+                 * COD
+                 * CBD
+                 */
+
+                paymentMethod:
+                  selectedPaymentMethod as
+                    | "TRANSFER"
+                    | "COD"
+                    | "CBD",
+
+                /*
+                 * KETERANGAN
+                 */
+
                 remarks:
-                  remarks || null,
+                  description ||
+                  remarks ||
+                  null,
+
+                /*
+                 * TOTAL
+                 */
 
                 total,
+
+                /*
+                 * ITEMS
+                 */
 
                 items: {
                   create:
@@ -479,7 +668,9 @@ export async function PUT(
             });
 
           /*
+           * =================================================
            * HISTORY
+           * =================================================
            */
 
           await tx.history.create({
@@ -500,13 +691,21 @@ export async function PUT(
         }
       );
 
+    /*
+     * =====================================================
+     * RESPONSE
+     * =====================================================
+     */
+
     return NextResponse.json({
       success: true,
+
       message:
         "Purchase Order berhasil diubah",
+
       data: result,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error(
       "PUT PURCHASE ERROR:",
       error
@@ -516,6 +715,7 @@ export async function PUT(
       {
         success: false,
         message:
+          error?.message ||
           "Gagal mengubah Purchase Order",
       },
       {
@@ -631,19 +831,6 @@ export async function DELETE(
     /*
      * =======================================================
      * SOURCE OPTIONAL
-     *
-     * Frontend lama:
-     *
-     * DELETE /api/purchase/8
-     *
-     * Tetap diterima.
-     *
-     * Jika source dikirim:
-     *
-     * ?source=PUSAT
-     * ?source=OUTLET
-     *
-     * akan dipakai sebagai petunjuk.
      * =======================================================
      */
 
@@ -672,10 +859,6 @@ export async function DELETE(
     /*
      * =======================================================
      * CARI PURCHASE PUSAT
-     * =======================================================
-     *
-     * Kalau source PUSAT atau tidak dikirim,
-     * cek tabel Purchase.
      * =======================================================
      */
 
@@ -733,8 +916,6 @@ export async function DELETE(
           async (tx) => {
             /*
              * HAPUS ITEM
-             *
-             * PurchaseItem.purchaseId
              */
 
             await tx.purchaseItem.deleteMany({
@@ -808,15 +989,6 @@ export async function DELETE(
      * =======================================================
      * CARI PURCHASE OUTLET
      * =======================================================
-     *
-     * OutletPurchase memiliki ID sendiri.
-     *
-     * Schema:
-     *
-     * OutletPurchaseItem.purchaseId
-     *
-     * BUKAN outletPurchaseId.
-     * =======================================================
      */
 
     if (
@@ -888,9 +1060,6 @@ export async function DELETE(
         async (tx) => {
           /*
            * HAPUS ITEM OUTLET
-           *
-           * Field schema:
-           * OutletPurchaseItem.purchaseId
            */
 
           await tx.outletPurchaseItem.deleteMany({

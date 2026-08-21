@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
-import { Role } from "@prisma/client";
+import {
+  PaymentMethod,
+  Role,
+} from "@prisma/client";
 import { randomUUID } from "crypto";
 
 /*
@@ -130,6 +133,32 @@ function getOutletFilter(user: {
 
 /*
  * =========================================================
+ * PAYMENT METHOD
+ * =========================================================
+ *
+ * Metode yang digunakan oleh halaman Purchase Outlet Baru:
+ *
+ * CASH
+ * TRANSFER
+ * COD
+ * CBD
+ * TEMPO
+ *
+ * Backend tetap menggunakan enum PaymentMethod dari Prisma
+ * agar nilai yang masuk ke database selalu valid.
+ * =========================================================
+ */
+
+const ALLOWED_PAYMENT_METHODS: PaymentMethod[] = [
+  PaymentMethod.CASH,
+  PaymentMethod.TRANSFER,
+  PaymentMethod.COD,
+  PaymentMethod.CBD,
+  PaymentMethod.TEMPO,
+];
+
+/*
+ * =========================================================
  * GET
  * =========================================================
  *
@@ -155,7 +184,8 @@ export async function GET() {
       return NextResponse.json(
         {
           success: false,
-          message: "Tidak login atau session tidak valid",
+          message:
+            "Tidak login atau session tidak valid",
         },
         {
           status: 401,
@@ -271,6 +301,30 @@ export async function GET() {
  * =========================================================
  *
  * CREATE PURCHASE OUTLET
+ *
+ * PAYMENT METHOD:
+ *
+ * Frontend mengirim:
+ *
+ * {
+ *   paymentMethod: "TRANSFER"
+ * }
+ *
+ * Backend:
+ * -> validasi
+ * -> simpan ke OutletPurchase.paymentMethod
+ *
+ * Sehingga alurnya:
+ *
+ * Purchase Outlet Baru
+ *        ↓
+ * Payment Method
+ *        ↓
+ * OutletPurchase
+ *        ↓
+ * Approve
+ *        ↓
+ * Payment
  * =========================================================
  */
 
@@ -290,7 +344,8 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message: "Tidak login atau session tidak valid",
+          message:
+            "Tidak login atau session tidak valid",
         },
         {
           status: 401,
@@ -353,13 +408,20 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message: "Format request tidak valid",
+          message:
+            "Format request tidak valid",
         },
         {
           status: 400,
         }
       );
     }
+
+    /*
+     * -------------------------------------------------------
+     * BASIC DATA
+     * -------------------------------------------------------
+     */
 
     const requestedOutletId = Number(
       body?.outletId
@@ -369,13 +431,94 @@ export async function POST(
       body?.supplierId
     );
 
+    /*
+     * -------------------------------------------------------
+     * PAYMENT METHOD
+     * -------------------------------------------------------
+     *
+     * WAJIB.
+     *
+     * Frontend:
+     *
+     * CASH
+     * TRANSFER
+     * COD
+     * CBD
+     * TEMPO
+     *
+     * Backend melakukan validasi enum Prisma.
+     * -------------------------------------------------------
+     */
+
+    const rawPaymentMethod =
+      body?.paymentMethod !== undefined &&
+      body?.paymentMethod !== null
+        ? String(
+            body.paymentMethod
+          ).trim()
+        : "";
+
+    if (!rawPaymentMethod) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Metode pembayaran wajib dipilih",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+     * Pastikan nilai yang dikirim benar-benar
+     * merupakan enum PaymentMethod yang diizinkan.
+     */
+
+    if (
+      !ALLOWED_PAYMENT_METHODS.includes(
+        rawPaymentMethod as PaymentMethod
+      )
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Metode pembayaran tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const paymentMethod =
+      rawPaymentMethod as PaymentMethod;
+
+    /*
+     * -------------------------------------------------------
+     * REMARKS
+     * -------------------------------------------------------
+     */
+
     const remarks =
       body?.remarks !== undefined &&
       body?.remarks !== null
-        ? String(body.remarks).trim()
+        ? String(
+            body.remarks
+          ).trim()
         : null;
 
-    const items = Array.isArray(body?.items)
+    /*
+     * -------------------------------------------------------
+     * ITEMS
+     * -------------------------------------------------------
+     */
+
+    const items = Array.isArray(
+      body?.items
+    )
       ? body.items
       : [];
 
@@ -389,7 +532,8 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message: "Barang belum dipilih",
+          message:
+            "Barang belum dipilih",
         },
         {
           status: 400,
@@ -428,12 +572,18 @@ export async function POST(
 
     let outletId: number;
 
-    if (user.role === Role.OUTLET_ADMIN) {
-      outletId = Number(user.outletId);
+    if (
+      user.role === Role.OUTLET_ADMIN
+    ) {
+      outletId = Number(
+        user.outletId
+      );
 
       if (
         !outletId ||
-        !Number.isInteger(outletId)
+        !Number.isInteger(
+          outletId
+        )
       ) {
         return NextResponse.json(
           {
@@ -465,7 +615,8 @@ export async function POST(
         );
       }
 
-      outletId = requestedOutletId;
+      outletId =
+        requestedOutletId;
     }
 
     /*
@@ -479,6 +630,7 @@ export async function POST(
         where: {
           id: outletId,
         },
+
         select: {
           id: true,
           code: true,
@@ -521,7 +673,9 @@ export async function POST(
 
     if (
       !supplierId ||
-      !Number.isInteger(supplierId)
+      !Number.isInteger(
+        supplierId
+      )
     ) {
       return NextResponse.json(
         {
@@ -568,7 +722,8 @@ export async function POST(
       subtotal: number;
     }[] = [];
 
-    const barangIds = new Set<number>();
+    const barangIds =
+      new Set<number>();
 
     let total = 0;
 
@@ -577,23 +732,35 @@ export async function POST(
       index < items.length;
       index++
     ) {
-      const item = items[index];
+      const item =
+        items[index];
 
-      const barangId = Number(
-        item?.barangId
-      );
+      const barangId =
+        Number(
+          item?.barangId
+        );
 
-      const qty = Number(item?.qty);
+      const qty =
+        Number(
+          item?.qty
+        );
 
-      const price = Number(item?.price);
+      const price =
+        Number(
+          item?.price
+        );
 
       /*
+       * -----------------------------------------------------
        * ID BARANG
+       * -----------------------------------------------------
        */
 
       if (
         !barangId ||
-        !Number.isInteger(barangId)
+        !Number.isInteger(
+          barangId
+        )
       ) {
         return NextResponse.json(
           {
@@ -608,10 +775,16 @@ export async function POST(
       }
 
       /*
+       * -----------------------------------------------------
        * CEGAH DUPLIKAT BARANG
+       * -----------------------------------------------------
        */
 
-      if (barangIds.has(barangId)) {
+      if (
+        barangIds.has(
+          barangId
+        )
+      ) {
         return NextResponse.json(
           {
             success: false,
@@ -624,14 +797,20 @@ export async function POST(
         );
       }
 
-      barangIds.add(barangId);
+      barangIds.add(
+        barangId
+      );
 
       /*
+       * -----------------------------------------------------
        * QTY
+       * -----------------------------------------------------
        */
 
       if (
-        !Number.isFinite(qty) ||
+        !Number.isFinite(
+          qty
+        ) ||
         qty <= 0
       ) {
         return NextResponse.json(
@@ -647,11 +826,15 @@ export async function POST(
       }
 
       /*
+       * -----------------------------------------------------
        * PRICE
+       * -----------------------------------------------------
        */
 
       if (
-        !Number.isFinite(price) ||
+        !Number.isFinite(
+          price
+        ) ||
         price <= 0
       ) {
         return NextResponse.json(
@@ -667,12 +850,16 @@ export async function POST(
       }
 
       /*
+       * -----------------------------------------------------
        * CEGAH ANGKA TERLALU BESAR
+       * -----------------------------------------------------
        */
 
       if (
-        qty > 1000000000 ||
-        price > 1000000000000
+        qty >
+          1000000000 ||
+        price >
+          1000000000000
       ) {
         return NextResponse.json(
           {
@@ -687,7 +874,9 @@ export async function POST(
       }
 
       /*
+       * -----------------------------------------------------
        * CEK BARANG
+       * -----------------------------------------------------
        */
 
       const barang =
@@ -695,6 +884,7 @@ export async function POST(
           where: {
             id: barangId,
           },
+
           select: {
             id: true,
             code: true,
@@ -717,11 +907,14 @@ export async function POST(
       }
 
       /*
+       * -----------------------------------------------------
        * BARANG NONAKTIF TIDAK BOLEH
+       * -----------------------------------------------------
        */
 
       if (
-        barang.active === false
+        barang.active ===
+        false
       ) {
         return NextResponse.json(
           {
@@ -735,11 +928,19 @@ export async function POST(
         );
       }
 
+      /*
+       * -----------------------------------------------------
+       * SUBTOTAL
+       * -----------------------------------------------------
+       */
+
       const subtotal =
         qty * price;
 
       if (
-        !Number.isFinite(subtotal)
+        !Number.isFinite(
+          subtotal
+        )
       ) {
         return NextResponse.json(
           {
@@ -753,7 +954,8 @@ export async function POST(
         );
       }
 
-      total += subtotal;
+      total +=
+        subtotal;
 
       normalizedItems.push({
         barangId,
@@ -770,7 +972,9 @@ export async function POST(
      */
 
     if (
-      !Number.isFinite(total) ||
+      !Number.isFinite(
+        total
+      ) ||
       total < 0
     ) {
       return NextResponse.json(
@@ -790,24 +994,14 @@ export async function POST(
      * CREATE PURCHASE
      * =======================================================
      *
-     * NOMOR PURCHASE TIDAK LAGI:
+     * Nomor temporary dibuat terlebih dahulu agar aman
+     * terhadap request bersamaan.
      *
-     * lastPurchase.id + 1
-     *
-     * Karena dua request bersamaan bisa mendapatkan
-     * nomor yang sama.
-     *
-     * Kita buat record terlebih dahulu menggunakan
-     * temporary unique number.
-     *
-     * Setelah mendapatkan ID database,
-     * nomor final dibuat:
+     * Setelah ID didapat:
      *
      * OP-00001
      * OP-00002
      * dst.
-     *
-     * ID database dijamin unik.
      * =======================================================
      */
 
@@ -827,6 +1021,9 @@ export async function POST(
            * -------------------------------------------------
            * CREATE
            * -------------------------------------------------
+           *
+           * PAYMENT METHOD SEKARANG DISIMPAN DI SINI.
+           * -------------------------------------------------
            */
 
           const created =
@@ -839,15 +1036,26 @@ export async function POST(
 
                 supplierId,
 
+                /*
+                 * =========================================
+                 * PAYMENT METHOD
+                 * =========================================
+                 */
+
+                paymentMethod,
+
                 total,
 
                 remarks:
-                  remarks || null,
+                  remarks ||
+                  null,
 
                 items: {
                   create:
                     normalizedItems.map(
-                      (item) => ({
+                      (
+                        item
+                      ) => ({
                         barangId:
                           item.barangId,
 
@@ -886,7 +1094,10 @@ export async function POST(
           const finalNumber =
             `OP-${String(
               created.id
-            ).padStart(5, "0")}`;
+            ).padStart(
+              5,
+              "0"
+            )}`;
 
           /*
            * -------------------------------------------------

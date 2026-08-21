@@ -59,6 +59,14 @@ type Me = {
   outletId?: number | null;
 };
 
+const PAYMENT_METHODS = [
+  "CASH",
+  "TRANSFER",
+  "COD",
+  "CBD",
+  "TEMPO",
+] as const;
+
 export default function PurchaseOutletNewPage() {
   const router = useRouter();
 
@@ -72,6 +80,8 @@ export default function PurchaseOutletNewPage() {
 
   const [outletId, setOutletId] = useState("");
   const [supplierId, setSupplierId] = useState("");
+  const [paymentMethod, setPaymentMethod] =
+    useState("");
   const [remarks, setRemarks] = useState("");
 
   // Supplier dropdown
@@ -101,9 +111,22 @@ export default function PurchaseOutletNewPage() {
   const isAdminPusat =
     me?.role === "ADMIN";
 
-  const isOutletUser =
-    !!me &&
-    me.role !== "ADMIN";
+  const isPurchasing =
+    me?.role === "PURCHASING";
+
+  const isOutletAdmin =
+    me?.role === "OUTLET_ADMIN";
+
+  /*
+   * ADMIN + PURCHASING
+   * adalah user pusat dan boleh memilih outlet.
+   *
+   * OUTLET_ADMIN
+   * hanya boleh menggunakan outlet dari session.
+   */
+  const canChooseOutlet =
+    isAdminPusat ||
+    isPurchasing;
 
   // =========================================================
   // LOAD USER + MASTER
@@ -136,12 +159,25 @@ export default function PurchaseOutletNewPage() {
         meJson = null;
       }
 
-      const supplierJson =
-        await supplierRes.json();
+      let supplierJson: any = null;
+
+      try {
+        supplierJson =
+          await supplierRes.json();
+      } catch {
+        supplierJson = null;
+      }
+
+      // =====================================================
+      // USER
+      // =====================================================
 
       let currentUser: Me | null = null;
 
-      if (meJson?.success && meJson?.data) {
+      if (
+        meJson?.success &&
+        meJson?.data
+      ) {
         currentUser = meJson.data;
       } else if (meJson?.data) {
         currentUser = meJson.data;
@@ -150,65 +186,135 @@ export default function PurchaseOutletNewPage() {
       }
 
       if (!currentUser) {
-        alert("Data user tidak ditemukan");
-        router.push("/outlet/purchase");
+        alert(
+          "Data user tidak ditemukan"
+        );
+
+        router.push(
+          "/outlet/purchase"
+        );
+
         return;
       }
 
       setMe(currentUser);
 
       // =====================================================
+      // VALIDASI ROLE
+      // =====================================================
+
+      const allowedRoles = [
+        "ADMIN",
+        "PURCHASING",
+        "OUTLET_ADMIN",
+      ];
+
+      if (
+        !allowedRoles.includes(
+          currentUser.role
+        )
+      ) {
+        alert(
+          "Anda tidak memiliki akses membuat Purchase Outlet"
+        );
+
+        router.push(
+          "/outlet/purchase"
+        );
+
+        return;
+      }
+
+      // =====================================================
       // SUPPLIER
       // =====================================================
 
-      if (supplierJson.success) {
+      if (
+        supplierJson?.success
+      ) {
         setSuppliers(
           supplierJson.data || []
         );
       }
 
       // =====================================================
-      // ADMIN PUSAT
+      // USER PUSAT
+      //
+      // ADMIN + PURCHASING
+      // boleh memilih outlet.
       // =====================================================
 
-      if (currentUser.role === "ADMIN") {
-        const outletRes = await fetch(
-          "/api/outlet",
-          {
-            cache: "no-store",
-          }
-        );
+      if (
+        currentUser.role === "ADMIN" ||
+        currentUser.role === "PURCHASING"
+      ) {
+        const outletRes =
+          await fetch(
+            "/api/outlet",
+            {
+              cache: "no-store",
+            }
+          );
 
-        const outletJson =
-          await outletRes.json();
+        let outletJson: any = null;
 
-        if (outletJson.success) {
+        try {
+          outletJson =
+            await outletRes.json();
+        } catch {
+          outletJson = null;
+        }
+
+        if (
+          outletJson?.success
+        ) {
           setOutlets(
             outletJson.data || []
           );
+        } else {
+          setOutlets([]);
+
+          alert(
+            outletJson?.message ||
+              "Gagal mengambil data outlet"
+          );
         }
 
-        // Admin pusat belum memilih outlet
+        /*
+         * User pusat harus memilih outlet
+         * secara manual.
+         */
         setOutletId("");
       }
 
       // =====================================================
-      // USER OUTLET
+      // OUTLET ADMIN
+      //
+      // Outlet otomatis dari session.
       // =====================================================
 
-      else {
-        if (!currentUser.outletId) {
+      else if (
+        currentUser.role ===
+        "OUTLET_ADMIN"
+      ) {
+        if (
+          !currentUser.outletId
+        ) {
           alert(
             "User Anda belum terhubung ke outlet."
           );
 
-          router.push("/outlet/purchase");
+          router.push(
+            "/outlet/purchase"
+          );
+
           return;
         }
 
-        // Otomatis gunakan outlet user
         setOutletId(
-          String(currentUser.outletId)
+          String(
+            currentUser.outletId
+          )
         );
       }
     } catch (error) {
@@ -230,12 +336,16 @@ export default function PurchaseOutletNewPage() {
   // =========================================================
 
   const filteredSuppliers = useMemo(() => {
-    const keyword = supplierSearch
-      .toLowerCase()
-      .trim();
+    const keyword =
+      supplierSearch
+        .toLowerCase()
+        .trim();
 
     if (!keyword) {
-      return suppliers.slice(0, 50);
+      return suppliers.slice(
+        0,
+        50
+      );
     }
 
     return suppliers
@@ -305,10 +415,14 @@ export default function PurchaseOutletNewPage() {
       setBarangSearch("");
       setBarangOpen(false);
       setPrice("");
+      setItems([]);
+
       return;
     }
 
-    loadOutletBarang(outletId);
+    loadOutletBarang(
+      outletId
+    );
   }, [outletId]);
 
   async function loadOutletBarang(
@@ -325,21 +439,30 @@ export default function PurchaseOutletNewPage() {
         selectedOutletId
       );
 
-      const res = await fetch(
-        `/api/outlet/master-barang?${params.toString()}`,
-        {
-          cache: "no-store",
-        }
-      );
+      const res =
+        await fetch(
+          `/api/outlet/master-barang?${params.toString()}`,
+          {
+            cache: "no-store",
+          }
+        );
 
-      const json =
-        await res.json();
+      let json: any = null;
 
-      if (!json.success) {
+      try {
+        json = await res.json();
+      } catch {
+        json = null;
+      }
+
+      if (
+        !res.ok ||
+        !json?.success
+      ) {
         setOutletBarang([]);
 
         alert(
-          json.message ||
+          json?.message ||
             "Gagal mengambil barang outlet"
         );
 
@@ -348,7 +471,9 @@ export default function PurchaseOutletNewPage() {
 
       const activeBarang =
         (json.data || []).filter(
-          (item: OutletBarang) =>
+          (
+            item: OutletBarang
+          ) =>
             item.aktif === true
         );
 
@@ -361,8 +486,11 @@ export default function PurchaseOutletNewPage() {
       setBarangOpen(false);
       setPrice("");
 
-      // Ketika outlet berganti,
-      // item PO sebelumnya harus dikosongkan.
+      /*
+       * Ketika outlet berubah,
+       * item PO lama harus dikosongkan
+       * supaya tidak tercampur dengan outlet sebelumnya.
+       */
       setItems([]);
     } catch (error) {
       console.error(
@@ -385,9 +513,10 @@ export default function PurchaseOutletNewPage() {
   // =========================================================
 
   const filteredBarang = useMemo(() => {
-    const keyword = barangSearch
-      .toLowerCase()
-      .trim();
+    const keyword =
+      barangSearch
+        .toLowerCase()
+        .trim();
 
     if (!keyword) {
       return outletBarang.slice(
@@ -428,7 +557,9 @@ export default function PurchaseOutletNewPage() {
       return outletBarang.find(
         (item) =>
           item.barang.id ===
-          Number(selectedBarangId)
+          Number(
+            selectedBarangId
+          )
       );
     }, [
       outletBarang,
@@ -443,7 +574,9 @@ export default function PurchaseOutletNewPage() {
     item: OutletBarang
   ) {
     setSelectedBarangId(
-      String(item.barang.id)
+      String(
+        item.barang.id
+      )
     );
 
     setBarangSearch(
@@ -452,7 +585,9 @@ export default function PurchaseOutletNewPage() {
 
     setPrice(
       String(
-        Number(item.harga || 0)
+        Number(
+          item.harga || 0
+        )
       )
     );
 
@@ -475,6 +610,7 @@ export default function PurchaseOutletNewPage() {
       alert(
         "Outlet belum ditentukan"
       );
+
       return;
     }
 
@@ -482,6 +618,7 @@ export default function PurchaseOutletNewPage() {
       alert(
         "Pilih barang terlebih dahulu"
       );
+
       return;
     }
 
@@ -498,6 +635,7 @@ export default function PurchaseOutletNewPage() {
       alert(
         "Barang tidak ditemukan di outlet"
       );
+
       return;
     }
 
@@ -508,22 +646,28 @@ export default function PurchaseOutletNewPage() {
       Number(price);
 
     if (
-      !itemQty ||
+      !Number.isFinite(
+        itemQty
+      ) ||
       itemQty <= 0
     ) {
       alert(
         "Qty harus lebih dari 0"
       );
+
       return;
     }
 
     if (
-      !itemPrice ||
+      !Number.isFinite(
+        itemPrice
+      ) ||
       itemPrice <= 0
     ) {
       alert(
         "Harga harus lebih dari 0"
       );
+
       return;
     }
 
@@ -534,7 +678,9 @@ export default function PurchaseOutletNewPage() {
           selected.barang.id
       );
 
-    if (existingIndex >= 0) {
+    if (
+      existingIndex >= 0
+    ) {
       const updated =
         [...items];
 
@@ -563,10 +709,14 @@ export default function PurchaseOutletNewPage() {
         {
           barangId:
             selected.barang.id,
+
           barang:
             selected.barang,
+
           qty: itemQty,
+
           price: itemPrice,
+
           subtotal:
             itemQty *
             itemPrice,
@@ -601,7 +751,9 @@ export default function PurchaseOutletNewPage() {
 
           return {
             ...item,
+
             qty: newQty,
+
             subtotal:
               newQty *
               item.price,
@@ -634,7 +786,9 @@ export default function PurchaseOutletNewPage() {
 
           return {
             ...item,
+
             price: newPrice,
+
             subtotal:
               item.qty *
               newPrice,
@@ -703,7 +857,7 @@ export default function PurchaseOutletNewPage() {
 
     if (!outletId) {
       alert(
-        isAdminPusat
+        canChooseOutlet
           ? "Outlet wajib dipilih"
           : "Outlet user belum ditentukan"
       );
@@ -711,9 +865,15 @@ export default function PurchaseOutletNewPage() {
       return;
     }
 
-    // User outlet harus memakai outlet dari session.
+    /*
+     * Hanya OUTLET_ADMIN yang dikunci
+     * ke outlet dari session.
+     *
+     * ADMIN dan PURCHASING bebas memilih
+     * outlet sesuai kebutuhan.
+     */
     if (
-      isOutletUser &&
+      isOutletAdmin &&
       me?.outletId &&
       Number(outletId) !==
         Number(me.outletId)
@@ -738,10 +898,37 @@ export default function PurchaseOutletNewPage() {
     }
 
     // =======================================================
+    // VALIDASI PAYMENT METHOD
+    // =======================================================
+
+    if (!paymentMethod) {
+      alert(
+        "Metode pembayaran wajib dipilih"
+      );
+
+      return;
+    }
+
+    if (
+      !PAYMENT_METHODS.includes(
+        paymentMethod as
+          (typeof PAYMENT_METHODS)[number]
+      )
+    ) {
+      alert(
+        "Metode pembayaran tidak valid"
+      );
+
+      return;
+    }
+
+    // =======================================================
     // VALIDASI ITEM
     // =======================================================
 
-    if (items.length === 0) {
+    if (
+      items.length === 0
+    ) {
       alert(
         "Minimal tambahkan 1 barang"
       );
@@ -752,8 +939,14 @@ export default function PurchaseOutletNewPage() {
     const invalidItem =
       items.find(
         (item) =>
+          !Number.isFinite(
+            Number(item.qty)
+          ) ||
           Number(item.qty) <=
             0 ||
+          !Number.isFinite(
+            Number(item.price)
+          ) ||
           Number(item.price) <=
             0
       );
@@ -782,11 +975,22 @@ export default function PurchaseOutletNewPage() {
           "/api/outlet/purchase",
           {
             method: "POST",
+
             headers: {
               "Content-Type":
                 "application/json",
             },
+
             body: JSON.stringify({
+              /*
+               * ADMIN / PURCHASING
+               * -> outlet pilihan user pusat
+               *
+               * OUTLET_ADMIN
+               * -> API akan tetap mengabaikan
+               *    outletId frontend dan memakai
+               *    outletId dari session.
+               */
               outletId:
                 Number(
                   outletId
@@ -796,6 +1000,8 @@ export default function PurchaseOutletNewPage() {
                 Number(
                   supplierId
                 ),
+
+              paymentMethod,
 
               remarks:
                 remarks.trim() ||
@@ -821,15 +1027,21 @@ export default function PurchaseOutletNewPage() {
           }
         );
 
-      const json =
-        await res.json();
+      let json: any = null;
+
+      try {
+        json =
+          await res.json();
+      } catch {
+        json = null;
+      }
 
       if (
         !res.ok ||
-        !json.success
+        !json?.success
       ) {
         alert(
-          json.message ||
+          json?.message ||
             "Gagal membuat Purchase Order Outlet"
         );
 
@@ -904,7 +1116,9 @@ export default function PurchaseOutletNewPage() {
             }
             className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#DDE9E4] bg-white text-gray-600 shadow-sm transition hover:bg-[#F5F8F6]"
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft
+              size={20}
+            />
           </button>
 
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#497F70] text-white shadow-sm">
@@ -947,16 +1161,16 @@ export default function PurchaseOutletNewPage() {
             </h2>
 
             <p className="mt-1 text-sm text-gray-500">
-              {isAdminPusat
-                ? "Tentukan outlet dan supplier"
-                : "Tentukan supplier untuk Purchase Order outlet"}
+              {canChooseOutlet
+                ? "Tentukan outlet, supplier, dan metode pembayaran"
+                : "Tentukan supplier dan metode pembayaran untuk Purchase Order outlet"}
             </p>
 
           </div>
 
           <div
             className={`grid grid-cols-1 gap-5 p-5 ${
-              isAdminPusat
+              canChooseOutlet
                 ? "md:grid-cols-2"
                 : "md:grid-cols-1"
             }`}
@@ -964,10 +1178,10 @@ export default function PurchaseOutletNewPage() {
 
             {/* =================================================
                 OUTLET
-                HANYA ADMIN PUSAT
+                ADMIN + PURCHASING
             ================================================= */}
 
-            {isAdminPusat && (
+            {canChooseOutlet && (
               <div>
 
                 <label className="mb-2 block text-sm font-semibold text-gray-700">
@@ -978,8 +1192,12 @@ export default function PurchaseOutletNewPage() {
                 </label>
 
                 <select
-                  value={outletId}
-                  onChange={(e) =>
+                  value={
+                    outletId
+                  }
+                  onChange={(
+                    e
+                  ) =>
                     setOutletId(
                       e.target.value
                     )
@@ -992,7 +1210,9 @@ export default function PurchaseOutletNewPage() {
                   </option>
 
                   {outlets.map(
-                    (outlet) => (
+                    (
+                      outlet
+                    ) => (
                       <option
                         key={
                           outlet.id
@@ -1001,13 +1221,24 @@ export default function PurchaseOutletNewPage() {
                           outlet.id
                         }
                       >
-                        {outlet.code} -{" "}
-                        {outlet.name}
+                        {
+                          outlet.code
+                        }{" "}
+                        -{" "}
+                        {
+                          outlet.name
+                        }
                       </option>
                     )
                   )}
 
                 </select>
+
+                {isPurchasing && (
+                  <p className="mt-1 text-xs text-gray-400">
+                    Purchasing dapat membuat Purchase Order untuk outlet mana pun.
+                  </p>
+                )}
 
               </div>
             )}
@@ -1042,7 +1273,9 @@ export default function PurchaseOutletNewPage() {
                       true
                     )
                   }
-                  onChange={(e) => {
+                  onChange={(
+                    e
+                  ) => {
                     setSupplierSearch(
                       e.target
                         .value
@@ -1162,6 +1395,70 @@ export default function PurchaseOutletNewPage() {
             </div>
 
             {/* =================================================
+                METODE PEMBAYARAN
+            ================================================= */}
+
+            <div
+              className={
+                canChooseOutlet
+                  ? ""
+                  : "md:max-w-xl"
+              }
+            >
+
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Metode Pembayaran
+                <span className="ml-1 text-red-500">
+                  *
+                </span>
+              </label>
+
+              <select
+                value={
+                  paymentMethod
+                }
+                onChange={(
+                  e
+                ) =>
+                  setPaymentMethod(
+                    e.target.value
+                  )
+                }
+                className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+              >
+
+                <option value="">
+                  Pilih Metode Pembayaran
+                </option>
+
+                {PAYMENT_METHODS.map(
+                  (
+                    method
+                  ) => (
+                    <option
+                      key={
+                        method
+                      }
+                      value={
+                        method
+                      }
+                    >
+                      {
+                        method
+                      }
+                    </option>
+                  )
+                )}
+
+              </select>
+
+              <p className="mt-1 text-xs text-gray-400">
+                Metode ini akan digunakan pada proses Payment setelah PO disetujui.
+              </p>
+
+            </div>
+
+            {/* =================================================
                 KETERANGAN
             ================================================= */}
 
@@ -1175,9 +1472,12 @@ export default function PurchaseOutletNewPage() {
                 value={
                   remarks
                 }
-                onChange={(e) =>
+                onChange={(
+                  e
+                ) =>
                   setRemarks(
-                    e.target.value
+                    e.target
+                      .value
                   )
                 }
                 rows={3}
@@ -1292,7 +1592,9 @@ export default function PurchaseOutletNewPage() {
                           true
                         )
                       }
-                      onChange={(e) => {
+                      onChange={(
+                        e
+                      ) => {
                         setBarangSearch(
                           e.target
                             .value
@@ -1486,8 +1788,12 @@ export default function PurchaseOutletNewPage() {
                     type="number"
                     min="0.01"
                     step="any"
-                    value={qty}
-                    onChange={(e) =>
+                    value={
+                      qty
+                    }
+                    onChange={(
+                      e
+                    ) =>
                       setQty(
                         e.target
                           .value
@@ -1510,8 +1816,12 @@ export default function PurchaseOutletNewPage() {
                     type="number"
                     min="0"
                     step="any"
-                    value={price}
-                    onChange={(e) =>
+                    value={
+                      price
+                    }
+                    onChange={(
+                      e
+                    ) =>
                       setPrice(
                         e.target
                           .value
@@ -1887,6 +2197,7 @@ export default function PurchaseOutletNewPage() {
               saving ||
               !outletId ||
               !supplierId ||
+              !paymentMethod ||
               items.length === 0
             }
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#497F70] px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3D6D60] disabled:cursor-not-allowed disabled:opacity-50"
