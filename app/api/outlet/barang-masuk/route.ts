@@ -63,22 +63,18 @@ async function getCurrentUser() {
 // =====================================================
 // GET OUTLET BARANG MASUK
 //
-// ADMIN / ADMIN PUSAT
+// ADMIN / MANAGER
 // -> semua outlet
 // -> bisa filter outlet
 // -> bisa filter tanggal
 //
-// MANAGER
-// -> semua outlet
-//
 // OUTLET_ADMIN
 // -> hanya outlet sendiri
-// -> tidak bisa memilih outlet lain
 //
-// QUERY:
-// ?outletId=1
-// ?dateFrom=2026-08-01
-// ?dateTo=2026-08-17
+// SUMBER:
+// 1. PURCHASE SUPPLIER
+// 2. GUDANG / PUSAT -> OUTLET
+// 3. OUTLET -> OUTLET
 //
 // =====================================================
 
@@ -198,14 +194,6 @@ export async function GET(
     // ===================================================
     // 6. SECURITY OUTLET
     // ===================================================
-    //
-    // OUTLET_ADMIN:
-    // hanya boleh outlet miliknya sendiri.
-    //
-    // ADMIN / MANAGER:
-    // boleh memilih outlet.
-    //
-    // ===================================================
 
     let outletFilter: any = {};
 
@@ -231,10 +219,6 @@ export async function GET(
         );
       }
 
-      // -----------------------------------------------
-      // Jika outlet admin mencoba memilih outlet lain
-      // -----------------------------------------------
-
       if (
         selectedOutletId !== null &&
         selectedOutletId !==
@@ -257,10 +241,6 @@ export async function GET(
           user.outletId,
       };
     } else {
-      // -----------------------------------------------
-      // ADMIN / MANAGER
-      // -----------------------------------------------
-
       if (
         selectedOutletId !== null
       ) {
@@ -279,10 +259,6 @@ export async function GET(
       fieldName: string
     ) {
       const filter: any = {};
-
-      // -----------------------------------------------
-      // TANGGAL AWAL
-      // -----------------------------------------------
 
       if (dateFrom) {
         const start =
@@ -305,10 +281,6 @@ export async function GET(
           gte: start,
         };
       }
-
-      // -----------------------------------------------
-      // TANGGAL AKHIR
-      // -----------------------------------------------
 
       if (dateTo) {
         const end =
@@ -336,7 +308,7 @@ export async function GET(
     }
 
     // ===================================================
-    // 8. FILTER PURCHASE
+    // 8. PURCHASE DATE FILTER
     // ===================================================
 
     const purchaseDateFilter =
@@ -395,7 +367,6 @@ export async function GET(
     const validPurchases =
       purchases.filter(
         (purchase) => {
-          // Outlet harus ada dan aktif
           if (
             !purchase.outlet ||
             !purchase.outlet.active
@@ -403,7 +374,6 @@ export async function GET(
             return false;
           }
 
-          // Barang harus CENTRAL
           return purchase.items.every(
             (item) =>
               item.barang &&
@@ -480,6 +450,9 @@ export async function GET(
             sumber:
               "PURCHASE" as const,
 
+            jenisTransfer:
+              null,
+
             nomor:
               purchase.number,
 
@@ -492,7 +465,34 @@ export async function GET(
 
             totalReceived,
 
+            outletId:
+              purchase.outlet?.id ??
+              null,
+
             outlet:
+              purchase.outlet
+                ? {
+                    id:
+                      purchase
+                        .outlet.id,
+
+                    code:
+                      purchase
+                        .outlet.code,
+
+                    name:
+                      purchase
+                        .outlet.name,
+                  }
+                : null,
+
+            sourceOutletId:
+              null,
+
+            sourceOutlet:
+              null,
+
+            destinationOutlet:
               purchase.outlet
                 ? {
                     id:
@@ -544,6 +544,9 @@ export async function GET(
                 purchase.remarks,
             },
 
+            transfer:
+              null,
+
             items:
               purchase.items.map(
                 (item) => ({
@@ -584,7 +587,7 @@ export async function GET(
       );
 
     // ===================================================
-    // 12. FILTER TRANSFER
+    // 12. TRANSFER DATE FILTER
     // ===================================================
 
     const transferDateFilter =
@@ -593,7 +596,16 @@ export async function GET(
       );
 
     // ===================================================
-    // 13. TRANSFER GUDANG -> OUTLET
+    // 13. OUTLET TRANSFER
+    //
+    // Bisa berupa:
+    //
+    // sourceOutletId = NULL
+    // -> GUDANG / PUSAT -> OUTLET
+    //
+    // sourceOutletId != NULL
+    // -> OUTLET -> OUTLET
+    //
     // ===================================================
 
     const transfers =
@@ -605,6 +617,15 @@ export async function GET(
           },
 
           include: {
+            sourceOutlet: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                active: true,
+              },
+            },
+
             outlet: {
               select: {
                 id: true,
@@ -653,7 +674,7 @@ export async function GET(
 
     // ===================================================
     // 15. MAP TRANSFER
-    // ===================================================
+    // =====================================================
 
     const transferData =
       validTransfers.map(
@@ -708,6 +729,23 @@ export async function GET(
               "RECEIVED";
           }
 
+          // =================================================
+          // JENIS TRANSFER
+          // =================================================
+          //
+          // sourceOutletId NULL:
+          // Gudang/Pusat -> Outlet
+          //
+          // sourceOutletId ADA:
+          // Outlet -> Outlet
+          //
+          // =================================================
+
+          const jenisTransfer =
+            transfer.sourceOutletId
+              ? "OUTLET_TO_OUTLET"
+              : "WAREHOUSE_TO_OUTLET";
+
           return {
             id:
               `TRANSFER-${transfer.id}`,
@@ -717,6 +755,8 @@ export async function GET(
 
             sumber:
               "TRANSFER" as const,
+
+            jenisTransfer,
 
             nomor:
               transfer.number,
@@ -730,7 +770,57 @@ export async function GET(
 
             totalReceived,
 
+            // =================================================
+            // SOURCE
+            // =================================================
+
+            sourceOutletId:
+              transfer.sourceOutletId ??
+              null,
+
+            sourceOutlet:
+              transfer.sourceOutlet
+                ? {
+                    id:
+                      transfer
+                        .sourceOutlet.id,
+
+                    code:
+                      transfer
+                        .sourceOutlet.code,
+
+                    name:
+                      transfer
+                        .sourceOutlet.name,
+                  }
+                : null,
+
+            // =================================================
+            // DESTINATION
+            // =================================================
+
+            outletId:
+              transfer.outlet?.id ??
+              null,
+
             outlet:
+              transfer.outlet
+                ? {
+                    id:
+                      transfer
+                        .outlet.id,
+
+                    code:
+                      transfer
+                        .outlet.code,
+
+                    name:
+                      transfer
+                        .outlet.name,
+                  }
+                : null,
+
+            destinationOutlet:
               transfer.outlet
                 ? {
                     id:
@@ -769,6 +859,15 @@ export async function GET(
 
               remarks:
                 transfer.remarks,
+
+              sourceOutletId:
+                transfer
+                  .sourceOutletId,
+
+              destinationOutletId:
+                transfer.outletId,
+
+              jenisTransfer,
             },
 
             items:
@@ -816,7 +915,7 @@ export async function GET(
       );
 
     // ===================================================
-    // 16. GABUNGKAN PURCHASE + TRANSFER
+    // 16. GABUNG PURCHASE + TRANSFER
     // ===================================================
 
     const data = [

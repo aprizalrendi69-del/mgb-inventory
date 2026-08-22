@@ -7,6 +7,7 @@ import {
   PackageCheck,
   RefreshCw,
   CheckCircle2,
+  ArrowRight,
 } from "lucide-react";
 
 type Item = {
@@ -15,6 +16,7 @@ type Item = {
   receivedQty?: number;
   price: number;
   subtotal: number;
+
   barang: {
     id: number;
     code: string;
@@ -23,26 +25,34 @@ type Item = {
   };
 };
 
+type OutletInfo = {
+  id?: number;
+  code: string;
+  name: string;
+};
+
 type Detail = {
   id: number;
   sourceId: number;
+
   sumber: "PURCHASE" | "TRANSFER";
+
   nomor: string;
   tanggal: string;
+
   status: string;
+
   remarks?: string | null;
 
-  outlet?: {
-    id?: number;
-    code: string;
-    name: string;
-  } | null;
+  outlet?: OutletInfo | null;
 
   supplier?: {
     id?: number;
     code: string;
     name: string;
   } | null;
+
+  sourceOutlet?: OutletInfo | null;
 
   purchase?: {
     id: number;
@@ -52,7 +62,23 @@ type Detail = {
     remarks?: string | null;
   } | null;
 
+  transfer?: {
+    id: number;
+    number: string;
+    status: string;
+    transferDate?: string;
+    remarks?: string | null;
+
+    sourceOutlet?: OutletInfo | null;
+
+    destinationOutlet?: OutletInfo | null;
+  } | null;
+
   items: Item[];
+
+  totalQty?: number;
+  totalReceivedQty?: number;
+  totalValue?: number;
 };
 
 export default function OutletBarangMasukDetailPage() {
@@ -61,17 +87,21 @@ export default function OutletBarangMasukDetailPage() {
 
   const id = String(params.id);
 
-  const [data, setData] = useState<Detail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [receiving, setReceiving] = useState(false);
+  const [data, setData] =
+    useState<Detail | null>(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [receiving, setReceiving] =
+    useState(false);
 
   // =====================================================
   // QTY DITERIMA MANUAL
   // =====================================================
 
-  const [receivedQty, setReceivedQty] = useState<
-    Record<number, number>
-  >({});
+  const [receivedQty, setReceivedQty] =
+    useState<Record<number, number>>({});
 
   // =====================================================
   // LOAD DATA
@@ -104,17 +134,23 @@ export default function OutletBarangMasukDetailPage() {
         return;
       }
 
-      const detail: Detail = json.data;
+      const detail: Detail =
+        json.data;
 
       // =================================================
       // SET QTY DITERIMA
       // =================================================
 
-      const initialQty: Record<number, number> = {};
+      const initialQty: Record<
+        number,
+        number
+      > = {};
 
       detail.items.forEach((item) => {
         initialQty[item.id] =
-          item.receivedQty ?? 0;
+          Number(
+            item.receivedQty ?? 0
+          );
       });
 
       setReceivedQty(initialQty);
@@ -141,19 +177,22 @@ export default function OutletBarangMasukDetailPage() {
 
     // ===================================================
     // PURCHASE SUPPLIER
-    //
-    // Purchase hanya boleh diterima jika PO sudah
-    // APPROVED.
     // ===================================================
 
-    if (data.sumber === "PURCHASE") {
+    if (
+      data.sumber === "PURCHASE"
+    ) {
       const purchaseStatus =
         data.purchase?.status?.toUpperCase();
 
-      if (purchaseStatus !== "APPROVED") {
+      if (
+        purchaseStatus !==
+        "APPROVED"
+      ) {
         alert(
           "Purchase Order belum di-approve. Barang belum dapat diterima."
         );
+
         return;
       }
     }
@@ -170,34 +209,55 @@ export default function OutletBarangMasukDetailPage() {
     }
 
     // ===================================================
-    // VALIDASI QTY TRANSFER
+    // VALIDASI TRANSFER
     // ===================================================
 
-    if (data.sumber === "TRANSFER") {
+    if (
+      data.sumber === "TRANSFER"
+    ) {
       for (const item of data.items) {
-        const qtyTerima = Number(
-          receivedQty[item.id] ?? 0
-        );
+        const qtyTerima =
+          Number(
+            receivedQty[item.id] ?? 0
+          );
 
         if (qtyTerima < 0) {
           alert(
             `Qty diterima untuk ${item.barang.name} tidak boleh negatif.`
           );
+
           return;
         }
 
-        if (qtyTerima > item.qty) {
+        if (
+          qtyTerima >
+          Number(item.qty)
+        ) {
           alert(
             `Qty diterima ${item.barang.name} tidak boleh lebih besar dari qty kirim (${item.qty}).`
           );
+
           return;
         }
       }
     }
 
-    const confirmed = window.confirm(
-      `Terima barang dari ${data.nomor}?\n\nStock outlet akan bertambah sesuai qty yang diterima.`
-    );
+    // ===================================================
+    // CONFIRM
+    // ===================================================
+
+    const sourceDescription =
+      data.sumber ===
+      "TRANSFER"
+        ? data.sourceOutlet?.name ||
+          "Outlet asal"
+        : data.supplier?.name ||
+          "Supplier";
+
+    const confirmed =
+      window.confirm(
+        `Terima barang dari ${sourceDescription}?\n\nNomor: ${data.nomor}\n\nStock outlet akan bertambah sesuai qty yang diterima.`
+      );
 
     if (!confirmed) return;
 
@@ -205,22 +265,34 @@ export default function OutletBarangMasukDetailPage() {
       setReceiving(true);
 
       let url = "";
-      let body: string | undefined;
+      let body:
+        | string
+        | undefined;
 
       // =================================================
-      // TRANSFER GUDANG
+      // TRANSFER OUTLET
       // =================================================
 
-      if (data.sumber === "TRANSFER") {
-        url = `/api/outlet/barang-masuk/${id}/receive`;
+      if (
+        data.sumber ===
+        "TRANSFER"
+      ) {
+        url =
+          `/api/outlet/barang-masuk/${id}/receive`;
 
         body = JSON.stringify({
-          items: data.items.map((item) => ({
-            id: item.id,
-            receivedQty: Number(
-              receivedQty[item.id] ?? 0
-            ),
-          })),
+          items: data.items.map(
+            (item) => ({
+              id: item.id,
+
+              receivedQty:
+                Number(
+                  receivedQty[
+                    item.id
+                  ] ?? 0
+                ),
+            })
+          ),
         });
       }
 
@@ -229,24 +301,34 @@ export default function OutletBarangMasukDetailPage() {
       // =================================================
 
       else {
-        url = `/api/outlet/barang-masuk/receive`;
+        url =
+          `/api/outlet/barang-masuk/receive`;
 
         body = JSON.stringify({
-          purchaseId: data.sourceId,
+          purchaseId:
+            data.sourceId,
         });
       }
 
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body,
-      });
+      const res = await fetch(
+        url,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body,
+        }
+      );
 
-      const json = await res.json();
+      const json =
+        await res.json();
 
-      if (!res.ok || !json.success) {
+      if (
+        !res.ok ||
+        !json.success
+      ) {
         throw new Error(
           json.message ||
             "Gagal menerima barang"
@@ -275,53 +357,69 @@ export default function OutletBarangMasukDetailPage() {
   }
 
   // =====================================================
-  // STATUS PENERIMAAN
+  // STATUS
   // =====================================================
 
   const alreadyReceived =
-    data?.status === "RECEIVED" ||
-    data?.status === "SELESAI";
+    data?.status ===
+      "RECEIVED" ||
+    data?.status ===
+      "SELESAI";
 
   // =====================================================
-  // STATUS PURCHASE ORDER
+  // PURCHASE STATUS
   // =====================================================
 
   const purchaseStatus =
     data?.purchase?.status?.toUpperCase();
 
   // =====================================================
-  // BOLEH TERIMA BARANG?
-  // =====================================================
-  //
-  // PURCHASE:
-  //   hanya APPROVED
-  //
-  // TRANSFER:
-  //   tetap boleh selama belum RECEIVED/SELESAI
-  //
+  // CAN RECEIVE
   // =====================================================
 
   const canReceive =
-    data?.sumber === "PURCHASE"
-      ? purchaseStatus === "APPROVED" &&
+    data?.sumber ===
+    "PURCHASE"
+      ? purchaseStatus ===
+          "APPROVED" &&
         !alreadyReceived
-      : data?.sumber === "TRANSFER"
+      : data?.sumber ===
+          "TRANSFER"
         ? !alreadyReceived
         : false;
 
   // =====================================================
-  // TOTAL QTY
+  // TOTAL QTY KIRIM
   // =====================================================
 
   const totalQty =
     data?.items?.reduce(
       (total, item) =>
         total +
-        (data.sumber === "TRANSFER"
+        Number(item.qty || 0),
+      0
+    ) ?? 0;
+
+  // =====================================================
+  // TOTAL QTY DITERIMA
+  // =====================================================
+
+  const totalReceivedQty =
+    data?.items?.reduce(
+      (total, item) =>
+        total +
+        (data.sumber ===
+        "TRANSFER"
           ? Number(
-              receivedQty[item.id] ?? 0
+              receivedQty[
+                item.id
+              ] ?? 0
             )
-          : item.qty),
+          : Number(
+              item.receivedQty ??
+                item.qty ??
+                0
+            )),
       0
     ) ?? 0;
 
@@ -331,13 +429,27 @@ export default function OutletBarangMasukDetailPage() {
 
   const totalValue =
     data?.items?.reduce(
-      (total, item) =>
-        total +
-        (data.sumber === "TRANSFER"
-          ? Number(
-              receivedQty[item.id] ?? 0
-            ) * item.price
-          : item.subtotal),
+      (total, item) => {
+        const qty =
+          data.sumber ===
+          "TRANSFER"
+            ? Number(
+                receivedQty[
+                  item.id
+                ] ?? 0
+              )
+            : Number(
+                item.qty || 0
+              );
+
+        return (
+          total +
+          qty *
+            Number(
+              item.price || 0
+            )
+        );
+      },
       0
     ) ?? 0;
 
@@ -346,7 +458,10 @@ export default function OutletBarangMasukDetailPage() {
   // =====================================================
 
   function sourceBadge() {
-    if (data?.sumber === "PURCHASE") {
+    if (
+      data?.sumber ===
+      "PURCHASE"
+    ) {
       return (
         <span className="inline-flex rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700">
           Purchase Supplier
@@ -356,7 +471,7 @@ export default function OutletBarangMasukDetailPage() {
 
     return (
       <span className="inline-flex rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-        Kiriman Gudang
+        Transfer Outlet
       </span>
     );
   }
@@ -380,7 +495,9 @@ export default function OutletBarangMasukDetailPage() {
       );
     }
 
-    if (status === "PARTIAL") {
+    if (
+      status === "PARTIAL"
+    ) {
       return (
         <span className="inline-flex rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700">
           Sebagian
@@ -400,12 +517,15 @@ export default function OutletBarangMasukDetailPage() {
   // =====================================================
 
   function purchaseStatusBadge() {
-    if (!data?.purchase) return null;
+    if (!data?.purchase)
+      return null;
 
     const status =
       data.purchase.status?.toUpperCase();
 
-    if (status === "APPROVED") {
+    if (
+      status === "APPROVED"
+    ) {
       return (
         <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
           Approved
@@ -413,7 +533,9 @@ export default function OutletBarangMasukDetailPage() {
       );
     }
 
-    if (status === "DRAFT") {
+    if (
+      status === "DRAFT"
+    ) {
       return (
         <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
           Draft
@@ -421,18 +543,12 @@ export default function OutletBarangMasukDetailPage() {
       );
     }
 
-    if (status === "RECEIVED") {
+    if (
+      status === "RECEIVED"
+    ) {
       return (
         <span className="inline-flex rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
           Received
-        </span>
-      );
-    }
-
-    if (status === "CANCELLED") {
-      return (
-        <span className="inline-flex rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
-          Cancelled
         </span>
       );
     }
@@ -456,6 +572,7 @@ export default function OutletBarangMasukDetailPage() {
             size={20}
             className="animate-spin text-[#497F70]"
           />
+
           Memuat detail...
         </div>
       </div>
@@ -489,7 +606,8 @@ export default function OutletBarangMasukDetailPage() {
           />
 
           <p className="font-semibold text-gray-700">
-            Data barang masuk tidak ditemukan
+            Data barang masuk
+            tidak ditemukan
           </p>
         </div>
       </div>
@@ -503,7 +621,9 @@ export default function OutletBarangMasukDetailPage() {
   return (
     <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
 
-      {/* HEADER */}
+      {/* =================================================
+          HEADER
+          ================================================= */}
 
       <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
@@ -541,27 +661,19 @@ export default function OutletBarangMasukDetailPage() {
 
         </div>
 
-        {/* =================================================
-            ACTION BUTTON
-            ================================================= */}
+        {/* ACTION */}
 
         <div className="flex flex-wrap gap-2">
-
-          {/* ===============================================
-              TOMBOL TERIMA BARANG
-
-              PURCHASE:
-              hanya muncul ketika PO APPROVED
-
-              TRANSFER:
-              muncul selama belum diterima
-              =============================================== */}
 
           {canReceive && (
             <button
               type="button"
-              onClick={handleReceive}
-              disabled={receiving}
+              onClick={
+                handleReceive
+              }
+              disabled={
+                receiving
+              }
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#497F70] px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#3E6E61] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {receiving ? (
@@ -570,7 +682,9 @@ export default function OutletBarangMasukDetailPage() {
                   className="animate-spin"
                 />
               ) : (
-                <CheckCircle2 size={17} />
+                <CheckCircle2
+                  size={17}
+                />
               )}
 
               {receiving
@@ -579,15 +693,14 @@ export default function OutletBarangMasukDetailPage() {
             </button>
           )}
 
-          {/* ===============================================
-              REFRESH
-              =============================================== */}
-
           <button
             type="button"
-            onClick={loadData}
+            onClick={
+              loadData
+            }
             disabled={
-              loading || receiving
+              loading ||
+              receiving
             }
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm hover:bg-[#F5F8F6]"
           >
@@ -599,14 +712,16 @@ export default function OutletBarangMasukDetailPage() {
                   : ""
               }
             />
+
             Refresh
           </button>
 
         </div>
-
       </div>
 
-      {/* INFO */}
+      {/* =================================================
+          INFO CARDS
+          ================================================= */}
 
       <div className="mb-6 grid gap-4 md:grid-cols-4">
 
@@ -614,7 +729,7 @@ export default function OutletBarangMasukDetailPage() {
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
           <p className="text-xs font-medium text-gray-400">
-            Nomor Penerimaan
+            Nomor
           </p>
 
           <p className="mt-2 font-bold text-[#18352D]">
@@ -638,62 +753,72 @@ export default function OutletBarangMasukDetailPage() {
           </p>
         </div>
 
-        {/* OUTLET */}
+        {/* OUTLET TUJUAN */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
           <p className="text-xs font-medium text-gray-400">
-            Outlet
+            Outlet Tujuan
           </p>
 
           <p className="mt-2 font-bold text-[#18352D]">
-            {data.outlet?.name || "-"}
+            {data.outlet?.name ||
+              "-"}
           </p>
 
           <p className="mt-1 text-xs text-gray-400">
-            {data.outlet?.code || "-"}
+            {data.outlet?.code ||
+              "-"}
           </p>
         </div>
 
-        {/* SUPPLIER / SOURCE */}
+        {/* SUMBER */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
           <p className="text-xs font-medium text-gray-400">
-            {data.sumber === "PURCHASE"
+            {data.sumber ===
+            "PURCHASE"
               ? "Supplier"
-              : "Sumber"}
+              : "Outlet Asal"}
           </p>
 
           {data.sumber ===
           "PURCHASE" ? (
             <>
               <p className="mt-2 font-bold text-[#18352D]">
-                {data.supplier?.name ||
+                {data.supplier
+                  ?.name ||
                   "-"}
               </p>
 
               <p className="mt-1 text-xs text-gray-400">
-                {data.supplier?.code ||
+                {data.supplier
+                  ?.code ||
                   "-"}
               </p>
             </>
           ) : (
             <>
               <p className="mt-2 font-bold text-[#18352D]">
-                Gudang Utama
+                {data.sourceOutlet
+                  ?.name ||
+                  "Tidak diketahui"}
               </p>
 
               <p className="mt-1 text-xs text-gray-400">
-                Kiriman Transfer
+                {data.sourceOutlet
+                  ?.code ||
+                  "-"}
               </p>
             </>
           )}
 
         </div>
-
       </div>
 
-      {/* STATUS */}
+      {/* =================================================
+          STATUS
+          ================================================= */}
 
       <div className="mb-6 rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
@@ -711,7 +836,7 @@ export default function OutletBarangMasukDetailPage() {
             </div>
           </div>
 
-          {/* STATUS BARANG MASUK */}
+          {/* STATUS */}
 
           <div>
             <p className="text-xs font-medium text-gray-400">
@@ -723,7 +848,28 @@ export default function OutletBarangMasukDetailPage() {
             </div>
           </div>
 
-          {/* PURCHASE ORDER */}
+          {/* TRANSFER */}
+
+          {data.sumber ===
+            "TRANSFER" &&
+            data.transfer && (
+              <div>
+                <p className="text-xs font-medium text-gray-400">
+                  Nomor Transfer
+                </p>
+
+                <div className="mt-2">
+                  <p className="font-semibold text-[#18352D]">
+                    {
+                      data.transfer
+                        .number
+                    }
+                  </p>
+                </div>
+              </div>
+            )}
+
+          {/* PURCHASE */}
 
           {data.purchase && (
             <div>
@@ -733,22 +879,93 @@ export default function OutletBarangMasukDetailPage() {
 
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <p className="font-semibold text-[#18352D]">
-                  {data.purchase.number}
+                  {
+                    data.purchase
+                      .number
+                  }
                 </p>
 
                 {purchaseStatusBadge()}
               </div>
             </div>
           )}
-
         </div>
 
-        {/* ===============================================
-            INFORMASI JIKA PO BELUM APPROVED
-            =============================================== */}
+        {/* =================================================
+            TRANSFER FLOW
+            ================================================= */}
 
-        {data.sumber === "PURCHASE" &&
-          purchaseStatus !== "APPROVED" &&
+        {data.sumber ===
+          "TRANSFER" && (
+          <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
+
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-700">
+              Alur Transfer Barang
+            </p>
+
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+
+              {/* SOURCE */}
+
+              <div className="flex-1 rounded-xl border border-blue-100 bg-white p-4">
+
+                <p className="text-xs text-gray-400">
+                  Outlet Asal
+                </p>
+
+                <p className="mt-1 font-bold text-[#18352D]">
+                  {data.sourceOutlet
+                    ?.name ||
+                    "-"}
+                </p>
+
+                <p className="mt-1 text-xs text-gray-400">
+                  {data.sourceOutlet
+                    ?.code ||
+                    "-"}
+                </p>
+
+              </div>
+
+              <ArrowRight
+                size={22}
+                className="mx-auto text-blue-500 md:mx-0"
+              />
+
+              {/* DESTINATION */}
+
+              <div className="flex-1 rounded-xl border border-blue-100 bg-white p-4">
+
+                <p className="text-xs text-gray-400">
+                  Outlet Tujuan
+                </p>
+
+                <p className="mt-1 font-bold text-[#18352D]">
+                  {data.outlet
+                    ?.name ||
+                    "-"}
+                </p>
+
+                <p className="mt-1 text-xs text-gray-400">
+                  {data.outlet
+                    ?.code ||
+                    "-"}
+                </p>
+
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* =================================================
+            PURCHASE BELUM APPROVED
+            ================================================= */}
+
+        {data.sumber ===
+          "PURCHASE" &&
+          purchaseStatus !==
+            "APPROVED" &&
           !alreadyReceived && (
             <div className="mt-5 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3">
 
@@ -762,43 +979,48 @@ export default function OutletBarangMasukDetailPage() {
                 </div>
 
                 <div>
-
                   <p className="text-sm font-semibold text-yellow-800">
                     Barang belum dapat diterima
                   </p>
 
                   <p className="mt-1 text-xs leading-5 text-yellow-700">
-                    Purchase Order masih berstatus{" "}
+                    Purchase Order
+                    masih berstatus{" "}
                     <strong>
-                      {data.purchase?.status ||
-                        "DRAFT"}
+                      {
+                        data
+                          .purchase
+                          ?.status ||
+                        "DRAFT"
+                      }
                     </strong>
-                    . Barang hanya dapat diterima
-                    setelah Purchase Order di-approve
-                    oleh admin pusat.
+                    . Barang hanya
+                    dapat diterima
+                    setelah Purchase
+                    Order di-approve.
                   </p>
-
                 </div>
 
               </div>
-
             </div>
           )}
-
       </div>
 
-      {/* ITEM TABLE */}
+      {/* =================================================
+          ITEM TABLE
+          ================================================= */}
 
       <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
         <div className="border-b border-[#E5ECE9] p-5">
 
           <h2 className="font-bold text-[#18352D]">
-            Barang Diterima
+            Barang Masuk
           </h2>
 
           <p className="mt-1 text-sm text-gray-400">
-            {data.sumber === "TRANSFER"
+            {data.sumber ===
+            "TRANSFER"
               ? "Masukkan jumlah barang yang benar-benar diterima outlet"
               : "Daftar barang yang diterima outlet"}
           </p>
@@ -845,14 +1067,13 @@ export default function OutletBarangMasukDetailPage() {
                 </th>
 
               </tr>
-
             </thead>
 
             <tbody>
 
-              {data.items.length === 0 ? (
+              {data.items.length ===
+              0 ? (
                 <tr>
-
                   <td
                     colSpan={
                       data.sumber ===
@@ -864,11 +1085,13 @@ export default function OutletBarangMasukDetailPage() {
                   >
                     Tidak ada barang.
                   </td>
-
                 </tr>
               ) : (
                 data.items.map(
-                  (item, index) => {
+                  (
+                    item,
+                    index
+                  ) => {
 
                     const qtyDiterima =
                       data.sumber ===
@@ -878,43 +1101,64 @@ export default function OutletBarangMasukDetailPage() {
                               item.id
                             ] ?? 0
                           )
-                        : item.qty;
+                        : Number(
+                            item.receivedQty ??
+                              item.qty ??
+                              0
+                          );
 
                     const subtotal =
-                      data.sumber ===
-                      "TRANSFER"
-                        ? qtyDiterima *
-                          item.price
-                        : item.subtotal;
+                      qtyDiterima *
+                      Number(
+                        item.price ||
+                          0
+                      );
 
                     return (
                       <tr
-                        key={item.id}
+                        key={
+                          item.id
+                        }
                         className="border-b border-[#EDF2EF] hover:bg-[#FAFCFB]"
                       >
 
                         <td className="px-5 py-4 text-gray-500">
-                          {index + 1}
+                          {index +
+                            1}
                         </td>
 
                         <td className="px-5 py-4 font-semibold text-[#18352D]">
-                          {item.barang.code}
+                          {
+                            item
+                              .barang
+                              .code
+                          }
                         </td>
 
                         <td className="px-5 py-4">
 
                           <div className="font-semibold text-[#18352D]">
-                            {item.barang.name}
+                            {
+                              item
+                                .barang
+                                .name
+                            }
                           </div>
 
                           <div className="mt-1 text-xs text-gray-400">
-                            {item.barang.unit}
+                            {
+                              item
+                                .barang
+                                .unit
+                            }
                           </div>
 
                         </td>
 
                         <td className="px-5 py-4 text-center font-semibold">
-                          {item.qty}
+                          {
+                            item.qty
+                          }
                         </td>
 
                         {data.sumber ===
@@ -924,19 +1168,30 @@ export default function OutletBarangMasukDetailPage() {
                             <input
                               type="number"
                               min={0}
-                              max={item.qty}
+                              max={
+                                item.qty
+                              }
+                              step="any"
                               value={
                                 receivedQty[
                                   item.id
-                                ] ?? ""
+                                ] ??
+                                ""
                               }
-                              onChange={(e) => {
+                              onChange={(
+                                e
+                              ) => {
                                 const value =
-                                  e.target.value;
+                                  e
+                                    .target
+                                    .value;
 
                                 setReceivedQty(
-                                  (prev) => ({
+                                  (
+                                    prev
+                                  ) => ({
                                     ...prev,
+
                                     [item.id]:
                                       value ===
                                       ""
@@ -956,7 +1211,9 @@ export default function OutletBarangMasukDetailPage() {
 
                             <div className="mt-1 text-[11px] text-gray-400">
                               Maks.{" "}
-                              {item.qty}
+                              {
+                                item.qty
+                              }
                             </div>
 
                           </td>
@@ -964,7 +1221,10 @@ export default function OutletBarangMasukDetailPage() {
 
                         <td className="px-5 py-4 text-right">
                           Rp{" "}
-                          {item.price.toLocaleString(
+                          {Number(
+                            item.price ||
+                              0
+                          ).toLocaleString(
                             "id-ID"
                           )}
                         </td>
@@ -992,7 +1252,7 @@ export default function OutletBarangMasukDetailPage() {
                   colSpan={
                     data.sumber ===
                     "TRANSFER"
-                      ? 4
+                      ? 3
                       : 3
                   }
                   className="px-5 py-4 text-right font-bold text-[#35564C]"
@@ -1000,9 +1260,20 @@ export default function OutletBarangMasukDetailPage() {
                   Total
                 </td>
 
-                <td className="px-5 py-4 text-center font-bold text-green-700">
-                  {totalQty}
+                <td className="px-5 py-4 text-center font-bold text-[#18352D]">
+                  {
+                    totalQty
+                  }
                 </td>
+
+                {data.sumber ===
+                  "TRANSFER" && (
+                  <td className="px-5 py-4 text-center font-bold text-green-700">
+                    {
+                      totalReceivedQty
+                    }
+                  </td>
+                )}
 
                 <td />
 
@@ -1018,12 +1289,12 @@ export default function OutletBarangMasukDetailPage() {
             </tfoot>
 
           </table>
-
         </div>
-
       </div>
 
-      {/* REMARKS */}
+      {/* =================================================
+          REMARKS
+          ================================================= */}
 
       {data.remarks && (
         <div className="mt-6 rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">

@@ -9,6 +9,7 @@ import {
   Truck,
   CalendarDays,
   X,
+  ArrowRightLeft,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -32,6 +33,11 @@ type BarangMasuk = {
 
   sumber: "PURCHASE" | "TRANSFER";
 
+  jenisTransfer?:
+    | "WAREHOUSE_TO_OUTLET"
+    | "OUTLET_TO_OUTLET"
+    | null;
+
   nomor: string;
   tanggal: string;
   status: string;
@@ -41,7 +47,9 @@ type BarangMasuk = {
 
   outlet?: Outlet | null;
 
+  sourceOutletId?: number | null;
   sourceOutlet?: Outlet | null;
+
   destinationOutlet?: Outlet | null;
 
   supplier?: Supplier | null;
@@ -50,15 +58,22 @@ type BarangMasuk = {
 export default function OutletBarangMasukPage() {
   const router = useRouter();
 
-  const [data, setData] = useState<BarangMasuk[]>([]);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [data, setData] =
+    useState<BarangMasuk[]>([]);
+
+  const [search, setSearch] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(true);
 
   // =====================================================
   // USER LOGIN
   // =====================================================
 
-  const [role, setRole] = useState("");
+  const [role, setRole] =
+    useState("");
+
   const [userOutletId, setUserOutletId] =
     useState<number | null>(null);
 
@@ -94,13 +109,18 @@ export default function OutletBarangMasukPage() {
       // CURRENT USER
       // =================================================
 
-      const meRes = await fetch("/api/me", {
-        cache: "no-store",
-      });
+      const meRes =
+        await fetch("/api/me", {
+          cache: "no-store",
+        });
 
-      const meJson = await meRes.json();
+      const meJson =
+        await meRes.json();
 
-      if (!meRes.ok || !meJson.success) {
+      if (
+        !meRes.ok ||
+        !meJson.success
+      ) {
         console.error(
           "LOAD USER:",
           meJson.message
@@ -120,12 +140,17 @@ export default function OutletBarangMasukPage() {
 
       const loginOutletId =
         loginUser?.outletId
-          ? Number(loginUser.outletId)
+          ? Number(
+              loginUser.outletId
+            )
           : null;
 
       setRole(loginRole);
+
       setUserOutletId(
-        Number.isInteger(loginOutletId)
+        Number.isInteger(
+          loginOutletId
+        )
           ? loginOutletId
           : null
       );
@@ -134,13 +159,60 @@ export default function OutletBarangMasukPage() {
       // BARANG MASUK OUTLET
       // =================================================
 
-      const res = await fetch(
-        "/api/outlet/barang-masuk",
-        {
-          method: "GET",
-          cache: "no-store",
-        }
-      );
+      const params =
+        new URLSearchParams();
+
+      // -------------------------------------------------
+      // Outlet admin
+      // API sebenarnya sudah membatasi berdasarkan session.
+      // Tidak perlu mengirim outletId dari frontend.
+      // -------------------------------------------------
+
+      if (
+        isAdminPusat &&
+        selectedOutlet !== "ALL"
+      ) {
+        params.set(
+          "outletId",
+          selectedOutlet
+        );
+      }
+
+      if (
+        isAdminPusat &&
+        dateFrom
+      ) {
+        params.set(
+          "dateFrom",
+          dateFrom
+        );
+      }
+
+      if (
+        isAdminPusat &&
+        dateTo
+      ) {
+        params.set(
+          "dateTo",
+          dateTo
+        );
+      }
+
+      const query =
+        params.toString();
+
+      const res =
+        await fetch(
+          `/api/outlet/barang-masuk${
+            query
+              ? `?${query}`
+              : ""
+          }`,
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
 
       const json =
         await res.json();
@@ -150,7 +222,10 @@ export default function OutletBarangMasukPage() {
         json
       );
 
-      if (!res.ok || !json.success) {
+      if (
+        !res.ok ||
+        !json.success
+      ) {
         console.error(
           "LOAD BARANG MASUK:",
           json.message
@@ -183,10 +258,27 @@ export default function OutletBarangMasukPage() {
   }, []);
 
   // =====================================================
+  // RELOAD SAAT FILTER ADMIN BERUBAH
+  // =====================================================
+
+  useEffect(() => {
+    if (!role) {
+      return;
+    }
+
+    if (!isAdminPusat) {
+      return;
+    }
+
+    loadData();
+  }, [
+    selectedOutlet,
+    dateFrom,
+    dateTo,
+  ]);
+
+  // =====================================================
   // OUTLET OPTIONS
-  //
-  // Untuk ADMIN / MANAGER.
-  // Ambil outlet tujuan dari data.
   // =====================================================
 
   const outletOptions =
@@ -280,9 +372,6 @@ export default function OutletBarangMasukPage() {
 
           // =============================================
           // SECURITY CLIENT
-          //
-          // Outlet admin hanya outlet miliknya.
-          // API tetap menjadi security utama.
           // =============================================
 
           if (
@@ -319,6 +408,10 @@ export default function OutletBarangMasukPage() {
                 ?.toLowerCase()
                 .includes(keyword) ||
 
+              item.jenisTransfer
+                ?.toLowerCase()
+                .includes(keyword) ||
+
               destinationOutlet?.code
                 ?.toLowerCase()
                 .includes(keyword) ||
@@ -343,15 +436,15 @@ export default function OutletBarangMasukPage() {
                 ?.toLowerCase()
                 .includes(keyword);
 
-            if (!matchesSearch) {
+            if (
+              !matchesSearch
+            ) {
               return false;
             }
           }
 
           // =============================================
           // FILTER OUTLET
-          //
-          // ADMIN / MANAGER
           // =============================================
 
           if (
@@ -371,7 +464,7 @@ export default function OutletBarangMasukPage() {
           }
 
           // =============================================
-          // FILTER TANGGAL DARI
+          // FILTER TANGGAL
           // =============================================
 
           if (
@@ -390,10 +483,6 @@ export default function OutletBarangMasukPage() {
               return false;
             }
           }
-
-          // =============================================
-          // FILTER TANGGAL SAMPAI
-          // =============================================
 
           if (
             isAdminPusat &&
@@ -513,10 +602,54 @@ export default function OutletBarangMasukPage() {
   function sourceBadge(
     item: BarangMasuk
   ) {
+    // ===================================================
+    // TRANSFER
+    // ===================================================
+
     if (
       item.sumber ===
       "TRANSFER"
     ) {
+      // ===============================================
+      // OUTLET -> OUTLET
+      // ===============================================
+
+      if (
+        item.jenisTransfer ===
+          "OUTLET_TO_OUTLET" ||
+        item.sourceOutletId
+      ) {
+        return (
+          <div className="flex flex-col items-start gap-1">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
+              <ArrowRightLeft
+                size={13}
+              />
+              Transfer Antar Outlet
+            </span>
+
+            {item.sourceOutlet && (
+              <span className="text-xs font-medium text-indigo-500">
+                Dari:{" "}
+                {
+                  item.sourceOutlet
+                    .code
+                }{" "}
+                -{" "}
+                {
+                  item.sourceOutlet
+                    .name
+                }
+              </span>
+            )}
+          </div>
+        );
+      }
+
+      // ===============================================
+      // GUDANG -> OUTLET
+      // ===============================================
+
       return (
         <div className="flex flex-col items-start gap-1">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
@@ -524,17 +657,16 @@ export default function OutletBarangMasukPage() {
             Kiriman Gudang
           </span>
 
-          {item.sourceOutlet && (
-            <span className="text-xs text-gray-400">
-              Dari:{" "}
-              {item.sourceOutlet.code}{" "}
-              -{" "}
-              {item.sourceOutlet.name}
-            </span>
-          )}
+          <span className="text-xs text-gray-400">
+            Dari: Gudang / Pusat
+          </span>
         </div>
       );
     }
+
+    // =================================================
+    // PURCHASE SUPPLIER
+    // =================================================
 
     return (
       <div className="flex flex-col items-start gap-1">
@@ -573,16 +705,16 @@ export default function OutletBarangMasukPage() {
   return (
     <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
 
-      {/* =================================================
-          HEADER
-      ================================================= */}
+      {/* HEADER */}
 
       <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
         <div className="flex items-center gap-3">
 
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#497F70] text-white shadow-sm">
-            <PackageCheck size={23} />
+            <PackageCheck
+              size={23}
+            />
           </div>
 
           <div>
@@ -592,7 +724,7 @@ export default function OutletBarangMasukPage() {
             </h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              Penerimaan barang dari supplier dan gudang utama
+              Penerimaan barang dari supplier, gudang utama, dan outlet lain
             </p>
 
           </div>
@@ -601,8 +733,12 @@ export default function OutletBarangMasukPage() {
 
         <button
           type="button"
-          onClick={loadData}
-          disabled={loading}
+          onClick={
+            loadData
+          }
+          disabled={
+            loading
+          }
           className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-[#F5F8F6] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw
@@ -619,9 +755,7 @@ export default function OutletBarangMasukPage() {
 
       </div>
 
-      {/* =================================================
-          FILTER ADMIN / MANAGER
-      ================================================= */}
+      {/* FILTER ADMIN */}
 
       {isAdminPusat && (
         <div className="mb-6 rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
@@ -639,8 +773,6 @@ export default function OutletBarangMasukPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-
-            {/* OUTLET */}
 
             <div>
 
@@ -667,8 +799,12 @@ export default function OutletBarangMasukPage() {
                 {outletOptions.map(
                   (item) => (
                     <option
-                      key={item.id}
-                      value={item.id}
+                      key={
+                        item.id
+                      }
+                      value={
+                        item.id
+                      }
                     >
                       {item.code} -{" "}
                       {item.name}
@@ -679,8 +815,6 @@ export default function OutletBarangMasukPage() {
               </select>
 
             </div>
-
-            {/* TANGGAL DARI */}
 
             <div>
 
@@ -697,7 +831,9 @@ export default function OutletBarangMasukPage() {
 
                 <input
                   type="date"
-                  value={dateFrom}
+                  value={
+                    dateFrom
+                  }
                   max={
                     dateTo ||
                     undefined
@@ -714,8 +850,6 @@ export default function OutletBarangMasukPage() {
 
             </div>
 
-            {/* TANGGAL SAMPAI */}
-
             <div>
 
               <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -731,7 +865,9 @@ export default function OutletBarangMasukPage() {
 
                 <input
                   type="date"
-                  value={dateTo}
+                  value={
+                    dateTo
+                  }
                   min={
                     dateFrom ||
                     undefined
@@ -749,8 +885,6 @@ export default function OutletBarangMasukPage() {
             </div>
 
           </div>
-
-          {/* RESET */}
 
           {(selectedOutlet !==
             "ALL" ||
@@ -778,13 +912,9 @@ export default function OutletBarangMasukPage() {
         </div>
       )}
 
-      {/* =================================================
-          TABLE
-      ================================================= */}
+      {/* TABLE */}
 
       <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
-
-        {/* SEARCH */}
 
         <div className="flex flex-col gap-3 border-b border-[#E5ECE9] p-5 md:flex-row md:items-center md:justify-between">
 
@@ -812,7 +942,9 @@ export default function OutletBarangMasukPage() {
           <div className="text-xs text-gray-400">
             Menampilkan{" "}
             <span className="font-semibold text-[#35564C]">
-              {filteredData.length}
+              {
+                filteredData.length
+              }
             </span>{" "}
             dari{" "}
             <span className="font-semibold text-[#35564C]">
@@ -822,8 +954,6 @@ export default function OutletBarangMasukPage() {
           </div>
 
         </div>
-
-        {/* TABLE */}
 
         <div className="overflow-x-auto">
 
@@ -961,26 +1091,19 @@ export default function OutletBarangMasukPage() {
                         }`}
                       >
 
-                        {/* NO */}
-
                         <td className="px-5 py-4 text-gray-500">
-                          {index +
-                            1}
+                          {index + 1}
                         </td>
-
-                        {/* NOMOR */}
 
                         <td className="px-5 py-4">
 
                           <div className="font-semibold text-[#18352D]">
-                            {
-                              item.nomor
-                            }
+                            {item.nomor}
                           </div>
 
                           {isTransfer &&
                             item.sourceOutlet && (
-                              <div className="mt-1 text-xs font-medium text-blue-600">
+                              <div className="mt-1 text-xs font-medium text-indigo-600">
                                 Dari{" "}
                                 {
                                   item
@@ -992,15 +1115,11 @@ export default function OutletBarangMasukPage() {
 
                         </td>
 
-                        {/* SUMBER */}
-
                         <td className="px-5 py-4">
                           {sourceBadge(
                             item
                           )}
                         </td>
-
-                        {/* TANGGAL */}
 
                         <td className="px-5 py-4 text-gray-600">
 
@@ -1020,8 +1139,6 @@ export default function OutletBarangMasukPage() {
                             : "-"}
 
                         </td>
-
-                        {/* OUTLET */}
 
                         <td className="px-5 py-4">
 
@@ -1043,8 +1160,6 @@ export default function OutletBarangMasukPage() {
 
                         </td>
 
-                        {/* TOTAL ITEM */}
-
                         <td className="px-5 py-4 text-center font-semibold text-[#18352D]">
                           {Number(
                             item.totalItem ??
@@ -1053,8 +1168,6 @@ export default function OutletBarangMasukPage() {
                             "id-ID"
                           )}
                         </td>
-
-                        {/* RECEIVED */}
 
                         <td className="px-5 py-4 text-center font-semibold text-[#497F70]">
                           {Number(
@@ -1065,15 +1178,11 @@ export default function OutletBarangMasukPage() {
                           )}
                         </td>
 
-                        {/* STATUS */}
-
                         <td className="px-5 py-4 text-center">
                           {statusBadge(
                             item.status
                           )}
                         </td>
-
-                        {/* AKSI */}
 
                         <td className="px-5 py-4 text-center">
 
