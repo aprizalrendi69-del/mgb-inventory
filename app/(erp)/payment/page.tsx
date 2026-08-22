@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+
 import {
   ArrowDownCircle,
   CheckCircle2,
@@ -15,12 +16,19 @@ import {
   X,
 } from "lucide-react";
 
+/*
+===========================================================
+TYPE
+===========================================================
+*/
+
 type PaymentMethod =
   | "PETTY_CASH"
   | "TRANSFER"
-  | "TEMPO"
+  | "CASH"
   | "COD"
   | "CBD"
+  | "TEMPO"
   | string;
 
 type PaymentStatus =
@@ -29,49 +37,88 @@ type PaymentStatus =
   | "PAID"
   | string;
 
-type Payment = {
+type PayableStatus =
+  | "UNPAID"
+  | "PARTIAL"
+  | "PAID"
+  | string;
+
+type Supplier = {
+  id: number;
+  code: string;
+  name: string;
+};
+
+type Outlet = {
+  id: number;
+  code: string;
+  name: string;
+};
+
+type PurchaseReference = {
   id: number;
   number: string;
-  payableId: number;
-  accountId: number;
-  paymentDate: string;
+};
+
+type Payable = {
+  id: number;
+
+  invoiceNumber?: string | null;
+  invoiceDate?: string | null;
+  dueDate?: string | null;
+
   amount: number;
+  paidAmount: number;
+  outstanding: number;
+
+  status: PayableStatus;
+
+  supplier?: Supplier | null;
+
+  outlet?: Outlet | null;
+
+  /*
+  =========================================================
+  REFERENSI PO
+  =========================================================
+
+  Payment API membutuhkan salah satu:
+
+  purchaseId
+  atau
+  outletPurchaseId
+  =========================================================
+  */
+
+  purchaseId?: number | null;
+
+  outletPurchaseId?: number | null;
+
+  purchase?: PurchaseReference | null;
+
+  outletPurchase?: PurchaseReference | null;
+};
+
+type Payment = {
+  id: number;
+
+  number: string;
+
+  payableId: number;
+
+  accountId: number;
+
+  paymentDate: string;
+
+  amount: number;
+
   method: PaymentMethod;
+
   referenceNumber?: string | null;
+
   remarks?: string | null;
 
-  payable?: {
-    id: number;
-    invoiceNumber?: string | null;
-    invoiceDate?: string | null;
-    dueDate?: string | null;
-    amount: number;
-    paidAmount: number;
-    outstanding: number;
-    status: PaymentStatus;
-
-    supplier?: {
-      id: number;
-      code: string;
-      name: string;
-    } | null;
-
-    outlet?: {
-      id: number;
-      code: string;
-      name: string;
-    } | null;
-
-    purchase?: {
-      id: number;
-      number: string;
-    } | null;
-
-    outletPurchase?: {
-      id: number;
-      number: string;
-    } | null;
-  } | null;
+  payable?: Payable | null;
 
   account?: {
     id: number;
@@ -83,27 +130,44 @@ type Payment = {
 
 type CashAccount = {
   id: number;
+
   code: string;
+
   name: string;
+
   type: string;
+
   outletId?: number | null;
+
   currentBalance: number;
+
   active: boolean;
 };
 
 type UserInfo = {
   id: number;
+
   fullname?: string;
+
   role: string;
+
   outletId?: number | null;
 };
+
+/*
+===========================================================
+FORMAT
+===========================================================
+*/
 
 function formatRupiah(value: number) {
   return Number(value || 0).toLocaleString("id-ID");
 }
 
 function formatDate(value?: string | null) {
-  if (!value) return "-";
+  if (!value) {
+    return "-";
+  }
 
   const date = new Date(value);
 
@@ -119,7 +183,9 @@ function formatDate(value?: string | null) {
 }
 
 function formatDateTime(value?: string | null) {
-  if (!value) return "-";
+  if (!value) {
+    return "-";
+  }
 
   const date = new Date(value);
 
@@ -140,16 +206,24 @@ function getPaymentMethodLabel(method: string) {
   switch (method) {
     case "PETTY_CASH":
       return "PETTY CASH";
+
     case "TRANSFER":
       return "TRANSFER";
-    case "TEMPO":
-      return "TEMPO";
+
+    case "CASH":
+      return "CASH";
+
     case "COD":
       return "COD";
+
     case "CBD":
       return "CBD";
+
+    case "TEMPO":
+      return "TEMPO";
+
     default:
-      return method;
+      return method || "-";
   }
 }
 
@@ -157,12 +231,15 @@ function getPaymentStatusLabel(status: string) {
   switch (status) {
     case "UNPAID":
       return "BELUM BAYAR";
+
     case "PARTIAL":
       return "SEBAGIAN";
+
     case "PAID":
       return "LUNAS";
+
     default:
-      return status;
+      return status || "-";
   }
 }
 
@@ -190,6 +267,9 @@ function getMethodClass(method: string) {
     case "TRANSFER":
       return "bg-blue-100 text-blue-700";
 
+    case "CASH":
+      return "bg-emerald-100 text-emerald-700";
+
     case "COD":
       return "bg-orange-100 text-orange-700";
 
@@ -204,16 +284,204 @@ function getMethodClass(method: string) {
   }
 }
 
+/*
+===========================================================
+NORMALIZE PAYABLE
+===========================================================
+
+PurchasePayable adalah sumber resmi:
+
+- amount
+- paidAmount
+- outstanding
+- status
+
+Selain itu kita pertahankan:
+
+- purchaseId
+- outletPurchaseId
+- purchase
+- outletPurchase
+
+Karena Payment API membutuhkan referensi PO.
+===========================================================
+*/
+
+function normalizePayable(item: any): Payable | null {
+  const id = Number(item?.id);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return null;
+  }
+
+  const amount = Number(item?.amount ?? 0);
+
+  const paidAmount = Number(item?.paidAmount ?? 0);
+
+  const rawOutstanding = Number(item?.outstanding);
+
+  const outstanding = Number.isFinite(rawOutstanding)
+    ? Math.max(rawOutstanding, 0)
+    : Math.max(amount - paidAmount, 0);
+
+  let status: PayableStatus = item?.status;
+
+  if (!status || typeof status !== "string") {
+    if (outstanding <= 0) {
+      status = "PAID";
+    } else if (paidAmount > 0) {
+      status = "PARTIAL";
+    } else {
+      status = "UNPAID";
+    }
+  }
+
+  /*
+  ---------------------------------------------------------
+  PURCHASE ID
+  ---------------------------------------------------------
+  */
+
+  const rawPurchaseId =
+    item?.purchaseId ??
+    item?.purchase?.id ??
+    null;
+
+  const purchaseId =
+    rawPurchaseId !== null &&
+    rawPurchaseId !== undefined &&
+    Number.isInteger(Number(rawPurchaseId)) &&
+    Number(rawPurchaseId) > 0
+      ? Number(rawPurchaseId)
+      : null;
+
+  /*
+  ---------------------------------------------------------
+  OUTLET PURCHASE ID
+  ---------------------------------------------------------
+  */
+
+  const rawOutletPurchaseId =
+    item?.outletPurchaseId ??
+    item?.outletPurchase?.id ??
+    null;
+
+  const outletPurchaseId =
+    rawOutletPurchaseId !== null &&
+    rawOutletPurchaseId !== undefined &&
+    Number.isInteger(Number(rawOutletPurchaseId)) &&
+    Number(rawOutletPurchaseId) > 0
+      ? Number(rawOutletPurchaseId)
+      : null;
+
+  return {
+    id,
+
+    invoiceNumber:
+      item?.invoiceNumber ??
+      item?.invoiceNo ??
+      item?.invoice ??
+      null,
+
+    invoiceDate:
+      item?.invoiceDate ??
+      null,
+
+    dueDate:
+      item?.dueDate ??
+      null,
+
+    amount,
+
+    paidAmount,
+
+    outstanding,
+
+    status,
+
+    supplier:
+      item?.supplier ??
+      null,
+
+    outlet:
+      item?.outlet ??
+      null,
+
+    purchaseId,
+
+    outletPurchaseId,
+
+    purchase:
+      item?.purchase ??
+      null,
+
+    outletPurchase:
+      item?.outletPurchase ??
+      null,
+  };
+}
+
+/*
+===========================================================
+PAGE
+===========================================================
+*/
+
 export default function PaymentPage() {
-  const [user, setUser] = useState<UserInfo | null>(null);
+  /*
+  =========================================================
+  USER
+  =========================================================
+  */
 
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [accounts, setAccounts] = useState<CashAccount[]>([]);
+  const [user, setUser] =
+    useState<UserInfo | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [loadingUser, setLoadingUser] = useState(true);
+  const [loadingUser, setLoadingUser] =
+    useState(true);
 
-  const [search, setSearch] = useState("");
+  /*
+  =========================================================
+  PAYMENT
+  =========================================================
+  */
+
+  const [payments, setPayments] =
+    useState<Payment[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  /*
+  =========================================================
+  PAYABLE
+  =========================================================
+  */
+
+  const [payables, setPayables] =
+    useState<Payable[]>([]);
+
+  const [loadingPayables, setLoadingPayables] =
+    useState(false);
+
+  /*
+  =========================================================
+  CASH ACCOUNT
+  =========================================================
+  */
+
+  const [accounts, setAccounts] =
+    useState<CashAccount[]>([]);
+
+  /*
+  =========================================================
+  FILTER
+  =========================================================
+  */
+
+  const [search, setSearch] =
+    useState("");
+
   const [statusFilter, setStatusFilter] =
     useState("ALL");
 
@@ -226,14 +494,26 @@ export default function PaymentPage() {
   const [tanggalSelesai, setTanggalSelesai] =
     useState("");
 
+  /*
+  =========================================================
+  PAYMENT MODAL
+  =========================================================
+  */
+
   const [showPayment, setShowPayment] =
     useState(false);
 
   const [savingPayment, setSavingPayment] =
     useState(false);
 
-  const [selectedPayment, setSelectedPayment] =
-    useState<Payment | null>(null);
+  /*
+  =========================================================
+  SELECTED PAYABLE
+  =========================================================
+  */
+
+  const [selectedPayable, setSelectedPayable] =
+    useState<Payable | null>(null);
 
   const [paymentPayableId, setPaymentPayableId] =
     useState("");
@@ -256,9 +536,11 @@ export default function PaymentPage() {
   const [paymentRemarks, setPaymentRemarks] =
     useState("");
 
-  // =====================================================
-  // USER
-  // =====================================================
+  /*
+  =========================================================
+  USER
+  =========================================================
+  */
 
   async function loadUser() {
     try {
@@ -275,39 +557,46 @@ export default function PaymentPage() {
         json?.data ??
         json;
 
-      if (res.ok && currentUser?.id) {
+      if (
+        res.ok &&
+        currentUser?.id
+      ) {
         setUser(currentUser);
       } else {
         setUser(null);
       }
     } catch (error) {
-      console.error("LOAD USER ERROR:", error);
+      console.error(
+        "LOAD USER ERROR:",
+        error
+      );
+
       setUser(null);
     } finally {
       setLoadingUser(false);
     }
   }
 
-  // =====================================================
-  // PAYMENT
-  // =====================================================
+  /*
+  =========================================================
+  PAYMENT
+  =========================================================
+  */
 
   async function loadPayments() {
     try {
       setLoading(true);
 
-      const res = await fetch(
-        "/api/payment",
-        {
-          cache: "no-store",
-        }
-      );
+      const res = await fetch("/api/payment", {
+        cache: "no-store",
+      });
 
       const json = await res.json();
 
       if (!res.ok) {
         throw new Error(
           json?.message ||
+            json?.error ||
             "Gagal mengambil data pembayaran."
         );
       }
@@ -341,9 +630,107 @@ export default function PaymentPage() {
     }
   }
 
-  // =====================================================
-  // CASH ACCOUNT
-  // =====================================================
+  /*
+  =========================================================
+  PURCHASE PAYABLE
+  =========================================================
+  */
+
+  async function loadPayables() {
+    try {
+      setLoadingPayables(true);
+
+      const res = await fetch(
+        "/api/purchase-payable",
+        {
+          cache: "no-store",
+        }
+      );
+
+      const contentType =
+        res.headers.get(
+          "content-type"
+        ) || "";
+
+      if (
+        !contentType.includes(
+          "application/json"
+        )
+      ) {
+        const text =
+          await res.text();
+
+        throw new Error(
+          `API purchase-payable mengembalikan response bukan JSON (${res.status}). ${text.slice(
+            0,
+            150
+          )}`
+        );
+      }
+
+      const json =
+        await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          json?.message ||
+            json?.error ||
+            "Gagal mengambil data payable."
+        );
+      }
+
+      const payload =
+        json?.data ??
+        json?.payables ??
+        json;
+
+      const payableData =
+        Array.isArray(payload)
+          ? payload
+          : payload?.payables ??
+            payload?.data ??
+            [];
+
+      const normalized =
+        Array.isArray(payableData)
+          ? payableData
+              .map(
+                normalizePayable
+              )
+              .filter(
+                (
+                  item
+                ): item is Payable =>
+                  item !== null
+              )
+              .filter(
+                (item) =>
+                  Number(
+                    item.outstanding
+                  ) > 0
+              )
+          : [];
+
+      setPayables(
+        normalized
+      );
+    } catch (error) {
+      console.error(
+        "LOAD PAYABLE ERROR:",
+        error
+      );
+
+      setPayables([]);
+    } finally {
+      setLoadingPayables(false);
+    }
+  }
+
+  /*
+  =========================================================
+  CASH ACCOUNT
+  =========================================================
+  */
 
   async function loadAccounts() {
     try {
@@ -354,10 +741,15 @@ export default function PaymentPage() {
         }
       );
 
-      const json = await res.json();
+      const json =
+        await res.json();
 
       if (!res.ok) {
-        return;
+        throw new Error(
+          json?.message ||
+            json?.error ||
+            "Gagal mengambil akun kas."
+        );
       }
 
       const payload =
@@ -372,7 +764,9 @@ export default function PaymentPage() {
             [];
 
       setAccounts(
-        Array.isArray(accountData)
+        Array.isArray(
+          accountData
+        )
           ? accountData
           : []
       );
@@ -386,175 +780,240 @@ export default function PaymentPage() {
     }
   }
 
+  /*
+  =========================================================
+  INITIAL LOAD
+  =========================================================
+  */
+
   useEffect(() => {
-    loadUser();
-    loadPayments();
-    loadAccounts();
+    void loadUser();
+    void loadPayments();
+    void loadPayables();
+    void loadAccounts();
   }, []);
 
-  // =====================================================
-  // ROLE
-  // =====================================================
+  /*
+  =========================================================
+  ROLE
+  =========================================================
+  */
 
-  const role = String(
-    user?.role || ""
-  ).toUpperCase();
+  const role =
+    String(
+      user?.role || ""
+    ).toUpperCase();
 
   const canPay =
     role === "ADMIN" ||
     role === "MANAGER" ||
     role === "PURCHASING" ||
-    role === "OUTLET_ADMIN";
+    role === "OUTLET_ADMIN" ||
+    role === "ADMIN_OUTLET";
 
-  // =====================================================
-  // FILTER
-  // =====================================================
+  /*
+  =========================================================
+  FILTER PAYMENT
+  =========================================================
+  */
 
-  const filteredPayments = useMemo(() => {
-    const keyword =
-      search.trim().toLowerCase();
+  const filteredPayments =
+    useMemo(() => {
+      const keyword =
+        search
+          .trim()
+          .toLowerCase();
 
-    return payments.filter(
-      (payment) => {
-        if (
-          statusFilter !== "ALL" &&
-          payment.payable?.status !==
-            statusFilter
-        ) {
-          return false;
-        }
+      return payments.filter(
+        (payment) => {
+          const payable =
+            payment.payable;
 
-        if (
-          methodFilter !== "ALL" &&
-          payment.method !==
-            methodFilter
-        ) {
-          return false;
-        }
+          if (
+            statusFilter !==
+              "ALL" &&
+            payable?.status !==
+              statusFilter
+          ) {
+            return false;
+          }
 
-        const paymentDateValue =
-          new Date(
-            payment.paymentDate
+          if (
+            methodFilter !==
+              "ALL" &&
+            payment.method !==
+              methodFilter
+          ) {
+            return false;
+          }
+
+          const paymentDateValue =
+            new Date(
+              payment.paymentDate
+            );
+
+          if (
+            Number.isNaN(
+              paymentDateValue.getTime()
+            )
+          ) {
+            return false;
+          }
+
+          const year =
+            paymentDateValue.getFullYear();
+
+          const month =
+            String(
+              paymentDateValue.getMonth() +
+                1
+            ).padStart(2, "0");
+
+          const day =
+            String(
+              paymentDateValue.getDate()
+            ).padStart(2, "0");
+
+          const dateOnly =
+            `${year}-${month}-${day}`;
+
+          if (
+            tanggalMulai &&
+            dateOnly <
+              tanggalMulai
+          ) {
+            return false;
+          }
+
+          if (
+            tanggalSelesai &&
+            dateOnly >
+              tanggalSelesai
+          ) {
+            return false;
+          }
+
+          if (!keyword) {
+            return true;
+          }
+
+          return (
+            payment.number
+              ?.toLowerCase()
+              .includes(keyword) ||
+
+            payment.referenceNumber
+              ?.toLowerCase()
+              .includes(keyword) ||
+
+            payment.remarks
+              ?.toLowerCase()
+              .includes(keyword) ||
+
+            payable?.invoiceNumber
+              ?.toLowerCase()
+              .includes(keyword) ||
+
+            payable?.supplier?.name
+              ?.toLowerCase()
+              .includes(keyword) ||
+
+            payable?.supplier?.code
+              ?.toLowerCase()
+              .includes(keyword) ||
+
+            payable?.purchase?.number
+              ?.toLowerCase()
+              .includes(keyword) ||
+
+            payable?.outletPurchase?.number
+              ?.toLowerCase()
+              .includes(keyword)
           );
-
-        if (
-          Number.isNaN(
-            paymentDateValue.getTime()
-          )
-        ) {
-          return false;
         }
+      );
+    }, [
+      payments,
+      search,
+      statusFilter,
+      methodFilter,
+      tanggalMulai,
+      tanggalSelesai,
+    ]);
 
-        const year =
-          paymentDateValue.getFullYear();
+  /*
+  =========================================================
+  SUMMARY
+  =========================================================
+  */
 
-        const month = String(
-          paymentDateValue.getMonth() + 1
-        ).padStart(2, "0");
-
-        const day = String(
-          paymentDateValue.getDate()
-        ).padStart(2, "0");
-
-        const dateOnly =
-          `${year}-${month}-${day}`;
-
-        if (
-          tanggalMulai &&
-          dateOnly < tanggalMulai
-        ) {
-          return false;
-        }
-
-        if (
-          tanggalSelesai &&
-          dateOnly > tanggalSelesai
-        ) {
-          return false;
-        }
-
-        if (!keyword) {
-          return true;
-        }
-
-        return (
-          payment.number
-            ?.toLowerCase()
-            .includes(keyword) ||
-          payment.referenceNumber
-            ?.toLowerCase()
-            .includes(keyword) ||
-          payment.remarks
-            ?.toLowerCase()
-            .includes(keyword) ||
-          payment.payable?.invoiceNumber
-            ?.toLowerCase()
-            .includes(keyword) ||
-          payment.payable?.supplier?.name
-            ?.toLowerCase()
-            .includes(keyword) ||
-          payment.payable?.supplier?.code
-            ?.toLowerCase()
-            .includes(keyword) ||
-          payment.payable?.purchase?.number
-            ?.toLowerCase()
-            .includes(keyword) ||
-          payment.payable?.outletPurchase?.number
-            ?.toLowerCase()
-            .includes(keyword)
-        );
-      }
+  const totalPayment =
+    useMemo(
+      () =>
+        payments.reduce(
+          (
+            sum,
+            payment
+          ) =>
+            sum +
+            Number(
+              payment.amount || 0
+            ),
+          0
+        ),
+      [payments]
     );
-  }, [
-    payments,
-    search,
-    statusFilter,
-    methodFilter,
-    tanggalMulai,
-    tanggalSelesai,
-  ]);
-
-  // =====================================================
-  // SUMMARY
-  // =====================================================
-
-  const totalPayment = useMemo(
-    () =>
-      payments.reduce(
-        (sum, payment) =>
-          sum +
-          Number(payment.amount || 0),
-        0
-      ),
-    [payments]
-  );
 
   const totalTransaction =
     payments.length;
 
-  const totalPaidInvoice = useMemo(
-    () =>
-      payments.filter(
-        (payment) =>
-          payment.payable?.status ===
-          "PAID"
-      ).length,
-    [payments]
-  );
+  const totalPaidInvoice =
+    useMemo(
+      () =>
+        payments.filter(
+          (payment) =>
+            payment.payable
+              ?.status ===
+            "PAID"
+        ).length,
+      [payments]
+    );
 
-  const totalPartialInvoice = useMemo(
-    () =>
-      payments.filter(
-        (payment) =>
-          payment.payable?.status ===
-          "PARTIAL"
-      ).length,
-    [payments]
-  );
+  const totalPartialInvoice =
+    useMemo(
+      () =>
+        payments.filter(
+          (payment) =>
+            payment.payable
+              ?.status ===
+            "PARTIAL"
+        ).length,
+      [payments]
+    );
 
-  // =====================================================
-  // RESET
-  // =====================================================
+  const totalOutstanding =
+    useMemo(
+      () =>
+        payables.reduce(
+          (
+            sum,
+            payable
+          ) =>
+            sum +
+            Number(
+              payable.outstanding ||
+                0
+            ),
+          0
+        ),
+      [payables]
+    );
+
+  /*
+  =========================================================
+  RESET FILTER
+  =========================================================
+  */
 
   function resetFilter() {
     setSearch("");
@@ -564,75 +1023,266 @@ export default function PaymentPage() {
     setTanggalSelesai("");
   }
 
-  // =====================================================
-  // OPEN PAYMENT
-  // =====================================================
+  /*
+  =========================================================
+  RESET PAYMENT FORM
+  =========================================================
+  */
 
-  function openPayment(payment?: Payment) {
-    setSelectedPayment(
-      payment ?? null
-    );
-
-    setPaymentPayableId(
-      payment?.payableId
-        ? String(payment.payableId)
-        : ""
-    );
-
-    setPaymentAccountId(
-      payment?.accountId
-        ? String(payment.accountId)
-        : ""
-    );
-
-    setPaymentAmount(
-      payment?.amount
-        ? Number(
-            payment.amount
-          ).toLocaleString("id-ID")
-        : ""
-    );
+  function resetPaymentForm() {
+    setSelectedPayable(null);
+    setPaymentPayableId("");
+    setPaymentAccountId("");
+    setPaymentAmount("");
 
     setPaymentMethod(
-      payment?.method ||
-        "PETTY_CASH"
+      "PETTY_CASH"
     );
 
     setPaymentDate(
-      payment?.paymentDate
-        ? new Date(
-            payment.paymentDate
-          )
-            .toISOString()
-            .slice(0, 10)
-        : new Date()
-            .toISOString()
-            .slice(0, 10)
+      new Date()
+        .toISOString()
+        .slice(0, 10)
     );
 
-    setPaymentReference(
-      payment?.referenceNumber ||
-        ""
-    );
-
-    setPaymentRemarks(
-      payment?.remarks ||
-        ""
-    );
-
-    setShowPayment(true);
+    setPaymentReference("");
+    setPaymentRemarks("");
   }
 
-  // =====================================================
-  // SUBMIT PAYMENT
-  // =====================================================
+  /*
+  =========================================================
+  OPEN NEW PAYMENT
+  =========================================================
+  */
+
+  async function openPayment(
+    payableId?: number
+  ) {
+    resetPaymentForm();
+
+    setShowPayment(true);
+
+    await loadPayables();
+
+    if (
+      payableId &&
+      payableId > 0
+    ) {
+      try {
+        const res =
+          await fetch(
+            "/api/purchase-payable",
+            {
+              cache: "no-store",
+            }
+          );
+
+        if (
+          res.ok &&
+          (
+            res.headers
+              .get(
+                "content-type"
+              ) || ""
+          ).includes(
+            "application/json"
+          )
+        ) {
+          const json =
+            await res.json();
+
+          const payload =
+            json?.data ??
+            json?.payables ??
+            json;
+
+          const payableData =
+            Array.isArray(
+              payload
+            )
+              ? payload
+              : payload?.payables ??
+                payload?.data ??
+                [];
+
+          const normalized =
+            Array.isArray(
+              payableData
+            )
+              ? payableData
+                  .map(
+                    normalizePayable
+                  )
+                  .filter(
+                    (
+                      item
+                    ): item is Payable =>
+                      item !== null
+                  )
+                  .filter(
+                    (item) =>
+                      item.outstanding >
+                      0
+                  )
+              : [];
+
+          const selected =
+            normalized.find(
+              (item) =>
+                item.id ===
+                payableId
+            );
+
+          if (selected) {
+            setPayables(
+              normalized
+            );
+
+            setSelectedPayable(
+              selected
+            );
+
+            setPaymentPayableId(
+              String(
+                selected.id
+              )
+            );
+
+            setPaymentAmount(
+              Number(
+                selected.outstanding
+              ).toLocaleString(
+                "id-ID"
+              )
+            );
+          }
+        }
+      } catch (error) {
+        console.error(
+          "SELECT PAYABLE AFTER REFRESH ERROR:",
+          error
+        );
+      }
+    }
+  }
+
+  /*
+  =========================================================
+  SELECT PAYABLE
+  =========================================================
+  */
+
+  function handleSelectPayable(
+    payableId: string
+  ) {
+    if (!payableId) {
+      setSelectedPayable(null);
+      setPaymentPayableId("");
+      setPaymentAmount("");
+
+      return;
+    }
+
+    const payable =
+      payables.find(
+        (item) =>
+          String(item.id) ===
+          payableId
+      );
+
+    if (!payable) {
+      return;
+    }
+
+    setSelectedPayable(
+      payable
+    );
+
+    setPaymentPayableId(
+      String(payable.id)
+    );
+
+    setPaymentAmount(
+      Number(
+        payable.outstanding || 0
+      ).toLocaleString(
+        "id-ID"
+      )
+    );
+  }
+
+  /*
+  =========================================================
+  GET PO REFERENCE
+  =========================================================
+
+  Payment API wajib menerima:
+
+  purchaseId
+  ATAU
+  outletPurchaseId
+
+  Prioritas:
+
+  1. purchaseId langsung
+  2. purchase.id
+  3. outletPurchaseId langsung
+  4. outletPurchase.id
+  =========================================================
+  */
+
+  function getPurchaseReference(
+    payable: Payable
+  ) {
+    const purchaseId =
+      Number(
+        payable.purchaseId ??
+          payable.purchase?.id ??
+          0
+      );
+
+    const outletPurchaseId =
+      Number(
+        payable.outletPurchaseId ??
+          payable.outletPurchase?.id ??
+          0
+      );
+
+    return {
+      purchaseId:
+        Number.isInteger(
+          purchaseId
+        ) &&
+        purchaseId > 0
+          ? purchaseId
+          : null,
+
+      outletPurchaseId:
+        Number.isInteger(
+          outletPurchaseId
+        ) &&
+        outletPurchaseId > 0
+          ? outletPurchaseId
+          : null,
+    };
+  }
+
+  /*
+  =========================================================
+  SUBMIT PAYMENT
+  =========================================================
+  */
 
   async function submitPayment() {
     const payableId =
-      Number(paymentPayableId);
+      Number(
+        paymentPayableId
+      );
 
     const accountId =
-      Number(paymentAccountId);
+      Number(
+        paymentAccountId
+      );
 
     const amount =
       Number(
@@ -641,69 +1291,260 @@ export default function PaymentPage() {
           .replace(/,/g, "")
       );
 
-    if (!payableId) {
+    /*
+    -------------------------------------------------------
+    PAYABLE
+    -------------------------------------------------------
+    */
+
+    if (
+      !Number.isInteger(
+        payableId
+      ) ||
+      payableId <= 0
+    ) {
       alert(
-        "Payable tidak ditemukan."
+        "Pilih invoice/payable terlebih dahulu."
       );
+
       return;
     }
 
+    const payable =
+      payables.find(
+        (item) =>
+          item.id ===
+          payableId
+      );
+
+    if (!payable) {
+      alert(
+        "Invoice/payable tidak ditemukan."
+      );
+
+      return;
+    }
+
+    const outstanding =
+      Number(
+        payable.outstanding || 0
+      );
+
     if (
-      !Number.isFinite(accountId) ||
+      outstanding <= 0
+    ) {
+      alert(
+        "Invoice tersebut sudah lunas."
+      );
+
+      return;
+    }
+
+    /*
+    -------------------------------------------------------
+    PO REFERENCE
+    -------------------------------------------------------
+
+    INI BAGIAN UTAMA PERBAIKAN.
+
+    API /api/payment membutuhkan PO pusat
+    atau PO outlet.
+    */
+
+    const {
+      purchaseId,
+      outletPurchaseId,
+    } =
+      getPurchaseReference(
+        payable
+      );
+
+    if (
+      !purchaseId &&
+      !outletPurchaseId
+    ) {
+      console.error(
+        "PAYABLE TANPA REFERENSI PO:",
+        payable
+      );
+
+      alert(
+        "Invoice ini tidak memiliki referensi PO pusat atau PO outlet. Silakan periksa data PurchasePayable."
+      );
+
+      return;
+    }
+
+    /*
+    -------------------------------------------------------
+    ACCOUNT
+    -------------------------------------------------------
+    */
+
+    if (
+      !Number.isInteger(
+        accountId
+      ) ||
       accountId <= 0
     ) {
       alert(
         "Pilih akun pembayaran."
       );
+
       return;
     }
 
+    /*
+    -------------------------------------------------------
+    AMOUNT
+    -------------------------------------------------------
+    */
+
     if (
-      !Number.isFinite(amount) ||
+      !Number.isFinite(
+        amount
+      ) ||
       amount <= 0
     ) {
       alert(
         "Nominal pembayaran harus lebih dari 0."
       );
+
       return;
     }
+
+    if (
+      amount >
+      outstanding
+    ) {
+      alert(
+        `Nominal pembayaran tidak boleh melebihi outstanding Rp ${formatRupiah(
+          outstanding
+        )}.`
+      );
+
+      return;
+    }
+
+    /*
+    -------------------------------------------------------
+    METHOD
+    -------------------------------------------------------
+    */
 
     if (!paymentMethod) {
       alert(
         "Pilih metode pembayaran."
       );
+
       return;
     }
 
     try {
-      setSavingPayment(true);
-
-      const res = await fetch(
-        "/api/payment",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            payableId,
-            accountId,
-            amount,
-            method: paymentMethod,
-            paymentDate:
-              paymentDate || undefined,
-            referenceNumber:
-              paymentReference.trim() ||
-              undefined,
-            remarks:
-              paymentRemarks.trim() ||
-              undefined,
-          }),
-        }
+      setSavingPayment(
+        true
       );
 
-      const json = await res.json();
+      /*
+      -----------------------------------------------------
+      BODY PAYMENT
+      -----------------------------------------------------
+
+      Sekarang bukan hanya payableId.
+
+      Kita kirim juga:
+
+      purchaseId
+      outletPurchaseId
+
+      sehingga API bisa menghubungkan Payment
+      langsung ke PO yang benar.
+      */
+
+      const paymentBody: Record<
+        string,
+        unknown
+      > = {
+        payableId,
+
+        accountId,
+
+        amount,
+
+        method:
+          paymentMethod,
+
+        paymentDate:
+          paymentDate ||
+          undefined,
+
+        referenceNumber:
+          paymentReference.trim() ||
+          undefined,
+
+        remarks:
+          paymentRemarks.trim() ||
+          undefined,
+      };
+
+      if (purchaseId) {
+        paymentBody.purchaseId =
+          purchaseId;
+      }
+
+      if (
+        outletPurchaseId
+      ) {
+        paymentBody.outletPurchaseId =
+          outletPurchaseId;
+      }
+
+      console.log(
+        "SUBMIT PAYMENT BODY:",
+        paymentBody
+      );
+
+      const res =
+        await fetch(
+          "/api/payment",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify(
+                paymentBody
+              ),
+          }
+        );
+
+      const contentType =
+        res.headers.get(
+          "content-type"
+        ) || "";
+
+      if (
+        !contentType.includes(
+          "application/json"
+        )
+      ) {
+        const text =
+          await res.text();
+
+        throw new Error(
+          `Server mengembalikan response bukan JSON (${res.status}). ${text.slice(
+            0,
+            150
+          )}`
+        );
+      }
+
+      const json =
+        await res.json();
 
       if (
         !res.ok ||
@@ -711,15 +1552,32 @@ export default function PaymentPage() {
       ) {
         throw new Error(
           json?.message ||
+            json?.error ||
             "Gagal menyimpan pembayaran."
         );
       }
 
-      setShowPayment(false);
-      setSelectedPayment(null);
+      /*
+      -------------------------------------------------------
+      CLOSE MODAL
+      -------------------------------------------------------
+      */
+
+      setShowPayment(
+        false
+      );
+
+      resetPaymentForm();
+
+      /*
+      -------------------------------------------------------
+      REFRESH DATA
+      -------------------------------------------------------
+      */
 
       await Promise.all([
         loadPayments(),
+        loadPayables(),
         loadAccounts(),
       ]);
 
@@ -738,18 +1596,24 @@ export default function PaymentPage() {
           : "Gagal menyimpan pembayaran."
       );
     } finally {
-      setSavingPayment(false);
+      setSavingPayment(
+        false
+      );
     }
   }
 
-  // =====================================================
-  // RENDER
-  // =====================================================
+  /*
+  =========================================================
+  RENDER
+  =========================================================
+  */
 
   return (
     <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
 
-      {/* HEADER */}
+      {/* =================================================
+          HEADER
+      ================================================= */}
 
       <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
@@ -760,14 +1624,15 @@ export default function PaymentPage() {
           </div>
 
           <div>
+
             <h1 className="text-2xl font-bold tracking-tight text-[#18352D] md:text-3xl">
               Pembayaran
             </h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              Kelola pembayaran hutang supplier
-              dan transaksi kas
+              Kelola pembayaran hutang supplier dan transaksi kas
             </p>
+
           </div>
 
         </div>
@@ -777,33 +1642,44 @@ export default function PaymentPage() {
           <button
             type="button"
             onClick={() => {
-              loadPayments();
-              loadAccounts();
+              void loadPayments();
+              void loadPayables();
+              void loadAccounts();
             }}
-            disabled={loading}
+            disabled={
+              loading ||
+              loadingPayables
+            }
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-[#F5F8F6] disabled:cursor-not-allowed disabled:opacity-50"
           >
+
             <RefreshCw
               size={17}
               className={
-                loading
+                loading ||
+                loadingPayables
                   ? "animate-spin"
                   : ""
               }
             />
+
             Refresh
+
           </button>
 
           {canPay && (
             <button
               type="button"
-              onClick={() =>
-                openPayment()
-              }
+              onClick={() => {
+                void openPayment();
+              }}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#497F70] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3D6D60]"
             >
+
               <Plus size={17} />
+
               Pembayaran
+
             </button>
           )}
 
@@ -811,15 +1687,20 @@ export default function PaymentPage() {
 
       </div>
 
-      {/* SUMMARY */}
+      {/* =================================================
+          SUMMARY
+      ================================================= */}
 
-      <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+
+        {/* TOTAL PAYMENT */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
           <div className="flex items-start justify-between">
 
             <div>
+
               <p className="text-xs font-semibold uppercase tracking-wide text-[#58736A]">
                 Total Pembayaran
               </p>
@@ -830,6 +1711,7 @@ export default function PaymentPage() {
                   totalPayment
                 )}
               </p>
+
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
@@ -844,11 +1726,14 @@ export default function PaymentPage() {
 
         </div>
 
+        {/* TRANSACTION */}
+
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
           <div className="flex items-start justify-between">
 
             <div>
+
               <p className="text-xs font-semibold uppercase tracking-wide text-[#58736A]">
                 Transaksi
               </p>
@@ -856,6 +1741,7 @@ export default function PaymentPage() {
               <p className="mt-2 text-2xl font-bold text-[#18352D]">
                 {totalTransaction}
               </p>
+
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EDF1F8] text-[#526A91]">
@@ -870,11 +1756,14 @@ export default function PaymentPage() {
 
         </div>
 
+        {/* PAID */}
+
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
           <div className="flex items-start justify-between">
 
             <div>
+
               <p className="text-xs font-semibold uppercase tracking-wide text-[#58736A]">
                 Invoice Lunas
               </p>
@@ -882,6 +1771,7 @@ export default function PaymentPage() {
               <p className="mt-2 text-2xl font-bold text-green-700">
                 {totalPaidInvoice}
               </p>
+
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-50 text-green-600">
@@ -896,11 +1786,14 @@ export default function PaymentPage() {
 
         </div>
 
+        {/* PARTIAL */}
+
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
           <div className="flex items-start justify-between">
 
             <div>
+
               <p className="text-xs font-semibold uppercase tracking-wide text-[#58736A]">
                 Pembayaran Sebagian
               </p>
@@ -908,6 +1801,7 @@ export default function PaymentPage() {
               <p className="mt-2 text-2xl font-bold text-amber-600">
                 {totalPartialInvoice}
               </p>
+
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
@@ -922,9 +1816,44 @@ export default function PaymentPage() {
 
         </div>
 
+        {/* OUTSTANDING */}
+
+        <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
+
+          <div className="flex items-start justify-between">
+
+            <div>
+
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#58736A]">
+                Hutang Outstanding
+              </p>
+
+              <p className="mt-2 text-2xl font-bold text-red-600">
+                Rp{" "}
+                {formatRupiah(
+                  totalOutstanding
+                )}
+              </p>
+
+            </div>
+
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-red-600">
+              <CreditCard size={21} />
+            </div>
+
+          </div>
+
+          <p className="mt-3 text-xs text-gray-400">
+            Payable yang belum lunas
+          </p>
+
+        </div>
+
       </div>
 
-      {/* MAIN */}
+      {/* =================================================
+          MAIN
+      ================================================= */}
 
       <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
@@ -936,7 +1865,7 @@ export default function PaymentPage() {
 
             {/* SEARCH */}
 
-            <div className="xl:col-span-1">
+            <div>
 
               <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#58736A]">
                 Pencarian
@@ -976,7 +1905,9 @@ export default function PaymentPage() {
               <div className="relative">
 
                 <select
-                  value={statusFilter}
+                  value={
+                    statusFilter
+                  }
                   onChange={(e) =>
                     setStatusFilter(
                       e.target.value
@@ -984,18 +1915,23 @@ export default function PaymentPage() {
                   }
                   className="w-full appearance-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 pr-10 text-sm text-gray-700 outline-none focus:border-[#497F70]"
                 >
+
                   <option value="ALL">
                     Semua Status
                   </option>
+
                   <option value="UNPAID">
                     Belum Bayar
                   </option>
+
                   <option value="PARTIAL">
                     Sebagian
                   </option>
+
                   <option value="PAID">
                     Lunas
                   </option>
+
                 </select>
 
                 <ChevronDown
@@ -1018,7 +1954,9 @@ export default function PaymentPage() {
               <div className="relative">
 
                 <select
-                  value={methodFilter}
+                  value={
+                    methodFilter
+                  }
                   onChange={(e) =>
                     setMethodFilter(
                       e.target.value
@@ -1026,24 +1964,35 @@ export default function PaymentPage() {
                   }
                   className="w-full appearance-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 pr-10 text-sm text-gray-700 outline-none focus:border-[#497F70]"
                 >
+
                   <option value="ALL">
                     Semua Metode
                   </option>
+
                   <option value="PETTY_CASH">
                     Petty Cash
                   </option>
+
                   <option value="TRANSFER">
                     Transfer
                   </option>
+
+                  <option value="CASH">
+                    Cash
+                  </option>
+
                   <option value="COD">
                     COD
                   </option>
+
                   <option value="CBD">
                     CBD
                   </option>
+
                   <option value="TEMPO">
                     Tempo
                   </option>
+
                 </select>
 
                 <ChevronDown
@@ -1065,7 +2014,9 @@ export default function PaymentPage() {
 
               <input
                 type="date"
-                value={tanggalMulai}
+                value={
+                  tanggalMulai
+                }
                 onChange={(e) =>
                   setTanggalMulai(
                     e.target.value
@@ -1086,7 +2037,9 @@ export default function PaymentPage() {
 
               <input
                 type="date"
-                value={tanggalSelesai}
+                value={
+                  tanggalSelesai
+                }
                 onChange={(e) =>
                   setTanggalSelesai(
                     e.target.value
@@ -1102,11 +2055,15 @@ export default function PaymentPage() {
           <div className="mt-4 flex items-center justify-between">
 
             <div className="text-xs text-gray-500">
+
               Menampilkan{" "}
+
               <span className="font-semibold text-[#497F70]">
                 {filteredPayments.length}
               </span>{" "}
+
               pembayaran
+
             </div>
 
             {(search ||
@@ -1116,20 +2073,26 @@ export default function PaymentPage() {
                 "ALL" ||
               tanggalMulai ||
               tanggalSelesai) && (
+
               <button
                 type="button"
-                onClick={resetFilter}
+                onClick={
+                  resetFilter
+                }
                 className="rounded-lg border border-[#D5E5DC] bg-white px-3 py-2 text-xs font-semibold text-[#497F70] hover:bg-[#F5F8F6]"
               >
                 Reset Filter
               </button>
+
             )}
 
           </div>
 
         </div>
 
-        {/* TABLE */}
+        {/* =================================================
+            TABLE
+        ================================================= */}
 
         <div className="overflow-x-auto">
 
@@ -1235,8 +2198,7 @@ export default function PaymentPage() {
                       </p>
 
                       <p className="mt-1 text-sm text-gray-400">
-                        Belum terdapat transaksi
-                        pembayaran.
+                        Belum terdapat transaksi pembayaran.
                       </p>
 
                     </div>
@@ -1248,7 +2210,10 @@ export default function PaymentPage() {
               ) : (
 
                 filteredPayments.map(
-                  (payment, index) => {
+                  (
+                    payment,
+                    index
+                  ) => {
 
                     const payable =
                       payment.payable;
@@ -1260,8 +2225,11 @@ export default function PaymentPage() {
                       );
 
                     return (
+
                       <tr
-                        key={payment.id}
+                        key={
+                          payment.id
+                        }
                         className="border-b border-[#EDF2EF] hover:bg-[#FAFCFB]"
                       >
 
@@ -1272,16 +2240,20 @@ export default function PaymentPage() {
                         <td className="px-5 py-4">
 
                           <div className="font-semibold text-[#18352D]">
-                            {payment.number}
+                            {
+                              payment.number
+                            }
                           </div>
 
                           {payment.referenceNumber && (
+
                             <div className="mt-1 text-xs text-gray-400">
                               Ref:{" "}
                               {
                                 payment.referenceNumber
                               }
                             </div>
+
                           )}
 
                         </td>
@@ -1289,19 +2261,23 @@ export default function PaymentPage() {
                         <td className="px-5 py-4">
 
                           <div className="font-semibold text-gray-700">
-                            {payable
-                              ?.invoiceNumber ||
-                              "-"}
+                            {
+                              payable?.invoiceNumber ||
+                              "-"
+                            }
                           </div>
 
                           <div className="mt-1 text-xs text-gray-400">
                             PO:{" "}
-                            {payable?.purchase
-                              ?.number ||
+                            {
+                              payable
+                                ?.purchase
+                                ?.number ||
                               payable
                                 ?.outletPurchase
                                 ?.number ||
-                              "-"}
+                              "-"
+                            }
                           </div>
 
                         </td>
@@ -1309,17 +2285,21 @@ export default function PaymentPage() {
                         <td className="px-5 py-4">
 
                           <div className="font-medium text-gray-700">
-                            {payable
-                              ?.supplier
-                              ?.name ||
-                              "-"}
+                            {
+                              payable
+                                ?.supplier
+                                ?.name ||
+                              "-"
+                            }
                           </div>
 
                           <div className="mt-1 text-xs text-gray-400">
-                            {payable
-                              ?.supplier
-                              ?.code ||
-                              "-"}
+                            {
+                              payable
+                                ?.supplier
+                                ?.code ||
+                              "-"
+                            }
                           </div>
 
                         </td>
@@ -1337,9 +2317,11 @@ export default function PaymentPage() {
                               payment.method
                             )}`}
                           >
-                            {getPaymentMethodLabel(
-                              payment.method
-                            )}
+                            {
+                              getPaymentMethodLabel(
+                                payment.method
+                              )
+                            }
                           </span>
 
                         </td>
@@ -1347,25 +2329,33 @@ export default function PaymentPage() {
                         <td className="px-5 py-4">
 
                           <div className="font-medium text-gray-700">
-                            {payment.account
-                              ?.name ||
+                            {
+                              payment.account
+                                ?.name ||
                               accounts.find(
-                                (account) =>
+                                (
+                                  account
+                                ) =>
                                   account.id ===
                                   payment.accountId
                               )?.name ||
-                              "-"}
+                              "-"
+                            }
                           </div>
 
                           <div className="mt-1 text-xs text-gray-400">
-                            {payment.account
-                              ?.code ||
+                            {
+                              payment.account
+                                ?.code ||
                               accounts.find(
-                                (account) =>
+                                (
+                                  account
+                                ) =>
                                   account.id ===
                                   payment.accountId
                               )?.code ||
-                              "-"}
+                              "-"
+                            }
                           </div>
 
                         </td>
@@ -1392,41 +2382,52 @@ export default function PaymentPage() {
                                 "UNPAID"
                             )}`}
                           >
-                            {getPaymentStatusLabel(
-                              payable?.status ||
-                                "UNPAID"
-                            )}
+                            {
+                              getPaymentStatusLabel(
+                                payable?.status ||
+                                  "UNPAID"
+                              )
+                            }
                           </span>
 
                         </td>
 
                         <td className="px-5 py-4 text-center">
 
-                          {outstanding > 0 &&
+                          {outstanding >
+                            0 &&
                           canPay ? (
+
                             <button
                               type="button"
-                              onClick={() =>
-                                openPayment(
-                                  payment
-                                )
-                              }
+                              onClick={() => {
+                                void openPayment(
+                                  payment.payableId
+                                );
+                              }}
                               className="inline-flex items-center gap-2 rounded-lg bg-[#497F70] px-3 py-2 text-xs font-semibold text-white hover:bg-[#3D6D60]"
                             >
+
                               <ArrowDownCircle
                                 size={15}
                               />
+
                               Bayar Lagi
+
                             </button>
+
                           ) : (
+
                             <span className="text-xs font-semibold text-green-600">
                               Lunas
                             </span>
+
                           )}
 
                         </td>
 
                       </tr>
+
                     );
                   }
                 )
@@ -1441,28 +2442,30 @@ export default function PaymentPage() {
 
       </div>
 
-      {/* PAYMENT MODAL */}
+      {/* =================================================
+          PAYMENT MODAL
+      ================================================= */}
 
       {showPayment && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
 
-          <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
 
             {/* HEADER */}
 
-            <div className="flex items-center justify-between border-b border-[#E5ECE9] px-6 py-5">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#E5ECE9] bg-white px-6 py-5">
 
               <div>
+
                 <h2 className="text-lg font-bold text-[#18352D]">
-                  {selectedPayment
-                    ? "Pembayaran Sebagian / Pelunasan"
-                    : "Pembayaran"}
+                  Pembayaran Supplier
                 </h2>
 
                 <p className="mt-1 text-xs text-gray-500">
-                  Pembayaran diproses secara
-                  server-side
+                  Pilih invoice/payable yang masih memiliki outstanding
                 </p>
+
               </div>
 
               <button
@@ -1471,7 +2474,9 @@ export default function PaymentPage() {
                   savingPayment
                 }
                 onClick={() =>
-                  setShowPayment(false)
+                  setShowPayment(
+                    false
+                  )
                 }
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"
               >
@@ -1484,30 +2489,264 @@ export default function PaymentPage() {
 
             <div className="space-y-4 p-6">
 
-              {/* PAYABLE */}
+              {/* INVOICE */}
 
               <div>
 
                 <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#58736A]">
-                  Payable ID
+                  Invoice / Payable
                 </label>
 
-                <input
-                  type="number"
-                  value={paymentPayableId}
-                  onChange={(e) =>
-                    setPaymentPayableId(
-                      e.target.value
-                    )
-                  }
-                  disabled={
-                    !!selectedPayment
-                  }
-                  placeholder="ID payable"
-                  className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm text-gray-700 outline-none focus:border-[#497F70] disabled:bg-gray-100"
-                />
+                <div className="relative">
+
+                  <select
+                    value={
+                      paymentPayableId
+                    }
+                    onChange={(e) =>
+                      handleSelectPayable(
+                        e.target.value
+                      )
+                    }
+                    disabled={
+                      savingPayment ||
+                      loadingPayables
+                    }
+                    className="w-full appearance-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 pr-10 text-sm text-gray-700 outline-none focus:border-[#497F70] disabled:bg-gray-100"
+                  >
+
+                    <option value="">
+                      {loadingPayables
+                        ? "Memuat invoice..."
+                        : payables.length ===
+                          0
+                        ? "Tidak ada invoice outstanding"
+                        : "Pilih invoice / payable"}
+                    </option>
+
+                    {payables.map(
+                      (
+                        payable
+                      ) => {
+
+                        const poNumber =
+                          payable
+                            .purchase
+                            ?.number ||
+                          payable
+                            .outletPurchase
+                            ?.number ||
+                          "-";
+
+                        const supplier =
+                          payable
+                            .supplier
+                            ?.name ||
+                          "-";
+
+                        return (
+
+                          <option
+                            key={
+                              payable.id
+                            }
+                            value={String(
+                              payable.id
+                            )}
+                          >
+
+                            {payable.invoiceNumber ||
+                              `PAYABLE-${payable.id}`}
+                            {" — "}
+                            {supplier}
+                            {" — "}
+                            PO {poNumber}
+                            {" — "}
+                            Rp{" "}
+                            {formatRupiah(
+                              payable.outstanding
+                            )}
+
+                          </option>
+
+                        );
+                      }
+                    )}
+
+                  </select>
+
+                  <ChevronDown
+                    size={17}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+
+                </div>
 
               </div>
+
+              {/* SELECTED PAYABLE */}
+
+              {selectedPayable && (
+
+                <div className="rounded-xl border border-[#DDE9E4] bg-[#F5F8F6] p-4">
+
+                  <div className="mb-3 flex items-center justify-between">
+
+                    <div>
+
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[#58736A]">
+                        Detail Hutang
+                      </p>
+
+                      <p className="mt-1 text-sm font-bold text-[#18352D]">
+                        {
+                          selectedPayable.invoiceNumber ||
+                          `PAYABLE-${selectedPayable.id}`
+                        }
+                      </p>
+
+                    </div>
+
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
+                        selectedPayable.status
+                      )}`}
+                    >
+                      {
+                        getPaymentStatusLabel(
+                          selectedPayable.status
+                        )
+                      }
+                    </span>
+
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+
+                    <div>
+
+                      <p className="text-xs text-gray-400">
+                        Supplier
+                      </p>
+
+                      <p className="mt-1 text-sm font-semibold text-gray-700">
+                        {
+                          selectedPayable
+                            .supplier
+                            ?.name ||
+                          "-"
+                        }
+                      </p>
+
+                      <p className="text-xs text-gray-400">
+                        {
+                          selectedPayable
+                            .supplier
+                            ?.code ||
+                          "-"
+                        }
+                      </p>
+
+                    </div>
+
+                    <div>
+
+                      <p className="text-xs text-gray-400">
+                        Purchase Order
+                      </p>
+
+                      <p className="mt-1 text-sm font-semibold text-gray-700">
+                        {
+                          selectedPayable
+                            .purchase
+                            ?.number ||
+                          selectedPayable
+                            .outletPurchase
+                            ?.number ||
+                          "-"
+                        }
+                      </p>
+
+                      {selectedPayable
+                        .purchaseId ? (
+
+                        <p className="mt-1 text-[11px] text-gray-400">
+                          PO Pusat ID:{" "}
+                          {
+                            selectedPayable
+                              .purchaseId
+                          }
+                        </p>
+
+                      ) : selectedPayable
+                        .outletPurchaseId ? (
+
+                        <p className="mt-1 text-[11px] text-gray-400">
+                          PO Outlet ID:{" "}
+                          {
+                            selectedPayable
+                              .outletPurchaseId
+                          }
+                        </p>
+
+                      ) : null}
+
+                    </div>
+
+                    <div>
+
+                      <p className="text-xs text-gray-400">
+                        Total Invoice
+                      </p>
+
+                      <p className="mt-1 text-sm font-semibold text-gray-700">
+                        Rp{" "}
+                        {formatRupiah(
+                          selectedPayable.amount
+                        )}
+                      </p>
+
+                    </div>
+
+                    <div>
+
+                      <p className="text-xs text-gray-400">
+                        Sudah Dibayar
+                      </p>
+
+                      <p className="mt-1 text-sm font-semibold text-gray-700">
+                        Rp{" "}
+                        {formatRupiah(
+                          selectedPayable.paidAmount
+                        )}
+                      </p>
+
+                    </div>
+
+                    <div className="md:col-span-2">
+
+                      <div className="flex items-center justify-between rounded-lg bg-white px-3 py-3">
+
+                        <span className="text-xs font-semibold text-gray-500">
+                          Outstanding
+                        </span>
+
+                        <span className="text-lg font-bold text-red-600">
+                          Rp{" "}
+                          {formatRupiah(
+                            selectedPayable.outstanding
+                          )}
+                        </span>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              )}
 
               {/* ACCOUNT */}
 
@@ -1528,6 +2767,9 @@ export default function PaymentPage() {
                         e.target.value
                       )
                     }
+                    disabled={
+                      savingPayment
+                    }
                     className="w-full appearance-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 pr-10 text-sm text-gray-700 outline-none focus:border-[#497F70]"
                   >
 
@@ -1537,11 +2779,16 @@ export default function PaymentPage() {
 
                     {accounts
                       .filter(
-                        (account) =>
+                        (
+                          account
+                        ) =>
                           account.active
                       )
                       .map(
-                        (account) => (
+                        (
+                          account
+                        ) => (
+
                           <option
                             key={
                               account.id
@@ -1550,15 +2797,19 @@ export default function PaymentPage() {
                               account.id
                             )}
                           >
-                            {account.code} -{" "}
+
+                            {account.code}
+                            {" - "}
                             {account.name}
-                            {" "}(
-                            Rp{" "}
+                            {" "}
+                            (Rp{" "}
                             {formatRupiah(
                               account.currentBalance
                             )}
                             )
+
                           </option>
+
                         )
                       )}
 
@@ -1570,6 +2821,18 @@ export default function PaymentPage() {
                   />
 
                 </div>
+
+                {accounts.filter(
+                  (account) =>
+                    account.active
+                ).length ===
+                  0 && (
+
+                  <p className="mt-2 text-xs text-red-500">
+                    Tidak ada akun pembayaran yang aktif.
+                  </p>
+
+                )}
 
               </div>
 
@@ -1594,6 +2857,7 @@ export default function PaymentPage() {
                       paymentAmount
                     }
                     onChange={(e) => {
+
                       const raw =
                         e.target.value.replace(
                           /\D/g,
@@ -1609,6 +2873,7 @@ export default function PaymentPage() {
                             )
                           : ""
                       );
+
                     }}
                     placeholder="0"
                     className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-12 pr-4 text-sm font-semibold text-gray-700 outline-none focus:border-[#497F70]"
@@ -1616,22 +2881,23 @@ export default function PaymentPage() {
 
                 </div>
 
-                {selectedPayment
-                  ?.payable && (
-                  <div className="mt-2 rounded-lg bg-[#F5F8F6] px-3 py-2 text-xs text-gray-500">
+                {selectedPayable && (
 
-                    Outstanding saat ini:{" "}
+                  <div className="mt-2 flex items-center justify-between rounded-lg bg-[#F5F8F6] px-3 py-2 text-xs">
+
+                    <span className="text-gray-500">
+                      Maksimal pembayaran
+                    </span>
 
                     <span className="font-bold text-[#18352D]">
                       Rp{" "}
                       {formatRupiah(
-                        selectedPayment
-                          .payable
-                          .outstanding
+                        selectedPayable.outstanding
                       )}
                     </span>
 
                   </div>
+
                 )}
 
               </div>
@@ -1652,9 +2918,11 @@ export default function PaymentPage() {
                     }
                     onChange={(e) =>
                       setPaymentMethod(
-                        e.target
-                          .value
+                        e.target.value
                       )
+                    }
+                    disabled={
+                      savingPayment
                     }
                     className="w-full appearance-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 pr-10 text-sm text-gray-700 outline-none focus:border-[#497F70]"
                   >
@@ -1677,6 +2945,10 @@ export default function PaymentPage() {
 
                     <option value="CBD">
                       CBD
+                    </option>
+
+                    <option value="TEMPO">
+                      Tempo
                     </option>
 
                   </select>
@@ -1708,6 +2980,9 @@ export default function PaymentPage() {
                       e.target.value
                     )
                   }
+                  disabled={
+                    savingPayment
+                  }
                   className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm text-gray-700 outline-none focus:border-[#497F70]"
                 />
 
@@ -1730,6 +3005,9 @@ export default function PaymentPage() {
                     setPaymentReference(
                       e.target.value
                     )
+                  }
+                  disabled={
+                    savingPayment
                   }
                   placeholder="No. transfer / bukti pembayaran"
                   className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm text-gray-700 outline-none focus:border-[#497F70]"
@@ -1754,6 +3032,9 @@ export default function PaymentPage() {
                       e.target.value
                     )
                   }
+                  disabled={
+                    savingPayment
+                  }
                   rows={3}
                   placeholder="Keterangan pembayaran..."
                   className="w-full resize-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm text-gray-700 outline-none focus:border-[#497F70]"
@@ -1765,7 +3046,7 @@ export default function PaymentPage() {
 
             {/* FOOTER */}
 
-            <div className="flex justify-end gap-2 border-t border-[#E5ECE9] bg-[#FAFCFB] px-6 py-4">
+            <div className="sticky bottom-0 flex justify-end gap-2 border-t border-[#E5ECE9] bg-[#FAFCFB] px-6 py-4">
 
               <button
                 type="button"
@@ -1773,7 +3054,9 @@ export default function PaymentPage() {
                   savingPayment
                 }
                 onClick={() =>
-                  setShowPayment(false)
+                  setShowPayment(
+                    false
+                  )
                 }
                 className="rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
@@ -1786,7 +3069,13 @@ export default function PaymentPage() {
                   savingPayment ||
                   !paymentPayableId ||
                   !paymentAccountId ||
-                  !paymentAmount
+                  !paymentAmount ||
+                  !paymentMethod ||
+                  !selectedPayable ||
+                  (!selectedPayable.purchaseId &&
+                    !selectedPayable.outletPurchaseId &&
+                    !selectedPayable.purchase?.id &&
+                    !selectedPayable.outletPurchase?.id)
                 }
                 onClick={
                   submitPayment
@@ -1795,10 +3084,12 @@ export default function PaymentPage() {
               >
 
                 {savingPayment && (
+
                   <RefreshCw
                     size={16}
                     className="animate-spin"
                   />
+
                 )}
 
                 {savingPayment
@@ -1812,6 +3103,7 @@ export default function PaymentPage() {
           </div>
 
         </div>
+
       )}
 
     </div>

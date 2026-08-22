@@ -1,39 +1,92 @@
-import { NextRequest, NextResponse } from "next/server";
+import {
+  NextRequest,
+  NextResponse,
+} from "next/server";
+
 import { prisma } from "@/lib/prisma";
+
 import { cookies } from "next/headers";
-import { PaymentStatus } from "@prisma/client";
+
+import {
+  PaymentMethod,
+  PaymentStatus,
+  Role,
+} from "@prisma/client";
 
 /*
 ===========================================================
-MARK PAYMENT AS PAID
+PAYMENT PAID ENDPOINT
 ===========================================================
 
-PUT /api/payment/[id]/paid
+DESAIN FINAL
+============
 
-FLOW:
+Endpoint ini TIDAK lagi digunakan untuk:
 
-APPROVED
+CASH
+TRANSFER
+COD
+CBD
+
+Karena metode tersebut:
+
+Payment PENDING
    ↓
-PAID
+Approve
+   ↓
+Petty Cash OUT
+   ↓
+Payment PAID
 
-KETENTUAN:
+Jadi Payment menjadi PAID langsung pada saat APPROVE.
 
-- User harus login
-- User harus aktif
-- ADMIN / MANAGER dapat menandai PAID
-- Payment harus APPROVED
-- Tidak mengubah PO
-- Tidak mengubah stock
-- Tidak mengubah receipt
-- Membuat History
+-----------------------------------------------------------
+
+TEMPO
+
+Payment PENDING
+   ↓
+Approve
+   ↓
+PurchasePayable OUTSTANDING
+   ↓
+Payment APPROVED
+
+TEMPO tidak menjadi PAID melalui endpoint ini.
+
+-----------------------------------------------------------
+
+KESIMPULAN:
+
+/api/payment/[id]/paid
+
+TIDAK BOLEH mengubah:
+
+APPROVED → PAID
+
+Karena perubahan tersebut sekarang sudah menjadi bagian
+dari proses APPROVE PAYMENT.
+
+Endpoint ini dipertahankan sebagai endpoint pengaman agar
+route lama/frontend lama tidak dapat merusak flow payment.
+===========================================================
+*/
+
+/*
+===========================================================
+CURRENT USER
 ===========================================================
 */
 
 async function getCurrentUser() {
   try {
-    const cookieStore = await cookies();
+    const cookieStore =
+      await cookies();
 
-    const session = cookieStore.get("erp-session");
+    const session =
+      cookieStore.get(
+        "erp-session"
+      );
 
     if (!session?.value) {
       return null;
@@ -42,52 +95,90 @@ async function getCurrentUser() {
     let sessionData: any;
 
     try {
-      sessionData = JSON.parse(session.value);
+      sessionData =
+        JSON.parse(
+          session.value
+        );
     } catch {
       return null;
     }
 
     const sessionUser =
-      sessionData?.user ?? sessionData;
+      sessionData?.user ??
+      sessionData;
 
-    const userId = Number(sessionUser?.id);
+    const userId =
+      Number(
+        sessionUser?.id
+      );
 
     if (
-      !Number.isInteger(userId) ||
+      !Number.isInteger(
+        userId
+      ) ||
       userId <= 0
     ) {
       return null;
     }
 
-    const user = await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
 
-      select: {
-        id: true,
-        username: true,
-        fullname: true,
-        role: true,
-        outletId: true,
-        active: true,
-      },
-    });
+        select: {
+          id: true,
+          username: true,
+          fullname: true,
+          role: true,
+          outletId: true,
+          active: true,
+        },
+      });
 
-    if (!user || !user.active) {
+    if (
+      !user ||
+      !user.active
+    ) {
       return null;
     }
 
     return user;
   } catch (error) {
     console.error(
-      "GET CURRENT USER PAID PAYMENT ERROR:",
+      "GET CURRENT USER PAYMENT PAID ERROR:",
       error
     );
 
     return null;
   }
 }
+
+/*
+===========================================================
+PUT
+===========================================================
+
+Endpoint lama:
+
+PUT /api/payment/[id]/paid
+
+SEKARANG TIDAK BOLEH melakukan:
+
+APPROVED → PAID
+
+Karena approve payment sudah menangani seluruh proses.
+
+Tujuannya supaya tidak ada double:
+
+- Payment PAID
+- Petty Cash OUT
+- PurchasePayable
+- History
+
+===========================================================
+*/
 
 export async function PUT(
   req: NextRequest,
@@ -106,13 +197,15 @@ export async function PUT(
     ========================================================
     */
 
-    const user = await getCurrentUser();
+    const user =
+      await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unauthorized",
+          message:
+            "Unauthorized",
         },
         {
           status: 401,
@@ -127,14 +220,16 @@ export async function PUT(
     */
 
     if (
-      user.role !== "ADMIN" &&
-      user.role !== "MANAGER"
+      user.role !==
+        Role.ADMIN &&
+      user.role !==
+        Role.MANAGER
     ) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Anda tidak memiliki akses untuk menyelesaikan payment",
+            "Anda tidak memiliki akses untuk memproses payment",
         },
         {
           status: 403,
@@ -148,12 +243,16 @@ export async function PUT(
     ========================================================
     */
 
-    const { id } = await params;
+    const { id } =
+      await params;
 
-    const paymentId = Number(id);
+    const paymentId =
+      Number(id);
 
     if (
-      !Number.isInteger(paymentId) ||
+      !Number.isInteger(
+        paymentId
+      ) ||
       paymentId <= 0
     ) {
       return NextResponse.json(
@@ -175,47 +274,51 @@ export async function PUT(
     */
 
     const payment =
-      await prisma.payment.findUnique({
-        where: {
-          id: paymentId,
-        },
-
-        include: {
-          supplier: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-            },
+      await prisma.payment.findUnique(
+        {
+          where: {
+            id: paymentId,
           },
 
-          purchase: {
-            select: {
-              id: true,
-              number: true,
-              total: true,
-              status: true,
+          include: {
+            supplier: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
             },
-          },
 
-          outletPurchase: {
-            select: {
-              id: true,
-              number: true,
-              total: true,
-              status: true,
+            purchase: {
+              select: {
+                id: true,
+                number: true,
+                total: true,
+                status: true,
+                paymentMethod: true,
+              },
+            },
 
-              outlet: {
-                select: {
-                  id: true,
-                  code: true,
-                  name: true,
+            outletPurchase: {
+              select: {
+                id: true,
+                number: true,
+                total: true,
+                status: true,
+                paymentMethod: true,
+
+                outlet: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                  },
                 },
               },
             },
           },
-        },
-      });
+        }
+      );
 
     if (!payment) {
       return NextResponse.json(
@@ -232,29 +335,7 @@ export async function PUT(
 
     /*
     ========================================================
-    STATUS CHECK
-    ========================================================
-    */
-
-    if (
-      payment.status !==
-      PaymentStatus.APPROVED
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            `Payment belum dapat diselesaikan karena status saat ini ${payment.status}`,
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /*
-    ========================================================
-    VALIDASI SUMBER PO
+    VALIDASI SOURCE PO
     ========================================================
     */
 
@@ -292,145 +373,87 @@ export async function PUT(
 
     /*
     ========================================================
-    MARK AS PAID
+    STATUS FINAL
     ========================================================
+
+    Kalau sudah PAID:
+
+    Tidak perlu diproses lagi.
+
+    --------------------------------------------------------
+
+    Kalau PENDING:
+
+    Payment harus melalui endpoint APPROVE.
+
+    --------------------------------------------------------
+
+    Kalau APPROVED:
+
+    Endpoint ini sengaja menolak karena status APPROVED
+    seharusnya hanya terjadi pada TEMPO.
+
+    --------------------------------------------------------
     */
 
-    const result =
-      await prisma.$transaction(
-        async (tx) => {
-          /*
-          --------------------------------------------------
-          CEK ULANG STATUS DI TRANSACTION
-          --------------------------------------------------
-          */
-
-          const currentPayment =
-            await tx.payment.findUnique({
-              where: {
-                id: paymentId,
-              },
-
-              select: {
-                id: true,
-                number: true,
-                status: true,
-                amount: true,
-                purchaseId: true,
-                outletPurchaseId: true,
-              },
-            });
-
-          if (!currentPayment) {
-            throw new Error(
-              "PAYMENT_NOT_FOUND"
-            );
-          }
-
-          if (
-            currentPayment.status !==
-            PaymentStatus.APPROVED
-          ) {
-            throw new Error(
-              "PAYMENT_NOT_APPROVED"
-            );
-          }
-
-          /*
-          --------------------------------------------------
-          UPDATE PAYMENT
-          --------------------------------------------------
-          */
-
-          const updatedPayment =
-            await tx.payment.update({
-              where: {
-                id: paymentId,
-              },
-
-              data: {
-                status:
-                  PaymentStatus.PAID,
-              },
-
-              include: {
-                supplier: true,
-                purchase: true,
-                outletPurchase: {
-                  include: {
-                    outlet: true,
-                  },
-                },
-              },
-            });
-
-          /*
-          --------------------------------------------------
-          HISTORY
-          --------------------------------------------------
-          */
-
-          const poNumber =
-            updatedPayment.purchase?.number ??
-            updatedPayment.outletPurchase?.number ??
-            "-";
-
-          await tx.history.create({
-            data: {
-              transactionType:
-                "PURCHASE",
-
-              referenceNumber:
-                updatedPayment.number,
-
-              description:
-                `Payment ${updatedPayment.number} telah dibayar untuk ${poNumber} sebesar ${updatedPayment.amount}`,
-
-              userId: user.id,
-            },
-          });
-
-          return updatedPayment;
-        }
-      );
-
-    return NextResponse.json({
-      success: true,
-      message:
-        "Payment berhasil ditandai sebagai PAID",
-      data: result,
-    });
-  } catch (error: any) {
-    console.error(
-      "PAID PAYMENT ERROR:",
-      error
-    );
-
     if (
-      error?.message ===
-      "PAYMENT_NOT_FOUND"
+      payment.status ===
+      PaymentStatus.PAID
     ) {
       return NextResponse.json(
         {
-          success: false,
+          success: true,
+
           message:
-            "Payment tidak ditemukan",
-        },
-        {
-          status: 404,
+            "Payment sudah berstatus PAID. Tidak ada proses tambahan.",
+
+          data: {
+            id:
+              payment.id,
+
+            number:
+              payment.number,
+
+            status:
+              payment.status,
+          },
         }
       );
     }
 
+    /*
+    ========================================================
+    TEMPO
+    ========================================================
+    */
+
+    const paymentMethod =
+      payment.method;
+
     if (
-      error?.message ===
-      "PAYMENT_NOT_APPROVED"
+      paymentMethod ===
+      PaymentMethod.TEMPO
     ) {
       return NextResponse.json(
         {
           success: false,
+
           message:
-            "Payment belum berstatus APPROVED atau sudah diproses",
+            "Payment TEMPO tidak dapat ditandai PAID melalui endpoint ini. Payment TEMPO harus tetap APPROVED sampai pembayaran hutang supplier diproses melalui modul Purchase Payable.",
+
+          data: {
+            id:
+              payment.id,
+
+            number:
+              payment.number,
+
+            status:
+              payment.status,
+
+            method:
+              payment.method,
+          },
         },
         {
           status: 400,
@@ -438,11 +461,198 @@ export async function PUT(
       );
     }
 
+    /*
+    ========================================================
+    CASH / TRANSFER / COD / CBD
+    ========================================================
+
+    Metode ini seharusnya sudah PAID setelah APPROVE.
+
+    Jika masih PENDING:
+
+    Jangan langsung ubah menjadi PAID.
+
+    Harus melalui:
+
+    /api/payment/[id]/approve
+
+    supaya:
+
+    1. cek Petty Cash
+    2. buat PettyCash OUT
+    3. update saldo akun
+    4. Payment → PAID
+    5. sinkron PurchasePayable
+    6. History
+    ========================================================
+    */
+
+    if (
+      payment.status ===
+      PaymentStatus.PENDING
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+
+          message:
+            "Payment masih PENDING. Gunakan proses APPROVE PAYMENT agar Petty Cash dan Payment diproses secara bersamaan.",
+
+          data: {
+            id:
+              payment.id,
+
+            number:
+              payment.number,
+
+            status:
+              payment.status,
+
+            method:
+              payment.method,
+
+            purchaseId:
+              payment.purchaseId,
+
+            outletPurchaseId:
+              payment.outletPurchaseId,
+          },
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+    ========================================================
+    APPROVED
+    ========================================================
+
+    APPROVED untuk metode non-TEMPO seharusnya tidak terjadi
+    pada desain final.
+
+    Karena:
+
+    CASH
+    TRANSFER
+    COD
+    CBD
+
+    APPROVE → PAID
+
+    Jadi kalau ditemukan kondisi seperti ini, endpoint
+    menolak agar tidak terjadi perubahan status tanpa
+    Petty Cash.
+    ========================================================
+    */
+
+    if (
+      payment.status ===
+      PaymentStatus.APPROVED
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+
+          message:
+            "Payment sudah APPROVED tetapi belum PAID. Jangan gunakan endpoint ini karena proses APPROVE PAYMENT seharusnya sudah memproses Petty Cash dan mengubah payment menjadi PAID. Periksa kembali proses approval payment.",
+
+          data: {
+            id:
+              payment.id,
+
+            number:
+              payment.number,
+
+            status:
+              payment.status,
+
+            method:
+              payment.method,
+          },
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+    ========================================================
+    REJECTED / CANCELLED
+    ========================================================
+    */
+
+    if (
+      payment.status ===
+        PaymentStatus.REJECTED ||
+      payment.status ===
+        PaymentStatus.CANCELLED
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+
+          message:
+            `Payment berstatus ${payment.status} dan tidak dapat ditandai PAID.`,
+
+          data: {
+            id:
+              payment.id,
+
+            number:
+              payment.number,
+
+            status:
+              payment.status,
+          },
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+    ========================================================
+    FALLBACK
+    ========================================================
+    */
+
+    return NextResponse.json(
+      {
+        success: false,
+
+        message:
+          `Payment tidak dapat diproses dari status ${payment.status}.`,
+
+        data: {
+          id:
+            payment.id,
+
+          number:
+            payment.number,
+
+          status:
+            payment.status,
+        },
+      },
+      {
+        status: 400,
+      }
+    );
+  } catch (error) {
+    console.error(
+      "PUT PAYMENT PAID ERROR:",
+      error
+    );
+
     return NextResponse.json(
       {
         success: false,
         message:
-          "Gagal menyelesaikan payment",
+          "Gagal memproses payment PAID",
       },
       {
         status: 500,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import {
@@ -17,6 +17,8 @@ import {
   CreditCard,
   X,
   Loader2,
+  Wallet,
+  AlertCircle,
 } from "lucide-react";
 
 import { exportPurchasePDF } from "@/lib/exportPurchasePdf";
@@ -136,7 +138,7 @@ export default function DetailPurchase() {
       setDeleting(true);
 
       const res = await fetch(
-        `/api/purchase/${purchase.id}`,
+        `/api/purchase/${purchase.id}?source=PUSAT`,
         {
           method: "DELETE",
         }
@@ -248,19 +250,170 @@ export default function DetailPurchase() {
   }
 
   // =====================================================
-  // PAYMENT
+  // PAYMENT / PAYABLE DATA
   // =====================================================
 
   const purchasePaymentMethod =
     String(
       purchase?.paymentMethod || ""
-    ).toUpperCase();
+    )
+      .trim()
+      .toUpperCase();
 
+  /*
+   * API purchase bisa mengembalikan payable
+   * dengan beberapa nama property tergantung
+   * include Prisma yang digunakan.
+   *
+   * Kita support beberapa kemungkinan tanpa
+   * mengubah backend.
+   */
+  const payable =
+    purchase?.purchasePayable ??
+    purchase?.payable ??
+    purchase?.PurchasePayable ??
+    null;
+
+  const payableAmount =
+    Number(
+      payable?.amount ??
+        purchase?.total ??
+        0
+    );
+
+  const payablePaidAmount =
+    Number(
+      payable?.paidAmount ??
+        0
+    );
+
+  const payableOutstanding =
+    Number(
+      payable?.outstanding ??
+        Math.max(
+          0,
+          payableAmount -
+            payablePaidAmount
+        )
+    );
+
+  const payableStatus =
+    String(
+      payable?.status || ""
+    )
+      .trim()
+      .toUpperCase();
+
+  /*
+   * Apakah PO ini menggunakan TEMPO?
+   */
+  const isTempoPurchase =
+    purchasePaymentMethod ===
+    "TEMPO";
+
+  /*
+   * Payable dianggap sudah ada apabila
+   * object payable tersedia.
+   */
+  const hasPayable =
+    isTempoPurchase &&
+    !!payable;
+
+  /*
+   * Apakah hutang masih bisa dibayar?
+   */
+  const hasOutstanding =
+    hasPayable &&
+    payableOutstanding >
+      0.01 &&
+    payableStatus !==
+      "PAID";
+
+  /*
+   * TEMPO pertama:
+   *
+   * Belum ada payable.
+   *
+   * Saat Payment ditekan:
+   * TEMPO dikirim ke backend untuk
+   * membuat PurchasePayable.
+   */
+  const isTempoInitialPayment =
+    isTempoPurchase &&
+    !hasPayable;
+
+  /*
+   * TEMPO settlement:
+   *
+   * Sudah ada payable dan masih
+   * mempunyai outstanding.
+   */
+  const isTempoSettlement =
+    isTempoPurchase &&
+    hasPayable &&
+    hasOutstanding;
+
+  /*
+   * TEMPO sudah lunas.
+   */
+  const isTempoPaid =
+    isTempoPurchase &&
+    hasPayable &&
+    !hasOutstanding;
+
+  // =====================================================
+  // PAYMENT BUTTON
+  // =====================================================
+
+  /*
+   * Payment normal:
+   *
+   * - PO tidak draft
+   * - belum completed
+   * - belum cancelled
+   *
+   * TEMPO:
+   * - initial → boleh membuat payable
+   * - settlement → boleh bayar outstanding
+   * - paid → tidak boleh payment lagi
+   */
   const canPayment =
-    purchase &&
+    !!purchase &&
     purchase.status !== "DRAFT" &&
     purchase.status !== "COMPLETED" &&
-    purchase.status !== "CANCELLED";
+    purchase.status !== "CANCELLED" &&
+    !!purchasePaymentMethod &&
+    (
+      !isTempoPurchase ||
+      isTempoInitialPayment ||
+      isTempoSettlement
+    );
+
+  // =====================================================
+  // PAYMENT LABEL
+  // =====================================================
+
+  const paymentButtonLabel =
+    isTempoInitialPayment
+      ? "Buat Hutang TEMPO"
+      : isTempoSettlement
+      ? "Bayar Hutang"
+      : "Payment";
+
+  // =====================================================
+  // PAYMENT MODAL TITLE
+  // =====================================================
+
+  const paymentModalTitle =
+    isTempoInitialPayment
+      ? "Buat Purchase Payable"
+      : isTempoSettlement
+      ? "Pelunasan Purchase"
+      : "Payment Purchase";
+
+  // =====================================================
+  // OPEN PAYMENT MODAL
+  // =====================================================
 
   function openPaymentModal() {
     if (!purchase) return;
@@ -268,7 +421,122 @@ export default function DetailPurchase() {
     const method =
       String(
         purchase.paymentMethod || ""
-      ).toUpperCase();
+      )
+        .trim()
+        .toUpperCase();
+
+    if (!method) {
+      alert(
+        "Purchase belum memiliki metode pembayaran."
+      );
+
+      return;
+    }
+
+    // ===================================================
+    // TEMPO SUDAH LUNAS
+    // ===================================================
+
+    if (
+      method === "TEMPO" &&
+      hasPayable &&
+      !hasOutstanding
+    ) {
+      alert(
+        "Purchase Payable ini sudah lunas."
+      );
+
+      return;
+    }
+
+    // ===================================================
+    // TEMPO INITIAL
+    // ===================================================
+
+    if (
+      method === "TEMPO" &&
+      !hasPayable
+    ) {
+      /*
+       * Backend membutuhkan amount > 0
+       * walaupun pada proses TEMPO amount
+       * tidak menjadi payment actual.
+       *
+       * Kirim total Purchase.
+       */
+      setPaymentAmount(
+        String(
+          Number(
+            purchase.total || 0
+          )
+        )
+      );
+
+      setPaymentMethod(
+        "TEMPO"
+      );
+
+      setReferenceNumber("");
+
+      setPaymentRemarks("");
+
+      setPaymentDate(
+        getTodayDate()
+      );
+
+      setShowPaymentModal(true);
+
+      return;
+    }
+
+    // ===================================================
+    // TEMPO SETTLEMENT
+    // ===================================================
+
+    if (
+      method === "TEMPO" &&
+      hasPayable &&
+      hasOutstanding
+    ) {
+      /*
+       * Default amount = seluruh outstanding.
+       *
+       * User tetap bisa mengubah menjadi
+       * partial payment.
+       */
+      setPaymentAmount(
+        String(
+          payableOutstanding
+        )
+      );
+
+      /*
+       * JANGAN gunakan TEMPO sebagai metode
+       * pembayaran aktual.
+       *
+       * Default settlement = TRANSFER.
+       * User masih bisa memilih CASH/COD/CBD.
+       */
+      setPaymentMethod(
+        "TRANSFER"
+      );
+
+      setReferenceNumber("");
+
+      setPaymentRemarks("");
+
+      setPaymentDate(
+        getTodayDate()
+      );
+
+      setShowPaymentModal(true);
+
+      return;
+    }
+
+    // ===================================================
+    // NON TEMPO
+    // ===================================================
 
     setPaymentAmount(
       String(
@@ -278,7 +546,9 @@ export default function DetailPurchase() {
       )
     );
 
-    setPaymentMethod(method);
+    setPaymentMethod(
+      method
+    );
 
     setReferenceNumber("");
 
@@ -291,14 +561,149 @@ export default function DetailPurchase() {
     setShowPaymentModal(true);
   }
 
+  // =====================================================
+  // CLOSE PAYMENT MODAL
+  // =====================================================
+
   function closePaymentModal() {
     if (processingPayment) return;
 
     setShowPaymentModal(false);
   }
 
+  // =====================================================
+  // PROCESS PAYMENT
+  // =====================================================
+
   async function processPurchasePayment() {
     if (!purchase) return;
+
+    const purchaseMethod =
+      String(
+        purchase.paymentMethod || ""
+      )
+        .trim()
+        .toUpperCase();
+
+    const selectedMethod =
+      String(
+        paymentMethod || ""
+      )
+        .trim()
+        .toUpperCase();
+
+    // ===================================================
+    // BASIC METHOD VALIDATION
+    // ===================================================
+
+    if (!purchaseMethod) {
+      alert(
+        "Purchase belum memiliki metode pembayaran."
+      );
+
+      return;
+    }
+
+    if (!selectedMethod) {
+      alert(
+        "Metode pembayaran wajib dipilih."
+      );
+
+      return;
+    }
+
+    // ===================================================
+    // TEMPO INITIAL
+    // ===================================================
+
+    if (
+      purchaseMethod ===
+        "TEMPO" &&
+      !hasPayable
+    ) {
+      if (
+        selectedMethod !==
+        "TEMPO"
+      ) {
+        alert(
+          "Untuk pembuatan Purchase Payable pertama, metode harus TEMPO."
+        );
+
+        setPaymentMethod(
+          "TEMPO"
+        );
+
+        return;
+      }
+    }
+
+    // ===================================================
+    // TEMPO SETTLEMENT
+    // ===================================================
+
+    if (
+      purchaseMethod ===
+        "TEMPO" &&
+      hasPayable
+    ) {
+      if (
+        !hasOutstanding
+      ) {
+        alert(
+          "Purchase Payable ini sudah lunas."
+        );
+
+        return;
+      }
+
+      /*
+       * TEMPO tidak boleh digunakan
+       * sebagai metode pelunasan.
+       */
+      const settlementMethods = [
+        "CASH",
+        "TRANSFER",
+        "COD",
+        "CBD",
+      ];
+
+      if (
+        !settlementMethods.includes(
+          selectedMethod
+        )
+      ) {
+        alert(
+          "Pelunasan hutang TEMPO hanya dapat menggunakan CASH, TRANSFER, COD, atau CBD."
+        );
+
+        return;
+      }
+    }
+
+    // ===================================================
+    // NON TEMPO
+    // ===================================================
+
+    if (
+      purchaseMethod !==
+        "TEMPO" &&
+      selectedMethod !==
+        purchaseMethod
+    ) {
+      alert(
+        `Metode pembayaran tidak boleh berbeda dari Purchase.\n\nMetode Purchase: ${purchaseMethod}`
+      );
+
+      setPaymentMethod(
+        purchaseMethod
+      );
+
+      return;
+    }
+
+    // ===================================================
+    // AMOUNT
+    // ===================================================
 
     const amount =
       Number(
@@ -321,35 +726,93 @@ export default function DetailPurchase() {
       return;
     }
 
-    const total =
-      Number(
-        purchase.total || 0
-      );
+    // ===================================================
+    // TEMPO INITIAL AMOUNT
+    // ===================================================
 
     if (
-      Math.abs(
-        amount - total
-      ) > 0.01
+      purchaseMethod ===
+        "TEMPO" &&
+      !hasPayable
     ) {
-      alert(
-        `Jumlah pembayaran harus sama dengan total Purchase.\n\nTotal Purchase: Rp ${formatRupiah(
-          total
-        )}`
-      );
+      const total =
+        Number(
+          purchase.total || 0
+        );
 
-      return;
+      if (
+        Math.abs(
+          amount - total
+        ) > 0.01
+      ) {
+        alert(
+          `Jumlah untuk pembuatan Purchase Payable harus sama dengan total Purchase.\n\nTotal Purchase: Rp ${formatRupiah(
+            total
+          )}`
+        );
+
+        return;
+      }
     }
 
-    if (!paymentMethod) {
-      alert(
-        "Metode pembayaran belum dipilih."
-      );
-
-      return;
-    }
+    // ===================================================
+    // TEMPO SETTLEMENT AMOUNT
+    // ===================================================
 
     if (
-      paymentMethod ===
+      purchaseMethod ===
+        "TEMPO" &&
+      hasPayable
+    ) {
+      if (
+        amount >
+        payableOutstanding +
+          0.01
+      ) {
+        alert(
+          `Jumlah pembayaran tidak boleh melebihi outstanding.\n\nOutstanding: Rp ${formatRupiah(
+            payableOutstanding
+          )}`
+        );
+
+        return;
+      }
+    }
+
+    // ===================================================
+    // NON TEMPO AMOUNT
+    // ===================================================
+
+    if (
+      purchaseMethod !==
+        "TEMPO"
+    ) {
+      const total =
+        Number(
+          purchase.total || 0
+        );
+
+      if (
+        Math.abs(
+          amount - total
+        ) > 0.01
+      ) {
+        alert(
+          `Jumlah pembayaran harus sama dengan total Purchase.\n\nTotal Purchase: Rp ${formatRupiah(
+            total
+          )}`
+        );
+
+        return;
+      }
+    }
+
+    // ===================================================
+    // TRANSFER REFERENCE
+    // ===================================================
+
+    if (
+      selectedMethod ===
         "TRANSFER" &&
       !referenceNumber.trim()
     ) {
@@ -360,6 +823,10 @@ export default function DetailPurchase() {
       return;
     }
 
+    // ===================================================
+    // DATE
+    // ===================================================
+
     if (!paymentDate) {
       alert(
         "Tanggal pembayaran wajib diisi."
@@ -368,14 +835,65 @@ export default function DetailPurchase() {
       return;
     }
 
+    // ===================================================
+    // CONFIRM MESSAGE
+    // ===================================================
+
+    let confirmMessage = "";
+
+    if (
+      purchaseMethod ===
+        "TEMPO" &&
+      !hasPayable
+    ) {
+      confirmMessage =
+        `Buat Purchase Payable ${purchase.number}?\n\n` +
+        `Metode: TEMPO\n` +
+        `Nilai Hutang: Rp ${formatRupiah(
+          amount
+        )}`;
+    } else if (
+      purchaseMethod ===
+        "TEMPO"
+    ) {
+      const remaining =
+        Math.max(
+          0,
+          payableOutstanding -
+            amount
+        );
+
+      confirmMessage =
+        `Proses pelunasan Purchase ${purchase.number}?\n\n` +
+        `Metode: ${selectedMethod}\n` +
+        `Pembayaran: Rp ${formatRupiah(
+          amount
+        )}\n` +
+        `Outstanding sebelum: Rp ${formatRupiah(
+          payableOutstanding
+        )}\n` +
+        `Sisa setelah pembayaran: Rp ${formatRupiah(
+          remaining
+        )}`;
+    } else {
+      confirmMessage =
+        `Proses pembayaran Purchase ${purchase.number}?\n\n` +
+        `Metode: ${selectedMethod}\n` +
+        `Jumlah: Rp ${formatRupiah(
+          amount
+        )}`;
+    }
+
     const confirmed =
       window.confirm(
-        `Proses pembayaran Purchase ${purchase.number}?\n\nMetode: ${paymentMethod}\nJumlah: Rp ${formatRupiah(
-          amount
-        )}`
+        confirmMessage
       );
 
     if (!confirmed) return;
+
+    // ===================================================
+    // PROCESS
+    // ===================================================
 
     try {
       setProcessingPayment(true);
@@ -393,8 +911,18 @@ export default function DetailPurchase() {
           body: JSON.stringify({
             amount,
 
+            /*
+             * TEMPO initial:
+             *   TEMPO
+             *
+             * TEMPO settlement:
+             *   CASH / TRANSFER / COD / CBD
+             *
+             * Non TEMPO:
+             *   mengikuti PO
+             */
             method:
-              paymentMethod,
+              selectedMethod,
 
             referenceNumber:
               referenceNumber.trim() ||
@@ -412,19 +940,67 @@ export default function DetailPurchase() {
       const json =
         await res.json();
 
-      if (!res.ok || !json.success) {
+      if (
+        !res.ok ||
+        !json.success
+      ) {
         throw new Error(
           json.message ||
             "Gagal melakukan pembayaran Purchase."
         );
       }
 
-      alert(
-        json.message ||
-          "Pembayaran Purchase berhasil."
-      );
+      // =================================================
+      // SUCCESS MESSAGE
+      // =================================================
 
-      setShowPaymentModal(false);
+      if (
+        json.data?.type ===
+        "PAYABLE"
+      ) {
+        alert(
+          `Purchase Payable berhasil dibuat.\n\nOutstanding: Rp ${formatRupiah(
+            json.data?.payable?.outstanding ??
+              purchase.total
+          )}`
+        );
+      } else if (
+        json.data?.type ===
+        "PAYABLE_PAYMENT"
+      ) {
+        const resultPayable =
+          json.data?.payable;
+
+        const resultStatus =
+          String(
+            resultPayable?.status ||
+              ""
+          ).toUpperCase();
+
+        if (
+          resultStatus ===
+          "PAID"
+        ) {
+          alert(
+            "Pembayaran berhasil. Purchase Payable sudah LUNAS."
+          );
+        } else {
+          alert(
+            `Pembayaran berhasil.\n\nSisa hutang: Rp ${formatRupiah(
+              resultPayable?.outstanding
+            )}`
+          );
+        }
+      } else {
+        alert(
+          json.message ||
+            "Pembayaran Purchase berhasil."
+        );
+      }
+
+      setShowPaymentModal(
+        false
+      );
 
       await loadPurchase();
 
@@ -441,9 +1017,56 @@ export default function DetailPurchase() {
           : "Terjadi kesalahan saat melakukan pembayaran."
       );
     } finally {
-      setProcessingPayment(false);
+      setProcessingPayment(
+        false
+      );
     }
   }
+
+  // =====================================================
+  // PAYMENT OPTIONS
+  // =====================================================
+
+  const settlementMethods = [
+    {
+      value: "CASH",
+      label: "CASH",
+    },
+    {
+      value: "TRANSFER",
+      label: "TRANSFER",
+    },
+    {
+      value: "COD",
+      label: "COD",
+    },
+    {
+      value: "CBD",
+      label: "CBD",
+    },
+  ];
+
+  const isSettlementModal =
+    isTempoSettlement;
+
+  const isInitialTempoModal =
+    isTempoInitialPayment;
+
+  const paymentInfoText =
+    isInitialTempoModal
+      ? "TEMPO: Purchase akan dicatat sebagai hutang supplier. Belum ada pengeluaran Petty Cash."
+      : isSettlementModal
+      ? paymentMethod ===
+        "TRANSFER"
+        ? "TRANSFER: pelunasan akan dicatat sebagai Payment dan tidak mengurangi Petty Cash."
+        : `PEMBAYARAN ${paymentMethod}: pelunasan akan dicatat sebagai Payment dan mengurangi Petty Cash.`
+      : paymentMethod ===
+        "TEMPO"
+      ? "TEMPO: pembayaran akan dicatat sebagai Purchase Payable dan tidak mengurangi Petty Cash."
+      : paymentMethod ===
+        "TRANSFER"
+      ? "TRANSFER: pembayaran akan dicatat sebagai Payment tanpa mengurangi Petty Cash."
+      : `${paymentMethod}: pembayaran akan dicatat sebagai Payment dan mengurangi Petty Cash.`;
 
   // =====================================================
   // LOADING
@@ -488,7 +1111,9 @@ export default function DetailPurchase() {
 
           <button
             onClick={() =>
-              router.push("/purchase")
+              router.push(
+                "/purchase"
+              )
             }
             className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#497F70] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#3D6D60]"
           >
@@ -499,6 +1124,10 @@ export default function DetailPurchase() {
       </div>
     );
   }
+
+  // =====================================================
+  // SUMMARY
+  // =====================================================
 
   const totalItem =
     purchase.items?.length ?? 0;
@@ -576,13 +1205,9 @@ export default function DetailPurchase() {
 
         </div>
 
-        {/* ===================================================
-            ACTIONS
-        =================================================== */}
+        {/* ACTIONS */}
 
         <div className="flex flex-wrap gap-2">
-
-          {/* EDIT */}
 
           {isDraft && (
             <button
@@ -597,8 +1222,6 @@ export default function DetailPurchase() {
               Edit
             </button>
           )}
-
-          {/* DELETE - ADMIN PUSAT ONLY */}
 
           {isDraft &&
             canDelete && (
@@ -617,10 +1240,6 @@ export default function DetailPurchase() {
               </button>
             )}
 
-          {/* =================================================
-              PAYMENT
-          ================================================= */}
-
           {canPayment && (
             <button
               onClick={
@@ -629,11 +1248,9 @@ export default function DetailPurchase() {
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
             >
               <CreditCard size={16} />
-              Payment
+              {paymentButtonLabel}
             </button>
           )}
-
-          {/* EXPORT PDF */}
 
           <button
             onClick={() =>
@@ -647,8 +1264,6 @@ export default function DetailPurchase() {
             PDF
           </button>
 
-          {/* EXPORT EXCEL */}
-
           <button
             onClick={() =>
               exportPurchaseExcel(
@@ -661,8 +1276,6 @@ export default function DetailPurchase() {
             Excel
           </button>
 
-          {/* PRINT */}
-
           <a
             href={`/purchase/print?id=${purchase.id}`}
             target="_blank"
@@ -672,8 +1285,6 @@ export default function DetailPurchase() {
             <Printer size={16} />
             Print
           </a>
-
-          {/* RECEIVE */}
 
           {isApproved && (
             <a
@@ -685,8 +1296,6 @@ export default function DetailPurchase() {
             </a>
           )}
 
-          {/* BARANG MASUK */}
-
           {isReceived && (
             <a
               href="/barang-masuk"
@@ -697,11 +1306,11 @@ export default function DetailPurchase() {
             </a>
           )}
 
-          {/* BACK */}
-
           <button
             onClick={() =>
-              router.push("/purchase")
+              router.push(
+                "/purchase"
+              )
             }
             className="inline-flex items-center gap-2 rounded-xl border border-[#D5E5DC] bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-[#F5F8F6]"
           >
@@ -713,7 +1322,7 @@ export default function DetailPurchase() {
       </div>
 
       {/* =====================================================
-          INFO WARNING DRAFT
+          DRAFT WARNING
       ===================================================== */}
 
       {isDraft && (
@@ -734,7 +1343,8 @@ export default function DetailPurchase() {
               {canDelete
                 ? " Sebagai Admin Pusat, PO juga dapat dihapus."
                 : " Penghapusan PO hanya dapat dilakukan oleh Admin Pusat."}
-              {" "}Setelah di-approve, data PO tidak dapat diubah atau dihapus.
+              {" "}
+              Setelah di-approve, data PO tidak dapat diubah atau dihapus.
             </p>
           </div>
 
@@ -754,7 +1364,8 @@ export default function DetailPurchase() {
               <CreditCard size={19} />
             </div>
 
-            <div>
+            <div className="min-w-0 flex-1">
+
               <p className="text-xs font-medium text-emerald-700">
                 Metode Pembayaran Purchase
               </p>
@@ -762,8 +1373,175 @@ export default function DetailPurchase() {
               <p className="mt-0.5 font-bold text-emerald-900">
                 {purchasePaymentMethod}
               </p>
+
             </div>
 
+            {isTempoPurchase &&
+              hasPayable && (
+                <div className="hidden text-right sm:block">
+
+                  <p className="text-xs text-emerald-700">
+                    Status Hutang
+                  </p>
+
+                  <p
+                    className={`mt-0.5 font-bold ${
+                      isTempoPaid
+                        ? "text-green-700"
+                        : "text-orange-700"
+                    }`}
+                  >
+                    {payableStatus ||
+                      "OUTSTANDING"}
+                  </p>
+
+                </div>
+              )}
+
+          </div>
+
+        </div>
+      )}
+
+      {/* =====================================================
+          TEMPO PAYABLE SUMMARY
+      ===================================================== */}
+
+      {isTempoPurchase &&
+        hasPayable && (
+          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+
+              <div className="flex items-center justify-between">
+
+                <div>
+                  <p className="text-sm text-blue-700">
+                    Nilai Hutang
+                  </p>
+
+                  <p className="mt-1 text-xl font-bold text-blue-900">
+                    Rp{" "}
+                    {formatRupiah(
+                      payableAmount
+                    )}
+                  </p>
+                </div>
+
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                  <Wallet size={21} />
+                </div>
+
+              </div>
+
+            </div>
+
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+
+              <div className="flex items-center justify-between">
+
+                <div>
+                  <p className="text-sm text-emerald-700">
+                    Sudah Dibayar
+                  </p>
+
+                  <p className="mt-1 text-xl font-bold text-emerald-900">
+                    Rp{" "}
+                    {formatRupiah(
+                      payablePaidAmount
+                    )}
+                  </p>
+                </div>
+
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                  <CheckCircle2 size={21} />
+                </div>
+
+              </div>
+
+            </div>
+
+            <div
+              className={`rounded-2xl border p-5 ${
+                hasOutstanding
+                  ? "border-orange-200 bg-orange-50"
+                  : "border-green-200 bg-green-50"
+              }`}
+            >
+
+              <div className="flex items-center justify-between">
+
+                <div>
+                  <p
+                    className={`text-sm ${
+                      hasOutstanding
+                        ? "text-orange-700"
+                        : "text-green-700"
+                    }`}
+                  >
+                    Outstanding
+                  </p>
+
+                  <p
+                    className={`mt-1 text-xl font-bold ${
+                      hasOutstanding
+                        ? "text-orange-900"
+                        : "text-green-900"
+                    }`}
+                  >
+                    Rp{" "}
+                    {formatRupiah(
+                      payableOutstanding
+                    )}
+                  </p>
+                </div>
+
+                <div
+                  className={`flex h-11 w-11 items-center justify-center rounded-xl ${
+                    hasOutstanding
+                      ? "bg-orange-100 text-orange-700"
+                      : "bg-green-100 text-green-700"
+                  }`}
+                >
+                  {hasOutstanding ? (
+                    <AlertCircle
+                      size={21}
+                    />
+                  ) : (
+                    <CheckCircle2
+                      size={21}
+                    />
+                  )}
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+      {/* =====================================================
+          TEMPO PAID INFO
+      ===================================================== */}
+
+      {isTempoPaid && (
+        <div className="mb-6 flex items-start gap-3 rounded-2xl border border-green-200 bg-green-50 p-4">
+
+          <CheckCircle2
+            size={21}
+            className="mt-0.5 shrink-0 text-green-600"
+          />
+
+          <div>
+            <p className="font-semibold text-green-800">
+              Purchase Payable sudah LUNAS
+            </p>
+
+            <p className="mt-1 text-sm text-green-700">
+              Seluruh hutang Purchase ini sudah dibayar.
+              Tidak ada outstanding yang tersisa.
+            </p>
           </div>
 
         </div>
@@ -774,8 +1552,6 @@ export default function DetailPurchase() {
       ===================================================== */}
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-
-        {/* SUPPLIER */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
@@ -801,8 +1577,6 @@ export default function DetailPurchase() {
 
         </div>
 
-        {/* ITEM */}
-
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
           <div className="flex items-center justify-between">
@@ -824,8 +1598,6 @@ export default function DetailPurchase() {
           </div>
 
         </div>
-
-        {/* QTY */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
@@ -850,8 +1622,6 @@ export default function DetailPurchase() {
           </div>
 
         </div>
-
-        {/* NILAI */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
 
@@ -1021,8 +1791,6 @@ export default function DetailPurchase() {
 
       <div className="mb-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
 
-        {/* PURCHASE */}
-
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-6 shadow-sm">
 
           <h2 className="mb-5 text-lg font-bold text-[#18352D]">
@@ -1111,8 +1879,6 @@ export default function DetailPurchase() {
           </div>
 
         </div>
-
-        {/* SUPPLIER */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-6 shadow-sm">
 
@@ -1380,7 +2146,9 @@ export default function DetailPurchase() {
 
       <div className="mt-6">
         <PurchaseComments
-          purchaseId={purchase.id}
+          purchaseId={
+            purchase.id
+          }
           source="PUSAT"
         />
       </div>
@@ -1431,13 +2199,15 @@ export default function DetailPurchase() {
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
           >
             <CreditCard size={17} />
-            Payment Purchase
+            {paymentButtonLabel}
           </button>
         )}
 
         <button
           onClick={() =>
-            router.push("/purchase")
+            router.push(
+              "/purchase"
+            )
           }
           className="inline-flex items-center gap-2 rounded-xl border border-[#D5E5DC] bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-[#F5F8F6]"
         >
@@ -1468,7 +2238,7 @@ export default function DetailPurchase() {
 
                 <div>
                   <h2 className="text-lg font-bold text-[#18352D]">
-                    Payment Purchase
+                    {paymentModalTitle}
                   </h2>
 
                   <p className="text-xs text-gray-500">
@@ -1495,86 +2265,226 @@ export default function DetailPurchase() {
 
             {/* MODAL BODY */}
 
-            <div className="space-y-5 p-6">
+            <div className="max-h-[75vh] space-y-5 overflow-y-auto p-6">
 
-              {/* TOTAL */}
+              {/* =================================================
+                  TEMPO OUTSTANDING
+                  ================================================= */}
 
-              <div className="rounded-xl border border-[#DDE9E4] bg-[#F5F8F6] p-4">
+              {isSettlementModal && (
+                <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
 
-                <div className="flex items-center justify-between">
+                  <div className="mb-3 flex items-center gap-2">
 
-                  <span className="text-sm text-gray-600">
-                    Total Purchase
-                  </span>
+                    <AlertCircle
+                      size={18}
+                      className="text-orange-600"
+                    />
 
-                  <span className="text-xl font-bold text-[#18352D]">
-                    Rp{" "}
-                    {formatRupiah(
-                      purchase.total
-                    )}
-                  </span>
+                    <span className="font-semibold text-orange-800">
+                      Sisa Hutang Purchase
+                    </span>
+
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+
+                    <div>
+                      <p className="text-xs text-orange-700">
+                        Total Hutang
+                      </p>
+
+                      <p className="mt-1 font-bold text-orange-900">
+                        Rp{" "}
+                        {formatRupiah(
+                          payableAmount
+                        )}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-orange-700">
+                        Sudah Dibayar
+                      </p>
+
+                      <p className="mt-1 font-bold text-orange-900">
+                        Rp{" "}
+                        {formatRupiah(
+                          payablePaidAmount
+                        )}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  <div className="mt-3 border-t border-orange-200 pt-3">
+
+                    <p className="text-xs text-orange-700">
+                      Outstanding
+                    </p>
+
+                    <p className="text-2xl font-bold text-orange-900">
+                      Rp{" "}
+                      {formatRupiah(
+                        payableOutstanding
+                      )}
+                    </p>
+
+                  </div>
 
                 </div>
+              )}
 
-              </div>
+              {/* =================================================
+                  INITIAL TEMPO INFO
+                  ================================================= */}
 
-              {/* METHOD */}
+              {isInitialTempoModal && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+
+                  <div className="flex items-start gap-3">
+
+                    <Wallet
+                      size={20}
+                      className="mt-0.5 shrink-0 text-blue-600"
+                    />
+
+                    <div>
+
+                      <p className="font-semibold text-blue-800">
+                        Pembuatan Purchase Payable
+                      </p>
+
+                      <p className="mt-1 text-sm leading-relaxed text-blue-700">
+                        Purchase ini menggunakan
+                        metode TEMPO. Payment ini
+                        tidak mengeluarkan uang,
+                        tetapi membuat catatan
+                        hutang kepada supplier.
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+              )}
+
+              {/* =================================================
+                  NORMAL TOTAL
+                  ================================================= */}
+
+              {!isSettlementModal && (
+                <div className="rounded-xl border border-[#DDE9E4] bg-[#F5F8F6] p-4">
+
+                  <div className="flex items-center justify-between">
+
+                    <span className="text-sm text-gray-600">
+                      Total Purchase
+                    </span>
+
+                    <span className="text-xl font-bold text-[#18352D]">
+                      Rp{" "}
+                      {formatRupiah(
+                        purchase.total
+                      )}
+                    </span>
+
+                  </div>
+
+                </div>
+              )}
+
+              {/* =================================================
+                  METHOD
+                  ================================================= */}
 
               <div>
 
                 <label className="mb-2 block text-sm font-semibold text-gray-700">
-                  Metode Pembayaran
+                  {isSettlementModal
+                    ? "Metode Pelunasan"
+                    : "Metode Pembayaran"}
                 </label>
 
-                <select
-                  value={
-                    paymentMethod
-                  }
-                  onChange={(e) =>
-                    setPaymentMethod(
-                      e.target.value
-                    )
-                  }
-                  disabled={
-                    processingPayment
-                  }
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10 disabled:bg-gray-100"
-                >
+                {isSettlementModal ? (
+                  <select
+                    value={
+                      paymentMethod
+                    }
+                    onChange={(e) =>
+                      setPaymentMethod(
+                        e.target.value
+                      )
+                    }
+                    disabled={
+                      processingPayment
+                    }
+                    className="w-full rounded-xl border border-orange-300 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10 disabled:bg-gray-100"
+                  >
 
-                  <option value="">
-                    Pilih metode pembayaran
-                  </option>
+                    {settlementMethods.map(
+                      (
+                        method
+                      ) => (
+                        <option
+                          key={
+                            method.value
+                          }
+                          value={
+                            method.value
+                          }
+                        >
+                          {
+                            method.label
+                          }
+                        </option>
+                      )
+                    )}
 
-                  <option value="CASH">
-                    CASH
-                  </option>
+                  </select>
+                ) : (
+                  <select
+                    value={
+                      paymentMethod
+                    }
+                    disabled
+                    className="w-full cursor-not-allowed appearance-none rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800 outline-none disabled:opacity-100"
+                  >
+                    <option
+                      value={
+                        paymentMethod
+                      }
+                    >
+                      {
+                        paymentMethod
+                      }
+                    </option>
+                  </select>
+                )}
 
-                  <option value="TRANSFER">
-                    TRANSFER
-                  </option>
+                <p className="mt-1 text-xs text-gray-400">
 
-                  <option value="COD">
-                    COD
-                  </option>
+                  {isInitialTempoModal
+                    ? "Metode TEMPO mengikuti Purchase Order dan digunakan untuk membuat hutang."
+                    : isSettlementModal
+                    ? "Untuk pelunasan TEMPO, pilih metode pembayaran aktual. TEMPO tidak dapat digunakan kembali."
+                    : "Metode pembayaran mengikuti metode yang dipilih saat Purchase Order dibuat dan tidak dapat diubah."}
 
-                  <option value="CBD">
-                    CBD
-                  </option>
-
-                  <option value="TEMPO">
-                    TEMPO
-                  </option>
-
-                </select>
+                </p>
 
               </div>
 
-              {/* AMOUNT */}
+              {/* =================================================
+                  AMOUNT
+                  ================================================= */}
 
               <div>
 
                 <label className="mb-2 block text-sm font-semibold text-gray-700">
-                  Jumlah Pembayaran
+                  {isSettlementModal
+                    ? "Jumlah Pelunasan"
+                    : "Jumlah Pembayaran"}
                 </label>
 
                 <div className="relative">
@@ -1586,6 +2496,11 @@ export default function DetailPurchase() {
                   <input
                     type="number"
                     min="0"
+                    max={
+                      isSettlementModal
+                        ? payableOutstanding
+                        : undefined
+                    }
                     step="1"
                     value={
                       paymentAmount
@@ -1603,13 +2518,45 @@ export default function DetailPurchase() {
 
                 </div>
 
-                <p className="mt-1 text-xs text-gray-400">
-                  Jumlah harus sama dengan total Purchase.
-                </p>
+                {isSettlementModal ? (
+                  <div className="mt-2 flex items-center justify-between text-xs">
+
+                    <span className="text-gray-400">
+                      Maksimal pembayaran:
+                    </span>
+
+                    <button
+                      type="button"
+                      disabled={
+                        processingPayment
+                      }
+                      onClick={() =>
+                        setPaymentAmount(
+                          String(
+                            payableOutstanding
+                          )
+                        )
+                      }
+                      className="font-bold text-emerald-600 hover:text-emerald-700 disabled:opacity-50"
+                    >
+                      Rp{" "}
+                      {formatRupiah(
+                        payableOutstanding
+                      )}
+                    </button>
+
+                  </div>
+                ) : (
+                  <p className="mt-1 text-xs text-gray-400">
+                    Jumlah harus sama dengan total Purchase.
+                  </p>
+                )}
 
               </div>
 
-              {/* PAYMENT DATE */}
+              {/* =================================================
+                  PAYMENT DATE
+                  ================================================= */}
 
               <div>
 
@@ -1635,17 +2582,22 @@ export default function DetailPurchase() {
 
               </div>
 
-              {/* REFERENCE */}
+              {/* =================================================
+                  REFERENCE
+                  ================================================= */}
 
               {paymentMethod ===
                 "TRANSFER" && (
                 <div>
 
                   <label className="mb-2 block text-sm font-semibold text-gray-700">
+
                     Nomor Referensi Transfer
+
                     <span className="ml-1 text-red-500">
                       *
                     </span>
+
                   </label>
 
                   <input
@@ -1668,7 +2620,9 @@ export default function DetailPurchase() {
                 </div>
               )}
 
-              {/* REMARKS */}
+              {/* =================================================
+                  REMARKS
+                  ================================================= */}
 
               <div>
 
@@ -1686,7 +2640,11 @@ export default function DetailPurchase() {
                     )
                   }
                   rows={3}
-                  placeholder="Keterangan pembayaran (opsional)"
+                  placeholder={
+                    isSettlementModal
+                      ? "Keterangan pelunasan (opsional)"
+                      : "Keterangan pembayaran (opsional)"
+                  }
                   disabled={
                     processingPayment
                   }
@@ -1695,43 +2653,29 @@ export default function DetailPurchase() {
 
               </div>
 
-              {/* INFO */}
+              {/* =================================================
+                  INFO PAYMENT
+                  ================================================= */}
 
-              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-relaxed text-blue-800">
 
-                {paymentMethod ===
-                  "TEMPO" ? (
-                  <p>
-                    <strong>TEMPO:</strong>{" "}
-                    pembayaran tidak membuat
-                    Petty Cash. Sistem akan
-                    membuat Purchase Payable.
-                  </p>
-                ) : paymentMethod ===
-                  "TRANSFER" ? (
-                  <p>
-                    <strong>TRANSFER:</strong>{" "}
-                    pembayaran akan dicatat
-                    sebagai Payment tanpa
-                    mengurangi Petty Cash.
-                  </p>
-                ) : (
-                  <p>
-                    <strong>
-                      {paymentMethod ||
-                        "CASH/COD/CBD"}:
-                    </strong>{" "}
-                    pembayaran akan dicatat
-                    sebagai Payment dan
-                    mengurangi Petty Cash.
-                  </p>
-                )}
+                <p>
+                  <strong>
+                    {paymentMethod}:
+                  </strong>{" "}
+                  {paymentInfoText.replace(
+                    `${paymentMethod}: `,
+                    ""
+                  )}
+                </p>
 
               </div>
 
             </div>
 
-            {/* MODAL FOOTER */}
+            {/* =================================================
+                MODAL FOOTER
+                ================================================= */}
 
             <div className="flex justify-end gap-2 border-t border-gray-200 bg-gray-50 px-6 py-4">
 
@@ -1772,7 +2716,12 @@ export default function DetailPurchase() {
                     <CreditCard
                       size={17}
                     />
-                    Proses Payment
+
+                    {isInitialTempoModal
+                      ? "Buat Hutang"
+                      : isSettlementModal
+                      ? "Proses Pelunasan"
+                      : "Proses Payment"}
                   </>
                 )}
 

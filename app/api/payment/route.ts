@@ -1,11 +1,7 @@
-import {
-  NextRequest,
-  NextResponse,
-} from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
 import { prisma } from "@/lib/prisma";
-
-import { cookies } from "next/headers";
 
 import {
   PaymentMethod,
@@ -17,43 +13,95 @@ import {
 
 /*
 ===========================================================
-PAYMENT API
+PAYMENT API - FINAL MGB ERP
 ===========================================================
 
+RULE FINAL:
+
 PO PUSAT
-Purchase
-   ↓
-Payment PENDING
-   ↓
-Approve Payment
-   ↓
-CASH / TRANSFER / COD / CBD
-   ↓
-Petty Cash Pusat
+-----------------------------------------------------------
+CASH / COD / CBD
+  Payment PENDING
+      ↓
+  Approve
+      ↓
+  Petty Cash Pusat OUT
+      ↓
+  Payment PAID
+      ↓
+  PurchasePayable sync
+
+TRANSFER
+  Payment PENDING
+      ↓
+  Approve
+      ↓
+  Payment PAID
+      ↓
+  TIDAK potong Petty Cash
+  TIDAK membuat PurchasePayable
 
 TEMPO
-   ↓
-PurchasePayable
-   ↓
-TIDAK memotong Petty Cash
+  Payment PENDING
+      ↓
+  Approve
+      ↓
+  Payment APPROVED
+      ↓
+  PurchasePayable OUTSTANDING
+      ↓
+  TIDAK potong Petty Cash
 
 
 PO OUTLET
-OutletPurchase
-   ↓
-Payment PENDING
-   ↓
-Approve Payment
-   ↓
-CASH / TRANSFER / COD / CBD
-   ↓
-Petty Cash Outlet
+-----------------------------------------------------------
+CASH / COD / CBD
+  Payment PENDING
+      ↓
+  Approve
+      ↓
+  Petty Cash Outlet OUT
+      ↓
+  Payment PAID
+
+TRANSFER
+  Payment PENDING
+      ↓
+  Approve
+      ↓
+  Payment PAID
+      ↓
+  TIDAK potong Petty Cash
+  TIDAK membuat PurchasePayable
 
 TEMPO
-   ↓
-PurchasePayable
-   ↓
-TIDAK memotong Petty Cash
+  Payment PENDING
+      ↓
+  Approve
+      ↓
+  PurchasePayable OUTSTANDING
+      ↓
+  TIDAK potong Petty Cash
+
+
+PETTY CASH
+-----------------------------------------------------------
+PUSAT:
+  outletId = null
+
+OUTLET:
+  outletId = outletPurchase.outletId
+
+CASH / COD / CBD saja yang membutuhkan
+PettyCashAccount.
+
+TRANSFER TIDAK PERNAH mencari PettyCashAccount.
+===========================================================
+*/
+
+/*
+===========================================================
+CURRENT USER
 ===========================================================
 */
 
@@ -79,32 +127,26 @@ async function getCurrentUser() {
       sessionData?.user ??
       sessionData;
 
-    const userId = Number(
-      sessionUser?.id
-    );
+    const userId = Number(sessionUser?.id);
 
-    if (
-      !Number.isInteger(userId) ||
-      userId <= 0
-    ) {
+    if (!Number.isInteger(userId) || userId <= 0) {
       return null;
     }
 
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
 
-        select: {
-          id: true,
-          username: true,
-          fullname: true,
-          role: true,
-          active: true,
-          outletId: true,
-        },
-      });
+      select: {
+        id: true,
+        username: true,
+        fullname: true,
+        role: true,
+        active: true,
+        outletId: true,
+      },
+    });
 
     if (!user || !user.active) {
       return null;
@@ -127,15 +169,308 @@ HELPER
 ===========================================================
 */
 
-function isCashPaymentMethod(
+function isPettyCashPaymentMethod(
   method: PaymentMethod
 ) {
   return (
     method === PaymentMethod.CASH ||
-    method === PaymentMethod.TRANSFER ||
     method === PaymentMethod.COD ||
     method === PaymentMethod.CBD
   );
+}
+
+function isTransferPaymentMethod(
+  method: PaymentMethod
+) {
+  return method === PaymentMethod.TRANSFER;
+}
+
+function isTempoPaymentMethod(
+  method: PaymentMethod
+) {
+  return method === PaymentMethod.TEMPO;
+}
+
+/*
+===========================================================
+SYNC PURCHASE PAYABLE
+===========================================================
+
+Hanya payment PAID yang dihitung sebagai pembayaran.
+
+TRANSFER = PAID
+CASH/COD/CBD = PAID
+TEMPO = APPROVED dan tidak dihitung sebagai paid.
+
+Jadi:
+
+PO TOTAL
+-
+SEMUA PAYMENT PAID
+=
+OUTSTANDING
+
+Jika outstanding <= 0:
+PAID
+
+Jika outstanding > 0:
+OUTSTANDING
+===========================================================
+*/
+
+async function syncPurchasePayable(
+  tx: any,
+  params: {
+    purchaseId?: number | null;
+    outletPurchaseId?: number | null;
+  }
+) {
+  const {
+    purchaseId,
+    outletPurchaseId,
+  } = params;
+
+  const isCentral =
+    purchaseId !== null &&
+    purchaseId !== undefined;
+
+  const isOutlet =
+    outletPurchaseId !== null &&
+    outletPurchaseId !== undefined;
+
+  if (!isCentral && !isOutlet) {
+    return null;
+  }
+
+  if (isCentral && isOutlet) {
+    throw new Error(
+      "MULTIPLE_PURCHASE_SOURCE"
+    );
+  }
+
+  let poTotal = 0;
+  let supplierId: number;
+  let outletId: number | null = null;
+
+  /*
+  ========================================================
+  PO PUSAT
+  ========================================================
+  */
+
+  if (isCentral) {
+    const purchase =
+      await tx.purchase.findUnique({
+        where: {
+          id: purchaseId!,
+        },
+      });
+
+    if (!purchase) {
+      throw new Error(
+        "PURCHASE_NOT_FOUND"
+      );
+    }
+
+    poTotal = Number(purchase.total);
+    supplierId = purchase.supplierId;
+    outletId = null;
+  }
+
+  /*
+  ========================================================
+  PO OUTLET
+  ========================================================
+  */
+
+  else {
+    const outletPurchase =
+      await tx.outletPurchase.findUnique({
+        where: {
+          id: outletPurchaseId!,
+        },
+      });
+
+    if (!outletPurchase) {
+      throw new Error(
+        "OUTLET_PURCHASE_NOT_FOUND"
+      );
+    }
+
+    poTotal = Number(outletPurchase.total);
+    supplierId = outletPurchase.supplierId;
+    outletId = outletPurchase.outletId;
+  }
+
+  /*
+  ========================================================
+  TOTAL PAYMENT PAID
+  ========================================================
+  */
+
+  const paidAggregate =
+    await tx.payment.aggregate({
+      where: {
+        ...(isCentral
+          ? {
+              purchaseId: purchaseId!,
+            }
+          : {
+              outletPurchaseId:
+                outletPurchaseId!,
+            }),
+
+        status: PaymentStatus.PAID,
+      },
+
+      _sum: {
+        amount: true,
+      },
+    });
+
+  const paidAmount =
+    Number(
+      paidAggregate._sum.amount ?? 0
+    );
+
+  const outstanding =
+    Math.max(
+      0,
+      poTotal - paidAmount
+    );
+
+  /*
+  ========================================================
+  EXISTING PAYABLE
+  ========================================================
+  */
+
+  const existingPayable = isCentral
+    ? await tx.purchasePayable.findUnique({
+        where: {
+          purchaseId: purchaseId!,
+        },
+      })
+    : await tx.purchasePayable.findUnique({
+        where: {
+          outletPurchaseId:
+            outletPurchaseId!,
+        },
+      });
+
+  /*
+  ========================================================
+  JIKA SUDAH LUNAS
+  ========================================================
+  */
+
+  if (outstanding <= 0.01) {
+    if (existingPayable) {
+      return await tx.purchasePayable.update({
+        where: {
+          id: existingPayable.id,
+        },
+
+        data: {
+          amount: poTotal,
+          paidAmount: poTotal,
+          outstanding: 0,
+          status: "PAID",
+        },
+      });
+    }
+
+    return await tx.purchasePayable.create({
+      data: {
+        ...(isCentral
+          ? {
+              purchaseId: purchaseId!,
+            }
+          : {
+              outletPurchaseId:
+                outletPurchaseId!,
+            }),
+
+        supplierId,
+        outletId,
+
+        invoiceNumber:
+          `PAID-${
+            isCentral
+              ? `PURCHASE-${purchaseId}`
+              : `OUTLET-${outletPurchaseId}`
+          }`,
+
+        invoiceDate: new Date(),
+        dueDate: new Date(),
+
+        amount: poTotal,
+        paidAmount: poTotal,
+        outstanding: 0,
+
+        status: "PAID",
+      },
+    });
+  }
+
+  /*
+  ========================================================
+  MASIH OUTSTANDING
+  ========================================================
+  */
+
+  if (existingPayable) {
+    return await tx.purchasePayable.update({
+      where: {
+        id: existingPayable.id,
+      },
+
+      data: {
+        amount: poTotal,
+        paidAmount,
+        outstanding,
+        status: "OUTSTANDING",
+      },
+    });
+  }
+
+  /*
+  ========================================================
+  CREATE PAYABLE
+  ========================================================
+  */
+
+  return await tx.purchasePayable.create({
+    data: {
+      ...(isCentral
+        ? {
+            purchaseId: purchaseId!,
+          }
+        : {
+            outletPurchaseId:
+              outletPurchaseId!,
+          }),
+
+      supplierId,
+      outletId,
+
+      invoiceNumber:
+        `PAYMENT-${
+          isCentral
+            ? purchaseId
+            : outletPurchaseId
+        }`,
+
+      invoiceDate: new Date(),
+      dueDate: new Date(),
+
+      amount: poTotal,
+      paidAmount,
+      outstanding,
+
+      status: "OUTSTANDING",
+    },
+  });
 }
 
 /*
@@ -185,15 +520,13 @@ export async function GET(
 
     /*
     ========================================================
-    FILTER STATUS
+    STATUS
     ========================================================
     */
 
     if (
       status &&
-      Object.values(
-        PaymentStatus
-      ).includes(
+      Object.values(PaymentStatus).includes(
         status as PaymentStatus
       )
     ) {
@@ -203,7 +536,7 @@ export async function GET(
 
     /*
     ========================================================
-    FILTER SUPPLIER
+    SUPPLIER
     ========================================================
     */
 
@@ -212,9 +545,7 @@ export async function GET(
         Number(supplierIdParam);
 
       if (
-        Number.isInteger(
-          supplierId
-        ) &&
+        Number.isInteger(supplierId) &&
         supplierId > 0
       ) {
         where.supplierId =
@@ -224,7 +555,7 @@ export async function GET(
 
     /*
     ========================================================
-    FILTER PO PUSAT
+    PO PUSAT
     ========================================================
     */
 
@@ -233,9 +564,7 @@ export async function GET(
         Number(purchaseIdParam);
 
       if (
-        Number.isInteger(
-          purchaseId
-        ) &&
+        Number.isInteger(purchaseId) &&
         purchaseId > 0
       ) {
         where.purchaseId =
@@ -245,7 +574,7 @@ export async function GET(
 
     /*
     ========================================================
-    FILTER PO OUTLET
+    PO OUTLET
     ========================================================
     */
 
@@ -273,8 +602,7 @@ export async function GET(
     */
 
     if (
-      user.role ===
-      Role.OUTLET_ADMIN
+      user.role === Role.OUTLET_ADMIN
     ) {
       if (!user.outletId) {
         return NextResponse.json({
@@ -283,14 +611,9 @@ export async function GET(
         });
       }
 
-      where.AND = [
-        {
-          outletPurchase: {
-            outletId:
-              user.outletId,
-          },
-        },
-      ];
+      where.outletPurchase = {
+        outletId: user.outletId,
+      };
     }
 
     /*
@@ -348,8 +671,7 @@ export async function GET(
 
         orderBy: [
           {
-            paymentDate:
-              "desc",
+            paymentDate: "desc",
           },
           {
             id: "desc",
@@ -443,13 +765,12 @@ export async function POST(
 
     /*
     ========================================================
-    SOURCE PO
+    SOURCE
     ========================================================
     */
 
     const pusatPurchaseId =
-      purchaseId !==
-        undefined &&
+      purchaseId !== undefined &&
       purchaseId !== null &&
       purchaseId !== ""
         ? Number(purchaseId)
@@ -460,9 +781,7 @@ export async function POST(
         undefined &&
       outletPurchaseId !== null &&
       outletPurchaseId !== ""
-        ? Number(
-            outletPurchaseId
-          )
+        ? Number(outletPurchaseId)
         : null;
 
     if (
@@ -581,10 +900,8 @@ export async function POST(
       }
 
       if (
-        purchase.status !==
-          "APPROVED" &&
-        purchase.status !==
-          "RECEIVED"
+        purchase.status !== "APPROVED" &&
+        purchase.status !== "RECEIVED"
       ) {
         return NextResponse.json(
           {
@@ -622,7 +939,8 @@ export async function POST(
     */
 
     if (
-      outletPurchaseIdValue !== null
+      outletPurchaseIdValue !==
+      null
     ) {
       if (
         !Number.isInteger(
@@ -643,17 +961,19 @@ export async function POST(
       }
 
       outletPurchase =
-        await prisma.outletPurchase.findUnique({
-          where: {
-            id:
-              outletPurchaseIdValue,
-          },
+        await prisma.outletPurchase.findUnique(
+          {
+            where: {
+              id:
+                outletPurchaseIdValue,
+            },
 
-          include: {
-            supplier: true,
-            outlet: true,
-          },
-        });
+            include: {
+              supplier: true,
+              outlet: true,
+            },
+          }
+        );
 
       if (!outletPurchase) {
         return NextResponse.json(
@@ -744,9 +1064,8 @@ export async function POST(
     const supplier =
       await prisma.supplier.findUnique({
         where: {
-          id: Number(
-            actualSupplierId
-          ),
+          id:
+            Number(actualSupplierId),
         },
       });
 
@@ -765,7 +1084,7 @@ export async function POST(
 
     /*
     ========================================================
-    PAYMENT SEBELUMNYA
+    CEK PAYMENT SEBELUMNYA
     ========================================================
     */
 
@@ -803,10 +1122,10 @@ export async function POST(
         },
       });
 
-    const alreadyPaid =
+    const alreadyReserved =
       Number(
-        existingPayments
-          ._sum.amount ?? 0
+        existingPayments._sum
+          .amount ?? 0
       );
 
     const poTotal =
@@ -819,7 +1138,8 @@ export async function POST(
     const outstanding =
       Math.max(
         0,
-        poTotal - alreadyPaid
+        poTotal -
+          alreadyReserved
       );
 
     if (
@@ -840,7 +1160,7 @@ export async function POST(
 
     /*
     ========================================================
-    NUMBER
+    PAYMENT NUMBER
     ========================================================
     */
 
@@ -900,9 +1220,7 @@ export async function POST(
             outletPurchaseIdValue,
 
           supplierId:
-            Number(
-              actualSupplierId
-            ),
+            Number(actualSupplierId),
 
           paymentDate:
             paymentDate
@@ -926,10 +1244,8 @@ export async function POST(
               : null,
 
           note:
-            (
-              note ??
-              remarks
-            )
+            note ??
+            remarks
               ? String(
                   note ??
                     remarks
@@ -1014,18 +1330,28 @@ export async function POST(
 PATCH PAYMENT
 ===========================================================
 
-ACTION:
 approve
 reject
 cancel
 
-APPROVE:
-CASH      → Petty Cash OUT
-TRANSFER  → Petty Cash OUT
-COD       → Petty Cash OUT
-CBD       → Petty Cash OUT
-TEMPO     → PurchasePayable
+FINAL:
 
+TRANSFER
+  APPROVE -> PAID
+  NO PETTY CASH
+  NO PAYABLE
+
+TEMPO
+  APPROVE -> APPROVED
+  CREATE/UPDATE PAYABLE
+  NO PETTY CASH
+
+CASH/COD/CBD
+  APPROVE
+  CHECK PETTY CASH
+  PETTY CASH OUT
+  PAYMENT PAID
+  SYNC PAYABLE
 ===========================================================
 */
 
@@ -1051,7 +1377,7 @@ export async function PATCH(
 
     /*
     ========================================================
-    ONLY ADMIN / MANAGER
+    ADMIN / MANAGER ONLY
     ========================================================
     */
 
@@ -1085,9 +1411,7 @@ export async function PATCH(
         .toLowerCase();
 
     if (
-      !Number.isInteger(
-        paymentId
-      ) ||
+      !Number.isInteger(paymentId) ||
       paymentId <= 0
     ) {
       return NextResponse.json(
@@ -1151,7 +1475,9 @@ export async function PATCH(
     ========================================================
     */
 
-    if (action === "reject") {
+    if (
+      action === "reject"
+    ) {
       if (
         payment.status !==
         PaymentStatus.PENDING
@@ -1171,7 +1497,8 @@ export async function PATCH(
       const rejected =
         await prisma.payment.update({
           where: {
-            id: payment.id,
+            id:
+              payment.id,
           },
 
           data: {
@@ -1181,6 +1508,7 @@ export async function PATCH(
 
           include: {
             supplier: true,
+
             purchase: true,
 
             outletPurchase: {
@@ -1221,7 +1549,9 @@ export async function PATCH(
     ========================================================
     */
 
-    if (action === "cancel") {
+    if (
+      action === "cancel"
+    ) {
       if (
         payment.status ===
         PaymentStatus.PAID
@@ -1257,7 +1587,8 @@ export async function PATCH(
       const cancelled =
         await prisma.payment.update({
           where: {
-            id: payment.id,
+            id:
+              payment.id,
           },
 
           data: {
@@ -1267,6 +1598,7 @@ export async function PATCH(
 
           include: {
             supplier: true,
+
             purchase: true,
 
             outletPurchase: {
@@ -1303,11 +1635,13 @@ export async function PATCH(
 
     /*
     ========================================================
-    APPROVE
+    ONLY APPROVE
     ========================================================
     */
 
-    if (action !== "approve") {
+    if (
+      action !== "approve"
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -1338,15 +1672,15 @@ export async function PATCH(
 
     /*
     ========================================================
-    VALIDASI SUMBER PO
+    VALIDASI SUMBER
     ========================================================
     */
 
     const isCentral =
-      !!payment.purchaseId;
+      payment.purchaseId !== null;
 
     const isOutlet =
-      !!payment.outletPurchaseId;
+      payment.outletPurchaseId !== null;
 
     if (!isCentral && !isOutlet) {
       return NextResponse.json(
@@ -1354,6 +1688,19 @@ export async function PATCH(
           success: false,
           message:
             "Payment tidak memiliki sumber PO",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (isCentral && isOutlet) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Payment memiliki dua sumber PO",
         },
         {
           status: 400,
@@ -1374,7 +1721,7 @@ export async function PATCH(
 
     /*
     ========================================================
-    APPROVAL DALAM TRANSACTION
+    TRANSACTION
     ========================================================
     */
 
@@ -1383,14 +1730,15 @@ export async function PATCH(
         async (tx) => {
           /*
           ==================================================
-          CEK ULANG PAYMENT
+          RECHECK PAYMENT
           ==================================================
           */
 
           const currentPayment =
             await tx.payment.findUnique({
               where: {
-                id: payment.id,
+                id:
+                  payment.id,
               },
             });
 
@@ -1411,17 +1759,88 @@ export async function PATCH(
 
           /*
           ==================================================
-          TEMPO
+          TRANSFER
           ==================================================
 
-          TEMPO TIDAK MENYENTUH PETTY CASH.
+          TRANSFER TIDAK menggunakan Petty Cash.
 
-          TEMPO masuk PurchasePayable.
+          TRANSFER:
+            PENDING
+              ↓
+            APPROVE
+              ↓
+            PAID
+
+          Tidak:
+            - pettyCash.create
+            - pettyCashAccount.update
+            - PurchasePayable
+          ==================================================
           */
 
           if (
-            currentPayment.method ===
-            PaymentMethod.TEMPO
+            isTransferPaymentMethod(
+              currentPayment.method
+            )
+          ) {
+            const approved =
+              await tx.payment.update({
+                where: {
+                  id:
+                    currentPayment.id,
+                },
+
+                data: {
+                  status:
+                    PaymentStatus.PAID,
+
+                  approvedBy:
+                    user.id,
+
+                  approvedAt:
+                    new Date(),
+                },
+
+                include: {
+                  supplier: true,
+
+                  purchase: true,
+
+                  outletPurchase: {
+                    include: {
+                      outlet: true,
+                    },
+                  },
+                },
+              });
+
+            /*
+            TRANSFER TIDAK SYNC PAYABLE
+            karena bukan hutang.
+            */
+
+            return {
+              payment: approved,
+
+              pettyCash: null,
+
+              payable: null,
+
+              paymentType:
+                "TRANSFER",
+            };
+          }
+
+          /*
+          ==================================================
+          TEMPO
+          ==================================================
+          */
+
+          if (
+            isTempoPaymentMethod(
+              currentPayment.method
+            )
           ) {
             const invoiceNumber =
               String(
@@ -1444,9 +1863,29 @@ export async function PATCH(
                   )
                 : null;
 
+            /*
+            ==================================================
+            TEMPO PUSAT
+            ==================================================
+            */
+
             if (isCentral) {
               const purchaseId =
                 currentPayment.purchaseId!;
+
+              const purchase =
+                await tx.purchase.findUnique({
+                  where: {
+                    id:
+                      purchaseId,
+                  },
+                });
+
+              if (!purchase) {
+                throw new Error(
+                  "PURCHASE_NOT_FOUND"
+                );
+              }
 
               const existingPayable =
                 await tx.purchasePayable.findUnique(
@@ -1457,18 +1896,22 @@ export async function PATCH(
                   }
                 );
 
-              if (
-                existingPayable
-              ) {
+              if (existingPayable) {
                 const newAmount =
-                  existingPayable.amount +
-                  currentPayment.amount;
+                  Number(
+                    existingPayable.amount
+                  ) +
+                  Number(
+                    currentPayment.amount
+                  );
 
                 const newOutstanding =
                   Math.max(
                     0,
                     newAmount -
-                      existingPayable.paidAmount
+                      Number(
+                        existingPayable.paidAmount
+                      )
                   );
 
                 await tx.purchasePayable.update(
@@ -1493,7 +1936,7 @@ export async function PATCH(
 
                       status:
                         newOutstanding <=
-                        0
+                        0.01
                           ? "PAID"
                           : "OUTSTANDING",
                     },
@@ -1517,12 +1960,16 @@ export async function PATCH(
                       dueDate,
 
                       amount:
-                        currentPayment.amount,
+                        Number(
+                          currentPayment.amount
+                        ),
 
                       paidAmount: 0,
 
                       outstanding:
-                        currentPayment.amount,
+                        Number(
+                          currentPayment.amount
+                        ),
 
                       status:
                         "OUTSTANDING",
@@ -1531,6 +1978,12 @@ export async function PATCH(
                 );
               }
             }
+
+            /*
+            ==================================================
+            TEMPO OUTLET
+            ==================================================
+            */
 
             if (isOutlet) {
               const outletPurchaseId =
@@ -1562,18 +2015,22 @@ export async function PATCH(
                   }
                 );
 
-              if (
-                existingPayable
-              ) {
+              if (existingPayable) {
                 const newAmount =
-                  existingPayable.amount +
-                  currentPayment.amount;
+                  Number(
+                    existingPayable.amount
+                  ) +
+                  Number(
+                    currentPayment.amount
+                  );
 
                 const newOutstanding =
                   Math.max(
                     0,
                     newAmount -
-                      existingPayable.paidAmount
+                      Number(
+                        existingPayable.paidAmount
+                      )
                   );
 
                 await tx.purchasePayable.update(
@@ -1598,7 +2055,7 @@ export async function PATCH(
 
                       status:
                         newOutstanding <=
-                        0
+                        0.01
                           ? "PAID"
                           : "OUTSTANDING",
                     },
@@ -1623,12 +2080,16 @@ export async function PATCH(
                       dueDate,
 
                       amount:
-                        currentPayment.amount,
+                        Number(
+                          currentPayment.amount
+                        ),
 
                       paidAmount: 0,
 
                       outstanding:
-                        currentPayment.amount,
+                        Number(
+                          currentPayment.amount
+                        ),
 
                       status:
                         "OUTSTANDING",
@@ -1637,6 +2098,12 @@ export async function PATCH(
                 );
               }
             }
+
+            /*
+            ==================================================
+            PAYMENT APPROVED
+            ==================================================
+            */
 
             const approved =
               await tx.payment.update({
@@ -1655,26 +2122,40 @@ export async function PATCH(
                   approvedAt:
                     new Date(),
                 },
+
+                include: {
+                  supplier: true,
+
+                  purchase: true,
+
+                  outletPurchase: {
+                    include: {
+                      outlet: true,
+                    },
+                  },
+                },
               });
 
             return {
-              payment:
-                approved,
+              payment: approved,
 
               pettyCash: null,
 
               payable: true,
+
+              paymentType:
+                "TEMPO",
             };
           }
 
           /*
           ==================================================
-          CASH / TRANSFER / COD / CBD
+          CASH / COD / CBD
           ==================================================
           */
 
           if (
-            !isCashPaymentMethod(
+            !isPettyCashPaymentMethod(
               currentPayment.method
             )
           ) {
@@ -1689,10 +2170,14 @@ export async function PATCH(
           ==================================================
 
           PUSAT:
-          outletId = NULL
+            outletId = null
 
           OUTLET:
-          outletId = outletPurchase.outletId
+            outletId = outletPurchase.outletId
+
+          HANYA jalur CASH/COD/CBD yang sampai ke sini.
+          TRANSFER sudah keluar di atas.
+          ==================================================
           */
 
           const pettyCashAccount =
@@ -1721,7 +2206,7 @@ export async function PATCH(
 
           /*
           ==================================================
-          CEK SALDO
+          SALDO
           ==================================================
           */
 
@@ -1750,7 +2235,7 @@ export async function PATCH(
 
           /*
           ==================================================
-          GENERATE PETTY CASH NUMBER
+          PETTY CASH NUMBER
           ==================================================
           */
 
@@ -1770,23 +2255,29 @@ export async function PATCH(
               "0"
             )}`;
 
+          const todayStart =
+            new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate()
+            );
+
+          const tomorrowStart =
+            new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate() + 1
+            );
+
           const pettyCount =
             await tx.pettyCash.count({
               where: {
                 createdAt: {
                   gte:
-                    new Date(
-                      now.getFullYear(),
-                      now.getMonth(),
-                      now.getDate()
-                    ),
+                    todayStart,
 
                   lt:
-                    new Date(
-                      now.getFullYear(),
-                      now.getMonth(),
-                      now.getDate() + 1
-                    ),
+                    tomorrowStart,
                 },
               },
             });
@@ -1798,6 +2289,62 @@ export async function PATCH(
               4,
               "0"
             )}`;
+
+          /*
+          ==================================================
+          SOURCE NUMBER
+          ==================================================
+          */
+
+          let sourceNumber =
+            isCentral
+              ? "PO Pusat"
+              : "PO Outlet";
+
+          if (
+            isCentral &&
+            currentPayment.purchaseId
+          ) {
+            const source =
+              await tx.purchase.findUnique({
+                where: {
+                  id:
+                    currentPayment.purchaseId,
+                },
+
+                select: {
+                  number: true,
+                },
+              });
+
+            sourceNumber =
+              source?.number ??
+              "PO Pusat";
+          }
+
+          if (
+            isOutlet &&
+            currentPayment.outletPurchaseId
+          ) {
+            const source =
+              await tx.outletPurchase.findUnique(
+                {
+                  where: {
+                    id:
+                      currentPayment
+                        .outletPurchaseId,
+                  },
+
+                  select: {
+                    number: true,
+                  },
+                }
+              );
+
+            sourceNumber =
+              source?.number ??
+              "PO Outlet";
+          }
 
           /*
           ==================================================
@@ -1821,20 +2368,7 @@ export async function PATCH(
                   "PAYMENT",
 
                 description:
-                  `Payment ${currentPayment.number} - ${
-                    currentPayment.method
-                  } - ${
-                    isCentral
-                      ? payment.purchase?.number ??
-                        "PO Pusat"
-                      : payment
-                          .outletPurchase
-                          ?.number ??
-                        "PO Outlet"
-                  } - Supplier ${
-                    currentPayment
-                      .supplierId
-                  }`,
+                  `Payment ${currentPayment.number} - ${currentPayment.method} - ${sourceNumber} - Supplier ${currentPayment.supplierId}`,
 
                 amount:
                   paymentAmount,
@@ -1849,8 +2383,7 @@ export async function PATCH(
                 paymentId:
                   currentPayment.id,
 
-                outletId:
-                  outletId,
+                outletId,
 
                 createdBy:
                   user.id,
@@ -1872,23 +2405,21 @@ export async function PATCH(
           ==================================================
           */
 
-          await tx.pettyCashAccount.update(
-            {
-              where: {
-                id:
-                  pettyCashAccount.id,
-              },
+          await tx.pettyCashAccount.update({
+            where: {
+              id:
+                pettyCashAccount.id,
+            },
 
-              data: {
-                currentBalance:
-                  balanceAfter,
-              },
-            }
-          );
+            data: {
+              currentBalance:
+                balanceAfter,
+            },
+          });
 
           /*
           ==================================================
-          PAYMENT APPROVED
+          PAYMENT PAID
           ==================================================
           */
 
@@ -1909,15 +2440,48 @@ export async function PATCH(
                 approvedAt:
                   new Date(),
               },
+
+              include: {
+                supplier: true,
+
+                purchase: true,
+
+                outletPurchase: {
+                  include: {
+                    outlet: true,
+                  },
+                },
+              },
             });
 
+          /*
+          ==================================================
+          SYNC PAYABLE
+          ==================================================
+          */
+
+          const payable =
+            await syncPurchasePayable(
+              tx,
+              {
+                purchaseId:
+                  currentPayment.purchaseId,
+
+                outletPurchaseId:
+                  currentPayment
+                    .outletPurchaseId,
+              }
+            );
+
           return {
-            payment:
-              approved,
+            payment: approved,
 
             pettyCash,
 
-            payable: false,
+            payable,
+
+            paymentType:
+              "PETTY_CASH",
           };
         }
       );
@@ -1928,6 +2492,30 @@ export async function PATCH(
     ========================================================
     */
 
+    let historyDescription =
+      "";
+
+    if (
+      payment.method ===
+      PaymentMethod.TRANSFER
+    ) {
+      historyDescription =
+        `Payment ${payment.number} disetujui sebagai TRANSFER dan langsung LUNAS. Tidak menggunakan Petty Cash dan tidak membuat hutang.`;
+    } else if (
+      payment.method ===
+      PaymentMethod.TEMPO
+    ) {
+      historyDescription =
+        `Payment ${payment.number} disetujui sebagai TEMPO dan masuk Purchase Payable. Tidak menggunakan Petty Cash.`;
+    } else {
+      historyDescription =
+        `Payment ${payment.number} disetujui dengan metode ${payment.method} dan Petty Cash ${
+          outletId
+            ? "outlet"
+            : "pusat"
+        } dipotong sebesar ${payment.amount}.`;
+    }
+
     await prisma.history.create({
       data: {
         transactionType:
@@ -1937,32 +2525,47 @@ export async function PATCH(
           payment.number,
 
         description:
-          payment.method ===
-          PaymentMethod.TEMPO
-            ? `Payment ${payment.number} disetujui sebagai TEMPO dan masuk Purchase Payable`
-            : `Payment ${payment.number} disetujui dan ${
-                result.pettyCash
-                  ? `memotong Petty Cash sebesar ${payment.amount}`
-                  : "diproses"
-              }`,
+          historyDescription,
 
         userId:
           user.id,
       },
     });
 
+    /*
+    ========================================================
+    RESPONSE
+    ========================================================
+    */
+
+    let message =
+      "Payment berhasil diproses";
+
+    if (
+      payment.method ===
+      PaymentMethod.TRANSFER
+    ) {
+      message =
+        "Payment TRANSFER berhasil disetujui dan langsung LUNAS";
+    } else if (
+      payment.method ===
+      PaymentMethod.TEMPO
+    ) {
+      message =
+        "Payment TEMPO berhasil disetujui dan masuk Purchase Payable";
+    } else {
+      message =
+        `Payment berhasil disetujui dan Petty Cash ${
+          outletId
+            ? "outlet"
+            : "pusat"
+        } telah dipotong`;
+    }
+
     return NextResponse.json({
       success: true,
 
-      message:
-        payment.method ===
-        PaymentMethod.TEMPO
-          ? "Payment TEMPO berhasil disetujui dan masuk Purchase Payable"
-          : `Payment berhasil disetujui dan Petty Cash ${
-              outletId
-                ? "outlet"
-                : "pusat"
-            } telah dipotong`,
+      message,
 
       data: {
         payment:
@@ -1973,6 +2576,9 @@ export async function PATCH(
 
         payable:
           result.payable,
+
+        paymentType:
+          result.paymentType,
       },
     });
   } catch (error: any) {
@@ -1985,6 +2591,12 @@ export async function PATCH(
       String(
         error?.message ?? ""
       );
+
+    /*
+    ========================================================
+    ERROR HANDLING
+    ========================================================
+    */
 
     if (
       message ===
@@ -2020,52 +2632,16 @@ export async function PATCH(
 
     if (
       message ===
-      "PETTY_CASH_CENTER_ACCOUNT_NOT_FOUND"
+      "PURCHASE_NOT_FOUND"
     ) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Akun Petty Cash Pusat belum tersedia atau tidak aktif",
+            "PO pusat tidak ditemukan",
         },
         {
-          status: 400,
-        }
-      );
-    }
-
-    if (
-      message ===
-      "PETTY_CASH_OUTLET_ACCOUNT_NOT_FOUND"
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Akun Petty Cash Outlet belum tersedia atau tidak aktif",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    if (
-      message.startsWith(
-        "PETTY_CASH_INSUFFICIENT:"
-      )
-    ) {
-      const balance =
-        message.split(":")[1];
-
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            `Saldo Petty Cash tidak mencukupi. Saldo saat ini: ${balance}`,
-        },
-        {
-          status: 400,
+          status: 404,
         }
       );
     }
@@ -2088,6 +2664,92 @@ export async function PATCH(
 
     if (
       message ===
+      "MULTIPLE_PURCHASE_SOURCE"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Payment tidak boleh memiliki PO pusat dan PO outlet sekaligus",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+    ========================================================
+    PETTY CASH ACCOUNT
+    ========================================================
+    */
+
+    if (
+      message ===
+      "PETTY_CASH_CENTER_ACCOUNT_NOT_FOUND"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Akun Petty Cash Pusat belum tersedia atau tidak aktif. Buat/aktifkan akun Petty Cash Pusat terlebih dahulu.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      message ===
+      "PETTY_CASH_OUTLET_ACCOUNT_NOT_FOUND"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Akun Petty Cash Outlet belum tersedia atau tidak aktif. Buat/aktifkan akun Petty Cash untuk outlet tersebut terlebih dahulu.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+    ========================================================
+    INSUFFICIENT BALANCE
+    ========================================================
+    */
+
+    if (
+      message.startsWith(
+        "PETTY_CASH_INSUFFICIENT:"
+      )
+    ) {
+      const balance =
+        message.split(":")[1];
+
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            `Saldo Petty Cash tidak mencukupi. Saldo saat ini: ${balance}`,
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+    ========================================================
+    INVALID METHOD
+    ========================================================
+    */
+
+    if (
+      message ===
       "INVALID_PAYMENT_METHOD"
     ) {
       return NextResponse.json(
@@ -2101,6 +2763,12 @@ export async function PATCH(
         }
       );
     }
+
+    /*
+    ========================================================
+    DEFAULT
+    ========================================================
+    */
 
     return NextResponse.json(
       {

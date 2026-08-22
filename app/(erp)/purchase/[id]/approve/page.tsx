@@ -1,77 +1,107 @@
 "use client";
 
-import {useRouter,useParams} from "next/navigation";
+import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 
-export default function ApprovePage(){
+export default function ApprovePage() {
+  const router = useRouter();
+  const params = useParams();
 
-const router=useRouter();
+  const [loading, setLoading] = useState(false);
 
-const params=useParams();
+  async function approve() {
+    const id = params.id;
 
-async function approve(){
+    if (!id) {
+      alert("ID Purchase Order tidak ditemukan.");
+      return;
+    }
 
-await fetch(
+    const yakin = confirm(
+      "Apakah Purchase Order ini akan disetujui?"
+    );
 
-"/api/purchase/"+params.id+"/approve",
+    if (!yakin) return;
 
-{
+    try {
+      setLoading(true);
 
-method:"PUT"
+      const res = await fetch(
+        `/api/purchase/${id}/approve`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-}
+      const json = await res.json();
 
-);
+      if (!res.ok || !json.success) {
+        throw new Error(
+          json.message ||
+            "Gagal melakukan approve Purchase Order"
+        );
+      }
 
-router.push("/purchase");
+      alert(
+        json.message ||
+          "Purchase Order berhasil diapprove."
+      );
 
-}
+      router.push("/purchase/approve");
+      router.refresh();
+    } catch (error: any) {
+      console.error(
+        "APPROVE PURCHASE ERROR:",
+        error
+      );
 
-return(
+      alert(
+        error?.message ||
+          "Gagal melakukan approve Purchase Order"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
 
-<div className="p-8">
+  return (
+    <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
+      <div className="mx-auto max-w-xl">
+        <div className="rounded-2xl border border-[#DDE9E4] bg-white p-8 shadow-sm">
+          <h1 className="text-2xl font-bold text-[#18352D]">
+            Approve Purchase Order
+          </h1>
 
-<h1 className="text-3xl font-bold mb-6">
+          <p className="mt-3 text-sm text-gray-500">
+            Apakah Purchase Order ini akan disetujui?
+          </p>
 
-Approve Purchase Order
+          <div className="mt-7 flex gap-3">
+            <button
+              type="button"
+              onClick={approve}
+              disabled={loading}
+              className="rounded-xl bg-[#497F70] px-6 py-3 text-sm font-semibold text-white hover:bg-[#3D6D60] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading
+                ? "Memproses..."
+                : "Approve"}
+            </button>
 
-</h1>
-
-<p className="mb-6">
-
-Apakah Purchase Order ini akan disetujui?
-
-</p>
-
-<div className="flex gap-3">
-
-<button
-
-onClick={approve}
-
-className="bg-green-600 text-white px-6 py-2 rounded"
-
->
-
-Approve
-
-</button>
-
-<button
-
-onClick={()=>router.back()}
-
-className="bg-gray-500 text-white px-6 py-2 rounded"
-
->
-
-Batal
-
-</button>
-
-</div>
-
-</div>
-
-);
-
+            <button
+              type="button"
+              onClick={() => router.back()}
+              disabled={loading}
+              className="rounded-xl bg-gray-500 px-6 py-3 text-sm font-semibold text-white hover:bg-gray-600 disabled:opacity-50"
+            >
+              Batal
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

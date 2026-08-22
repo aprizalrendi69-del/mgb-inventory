@@ -1,67 +1,146 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Building2,
   CalendarDays,
+  Check,
   ChevronDown,
+  CircleCheck,
+  CircleX,
+  Clock3,
+  CreditCard,
+  Landmark,
+  MoreHorizontal,
   Plus,
   RefreshCw,
   Search,
+  SlidersHorizontal,
+  Truck,
   Wallet,
   X,
+  Store,
 } from "lucide-react";
 
 /*
 ===========================================================
-TYPE
+TYPES
 ===========================================================
 */
 
-type CashAccount = {
+type Role =
+  | "ADMIN"
+  | "MANAGER"
+  | "OUTLET_ADMIN"
+  | "ADMIN_OUTLET"
+  | string;
+
+type PettyCashType =
+  | "IN"
+  | "OUT";
+
+type PettyCashStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | string;
+
+interface UserData {
   id: number;
-  code: string;
-  name: string;
-  openingBalance: number;
-  currentBalance: number;
-  isActive?: boolean;
-  active?: boolean;
-  outletId?: number | null;
+  fullname: string;
+  role: Role;
+  active: boolean;
+  outletId: number | null;
 
   outlet?: {
     id: number;
     code: string;
     name: string;
   } | null;
-};
+}
 
-type CashLedger = {
+interface Outlet {
+  id: number;
+  code: string;
+  name: string;
+  active: boolean;
+}
+
+interface PettyCashAccount {
+  id: number;
+  code: string;
+  name: string;
+  outletId: number | null;
+  openingBalance: number | string;
+  currentBalance: number | string;
+  balance?: number | string;
+  saldo?: number | string;
+  isActive: boolean;
+
+  outlet?: {
+    id: number;
+    code: string;
+    name: string;
+    active?: boolean;
+  } | null;
+}
+
+interface OutletBalance {
+  outletId: number | null;
+  outletCode: string;
+  outletName: string;
+  openingBalance: number;
+  balance: number;
+  saldo: number;
+  currentBalance: number;
+  accountCount: number;
+  accountId: number | null;
+}
+
+interface PettyCashTransaction {
   id: number;
   number: string;
-  accountId: number;
-
   trxDate: string;
+  type: PettyCashType;
+  category: string;
+  description: string | null;
+  amount: number | string;
 
-  type: "IN" | "OUT" | string;
+  balanceBefore: number | string;
+  balanceAfter: number | string;
 
-  category?: string | null;
-  description?: string | null;
+  accountId: number;
+  paymentId: number | null;
+  outletId: number | null;
+  createdBy: number;
 
-  amount: number;
+  status: PettyCashStatus;
 
-  balanceBefore: number;
-  balanceAfter: number;
+  referenceNumber?: string | null;
 
-  paymentId?: number | null;
-  outletId?: number | null;
-
-  status?: "PENDING" | "APPROVED" | "REJECTED" | string;
+  outlet?: {
+    id: number;
+    code: string;
+    name: string;
+  } | null;
 
   account?: {
     id: number;
     code: string;
     name: string;
-    outletId?: number | null;
+    outletId: number | null;
+
+    openingBalance: number | string;
+    currentBalance: number | string;
+    isActive: boolean;
 
     outlet?: {
       id: number;
@@ -69,33 +148,88 @@ type CashLedger = {
       name: string;
     } | null;
   } | null;
+}
 
-  outlet?: {
-    id: number;
-    code: string;
-    name: string;
-  } | null;
-};
+interface PettyCashResponse {
+  success: boolean;
 
-type UserInfo = {
-  id: number;
-  fullname?: string;
-  role: string;
-  outletId?: number | null;
-};
+  data: PettyCashTransaction[];
+
+  accounts: PettyCashAccount[];
+
+  outlets: Outlet[];
+
+  outletBalances: OutletBalance[];
+
+  summary: {
+    totalIn: number;
+    totalOut: number;
+    currentBalance: number;
+    totalOutletBalance: number;
+    pusatBalance: number;
+  };
+}
 
 /*
 ===========================================================
-HELPER
+HELPERS
 ===========================================================
 */
 
-function formatRupiah(value: number) {
-  return Number(value || 0).toLocaleString("id-ID");
+function formatRupiah(
+  value: number | string | null | undefined
+) {
+  const number = Number(value ?? 0);
+
+  if (!Number.isFinite(number)) {
+    return "0";
+  }
+
+  return Math.round(number).toLocaleString("id-ID");
 }
 
-function formatDateTime(value?: string) {
-  if (!value) return "-";
+function parseRupiah(value: string) {
+  const raw = value.replace(/\D/g, "");
+
+  if (!raw) {
+    return 0;
+  }
+
+  const number = Number(raw);
+
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+
+  return number;
+}
+
+function formatDateOnly(
+  value: string | Date | null | undefined
+) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return date.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function formatDateTime(
+  value: string | Date | null | undefined
+) {
+  if (!value) {
+    return "-";
+  }
 
   const date = new Date(value);
 
@@ -112,104 +246,38 @@ function formatDateTime(value?: string) {
   });
 }
 
-function getTypeLabel(type: string) {
-  switch (type) {
-    case "IN":
-      return "MASUK";
+function getTodayInput() {
+  const date = new Date();
 
-    case "OUT":
-      return "KELUAR";
+  const year = date.getFullYear();
 
-    default:
-      return type;
-  }
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, "0");
+
+  const day = String(
+    date.getDate()
+  ).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function isMoneyIn(type: string) {
   return type === "IN";
 }
 
-/*
-===========================================================
-EXTRACT ACCOUNTS
-===========================================================
-*/
-
-function extractAccounts(json: any): CashAccount[] {
-  const payload = json?.data ?? json;
-
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  if (Array.isArray(payload?.accounts)) {
-    return payload.accounts;
-  }
-
-  if (Array.isArray(payload?.cashAccounts)) {
-    return payload.cashAccounts;
-  }
-
-  if (Array.isArray(json?.accounts)) {
-    return json.accounts;
-  }
-
-  return [];
+function isCentralRole(role?: string) {
+  return (
+    role === "ADMIN" ||
+    role === "MANAGER"
+  );
 }
 
-/*
-===========================================================
-EXTRACT PETTY CASH TRANSACTIONS
-
-API /api/petty-cash:
-
-{
-  success: true,
-  data: pettyCash
-}
-
-Jadi data langsung berupa ARRAY transaksi.
-
-INI YANG MEMPERBAIKI MASALAH UTAMA.
-===========================================================
-*/
-
-function extractLedgers(json: any): CashLedger[] {
-  const payload = json?.data ?? json;
-
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  if (Array.isArray(payload?.pettyCash)) {
-    return payload.pettyCash;
-  }
-
-  if (Array.isArray(payload?.transactions)) {
-    return payload.transactions;
-  }
-
-  if (Array.isArray(payload?.ledgers)) {
-    return payload.ledgers;
-  }
-
-  if (Array.isArray(payload?.history)) {
-    return payload.history;
-  }
-
-  if (Array.isArray(json?.pettyCash)) {
-    return json.pettyCash;
-  }
-
-  if (Array.isArray(json?.transactions)) {
-    return json.transactions;
-  }
-
-  if (Array.isArray(json?.ledgers)) {
-    return json.ledgers;
-  }
-
-  return [];
+function isOutletRole(role?: string) {
+  return (
+    role === "OUTLET_ADMIN" ||
+    role === "ADMIN_OUTLET"
+  );
 }
 
 /*
@@ -219,26 +287,83 @@ PAGE
 */
 
 export default function PettyCashPage() {
+
+  /*
+  =========================================================
+  USER
+  =========================================================
+  */
+
   const [user, setUser] =
-    useState<UserInfo | null>(null);
-
-  const [accounts, setAccounts] =
-    useState<CashAccount[]>([]);
-
-  const [ledgers, setLedgers] =
-    useState<CashLedger[]>([]);
-
-  const [loading, setLoading] =
-    useState(true);
+    useState<UserData | null>(null);
 
   const [loadingUser, setLoadingUser] =
     useState(true);
 
+  /*
+  =========================================================
+  PETTY CASH DATA
+  =========================================================
+  */
+
+  const [transactions, setTransactions] =
+    useState<PettyCashTransaction[]>([]);
+
+  const [accounts, setAccounts] =
+    useState<PettyCashAccount[]>([]);
+
+  const [outlets, setOutlets] =
+    useState<Outlet[]>([]);
+
+  const [outletBalances, setOutletBalances] =
+    useState<OutletBalance[]>([]);
+
+  const [summary, setSummary] =
+    useState<PettyCashResponse["summary"]>({
+      totalIn: 0,
+      totalOut: 0,
+      currentBalance: 0,
+      totalOutletBalance: 0,
+      pusatBalance: 0,
+    });
+
+  const [loading, setLoading] =
+    useState(true);
+
+  /*
+  =========================================================
+  LOCATION SELECTION
+  =========================================================
+
+  null
+  = PUSAT
+
+  number
+  = OUTLET ID
+  =========================================================
+  */
+
+  const [
+    selectedLocationId,
+    setSelectedLocationId,
+  ] = useState<number | null>(null);
+
+  const [
+    locationInitialized,
+    setLocationInitialized,
+  ] = useState(false);
+
+  /*
+  =========================================================
+  FILTER
+  =========================================================
+  */
+
   const [search, setSearch] =
     useState("");
 
-  const [selectedAccount, setSelectedAccount] =
-    useState<string>("ALL");
+  const [statusFilter, setStatusFilter] =
+    useState("ALL");
 
   const [tanggalMulai, setTanggalMulai] =
     useState("");
@@ -248,24 +373,51 @@ export default function PettyCashPage() {
 
   /*
   =========================================================
-  TOP UP
+  MODAL
   =========================================================
   */
+
+  const [showManual, setShowManual] =
+    useState(false);
 
   const [showTopUp, setShowTopUp] =
     useState(false);
 
-  const [savingTopUp, setSavingTopUp] =
+  /*
+  =========================================================
+  MANUAL TRANSACTION
+  =========================================================
+  */
+
+  const [manualCategory, setManualCategory] =
+    useState("LALAMOVE");
+
+  const [manualAmount, setManualAmount] =
+    useState("");
+
+  const [manualDate, setManualDate] =
+    useState(getTodayInput());
+
+  const [manualReference, setManualReference] =
+    useState("");
+
+  const [manualDescription, setManualDescription] =
+    useState("");
+
+  const [savingManual, setSavingManual] =
     useState(false);
 
-  const [topUpAccountId, setTopUpAccountId] =
-    useState<string>("");
+  /*
+  =========================================================
+  TOP UP
+  =========================================================
+  */
 
   const [topUpAmount, setTopUpAmount] =
     useState("");
 
   const [topUpDate, setTopUpDate] =
-    useState("");
+    useState(getTodayInput());
 
   const [topUpReference, setTopUpReference] =
     useState("");
@@ -273,194 +425,203 @@ export default function PettyCashPage() {
   const [topUpDescription, setTopUpDescription] =
     useState("");
 
+  const [savingTopUp, setSavingTopUp] =
+    useState(false);
+
+  /*
+  =========================================================
+  APPROVAL
+  =========================================================
+  */
+
+  const [approvingId, setApprovingId] =
+    useState<number | null>(null);
+
+  const [rejectingId, setRejectingId] =
+    useState<number | null>(null);
+
   /*
   =========================================================
   LOAD USER
   =========================================================
   */
 
-  async function loadUser() {
+  const loadUser = useCallback(async () => {
     try {
       setLoadingUser(true);
 
-      const res = await fetch("/api/me", {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        "/api/me",
+        {
+          cache: "no-store",
+        }
+      );
+
+      const contentType =
+        res.headers.get(
+          "content-type"
+        ) || "";
+
+      if (
+        !contentType.includes(
+          "application/json"
+        )
+      ) {
+        const text = await res.text();
+
+        console.error(
+          "LOAD USER NON JSON RESPONSE:",
+          text
+        );
+
+        throw new Error(
+          `Server mengembalikan response bukan JSON (${res.status}).`
+        );
+      }
 
       const json = await res.json();
 
-      const currentUser =
+      if (!res.ok) {
+        throw new Error(
+          json?.message ||
+            json?.error ||
+            "Gagal mengambil data user."
+        );
+      }
+
+      const userData =
         json?.user ??
         json?.data ??
         json;
 
-      if (res.ok && currentUser?.id) {
-        setUser(currentUser);
-      } else {
-        setUser(null);
+      if (!userData?.id) {
+        throw new Error(
+          "Data user tidak ditemukan."
+        );
       }
+
+      setUser(userData);
     } catch (error) {
       console.error(
-        "LOAD USER ERROR:",
+        "LOAD USER PETTY CASH ERROR:",
         error
       );
-
-      setUser(null);
     } finally {
       setLoadingUser(false);
     }
-  }
+  }, []);
 
   /*
   =========================================================
-  LOAD ACCOUNTS
+  LOAD PETTY CASH
   =========================================================
   */
 
-  async function loadAccounts() {
-    try {
-      const res = await fetch(
-        "/api/petty-cash/accounts",
-        {
-          cache: "no-store",
-        }
-      );
+  const loadPettyCash = useCallback(
+    async () => {
+      try {
+        setLoading(true);
 
-      const json = await res.json();
-
-      if (!res.ok) {
-        throw new Error(
-          json?.message ||
-            "Gagal mengambil data akun Petty Cash"
+        const res = await fetch(
+          "/api/petty-cash",
+          {
+            cache: "no-store",
+          }
         );
-      }
 
-      const accountData =
-        extractAccounts(json);
+        const contentType =
+          res.headers.get(
+            "content-type"
+          ) || "";
 
-      const activeAccounts =
-        accountData.filter((account) => {
-          if (
-            typeof account.isActive ===
-            "boolean"
-          ) {
-            return account.isActive;
-          }
+        let json: any;
 
-          if (
-            typeof account.active ===
-            "boolean"
-          ) {
-            return account.active;
-          }
-
-          return true;
-        });
-
-      setAccounts(activeAccounts);
-
-      setTopUpAccountId((current) => {
         if (
-          current &&
-          activeAccounts.some(
-            (account) =>
-              String(account.id) === current
+          contentType.includes(
+            "application/json"
           )
         ) {
-          return current;
+          json = await res.json();
+        } else {
+          const text =
+            await res.text();
+
+          console.error(
+            "PETTY CASH NON JSON RESPONSE:",
+            text
+          );
+
+          throw new Error(
+            `Server mengembalikan response bukan JSON (${res.status}).`
+          );
         }
 
-        return activeAccounts[0]
-          ? String(activeAccounts[0].id)
-          : "";
-      });
-    } catch (error) {
-      console.error(
-        "LOAD PETTY CASH ACCOUNTS ERROR:",
-        error
-      );
-
-      setAccounts([]);
-      setTopUpAccountId("");
-    }
-  }
-
-  /*
-  =========================================================
-  LOAD TRANSACTIONS
-
-  API /api/petty-cash langsung mengembalikan:
-
-  data: [
-    {
-      id,
-      number,
-      type,
-      amount,
-      balanceBefore,
-      balanceAfter,
-      ...
-    }
-  ]
-
-  Jadi langsung masukkan hasil data ke ledger.
-  =========================================================
-  */
-
-  async function loadLedgers() {
-    try {
-      const res = await fetch(
-        "/api/petty-cash",
-        {
-          cache: "no-store",
+        if (
+          !res.ok ||
+          json?.success === false
+        ) {
+          throw new Error(
+            json?.message ||
+              json?.error ||
+              "Gagal mengambil data Petty Cash."
+          );
         }
-      );
 
-      const json = await res.json();
+        const data =
+          json as PettyCashResponse;
 
-      if (!res.ok) {
-        throw new Error(
-          json?.message ||
-            "Gagal mengambil data Petty Cash"
+        setTransactions(
+          Array.isArray(data.data)
+            ? data.data
+            : []
         );
+
+        setAccounts(
+          Array.isArray(data.accounts)
+            ? data.accounts
+            : []
+        );
+
+        setOutlets(
+          Array.isArray(data.outlets)
+            ? data.outlets
+            : []
+        );
+
+        setOutletBalances(
+          Array.isArray(
+            data.outletBalances
+          )
+            ? data.outletBalances
+            : []
+        );
+
+        setSummary(
+          data.summary ?? {
+            totalIn: 0,
+            totalOut: 0,
+            currentBalance: 0,
+            totalOutletBalance: 0,
+            pusatBalance: 0,
+          }
+        );
+      } catch (error) {
+        console.error(
+          "LOAD PETTY CASH ERROR:",
+          error
+        );
+
+        alert(
+          error instanceof Error
+            ? error.message
+            : "Gagal mengambil data Petty Cash."
+        );
+      } finally {
+        setLoading(false);
       }
-
-      const ledgerData =
-        extractLedgers(json);
-
-      setLedgers(
-        Array.isArray(ledgerData)
-          ? ledgerData
-          : []
-      );
-    } catch (error) {
-      console.error(
-        "LOAD PETTY CASH LEDGER ERROR:",
-        error
-      );
-
-      setLedgers([]);
-    }
-  }
-
-  /*
-  =========================================================
-  LOAD ALL
-  =========================================================
-  */
-
-  async function loadPettyCash() {
-    try {
-      setLoading(true);
-
-      await Promise.all([
-        loadAccounts(),
-        loadLedgers(),
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  }
+    },
+    []
+  );
 
   /*
   =========================================================
@@ -470,164 +631,361 @@ export default function PettyCashPage() {
 
   useEffect(() => {
     loadUser();
+  }, [loadUser]);
+
+  useEffect(() => {
     loadPettyCash();
-  }, []);
+  }, [loadPettyCash]);
 
   /*
   =========================================================
-  ROLE
+  SET DEFAULT LOCATION
   =========================================================
   */
 
-  const role = String(
-    user?.role || ""
-  ).toUpperCase();
+  useEffect(() => {
+    if (
+      locationInitialized ||
+      loadingUser ||
+      !user
+    ) {
+      return;
+    }
+
+    if (isOutletRole(user.role)) {
+      if (
+        user.outletId !== null &&
+        user.outletId !== undefined
+      ) {
+        setSelectedLocationId(
+          user.outletId
+        );
+      }
+
+      setLocationInitialized(true);
+
+      return;
+    }
+
+    setSelectedLocationId(null);
+
+    setLocationInitialized(true);
+  }, [
+    user,
+    loadingUser,
+    locationInitialized,
+  ]);
+
+  /*
+  =========================================================
+  ACCESS
+  =========================================================
+  */
+
+  const isCentralAdmin =
+    isCentralRole(user?.role);
+
+  const isOutletAdmin =
+    isOutletRole(user?.role);
+
+  /*
+  Admin Pusat boleh Top Up.
+  Admin Outlet TIDAK BOLEH Top Up.
+  */
 
   const canTopUp =
-    role === "ADMIN" ||
-    role === "MANAGER";
+    isCentralAdmin;
+
+  /*
+  Semua user yang punya akses halaman
+  boleh membuat transaksi keluar.
+
+  API tetap wajib melakukan validasi
+  outletId berdasarkan session.
+  */
+
+  const canCreateTransaction =
+    Boolean(user);
+
+  /*
+  Approval hanya pusat.
+  */
+
+  const canApprove =
+    isCentralAdmin;
 
   /*
   =========================================================
-  PETTY CASH ACCOUNTS
+  LOCATION DATA
   =========================================================
   */
 
-  const pettyCashAccounts = useMemo(() => {
-    return accounts;
-  }, [accounts]);
+  const selectedOutlet =
+    selectedLocationId === null
+      ? null
+      : outlets.find(
+          (outlet) =>
+            outlet.id ===
+            selectedLocationId
+        ) ?? null;
+
+  /*
+  Cari saldo dari outletBalances terlebih dahulu.
+  */
+
+  const selectedBalance =
+    outletBalances.find(
+      (item) =>
+        item.outletId ===
+        selectedLocationId
+    ) ?? null;
+
+  /*
+  Fallback ke account jika outletBalances
+  belum memiliki data saldo.
+  */
+
+  const selectedAccount =
+    accounts.find(
+      (account) =>
+        account.outletId ===
+        selectedLocationId
+    ) ?? null;
 
   /*
   =========================================================
-  TOTAL BALANCE
+  LOCATION LABEL
+  =========================================================
+  */
+
+  const userLocationLabel =
+    selectedLocationId === null
+      ? "Pusat • Petty Cash Pusat"
+      : selectedOutlet
+        ? `${selectedOutlet.code} • ${selectedOutlet.name}`
+        : user?.outletId ===
+              selectedLocationId &&
+            user.outlet
+          ? `${user.outlet.code} • ${user.outlet.name}`
+          : "Outlet";
+
+  /*
+  =========================================================
+  CURRENT BALANCE
+  =========================================================
+
+  Jangan menghitung saldo dari transaksi.
+
+  Prioritas:
+  1. outletBalances.balance
+  2. outletBalances.currentBalance
+  3. outletBalances.saldo
+  4. account.currentBalance
+  5. account.balance
+  6. account.saldo
   =========================================================
   */
 
   const pettyCashBalance =
-    useMemo(() => {
-      return pettyCashAccounts.reduce(
-        (total, account) =>
-          total +
-          Number(
-            account.currentBalance || 0
-          ),
-        0
-      );
-    }, [pettyCashAccounts]);
+    selectedBalance
+      ? Number(
+          selectedBalance.balance ??
+            selectedBalance.currentBalance ??
+            selectedBalance.saldo ??
+            0
+        )
+      : selectedAccount
+        ? Number(
+            selectedAccount.currentBalance ??
+              selectedAccount.balance ??
+              selectedAccount.saldo ??
+              0
+          )
+        : 0;
 
   /*
   =========================================================
-  FILTER LEDGER
+  FILTER TRANSACTIONS BY LOCATION
   =========================================================
   */
 
-  const filteredLedgers =
+  const locationTransactions =
     useMemo(() => {
-      const keyword =
-        search.trim().toLowerCase();
+      return transactions.filter(
+        (transaction) =>
+          Number(
+            transaction.outletId
+          ) ===
+          Number(
+            selectedLocationId
+          )
+      );
+    }, [
+      transactions,
+      selectedLocationId,
+    ]);
 
-      return ledgers.filter(
-        (ledger) => {
-          /*
-          ACCOUNT
-          */
+  /*
+  =========================================================
+  SEARCH + FILTER
+  =========================================================
+  */
+
+  const filteredTransactions =
+    useMemo(() => {
+      const normalizedSearch =
+        search
+          .trim()
+          .toLowerCase();
+
+      return locationTransactions.filter(
+        (transaction) => {
+          if (
+            normalizedSearch
+          ) {
+            const haystack = [
+              transaction.number,
+              transaction.category,
+              transaction.description,
+              transaction.referenceNumber,
+              transaction.outlet?.code,
+              transaction.outlet?.name,
+              transaction.account?.code,
+              transaction.account?.name,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+
+            if (
+              !haystack.includes(
+                normalizedSearch
+              )
+            ) {
+              return false;
+            }
+          }
 
           if (
-            selectedAccount !==
-              "ALL" &&
-            String(
-              ledger.accountId
-            ) !== selectedAccount
+            statusFilter !== "ALL" &&
+            transaction.status !==
+              statusFilter
           ) {
             return false;
           }
 
-          /*
-          DATE
-          */
-
-          const ledgerDate =
-            new Date(
-              ledger.trxDate
-            );
-
           if (
-            Number.isNaN(
-              ledgerDate.getTime()
-            )
+            tanggalMulai
           ) {
-            return false;
-          }
+            const transactionDate =
+              new Date(
+                transaction.trxDate
+              );
 
-          const year =
-            ledgerDate.getFullYear();
+            const from =
+              new Date(
+                `${tanggalMulai}T00:00:00`
+              );
 
-          const month = String(
-            ledgerDate.getMonth() + 1
-          ).padStart(2, "0");
-
-          const day = String(
-            ledgerDate.getDate()
-          ).padStart(2, "0");
-
-          const dateOnly =
-            `${year}-${month}-${day}`;
-
-          if (
-            tanggalMulai &&
-            dateOnly < tanggalMulai
-          ) {
-            return false;
+            if (
+              transactionDate <
+              from
+            ) {
+              return false;
+            }
           }
 
           if (
-            tanggalSelesai &&
-            dateOnly > tanggalSelesai
+            tanggalSelesai
           ) {
-            return false;
+            const transactionDate =
+              new Date(
+                transaction.trxDate
+              );
+
+            const to =
+              new Date(
+                `${tanggalSelesai}T23:59:59.999`
+              );
+
+            if (
+              transactionDate >
+              to
+            ) {
+              return false;
+            }
           }
 
-          /*
-          SEARCH
-          */
-
-          if (!keyword) {
-            return true;
-          }
-
-          return (
-            ledger.number
-              ?.toLowerCase()
-              .includes(keyword) ||
-
-            ledger.type
-              ?.toLowerCase()
-              .includes(keyword) ||
-
-            ledger.category
-              ?.toLowerCase()
-              .includes(keyword) ||
-
-            ledger.description
-              ?.toLowerCase()
-              .includes(keyword) ||
-
-            ledger.account?.code
-              ?.toLowerCase()
-              .includes(keyword) ||
-
-            ledger.account?.name
-              ?.toLowerCase()
-              .includes(keyword)
-          );
+          return true;
         }
       );
     }, [
-      ledgers,
+      locationTransactions,
       search,
-      selectedAccount,
+      statusFilter,
       tanggalMulai,
       tanggalSelesai,
+    ]);
+
+  /*
+  =========================================================
+  APPROVED TOTALS
+  =========================================================
+  */
+
+  const totalApprovedIn =
+    useMemo(() => {
+      return locationTransactions
+        .filter(
+          (transaction) =>
+            transaction.status ===
+              "APPROVED" &&
+            transaction.type ===
+              "IN"
+        )
+        .reduce(
+          (total, transaction) =>
+            total +
+            Number(
+              transaction.amount ?? 0
+            ),
+          0
+        );
+    }, [
+      locationTransactions,
+    ]);
+
+  const totalApprovedOut =
+    useMemo(() => {
+      return locationTransactions
+        .filter(
+          (transaction) =>
+            transaction.status ===
+              "APPROVED" &&
+            transaction.type ===
+              "OUT"
+        )
+        .reduce(
+          (total, transaction) =>
+            total +
+            Number(
+              transaction.amount ?? 0
+            ),
+          0
+        );
+    }, [
+      locationTransactions,
+    ]);
+
+  const pendingCount =
+    useMemo(() => {
+      return locationTransactions.filter(
+        (transaction) =>
+          transaction.status ===
+          "PENDING"
+      ).length;
+    }, [
+      locationTransactions,
     ]);
 
   /*
@@ -638,9 +996,52 @@ export default function PettyCashPage() {
 
   function resetFilter() {
     setSearch("");
-    setSelectedAccount("ALL");
+    setStatusFilter("ALL");
     setTanggalMulai("");
     setTanggalSelesai("");
+  }
+
+  /*
+  =========================================================
+  OPEN MANUAL
+  =========================================================
+  */
+
+  function openManualTransaction() {
+    if (!user) {
+      alert(
+        "User belum tersedia."
+      );
+
+      return;
+    }
+
+    if (
+      isOutletAdmin &&
+      user.outletId == null
+    ) {
+      alert(
+        "User outlet belum memiliki outlet."
+      );
+
+      return;
+    }
+
+    setManualCategory(
+      "LALAMOVE"
+    );
+
+    setManualAmount("");
+
+    setManualDate(
+      getTodayInput()
+    );
+
+    setManualReference("");
+
+    setManualDescription("");
+
+    setShowManual(true);
   }
 
   /*
@@ -650,24 +1051,22 @@ export default function PettyCashPage() {
   */
 
   function openTopUp() {
-    const firstPetty =
-      pettyCashAccounts[0];
+    if (!canTopUp) {
+      alert(
+        "Anda tidak memiliki akses Top Up."
+      );
 
-    setTopUpAccountId(
-      firstPetty
-        ? String(firstPetty.id)
-        : ""
-    );
+      return;
+    }
 
     setTopUpAmount("");
 
     setTopUpDate(
-      new Date()
-        .toISOString()
-        .slice(0, 10)
+      getTodayInput()
     );
 
     setTopUpReference("");
+
     setTopUpDescription("");
 
     setShowTopUp(true);
@@ -677,46 +1076,32 @@ export default function PettyCashPage() {
   =========================================================
   SUBMIT TOP UP
   =========================================================
+
+  Top Up:
+  1. CREATE IN
+  2. API membuat PENDING
+  3. Ambil ID
+  4. APPROVE
+  5. Reload saldo
+
+  API tetap wajib memastikan user adalah
+  Admin Pusat dan outletId valid.
+  =========================================================
   */
 
   async function submitTopUp() {
-    const accountId =
-      Number(topUpAccountId);
-
-    const amount = Number(
-      topUpAmount
-        .replace(/\./g, "")
-        .replace(/,/g, "")
-    );
-
-    /*
-    ACCOUNT
-    */
-
-    if (!accountId) {
+    if (!canTopUp) {
       alert(
-        "Pilih akun Petty Cash."
-      );
-      return;
-    }
-
-    const selected =
-      pettyCashAccounts.find(
-        (account) =>
-          account.id === accountId
-      );
-
-    if (!selected) {
-      alert(
-        "Akun Petty Cash tidak ditemukan. Silakan refresh halaman."
+        "Anda tidak memiliki akses Top Up."
       );
 
       return;
     }
 
-    /*
-    AMOUNT
-    */
+    const amount =
+      parseRupiah(
+        topUpAmount
+      );
 
     if (
       !Number.isFinite(amount) ||
@@ -729,39 +1114,79 @@ export default function PettyCashPage() {
       return;
     }
 
+    const outletId =
+      selectedLocationId;
+
     try {
       setSavingTopUp(true);
 
-      const res = await fetch(
-        "/api/petty-cash/top-up",
-        {
-          method: "POST",
+      /*
+      CREATE TOP UP
+      */
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+      const res =
+        await fetch(
+          "/api/petty-cash",
+          {
+            method: "POST",
 
-          body: JSON.stringify({
-            accountId,
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
 
-            amount,
+            body: JSON.stringify({
+              type: "IN",
 
-            paymentDate:
-              topUpDate || undefined,
+              category:
+                "TOP UP",
 
-            referenceNumber:
-              topUpReference.trim() ||
-              undefined,
+              description:
+                topUpDescription.trim() ||
+                `Top Up Petty Cash ${userLocationLabel}`,
 
-            description:
-              topUpDescription.trim() ||
-              undefined,
-          }),
-        }
-      );
+              amount,
 
-      const json = await res.json();
+              outletId,
+
+              referenceNumber:
+                topUpReference.trim() ||
+                undefined,
+
+              trxDate:
+                topUpDate ||
+                undefined,
+            }),
+          }
+        );
+
+      const contentType =
+        res.headers.get(
+          "content-type"
+        ) || "";
+
+      let json: any = null;
+
+      if (
+        contentType.includes(
+          "application/json"
+        )
+      ) {
+        json =
+          await res.json();
+      } else {
+        const text =
+          await res.text();
+
+        console.error(
+          "TOP UP NON JSON RESPONSE:",
+          text
+        );
+
+        throw new Error(
+          `Server mengembalikan response bukan JSON (${res.status}).`
+        );
+      }
 
       if (
         !res.ok ||
@@ -769,7 +1194,90 @@ export default function PettyCashPage() {
       ) {
         throw new Error(
           json?.message ||
-            "Gagal melakukan Top Up."
+            json?.error ||
+            "Gagal membuat Top Up."
+        );
+      }
+
+      const createdTransaction =
+        json?.data;
+
+      const createdId =
+        Number(
+          createdTransaction?.id
+        );
+
+      if (
+        !Number.isInteger(
+          createdId
+        ) ||
+        createdId <= 0
+      ) {
+        throw new Error(
+          "Top Up berhasil dibuat tetapi ID transaksi tidak ditemukan untuk proses approval."
+        );
+      }
+
+      /*
+      AUTO APPROVE
+      */
+
+      const approveRes =
+        await fetch(
+          "/api/petty-cash/approve",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              id: createdId,
+              action: "APPROVE",
+            }),
+          }
+        );
+
+      const approveContentType =
+        approveRes.headers.get(
+          "content-type"
+        ) || "";
+
+      let approveJson: any =
+        null;
+
+      if (
+        approveContentType.includes(
+          "application/json"
+        )
+      ) {
+        approveJson =
+          await approveRes.json();
+      } else {
+        const text =
+          await approveRes.text();
+
+        console.error(
+          "TOP UP APPROVE NON JSON RESPONSE:",
+          text
+        );
+
+        throw new Error(
+          `Top Up berhasil dibuat tetapi response approval bukan JSON (${approveRes.status}).`
+        );
+      }
+
+      if (
+        !approveRes.ok ||
+        approveJson?.success ===
+          false
+      ) {
+        throw new Error(
+          approveJson?.message ||
+            approveJson?.error ||
+            "Top Up berhasil dibuat tetapi gagal di-approve."
         );
       }
 
@@ -778,13 +1286,15 @@ export default function PettyCashPage() {
       await loadPettyCash();
 
       alert(
-        "Top Up Petty Cash berhasil."
+        "Petty Cash berhasil di-Top Up dan langsung APPROVED."
       );
     } catch (error) {
       console.error(
         "TOP UP PETTY CASH ERROR:",
         error
       );
+
+      await loadPettyCash();
 
       alert(
         error instanceof Error
@@ -798,198 +1308,933 @@ export default function PettyCashPage() {
 
   /*
   =========================================================
+  MANUAL TRANSACTION
+  =========================================================
+
+  Manual selalu OUT.
+  Status awal mengikuti API:
+  PENDING.
+  =========================================================
+  */
+
+  async function submitManualTransaction() {
+    if (!user) {
+      alert(
+        "User belum tersedia."
+      );
+
+      return;
+    }
+
+    const amount =
+      parseRupiah(
+        manualAmount
+      );
+
+    const category =
+      manualCategory.trim();
+
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
+      alert(
+        "Nominal transaksi harus lebih dari 0."
+      );
+
+      return;
+    }
+
+    if (!category) {
+      alert(
+        "Kategori wajib diisi."
+      );
+
+      return;
+    }
+
+    if (
+      isOutletAdmin &&
+      user.outletId == null
+    ) {
+      alert(
+        "User outlet belum memiliki outlet."
+      );
+
+      return;
+    }
+
+    let description =
+      manualDescription.trim();
+
+    if (
+      manualCategory ===
+        "LALAMOVE" &&
+      !description
+    ) {
+      description =
+        "Pembayaran ongkir Lalamove";
+    }
+
+    /*
+    Admin pusat:
+    lokasi mengikuti dropdown.
+
+    Admin outlet:
+    API wajib memaksa outlet
+    dari session.
+    */
+
+    const outletId =
+      selectedLocationId;
+
+    try {
+      setSavingManual(true);
+
+      const res =
+        await fetch(
+          "/api/petty-cash",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              type: "OUT",
+
+              category,
+
+              description:
+                description ||
+                undefined,
+
+              amount,
+
+              outletId,
+
+              referenceNumber:
+                manualReference.trim() ||
+                undefined,
+
+              trxDate:
+                manualDate ||
+                undefined,
+            }),
+          }
+        );
+
+      const contentType =
+        res.headers.get(
+          "content-type"
+        ) || "";
+
+      let json: any = null;
+
+      if (
+        contentType.includes(
+          "application/json"
+        )
+      ) {
+        json =
+          await res.json();
+      } else {
+        const text =
+          await res.text();
+
+        console.error(
+          "PETTY CASH NON JSON RESPONSE:",
+          text
+        );
+
+        throw new Error(
+          `Server mengembalikan response bukan JSON (${res.status}).`
+        );
+      }
+
+      if (
+        !res.ok ||
+        json?.success === false
+      ) {
+        throw new Error(
+          json?.message ||
+            json?.error ||
+            "Gagal membuat transaksi Petty Cash."
+        );
+      }
+
+      setShowManual(false);
+
+      await loadPettyCash();
+
+      alert(
+        "Transaksi keluar berhasil dibuat dan menunggu approval."
+      );
+    } catch (error) {
+      console.error(
+        "MANUAL PETTY CASH ERROR:",
+        error
+      );
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Gagal membuat transaksi Petty Cash."
+      );
+    } finally {
+      setSavingManual(false);
+    }
+  }
+
+  /*
+  =========================================================
+  APPROVE
+  =========================================================
+  */
+
+  async function approveTransaction(
+    transaction: PettyCashTransaction
+  ) {
+    if (!canApprove) {
+      alert(
+        "Anda tidak memiliki akses approval."
+      );
+
+      return;
+    }
+
+    if (
+      transaction.status !==
+      "PENDING"
+    ) {
+      alert(
+        "Transaksi ini sudah tidak berstatus PENDING."
+      );
+
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `Approve transaksi ${transaction.number} sebesar Rp ${formatRupiah(
+          transaction.amount
+        )}?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setApprovingId(
+        transaction.id
+      );
+
+      const res =
+        await fetch(
+          "/api/petty-cash/approve",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              id: transaction.id,
+              action: "APPROVE",
+            }),
+          }
+        );
+
+      const contentType =
+        res.headers.get(
+          "content-type"
+        ) || "";
+
+      let json: any = null;
+
+      if (
+        contentType.includes(
+          "application/json"
+        )
+      ) {
+        json =
+          await res.json();
+      } else {
+        const text =
+          await res.text();
+
+        console.error(
+          "APPROVE NON JSON RESPONSE:",
+          text
+        );
+
+        throw new Error(
+          `Server mengembalikan response bukan JSON (${res.status}).`
+        );
+      }
+
+      if (
+        !res.ok ||
+        json?.success === false
+      ) {
+        throw new Error(
+          json?.message ||
+            json?.error ||
+            "Gagal approve transaksi."
+        );
+      }
+
+      await loadPettyCash();
+
+      alert(
+        "Transaksi berhasil di-approve."
+      );
+    } catch (error) {
+      console.error(
+        "APPROVE PETTY CASH ERROR:",
+        error
+      );
+
+      await loadPettyCash();
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Gagal approve transaksi."
+      );
+    } finally {
+      setApprovingId(null);
+    }
+  }
+
+  /*
+  =========================================================
+  REJECT
+  =========================================================
+  */
+
+  async function rejectTransaction(
+    transaction: PettyCashTransaction
+  ) {
+    if (!canApprove) {
+      alert(
+        "Anda tidak memiliki akses approval."
+      );
+
+      return;
+    }
+
+    if (
+      transaction.status !==
+      "PENDING"
+    ) {
+      alert(
+        "Transaksi ini sudah tidak berstatus PENDING."
+      );
+
+      return;
+    }
+
+    const reason =
+      window.prompt(
+        "Alasan Reject transaksi:"
+      );
+
+    if (reason === null) {
+      return;
+    }
+
+    try {
+      setRejectingId(
+        transaction.id
+      );
+
+      const res =
+        await fetch(
+          "/api/petty-cash/approve",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              id: transaction.id,
+
+              action: "REJECT",
+
+              reason:
+                reason.trim() ||
+                undefined,
+            }),
+          }
+        );
+
+      const contentType =
+        res.headers.get(
+          "content-type"
+        ) || "";
+
+      let json: any = null;
+
+      if (
+        contentType.includes(
+          "application/json"
+        )
+      ) {
+        json =
+          await res.json();
+      } else {
+        const text =
+          await res.text();
+
+        console.error(
+          "REJECT NON JSON RESPONSE:",
+          text
+        );
+
+        throw new Error(
+          `Server mengembalikan response bukan JSON (${res.status}).`
+        );
+      }
+
+      if (
+        !res.ok ||
+        json?.success === false
+      ) {
+        throw new Error(
+          json?.message ||
+            json?.error ||
+            "Gagal reject transaksi."
+        );
+      }
+
+      await loadPettyCash();
+
+      alert(
+        "Transaksi berhasil di-reject."
+      );
+    } catch (error) {
+      console.error(
+        "REJECT PETTY CASH ERROR:",
+        error
+      );
+
+      await loadPettyCash();
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Gagal reject transaksi."
+      );
+    } finally {
+      setRejectingId(null);
+    }
+  }
+
+  /*
+  =========================================================
+  STATUS BADGE
+  =========================================================
+  */
+
+  function StatusBadge({
+    status,
+  }: {
+    status?: string;
+  }) {
+    if (
+      status ===
+      "APPROVED"
+    ) {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#B7D9EE] bg-[#EEF7FD] px-2.5 py-1 text-[9px] font-bold tracking-wide text-[#0066B3]">
+          <CircleCheck
+            size={11}
+          />
+          APPROVED
+        </span>
+      );
+    }
+
+    if (
+      status ===
+      "PENDING"
+    ) {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#B9D8EB] bg-[#F1F8FC] px-2.5 py-1 text-[9px] font-bold tracking-wide text-[#17618B]">
+          <Clock3
+            size={11}
+          />
+          PENDING
+        </span>
+      );
+    }
+
+    if (
+      status ===
+      "REJECTED"
+    ) {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#F0C5C5] bg-[#FFF5F5] px-2.5 py-1 text-[9px] font-bold tracking-wide text-[#C62828]">
+          <CircleX
+            size={11}
+          />
+          REJECTED
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex rounded-full bg-[#EEF4F8] px-2.5 py-1 text-[9px] font-bold text-[#58768B]">
+        {status || "-"}
+      </span>
+    );
+  }
+
+  /*
+  =========================================================
   RENDER
   =========================================================
   */
 
   return (
-    <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
+    <div className="min-h-full bg-[#F2F7FB] text-[#172B3A]">
 
-      {/* HEADER */}
+      {/* ===================================================
+          HEADER
+          =================================================== */}
 
-      <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="border-b border-[#D2E1EC] bg-white">
 
-        <div className="flex items-center gap-3">
+        <div className="px-5 py-5 lg:px-8">
 
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#497F70] text-white shadow-sm">
-            <Wallet size={23} />
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+
+            <div className="flex items-center gap-3">
+
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0066B3] text-white shadow-[0_4px_12px_rgba(0,102,179,0.20)]">
+                <Wallet size={21} />
+              </div>
+
+              <div>
+
+                <div className="flex items-center gap-2">
+
+                  <h1 className="text-[22px] font-bold tracking-[-0.025em] text-[#123B5D]">
+                    Petty Cash
+                  </h1>
+
+                  <span className="hidden rounded-full bg-[#E8F3FA] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#0066B3] sm:inline-flex">
+                    Cash Management
+                  </span>
+
+                </div>
+
+                <p className="mt-0.5 text-xs text-[#728494]">
+                  Rekening koran dan mutasi Petty Cash
+                </p>
+
+              </div>
+
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+
+              {/* LOCATION SELECTOR */}
+
+              <div className="flex items-center gap-2 rounded-lg border border-[#D4E3ED] bg-[#F3F8FC] px-3 py-1.5">
+
+                {selectedLocationId ===
+                null ? (
+                  <Landmark
+                    size={15}
+                    className="text-[#0066B3]"
+                  />
+                ) : (
+                  <Store
+                    size={15}
+                    className="text-[#0066B3]"
+                  />
+                )}
+
+                <div className="relative">
+
+                  {isCentralAdmin ? (
+                    <select
+                      value={
+                        selectedLocationId ===
+                        null
+                          ? "PUSAT"
+                          : String(
+                              selectedLocationId
+                            )
+                      }
+                      onChange={(e) => {
+                        const value =
+                          e.target
+                            .value;
+
+                        if (
+                          value ===
+                          "PUSAT"
+                        ) {
+                          setSelectedLocationId(
+                            null
+                          );
+                        } else {
+                          const outletId =
+                            Number(
+                              value
+                            );
+
+                          if (
+                            Number.isInteger(
+                              outletId
+                            )
+                          ) {
+                            setSelectedLocationId(
+                              outletId
+                            );
+                          }
+                        }
+
+                        resetFilter();
+                      }}
+                      className="h-7 min-w-[180px] appearance-none bg-transparent pr-6 text-xs font-bold text-[#315A78] outline-none"
+                    >
+
+                      <option value="PUSAT">
+                        PUSAT • Petty Cash Pusat
+                      </option>
+
+                      {outlets.map(
+                        (outlet) => (
+                          <option
+                            key={
+                              outlet.id
+                            }
+                            value={
+                              outlet.id
+                            }
+                          >
+                            {outlet.code} •{" "}
+                            {outlet.name}
+                          </option>
+                        )
+                      )}
+
+                    </select>
+                  ) : (
+                    <span className="text-xs font-bold text-[#315A78]">
+                      {userLocationLabel}
+                    </span>
+                  )}
+
+                  {isCentralAdmin && (
+                    <ChevronDown
+                      size={13}
+                      className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-[#7896AA]"
+                    />
+                  )}
+
+                </div>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  loadPettyCash
+                }
+                disabled={
+                  loading
+                }
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#C9DCE9] bg-white px-3.5 text-xs font-bold text-[#315A78] shadow-sm transition hover:border-[#8FB9D3] hover:bg-[#F2F8FC] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+
+                <RefreshCw
+                  size={14}
+                  className={
+                    loading
+                      ? "animate-spin"
+                      : ""
+                  }
+                />
+
+                Refresh
+
+              </button>
+
+              {canCreateTransaction && (
+                <button
+                  type="button"
+                  onClick={
+                    openManualTransaction
+                  }
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#0066B3] px-3.5 text-xs font-bold text-white shadow-[0_3px_8px_rgba(0,102,179,0.18)] transition hover:bg-[#005596]"
+                >
+                  <ArrowUpRight
+                    size={15}
+                  />
+                  Transaksi Keluar
+                </button>
+              )}
+
+              {canTopUp && (
+                <button
+                  type="button"
+                  onClick={openTopUp}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#087A56] px-3.5 text-xs font-bold text-white shadow-[0_3px_8px_rgba(8,122,86,0.18)] transition hover:bg-[#066646]"
+                >
+                  <Plus size={15} />
+                  Top Up
+                </button>
+              )}
+
+            </div>
+
           </div>
 
-          <div>
+        </div>
 
-            <h1 className="text-2xl font-bold tracking-tight text-[#18352D] md:text-3xl">
-              Petty Cash
-            </h1>
+      </div>
 
-            <p className="mt-1 text-sm text-gray-500">
-              Kelola saldo dan transaksi Petty Cash
+      {/* ===================================================
+          SUMMARY
+          =================================================== */}
+
+      <div className="px-5 py-5 lg:px-8">
+
+        <div className="grid gap-4 xl:grid-cols-[1.7fr_1fr_1fr_1fr]">
+
+          {/* SALDO */}
+
+          <div className="relative overflow-hidden rounded-xl bg-[#0066B3] p-5 text-white shadow-[0_8px_25px_rgba(0,73,128,0.16)]">
+
+            <div className="absolute -right-10 -top-16 h-44 w-44 rounded-full border-[24px] border-white/5" />
+
+            <div className="absolute -bottom-20 right-12 h-40 w-40 rounded-full border-[20px] border-white/5" />
+
+            <div className="relative">
+
+              <div className="flex items-center justify-between">
+
+                <div className="flex items-center gap-2">
+
+                  <CreditCard
+                    size={16}
+                    className="text-blue-100"
+                  />
+
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-blue-100">
+                    Saldo Tersedia
+                  </span>
+
+                </div>
+
+                <MoreHorizontal
+                  size={18}
+                  className="text-blue-100"
+                />
+
+              </div>
+
+              <div className="mt-3">
+
+                <div className="text-[11px] text-blue-100">
+                  {selectedLocationId ===
+                  null
+                    ? "Petty Cash Pusat"
+                    : "Petty Cash Outlet"}
+                </div>
+
+                <div className="mt-1 text-[29px] font-bold tracking-[-0.03em]">
+                  Rp{" "}
+                  {formatRupiah(
+                    pettyCashBalance
+                  )}
+                </div>
+
+              </div>
+
+              <div className="mt-4 flex items-center justify-between border-t border-white/15 pt-3">
+
+                <span className="text-[10px] text-blue-100">
+                  Lokasi
+                </span>
+
+                <span className="text-right text-[10px] font-bold">
+                  {userLocationLabel}
+                </span>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* TOTAL MASUK */}
+
+          <div className="rounded-xl border border-[#CFE0EB] bg-white p-5 shadow-sm">
+
+            <div className="flex items-center justify-between">
+
+              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#718899]">
+                Total Masuk
+              </span>
+
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF5FB] text-[#0066B3]">
+                <ArrowDownLeft
+                  size={16}
+                />
+              </div>
+
+            </div>
+
+            <div className="mt-4 text-[21px] font-bold tracking-tight text-[#123B5D]">
+              Rp{" "}
+              {formatRupiah(
+                totalApprovedIn
+              )}
+            </div>
+
+            <p className="mt-1 text-[10px] text-[#91A0AB]">
+              Total transaksi approved
+            </p>
+
+          </div>
+
+          {/* TOTAL KELUAR */}
+
+          <div className="rounded-xl border border-[#CFE0EB] bg-white p-5 shadow-sm">
+
+            <div className="flex items-center justify-between">
+
+              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#718899]">
+                Total Keluar
+              </span>
+
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EEF5FA] text-[#0066B3]">
+                <ArrowUpRight
+                  size={16}
+                />
+              </div>
+
+            </div>
+
+            <div className="mt-4 text-[21px] font-bold tracking-tight text-[#123B5D]">
+              Rp{" "}
+              {formatRupiah(
+                totalApprovedOut
+              )}
+            </div>
+
+            <p className="mt-1 text-[10px] text-[#91A0AB]">
+              Total transaksi approved
+            </p>
+
+          </div>
+
+          {/* PENDING */}
+
+          <div className="rounded-xl border border-[#CFE0EB] bg-white p-5 shadow-sm">
+
+            <div className="flex items-center justify-between">
+
+              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#718899]">
+                Menunggu Approval
+              </span>
+
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF3FA] text-[#0066B3]">
+                <Clock3 size={16} />
+              </div>
+
+            </div>
+
+            <div className="mt-4 text-[25px] font-bold tracking-tight text-[#123B5D]">
+              {pendingCount}
+            </div>
+
+            <p className="mt-1 text-[10px] text-[#91A0AB]">
+              Transaksi pending
             </p>
 
           </div>
 
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        {/* =================================================
+            REKENING KORAN
+            ================================================= */}
 
-          <button
-            type="button"
-            onClick={loadPettyCash}
-            disabled={loading}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-[#F5F8F6] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <RefreshCw
-              size={17}
-              className={
-                loading
-                  ? "animate-spin"
-                  : ""
-              }
-            />
+        <div className="mt-5 overflow-hidden rounded-xl border border-[#BFD5E3] bg-white shadow-[0_4px_18px_rgba(22,75,110,0.07)]">
 
-            Refresh
-          </button>
+          {/* HEADER */}
 
-          {canTopUp && (
-            <button
-              type="button"
-              onClick={openTopUp}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#497F70] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3D6D60]"
-            >
-              <Plus size={17} />
+          <div className="border-b border-[#C8DCE9] bg-gradient-to-r from-[#F1F7FB] via-white to-[#F5F9FC] px-5 py-4">
 
-              Top Up
-            </button>
-          )}
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
 
-        </div>
+              <div>
 
-      </div>
+                <div className="flex items-center gap-2">
 
-      {/* SUMMARY */}
-
-      <div className="mb-6">
-
-        <div className="rounded-2xl border border-[#DDE9E4] bg-white p-6 shadow-sm">
-
-          <div className="flex items-start justify-between">
-
-            <div>
-
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#58736A]">
-                Saldo Petty Cash
-              </p>
-
-              <p className="mt-2 text-3xl font-bold text-[#18352D]">
-                Rp{" "}
-                {formatRupiah(
-                  pettyCashBalance
-                )}
-              </p>
-
-              <p className="mt-2 text-xs text-gray-400">
-                {pettyCashAccounts.length} akun Petty Cash
-              </p>
-
-            </div>
-
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
-              <Wallet size={23} />
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* ACCOUNT LIST */}
-
-      {pettyCashAccounts.length > 0 && (
-
-        <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-
-          {pettyCashAccounts.map(
-            (account) => (
-
-              <div
-                key={account.id}
-                className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm"
-              >
-
-                <div className="flex items-start justify-between gap-3">
-
-                  <div className="min-w-0">
-
-                    <p className="text-xs font-semibold text-[#58736A]">
-                      {account.code}
-                    </p>
-
-                    <p className="mt-1 truncate text-sm font-bold text-[#18352D]">
-                      {account.name}
-                    </p>
-
+                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#0066B3] text-white shadow-sm">
+                    <CreditCard
+                      size={13}
+                    />
                   </div>
 
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
-                    <Wallet size={17} />
-                  </div>
+                  <h2 className="text-[15px] font-bold tracking-[-0.01em] text-[#123B5D]">
+                    Rekening Koran
+                  </h2>
+
+                  <span className="rounded-full border border-[#BFD9EA] bg-[#EAF5FB] px-2.5 py-1 text-[9px] font-bold text-[#0066B3]">
+                    {
+                      filteredTransactions.length
+                    }{" "}
+                    MUTASI
+                  </span>
 
                 </div>
 
-                <div className="mt-4">
-
-                  <p className="text-xs text-gray-400">
-                    Saldo
-                  </p>
-
-                  <p className="mt-1 text-xl font-bold text-[#18352D]">
-                    Rp{" "}
-                    {formatRupiah(
-                      account.currentBalance
-                    )}
-                  </p>
-
-                </div>
-
-                {account.outlet && (
-                  <p className="mt-3 text-xs text-gray-400">
-                    {account.outlet.code} -{" "}
-                    {account.outlet.name}
-                  </p>
-                )}
+                <p className="mt-1 pl-9 text-[10px] text-[#82919D]">
+                  Riwayat transaksi dan saldo Petty Cash
+                </p>
 
               </div>
 
-            )
-          )}
+              <div className="flex items-center gap-2">
 
-        </div>
+                <div className="hidden items-center gap-1.5 text-[10px] font-medium text-[#668196] sm:flex">
+                  <SlidersHorizontal
+                    size={13}
+                    className="text-[#0066B3]"
+                  />
+                  Filter mutasi
+                </div>
 
-      )}
+              </div>
 
-      {/* MAIN CARD */}
+            </div>
 
-      <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
+            {/* FILTER */}
 
-        {/* FILTER */}
-
-        <div className="border-b border-[#E5ECE9] p-5">
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-
-            {/* SEARCH */}
-
-            <div>
-
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#58736A]">
-                Pencarian
-              </label>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr_auto]">
 
               <div className="relative">
 
                 <Search
-                  size={18}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7896AA]"
                 />
 
                 <input
@@ -1000,619 +2245,1150 @@ export default function PettyCashPage() {
                       e.target.value
                     )
                   }
-                  placeholder="Cari transaksi..."
-                  className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-10 pr-4 text-sm outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                  placeholder="Cari transaksi, nomor, keterangan..."
+                  className="h-9 w-full rounded-lg border border-[#C9DCE8] bg-[#F4F9FC] pl-9 pr-3 text-xs text-[#344B5B] outline-none transition placeholder:text-[#91A6B5] focus:border-[#0066B3] focus:bg-white focus:ring-2 focus:ring-[#0066B3]/10"
                 />
 
               </div>
-
-            </div>
-
-            {/* ACCOUNT */}
-
-            <div>
-
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#58736A]">
-                Akun Petty Cash
-              </label>
 
               <div className="relative">
 
                 <select
-                  value={selectedAccount}
+                  value={
+                    statusFilter
+                  }
                   onChange={(e) =>
-                    setSelectedAccount(
+                    setStatusFilter(
                       e.target.value
                     )
                   }
-                  className="w-full appearance-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 pr-10 text-sm font-medium text-gray-700 outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                  className="h-9 w-full appearance-none rounded-lg border border-[#C9DCE8] bg-[#F4F9FC] px-3 pr-8 text-xs font-medium text-[#4D6271] outline-none focus:border-[#0066B3] focus:bg-white"
                 >
 
                   <option value="ALL">
-                    Semua Akun
+                    Semua Status
                   </option>
 
-                  {pettyCashAccounts.map(
-                    (account) => (
+                  <option value="PENDING">
+                    PENDING
+                  </option>
 
-                      <option
-                        key={account.id}
-                        value={String(
-                          account.id
-                        )}
-                      >
-                        {account.code} -{" "}
-                        {account.name}
-                      </option>
+                  <option value="APPROVED">
+                    APPROVED
+                  </option>
 
-                    )
-                  )}
+                  <option value="REJECTED">
+                    REJECTED
+                  </option>
 
                 </select>
 
                 <ChevronDown
-                  size={17}
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  size={13}
+                  className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7896AA]"
                 />
 
               </div>
 
-            </div>
+              <div className="relative">
 
-            {/* START DATE */}
+                <CalendarDays
+                  size={13}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7896AA]"
+                />
 
-            <div>
+                <input
+                  type="date"
+                  value={
+                    tanggalMulai
+                  }
+                  onChange={(e) =>
+                    setTanggalMulai(
+                      e.target.value
+                    )
+                  }
+                  className="h-9 w-full rounded-lg border border-[#C9DCE8] bg-[#F4F9FC] pl-8 pr-2 text-xs text-[#4D6271] outline-none focus:border-[#0066B3] focus:bg-white"
+                />
 
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#58736A]">
-                Tanggal Mulai
-              </label>
+              </div>
 
-              <input
-                type="date"
-                value={tanggalMulai}
-                onChange={(e) =>
-                  setTanggalMulai(
-                    e.target.value
-                  )
-                }
-                className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
-              />
+              <div className="relative">
 
-            </div>
+                <CalendarDays
+                  size={13}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7896AA]"
+                />
 
-            {/* END DATE */}
+                <input
+                  type="date"
+                  value={
+                    tanggalSelesai
+                  }
+                  onChange={(e) =>
+                    setTanggalSelesai(
+                      e.target.value
+                    )
+                  }
+                  className="h-9 w-full rounded-lg border border-[#C9DCE8] bg-[#F4F9FC] pl-8 pr-2 text-xs text-[#4D6271] outline-none focus:border-[#0066B3] focus:bg-white"
+                />
 
-            <div>
+              </div>
 
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#58736A]">
-                Tanggal Selesai
-              </label>
-
-              <input
-                type="date"
-                value={tanggalSelesai}
-                onChange={(e) =>
-                  setTanggalSelesai(
-                    e.target.value
-                  )
-                }
-                className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
-              />
+              {(
+                search ||
+                statusFilter !==
+                  "ALL" ||
+                tanggalMulai ||
+                tanggalSelesai
+              ) ? (
+                <button
+                  type="button"
+                  onClick={
+                    resetFilter
+                  }
+                  className="h-9 rounded-lg border border-[#BFD7E5] bg-white px-3 text-[10px] font-bold text-[#0066B3] transition hover:bg-[#EAF5FB]"
+                >
+                  Reset
+                </button>
+              ) : (
+                <div className="hidden xl:block" />
+              )}
 
             </div>
 
           </div>
 
-          <div className="mt-4 flex items-center justify-between gap-3">
+          {/* LOCATION BAR */}
 
-            <div className="text-xs text-gray-500">
+          <div className="flex flex-col gap-2 border-b border-[#CFE0EA] bg-[#EDF5FA] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+
+            <div className="flex items-center gap-2">
+
+              <div className="flex h-7 w-7 items-center justify-center rounded-md border border-[#C5DCEB] bg-white text-[#0066B3] shadow-sm">
+
+                {selectedLocationId ===
+                null ? (
+                  <Landmark
+                    size={13}
+                  />
+                ) : (
+                  <Building2
+                    size={13}
+                  />
+                )}
+
+              </div>
+
+              <div>
+
+                <div className="text-[8px] font-bold uppercase tracking-[0.12em] text-[#7890A0]">
+                  Rekening / Lokasi
+                </div>
+
+                <div className="text-[10px] font-bold text-[#245675]">
+                  {userLocationLabel}
+                </div>
+
+              </div>
+
+            </div>
+
+            <div className="text-[10px] text-[#7890A0]">
 
               Menampilkan{" "}
 
-              <span className="font-semibold text-[#497F70]">
-                {filteredLedgers.length}
+              <span className="font-bold text-[#0066B3]">
+                {
+                  filteredTransactions.length
+                }
               </span>{" "}
 
               transaksi
 
             </div>
 
-            {(search ||
-              selectedAccount !==
-                "ALL" ||
-              tanggalMulai ||
-              tanggalSelesai) && (
-
-              <button
-                type="button"
-                onClick={resetFilter}
-                className="rounded-lg border border-[#D5E5DC] bg-white px-3 py-2 text-xs font-semibold text-[#497F70] transition hover:bg-[#F5F8F6]"
-              >
-                Reset Filter
-              </button>
-
-            )}
-
           </div>
 
-        </div>
+          {/* TABLE */}
 
-        {/* TABLE */}
+          <div className="overflow-x-auto">
 
-        <div className="overflow-x-auto">
+            <table className="min-w-[1160px] w-full border-collapse">
 
-          <table className="min-w-[1150px] w-full text-sm">
+              <thead>
 
-            <thead className="bg-[#F5F8F6]">
+                <tr className="border-b border-[#9FC0D5] bg-[#DDECF5]">
 
-              <tr className="border-b border-[#E5ECE9]">
+                  <th className="w-[55px] border-r border-[#C5DBE8] px-4 py-3 text-center text-[9px] font-bold uppercase tracking-[0.08em] text-[#365D75]">
+                    No
+                  </th>
 
-                <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
-                  No
-                </th>
+                  <th className="w-[115px] border-r border-[#C5DBE8] px-4 py-3 text-left text-[9px] font-bold uppercase tracking-[0.08em] text-[#365D75]">
+                    Tanggal
+                  </th>
 
-                <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
-                  Tanggal
-                </th>
+                  <th className="w-[165px] border-r border-[#C5DBE8] px-4 py-3 text-left text-[9px] font-bold uppercase tracking-[0.08em] text-[#365D75]">
+                    Nomor Transaksi
+                  </th>
 
-                <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
-                  Nomor
-                </th>
+                  <th className="min-w-[270px] border-r border-[#C5DBE8] px-4 py-3 text-left text-[9px] font-bold uppercase tracking-[0.08em] text-[#365D75]">
+                    Keterangan
+                  </th>
 
-                <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
-                  Akun
-                </th>
+                  <th className="w-[130px] border-r border-[#C5DBE8] px-4 py-3 text-left text-[9px] font-bold uppercase tracking-[0.08em] text-[#365D75]">
+                    Kategori
+                  </th>
 
-                <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
-                  Jenis
-                </th>
+                  <th className="w-[155px] border-r border-[#C5DBE8] px-4 py-3 text-right text-[9px] font-bold uppercase tracking-[0.08em] text-[#365D75]">
+                    Debet
+                  </th>
 
-                <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
-                  Kategori
-                </th>
+                  <th className="w-[155px] border-r border-[#C5DBE8] px-4 py-3 text-right text-[9px] font-bold uppercase tracking-[0.08em] text-[#365D75]">
+                    Kredit
+                  </th>
 
-                <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
-                  Keterangan
-                </th>
+                  <th className="w-[165px] border-r border-[#C5DBE8] px-4 py-3 text-right text-[9px] font-bold uppercase tracking-[0.08em] text-[#365D75]">
+                    Saldo
+                  </th>
 
-                <th className="px-5 py-4 text-right font-semibold text-[#35564C]">
-                  Masuk
-                </th>
+                  <th className="w-[115px] border-r border-[#C5DBE8] px-4 py-3 text-center text-[9px] font-bold uppercase tracking-[0.08em] text-[#365D75]">
+                    Status
+                  </th>
 
-                <th className="px-5 py-4 text-right font-semibold text-[#35564C]">
-                  Keluar
-                </th>
-
-                <th className="px-5 py-4 text-right font-semibold text-[#35564C]">
-                  Saldo
-                </th>
-
-                <th className="px-5 py-4 text-center font-semibold text-[#35564C]">
-                  Status
-                </th>
-
-              </tr>
-
-            </thead>
-
-            <tbody>
-
-              {loading || loadingUser ? (
-
-                <tr>
-
-                  <td
-                    colSpan={11}
-                    className="px-5 py-14 text-center"
-                  >
-
-                    <div className="flex items-center justify-center gap-2 text-gray-500">
-
-                      <RefreshCw
-                        size={18}
-                        className="animate-spin text-[#497F70]"
-                      />
-
-                      Memuat Petty Cash...
-
-                    </div>
-
-                  </td>
+                  <th className="w-[150px] px-4 py-3 text-center text-[9px] font-bold uppercase tracking-[0.08em] text-[#365D75]">
+                    Aksi
+                  </th>
 
                 </tr>
 
-              ) : filteredLedgers.length ===
-                0 ? (
+              </thead>
 
-                <tr>
+              <tbody>
 
-                  <td
-                    colSpan={11}
-                    className="px-5 py-14 text-center"
-                  >
+                {loading ||
+                loadingUser ? (
+                  <tr>
 
-                    <div className="flex flex-col items-center">
+                    <td
+                      colSpan={10}
+                      className="px-4 py-20 text-center"
+                    >
 
-                      <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#EAF3EF] text-[#497F70]">
+                      <div className="flex flex-col items-center">
 
-                        <Wallet size={25} />
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E5F1F8] text-[#0066B3]">
+
+                          <RefreshCw
+                            size={18}
+                            className="animate-spin"
+                          />
+
+                        </div>
+
+                        <p className="mt-3 text-xs font-bold text-[#42647A]">
+                          Memuat rekening koran...
+                        </p>
+
+                        <p className="mt-1 text-[10px] text-[#8DA1AF]">
+                          Mohon tunggu sebentar
+                        </p>
 
                       </div>
 
-                      <p className="font-semibold text-gray-700">
-                        Belum ada transaksi Petty Cash
-                      </p>
+                    </td>
 
-                      <p className="mt-1 max-w-md text-sm text-gray-400">
-                        Belum terdapat transaksi
-                        Petty Cash yang sesuai
-                        dengan filter.
-                      </p>
+                  </tr>
+                ) : filteredTransactions.length ===
+                  0 ? (
+                  <tr>
 
-                      {pettyCashAccounts.length ===
-                        0 && (
+                    <td
+                      colSpan={10}
+                      className="px-4 py-20 text-center"
+                    >
 
-                        <p className="mt-2 text-xs font-medium text-[#497F70]">
-                          Belum ada akun Petty Cash
-                          yang tersedia.
+                      <div className="flex flex-col items-center">
+
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#EAF3F8] text-[#7191A5]">
+                          <Wallet
+                            size={20}
+                          />
+                        </div>
+
+                        <p className="mt-3 text-xs font-bold text-[#536F82]">
+                          Belum ada mutasi
                         </p>
 
-                      )}
+                        <p className="mt-1 max-w-sm text-[10px] leading-5 text-[#91A3AE]">
+                          Transaksi Petty Cash yang
+                          sesuai dengan filter akan
+                          ditampilkan di rekening koran.
+                        </p>
 
-                    </div>
+                      </div>
 
-                  </td>
+                    </td>
 
-                </tr>
+                  </tr>
+                ) : (
+                  filteredTransactions.map(
+                    (
+                      transaction,
+                      index
+                    ) => {
+                      const moneyIn =
+                        isMoneyIn(
+                          transaction.type
+                        );
 
-              ) : (
+                      const isPending =
+                        transaction.status ===
+                        "PENDING";
 
-                filteredLedgers.map(
-                  (ledger, index) => {
+                      const isApproving =
+                        approvingId ===
+                        transaction.id;
 
-                    const moneyIn =
-                      isMoneyIn(
-                        ledger.type
-                      );
+                      const isRejecting =
+                        rejectingId ===
+                        transaction.id;
 
-                    const account =
-                      ledger.account ||
-                      pettyCashAccounts.find(
-                        (item) =>
-                          item.id ===
-                          ledger.accountId
-                      );
+                      return (
+                        <tr
+                          key={
+                            transaction.id
+                          }
+                          className={
+                            "group border-b border-[#DCE8EF] transition-colors " +
+                            (isPending
+                              ? "bg-[#F5FAFD] hover:bg-[#EAF5FB]"
+                              : index %
+                                    2 ===
+                                  0
+                                ? "bg-white hover:bg-[#F0F7FB]"
+                                : "bg-[#F8FBFD] hover:bg-[#EDF5FA]")
+                          }
+                        >
 
-                    return (
+                          <td className="border-r border-[#E1EBF1] px-4 py-3.5 text-center align-middle">
+                            <span className="text-[10px] font-semibold text-[#7692A4]">
+                              {index + 1}
+                            </span>
+                          </td>
 
-                      <tr
-                        key={ledger.id}
-                        className="border-b border-[#EDF2EF] transition hover:bg-[#FAFCFB]"
-                      >
+                          <td className="whitespace-nowrap border-r border-[#E1EBF1] px-4 py-3.5 align-middle">
+                            <div className="text-[10px] font-bold text-[#365A70]">
+                              {formatDateOnly(
+                                transaction.trxDate
+                              )}
+                            </div>
 
-                        {/* NO */}
-
-                        <td className="px-5 py-4 text-gray-500">
-                          {index + 1}
-                        </td>
-
-                        {/* DATE */}
-
-                        <td className="whitespace-nowrap px-5 py-4 text-gray-600">
-                          {formatDateTime(
-                            ledger.trxDate
-                          )}
-                        </td>
-
-                        {/* NUMBER */}
-
-                        <td className="px-5 py-4">
-
-                          <div className="font-semibold text-[#18352D]">
-                            {ledger.number ||
-                              "-"}
-                          </div>
-
-                        </td>
-
-                        {/* ACCOUNT */}
-
-                        <td className="px-5 py-4">
-
-                          <div className="font-semibold text-[#18352D]">
-                            {account?.name ||
-                              "-"}
-                          </div>
-
-                          <div className="mt-1 text-xs text-gray-400">
-                            {account?.code ||
-                              "-"}
-                          </div>
-
-                        </td>
-
-                        {/* TYPE */}
-
-                        <td className="px-5 py-4">
-
-                          <span
-                            className={
-                              `inline-flex rounded-full px-3 py-1 text-xs font-semibold ` +
-                              (
-                                ledger.type ===
-                                "IN"
-                                  ? "bg-green-100 text-green-700"
-                                  : ledger.type ===
-                                    "OUT"
-                                  ? "bg-red-100 text-red-700"
-                                  : "bg-gray-100 text-gray-700"
+                            <div className="mt-0.5 text-[9px] text-[#8EA2AF]">
+                              {formatDateTime(
+                                transaction.trxDate
                               )
-                            }
-                          >
-                            {getTypeLabel(
-                              ledger.type
+                                .split(" ")
+                                .slice(1)
+                                .join(" ")}
+                            </div>
+                          </td>
+
+                          <td className="border-r border-[#E1EBF1] px-4 py-3.5 align-middle">
+                            <div className="text-[10px] font-bold text-[#0066B3]">
+                              {transaction.number ||
+                                "-"}
+                            </div>
+
+                            {transaction.referenceNumber && (
+                              <div className="mt-1 text-[8px] text-[#8EA2AF]">
+                                Ref.{" "}
+                                {
+                                  transaction.referenceNumber
+                                }
+                              </div>
                             )}
-                          </span>
 
-                        </td>
+                            {transaction.paymentId && (
+                              <div className="mt-1 text-[8px] font-medium text-[#7B919F]">
+                                Payment #
+                                {
+                                  transaction.paymentId
+                                }
+                              </div>
+                            )}
+                          </td>
 
-                        {/* CATEGORY */}
+                          <td className="max-w-[330px] border-r border-[#E1EBF1] px-4 py-3.5 align-middle">
+                            <div className="flex items-center gap-2.5">
 
-                        <td className="px-5 py-4">
+                              <div
+                                className={
+                                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border " +
+                                  (moneyIn
+                                    ? "border-[#BFDDEB] bg-[#EAF6FB] text-[#0066B3]"
+                                    : "border-[#D3E1E9] bg-[#F0F6FA] text-[#48728C]")
+                                }
+                              >
+                                {moneyIn ? (
+                                  <ArrowDownLeft
+                                    size={13}
+                                  />
+                                ) : (
+                                  <ArrowUpRight
+                                    size={13}
+                                  />
+                                )}
+                              </div>
 
-                          <span className="text-gray-700">
-                            {ledger.category ||
-                              "-"}
-                          </span>
+                              <div className="min-w-0">
 
-                        </td>
+                                <div className="truncate text-[10px] font-semibold text-[#354D5C]">
+                                  {transaction.description ||
+                                    "-"}
+                                </div>
 
-                        {/* DESCRIPTION */}
+                                {transaction.outlet && (
+                                  <div className="mt-0.5 truncate text-[8px] text-[#8EA2AF]">
+                                    {
+                                      transaction.outlet
+                                        .code
+                                    }{" "}
+                                    •{" "}
+                                    {
+                                      transaction.outlet
+                                        .name
+                                    }
+                                  </div>
+                                )}
 
-                        <td className="max-w-[280px] px-5 py-4 text-gray-600">
+                              </div>
 
-                          <div className="truncate">
-                            {ledger.description ||
-                              "-"}
-                          </div>
+                            </div>
+                          </td>
 
-                        </td>
+                          <td className="border-r border-[#E1EBF1] px-4 py-3.5 align-middle">
 
-                        {/* IN */}
+                            {transaction.category ===
+                            "LALAMOVE" ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-md border border-[#BFD9E8] bg-[#EAF4FA] px-2 py-1 text-[8px] font-bold tracking-wide text-[#0066B3]">
+                                <Truck
+                                  size={10}
+                                />
+                                LALAMOVE
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-semibold text-[#617C8E]">
+                                {transaction.category ||
+                                  "-"}
+                              </span>
+                            )}
 
-                        <td className="px-5 py-4 text-right font-semibold text-green-700">
+                          </td>
 
-                          {moneyIn
-                            ? `Rp ${formatRupiah(
-                                ledger.amount
-                              )}`
-                            : "-"}
+                          {/* DEBET / OUT */}
 
-                        </td>
+                          <td className="border-r border-[#E1EBF1] px-4 py-3.5 text-right align-middle">
 
-                        {/* OUT */}
-
-                        <td className="px-5 py-4 text-right font-semibold text-red-600">
-
-                          {!moneyIn
-                            ? `Rp ${formatRupiah(
-                                ledger.amount
-                              )}`
-                            : "-"}
-
-                        </td>
-
-                        {/* BALANCE */}
-
-                        <td className="px-5 py-4 text-right font-bold text-[#18352D]">
-
-                          Rp{" "}
-
-                          {formatRupiah(
-                            ledger.balanceAfter
-                          )}
-
-                        </td>
-
-                        {/* STATUS */}
-
-                        <td className="px-5 py-4 text-center">
-
-                          <span
-                            className={
-                              `inline-flex rounded-full px-3 py-1 text-xs font-semibold ` +
-                              (
-                                ledger.status ===
-                                "APPROVED"
-                                  ? "bg-green-100 text-green-700"
-                                  : ledger.status ===
-                                    "PENDING"
-                                  ? "bg-amber-100 text-amber-700"
-                                  : ledger.status ===
-                                    "REJECTED"
-                                  ? "bg-red-100 text-red-700"
-                                  : "bg-gray-100 text-gray-700"
+                            {!moneyIn ? (
+                              transaction.status ===
+                              "APPROVED" ? (
+                                <span className="font-bold tabular-nums text-[#C62828]">
+                                  Rp{" "}
+                                  {formatRupiah(
+                                    transaction.amount
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="font-semibold tabular-nums text-[#9AAEBB]">
+                                  Rp{" "}
+                                  {formatRupiah(
+                                    transaction.amount
+                                  )}
+                                </span>
                               )
-                            }
-                          >
-                            {ledger.status ||
-                              "-"}
-                          </span>
+                            ) : (
+                              <span className="text-[#C3D0D8]">
+                                —
+                              </span>
+                            )}
 
-                        </td>
+                          </td>
 
-                      </tr>
+                          {/* KREDIT / IN */}
 
-                    );
-                  }
-                )
+                          <td className="border-r border-[#E1EBF1] px-4 py-3.5 text-right align-middle">
 
-              )}
+                            {moneyIn ? (
+                              transaction.status ===
+                              "APPROVED" ? (
+                                <span className="font-bold tabular-nums text-[#0066B3]">
+                                  Rp{" "}
+                                  {formatRupiah(
+                                    transaction.amount
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="font-semibold tabular-nums text-[#9AAEBB]">
+                                  Rp{" "}
+                                  {formatRupiah(
+                                    transaction.amount
+                                  )}
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-[#C3D0D8]">
+                                —
+                              </span>
+                            )}
 
-            </tbody>
+                          </td>
 
-          </table>
+                          {/* SALDO */}
+
+                          <td className="border-r border-[#E1EBF1] px-4 py-3.5 text-right align-middle">
+
+                            {transaction.status ===
+                            "APPROVED" ? (
+                              <span className="font-bold tabular-nums text-[#173D59]">
+                                Rp{" "}
+                                {formatRupiah(
+                                  transaction.balanceAfter
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-semibold text-[#9EAFBA]">
+                                Belum diposting
+                              </span>
+                            )}
+
+                          </td>
+
+                          {/* STATUS */}
+
+                          <td className="border-r border-[#E1EBF1] px-4 py-3.5 text-center align-middle">
+
+                            <StatusBadge
+                              status={
+                                transaction.status
+                              }
+                            />
+
+                          </td>
+
+                          {/* AKSI */}
+
+                          <td className="px-4 py-3.5 text-center align-middle">
+
+                            {canApprove &&
+                            isPending ? (
+                              <div className="flex items-center justify-center gap-1.5">
+
+                                <button
+                                  type="button"
+                                  disabled={
+                                    isApproving ||
+                                    isRejecting
+                                  }
+                                  onClick={() =>
+                                    approveTransaction(
+                                      transaction
+                                    )
+                                  }
+                                  className="inline-flex h-7 items-center gap-1 rounded-md bg-[#0066B3] px-2.5 text-[8px] font-bold text-white shadow-sm transition hover:bg-[#005596] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+
+                                  {isApproving ? (
+                                    <RefreshCw
+                                      size={10}
+                                      className="animate-spin"
+                                    />
+                                  ) : (
+                                    <Check
+                                      size={10}
+                                    />
+                                  )}
+
+                                  {isApproving
+                                    ? "..."
+                                    : "Approve"}
+
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={
+                                    isApproving ||
+                                    isRejecting
+                                  }
+                                  onClick={() =>
+                                    rejectTransaction(
+                                      transaction
+                                    )
+                                  }
+                                  className="inline-flex h-7 items-center gap-1 rounded-md border border-[#C7DCE8] bg-white px-2.5 text-[8px] font-bold text-[#C62828] transition hover:bg-[#FFF5F5] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+
+                                  {isRejecting ? (
+                                    <RefreshCw
+                                      size={10}
+                                      className="animate-spin"
+                                    />
+                                  ) : (
+                                    <CircleX
+                                      size={10}
+                                    />
+                                  )}
+
+                                  {isRejecting
+                                    ? "..."
+                                    : "Reject"}
+
+                                </button>
+
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-[#B8C7D0]">
+                                —
+                              </span>
+                            )}
+
+                          </td>
+
+                        </tr>
+                      );
+                    }
+                  )
+                )}
+
+              </tbody>
+
+            </table>
+
+          </div>
+
+          {/* FOOTER */}
+
+          {!loading &&
+            !loadingUser &&
+            filteredTransactions.length >
+              0 && (
+              <div className="flex flex-col gap-2 border-t border-[#C9DDE9] bg-[#EDF5FA] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+
+                <div className="text-[9px] text-[#718B9C]">
+                  Rekening koran Petty Cash
+                </div>
+
+                <div className="flex items-center gap-4 text-[9px]">
+
+                  <span className="flex items-center gap-1.5">
+
+                    <span className="h-2 w-2 rounded-full bg-[#0066B3]" />
+
+                    <span className="text-[#647D8D]">
+                      Kredit / Masuk
+                    </span>
+
+                  </span>
+
+                  <span className="flex items-center gap-1.5">
+
+                    <span className="h-2 w-2 rounded-full bg-[#C62828]" />
+
+                    <span className="text-[#647D8D]">
+                      Debet / Keluar
+                    </span>
+
+                  </span>
+
+                </div>
+
+              </div>
+            )}
 
         </div>
 
       </div>
 
-      {/* TOP UP MODAL */}
+      {/* ===================================================
+          MANUAL TRANSACTION MODAL
+          =================================================== */}
 
-      {showTopUp && (
+      {showManual && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#061F31]/50 p-4 backdrop-blur-sm">
 
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-white/50 bg-white shadow-[0_25px_80px_rgba(0,30,50,0.25)]">
 
-          <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
-
-            {/* HEADER */}
-
-            <div className="flex items-center justify-between border-b border-[#E5ECE9] px-6 py-5">
+            <div className="flex items-center justify-between border-b border-[#D7E4EC] bg-[#EDF5FA] px-5 py-4">
 
               <div>
 
-                <h2 className="text-lg font-bold text-[#18352D]">
-                  Top Up Petty Cash
-                </h2>
+                <div className="flex items-center gap-2">
 
-                <p className="mt-1 text-xs text-gray-500">
-                  Tambahkan saldo ke akun Petty Cash
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#DDECF5] text-[#0066B3]">
+                    <ArrowUpRight
+                      size={15}
+                    />
+                  </div>
+
+                  <h2 className="text-[15px] font-bold text-[#123B5D]">
+                    Transaksi Keluar
+                  </h2>
+
+                </div>
+
+                <p className="mt-1 pl-10 text-[10px] text-[#78909F]">
+                  Tambahkan pengeluaran Petty Cash
                 </p>
 
               </div>
 
               <button
                 type="button"
-                onClick={() =>
-                  !savingTopUp &&
-                  setShowTopUp(false)
+                disabled={
+                  savingManual
                 }
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+                onClick={() =>
+                  setShowManual(
+                    false
+                  )
+                }
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[#8FA2AF] transition hover:bg-white hover:text-[#425766]"
               >
-                <X size={18} />
+                <X size={17} />
               </button>
 
             </div>
 
-            {/* FORM */}
+            <div className="space-y-4 p-5">
 
-            <div className="space-y-4 p-6">
-
-              {/* ACCOUNT */}
+              {/* LOKASI */}
 
               <div>
 
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#58736A]">
-                  Akun Petty Cash
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-[#647A89]">
+                  Rekening / Lokasi
                 </label>
 
-                {pettyCashAccounts.length ===
-                0 ? (
+                <div className="flex items-center gap-2 rounded-lg border border-[#C9DCE8] bg-[#F1F7FB] px-3 py-2.5 text-xs font-bold text-[#315A78]">
 
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                    Belum ada akun Petty Cash
-                    yang tersedia.
-                  </div>
+                  {selectedLocationId ===
+                  null ? (
+                    <Landmark
+                      size={14}
+                      className="text-[#0066B3]"
+                    />
+                  ) : (
+                    <Building2
+                      size={14}
+                      className="text-[#0066B3]"
+                    />
+                  )}
 
-                ) : (
+                  {userLocationLabel}
 
-                  <div>
-
-                    <div className="relative">
-
-                      <select
-                        value={topUpAccountId}
-                        onChange={(e) =>
-                          setTopUpAccountId(
-                            e.target.value
-                          )
-                        }
-                        className="w-full appearance-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 pr-10 text-sm text-gray-700 outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
-                      >
-
-                        <option value="">
-                          Pilih akun
-                        </option>
-
-                        {pettyCashAccounts.map(
-                          (account) => (
-
-                            <option
-                              key={account.id}
-                              value={String(
-                                account.id
-                              )}
-                            >
-                              {account.code} -{" "}
-                              {account.name}
-                            </option>
-
-                          )
-                        )}
-
-                      </select>
-
-                      <ChevronDown
-                        size={17}
-                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
-                      />
-
-                    </div>
-
-                    {topUpAccountId && (
-
-                      <div className="mt-2 rounded-lg bg-[#F5F8F6] px-3 py-2 text-xs text-[#58736A]">
-
-                        Saldo saat ini:{" "}
-
-                        <span className="font-bold text-[#18352D]">
-
-                          Rp{" "}
-
-                          {formatRupiah(
-                            pettyCashAccounts.find(
-                              (account) =>
-                                String(
-                                  account.id
-                                ) ===
-                                topUpAccountId
-                            )
-                              ?.currentBalance ||
-                              0
-                          )}
-
-                        </span>
-
-                      </div>
-
-                    )}
-
-                  </div>
-
-                )}
+                </div>
 
               </div>
 
-              {/* AMOUNT */}
+              {/* JENIS */}
 
               <div>
 
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#58736A]">
-                  Nominal Top Up
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-[#647A89]">
+                  Jenis Mutasi
+                </label>
+
+                <div className="flex items-center gap-2 rounded-lg border border-[#BFD9E8] bg-[#EAF4FA] px-3 py-2.5">
+
+                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-[#0066B3] shadow-sm">
+                    <ArrowUpRight
+                      size={14}
+                    />
+                  </div>
+
+                  <div>
+
+                    <div className="text-xs font-bold text-[#0066B3]">
+                      KELUAR
+                    </div>
+
+                    <div className="text-[9px] text-[#78909F]">
+                      Mengurangi saldo Petty Cash setelah approval
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* KATEGORI */}
+
+              <div>
+
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-[#647A89]">
+                  Kategori
                 </label>
 
                 <div className="relative">
 
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-500">
+                  <select
+                    value={
+                      manualCategory
+                    }
+                    onChange={(e) =>
+                      setManualCategory(
+                        e.target.value
+                      )
+                    }
+                    className="h-10 w-full appearance-none rounded-lg border border-[#C9DCE8] bg-white px-3 pr-9 text-xs text-[#465B69] outline-none focus:border-[#0066B3] focus:ring-2 focus:ring-[#0066B3]/10"
+                  >
+
+                    <option value="LALAMOVE">
+                      LALAMOVE
+                    </option>
+
+                    <option value="OPERASIONAL">
+                      OPERASIONAL
+                    </option>
+
+                    <option value="TRANSPORTASI">
+                      TRANSPORTASI
+                    </option>
+
+                    <option value="ATK">
+                      ATK
+                    </option>
+
+                    <option value="KAS KECIL">
+                      KAS KECIL
+                    </option>
+
+                    <option value="LAINNYA">
+                      LAINNYA
+                    </option>
+
+                  </select>
+
+                  <ChevronDown
+                    size={14}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#8CA0AD]"
+                  />
+
+                </div>
+
+              </div>
+
+              {/* NOMINAL */}
+
+              <div>
+
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-[#647A89]">
+                  Nominal
+                </label>
+
+                <div className="relative">
+
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#7A8994]">
                     Rp
                   </span>
 
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={topUpAmount}
+                    value={
+                      manualAmount
+                    }
                     onChange={(e) => {
+                      const raw =
+                        e.target.value.replace(
+                          /\D/g,
+                          ""
+                        );
 
+                      setManualAmount(
+                        raw
+                          ? Number(
+                              raw
+                            ).toLocaleString(
+                              "id-ID"
+                            )
+                          : ""
+                      );
+                    }}
+                    placeholder="0"
+                    className="h-10 w-full rounded-lg border border-[#C9DCE8] bg-white pl-10 pr-3 text-sm font-bold text-[#123B5D] outline-none focus:border-[#0066B3] focus:ring-2 focus:ring-[#0066B3]/10"
+                  />
+
+                </div>
+
+              </div>
+
+              {/* TANGGAL + REFERENSI */}
+
+              <div className="grid gap-3 sm:grid-cols-2">
+
+                <div>
+
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-[#647A89]">
+                    Tanggal
+                  </label>
+
+                  <div className="relative">
+
+                    <CalendarDays
+                      size={14}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8CA0AD]"
+                    />
+
+                    <input
+                      type="date"
+                      value={
+                        manualDate
+                      }
+                      onChange={(e) =>
+                        setManualDate(
+                          e.target.value
+                        )
+                      }
+                      className="h-10 w-full rounded-lg border border-[#C9DCE8] bg-white pl-9 pr-2 text-xs text-[#465B69] outline-none focus:border-[#0066B3]"
+                    />
+
+                  </div>
+
+                </div>
+
+                <div>
+
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-[#647A89]">
+                    Nomor Referensi
+                  </label>
+
+                  <input
+                    type="text"
+                    value={
+                      manualReference
+                    }
+                    onChange={(e) =>
+                      setManualReference(
+                        e.target.value
+                      )
+                    }
+                    placeholder="Contoh: LLMV-001"
+                    className="h-10 w-full rounded-lg border border-[#C9DCE8] bg-white px-3 text-xs text-[#465B69] outline-none focus:border-[#0066B3]"
+                  />
+
+                </div>
+
+              </div>
+
+              {/* KETERANGAN */}
+
+              <div>
+
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-[#647A89]">
+                  Keterangan
+                </label>
+
+                <textarea
+                  value={
+                    manualDescription
+                  }
+                  onChange={(e) =>
+                    setManualDescription(
+                      e.target.value
+                    )
+                  }
+                  rows={3}
+                  placeholder={
+                    manualCategory ===
+                    "LALAMOVE"
+                      ? "Contoh: Ongkir Lalamove pengiriman barang..."
+                      : "Keterangan transaksi..."
+                  }
+                  className="w-full resize-none rounded-lg border border-[#C9DCE8] bg-white px-3 py-2.5 text-xs text-[#465B69] outline-none focus:border-[#0066B3] focus:ring-2 focus:ring-[#0066B3]/10"
+                />
+
+              </div>
+
+              {/* INFO */}
+
+              <div className="rounded-lg border border-[#C4DDEB] bg-[#EFF7FB] px-3 py-2.5 text-[10px] leading-5 text-[#617B8C]">
+
+                <span className="font-bold text-[#0066B3]">
+                  Informasi:
+                </span>{" "}
+                transaksi ini merupakan{" "}
+                <span className="font-bold text-[#17618B]">
+                  KELUAR
+                </span>{" "}
+                dan akan masuk ke status{" "}
+                <span className="font-bold text-[#17618B]">
+                  PENDING
+                </span>
+                . Saldo belum berkurang sebelum approval.
+
+              </div>
+
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-[#D7E4EC] bg-[#F4F8FB] px-5 py-4">
+
+              <button
+                type="button"
+                disabled={
+                  savingManual
+                }
+                onClick={() =>
+                  setShowManual(
+                    false
+                  )
+                }
+                className="h-9 rounded-lg border border-[#C9DCE8] bg-white px-4 text-xs font-bold text-[#687B88] transition hover:bg-[#EDF5FA] disabled:opacity-50"
+              >
+                Batal
+              </button>
+
+              <button
+                type="button"
+                disabled={
+                  savingManual ||
+                  !manualAmount
+                }
+                onClick={
+                  submitManualTransaction
+                }
+                className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#0066B3] px-5 text-xs font-bold text-white transition hover:bg-[#005596] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+
+                {savingManual && (
+                  <RefreshCw
+                    size={13}
+                    className="animate-spin"
+                  />
+                )}
+
+                {!savingManual && (
+                  <ArrowUpRight
+                    size={13}
+                  />
+                )}
+
+                {savingManual
+                  ? "Memproses..."
+                  : "Simpan Transaksi Keluar"}
+
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* ===================================================
+          TOP UP MODAL
+          =================================================== */}
+
+      {showTopUp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#061F31]/50 p-4 backdrop-blur-sm">
+
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-white/50 bg-white shadow-[0_25px_80px_rgba(0,30,50,0.25)]">
+
+            <div className="flex items-center justify-between border-b border-[#D7E4EC] bg-[#EDF5FA] px-5 py-4">
+
+              <div>
+
+                <div className="flex items-center gap-2">
+
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E6F5EF] text-[#087A56]">
+                    <Wallet
+                      size={15}
+                    />
+                  </div>
+
+                  <h2 className="text-[15px] font-bold text-[#123B5D]">
+                    Top Up Petty Cash
+                  </h2>
+
+                </div>
+
+                <p className="mt-1 pl-10 text-[10px] text-[#78909F]">
+                  Penambahan saldo ke rekening Petty Cash
+                </p>
+
+              </div>
+
+              <button
+                type="button"
+                disabled={
+                  savingTopUp
+                }
+                onClick={() =>
+                  setShowTopUp(
+                    false
+                  )
+                }
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[#8FA2AF] transition hover:bg-white hover:text-[#425766]"
+              >
+                <X size={17} />
+              </button>
+
+            </div>
+
+            <div className="space-y-4 p-5">
+
+              {/* LOKASI */}
+
+              <div>
+
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-[#647A89]">
+                  Rekening / Lokasi
+                </label>
+
+                <div className="flex items-center gap-2 rounded-lg border border-[#C9DCE8] bg-[#F1F7FB] px-3 py-2.5 text-xs font-bold text-[#315A78]">
+
+                  {selectedLocationId ===
+                  null ? (
+                    <Landmark
+                      size={14}
+                      className="text-[#0066B3]"
+                    />
+                  ) : (
+                    <Building2
+                      size={14}
+                      className="text-[#0066B3]"
+                    />
+                  )}
+
+                  {userLocationLabel}
+
+                </div>
+
+              </div>
+
+              {/* NOMINAL */}
+
+              <div>
+
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-[#647A89]">
+                  Nominal Top Up
+                </label>
+
+                <div className="relative">
+
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#7A8994]">
+                    Rp
+                  </span>
+
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={
+                      topUpAmount
+                    }
+                    onChange={(e) => {
                       const raw =
                         e.target.value.replace(
                           /\D/g,
@@ -1628,78 +3404,85 @@ export default function PettyCashPage() {
                             )
                           : ""
                       );
-
                     }}
                     placeholder="0"
-                    className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-12 pr-4 text-sm font-semibold text-gray-700 outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                    className="h-11 w-full rounded-lg border border-[#C9DCE8] bg-white pl-10 pr-3 text-sm font-bold text-[#123B5D] outline-none focus:border-[#087A56] focus:ring-2 focus:ring-[#087A56]/10"
                   />
 
                 </div>
 
               </div>
 
-              {/* DATE */}
+              {/* TANGGAL + REF */}
 
-              <div>
+              <div className="grid gap-3 sm:grid-cols-2">
 
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#58736A]">
-                  Tanggal
-                </label>
+                <div>
 
-                <div className="relative">
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-[#647A89]">
+                    Tanggal
+                  </label>
 
-                  <CalendarDays
-                    size={17}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                  />
+                  <div className="relative">
+
+                    <CalendarDays
+                      size={14}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8CA0AD]"
+                    />
+
+                    <input
+                      type="date"
+                      value={
+                        topUpDate
+                      }
+                      onChange={(e) =>
+                        setTopUpDate(
+                          e.target.value
+                        )
+                      }
+                      className="h-10 w-full rounded-lg border border-[#C9DCE8] bg-white pl-9 pr-2 text-xs text-[#465B69] outline-none focus:border-[#087A56]"
+                    />
+
+                  </div>
+
+                </div>
+
+                <div>
+
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-[#647A89]">
+                    Nomor Referensi
+                  </label>
 
                   <input
-                    type="date"
-                    value={topUpDate}
+                    type="text"
+                    value={
+                      topUpReference
+                    }
                     onChange={(e) =>
-                      setTopUpDate(
+                      setTopUpReference(
                         e.target.value
                       )
                     }
-                    className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 pl-10 text-sm text-gray-700 outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                    placeholder="Contoh: TOPUP-001"
+                    className="h-10 w-full rounded-lg border border-[#C9DCE8] bg-white px-3 text-xs text-[#465B69] outline-none focus:border-[#087A56]"
                   />
 
                 </div>
 
               </div>
 
-              {/* REFERENCE */}
+              {/* KETERANGAN */}
 
               <div>
 
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#58736A]">
-                  Nomor Referensi
-                </label>
-
-                <input
-                  type="text"
-                  value={topUpReference}
-                  onChange={(e) =>
-                    setTopUpReference(
-                      e.target.value
-                    )
-                  }
-                  placeholder="Contoh: TOPUP-001"
-                  className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
-                />
-
-              </div>
-
-              {/* DESCRIPTION */}
-
-              <div>
-
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#58736A]">
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-[#647A89]">
                   Keterangan
                 </label>
 
                 <textarea
-                  value={topUpDescription}
+                  value={
+                    topUpDescription
+                  }
                   onChange={(e) =>
                     setTopUpDescription(
                       e.target.value
@@ -1707,24 +3490,46 @@ export default function PettyCashPage() {
                   }
                   rows={3}
                   placeholder="Keterangan Top Up..."
-                  className="w-full resize-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                  className="w-full resize-none rounded-lg border border-[#C9DCE8] bg-white px-3 py-2.5 text-xs text-[#465B69] outline-none focus:border-[#087A56] focus:ring-2 focus:ring-[#087A56]/10"
                 />
+
+              </div>
+
+              {/* INFO */}
+
+              <div className="rounded-lg border border-[#CFE7DD] bg-[#F0FBF6] px-3 py-2.5 text-[10px] leading-5 text-[#58776A]">
+
+                <span className="font-bold text-[#087A56]">
+                  Status:
+                </span>{" "}
+                transaksi Top Up akan dibuat
+                sebagai{" "}
+                <span className="font-bold text-[#087A56]">
+                  IN
+                </span>{" "}
+                lalu otomatis diproses menjadi{" "}
+                <span className="font-bold text-[#087A56]">
+                  APPROVED
+                </span>{" "}
+                dan menambah saldo Petty Cash.
 
               </div>
 
             </div>
 
-            {/* FOOTER */}
-
-            <div className="flex justify-end gap-2 border-t border-[#E5ECE9] bg-[#FAFCFB] px-6 py-4">
+            <div className="flex justify-end gap-2 border-t border-[#D7E4EC] bg-[#F4F8FB] px-5 py-4">
 
               <button
                 type="button"
-                disabled={savingTopUp}
-                onClick={() =>
-                  setShowTopUp(false)
+                disabled={
+                  savingTopUp
                 }
-                className="rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+                onClick={() =>
+                  setShowTopUp(
+                    false
+                  )
+                }
+                className="h-9 rounded-lg border border-[#C9DCE8] bg-white px-4 text-xs font-bold text-[#687B88] transition hover:bg-[#EDF5FA] disabled:opacity-50"
               >
                 Batal
               </button>
@@ -1733,20 +3538,23 @@ export default function PettyCashPage() {
                 type="button"
                 disabled={
                   savingTopUp ||
-                  !topUpAccountId ||
-                  !topUpAmount ||
-                  pettyCashAccounts.length ===
-                    0
+                  !topUpAmount
                 }
-                onClick={submitTopUp}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#497F70] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#3D6D60] disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={
+                  submitTopUp
+                }
+                className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#087A56] px-5 text-xs font-bold text-white transition hover:bg-[#066646] disabled:cursor-not-allowed disabled:opacity-50"
               >
 
                 {savingTopUp && (
                   <RefreshCw
-                    size={16}
+                    size={13}
                     className="animate-spin"
                   />
+                )}
+
+                {!savingTopUp && (
+                  <Plus size={13} />
                 )}
 
                 {savingTopUp
@@ -1760,7 +3568,6 @@ export default function PettyCashPage() {
           </div>
 
         </div>
-
       )}
 
     </div>

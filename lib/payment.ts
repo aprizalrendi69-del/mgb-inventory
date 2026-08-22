@@ -21,6 +21,8 @@ export type ProcessPaymentInput = {
   purchaseId?: number | null;
   outletPurchaseId?: number | null;
 
+  payableId?: number | null;
+
   supplierId: number;
 
   amount: number;
@@ -50,6 +52,28 @@ export function roundMoney(value: number) {
       (value + Number.EPSILON) * 100
     ) / 100
   );
+}
+
+// =====================================================
+// NORMALIZE PAYMENT METHOD
+// =====================================================
+
+export function normalizePaymentMethod(
+  value: unknown
+): PaymentMethod | null {
+  const method = String(value ?? "")
+    .trim()
+    .toUpperCase();
+
+  if (
+    !Object.values(PaymentMethod).includes(
+      method as PaymentMethod
+    )
+  ) {
+    return null;
+  }
+
+  return method as PaymentMethod;
 }
 
 // =====================================================
@@ -111,7 +135,7 @@ export function canManagePettyCash(
 }
 
 // =====================================================
-// VALIDATE PAYMENT METHOD
+// VALID PURCHASE PAYMENT METHOD
 // =====================================================
 
 export function isValidPurchasePaymentMethod(
@@ -123,6 +147,21 @@ export function isValidPurchasePaymentMethod(
     method === PaymentMethod.COD ||
     method === PaymentMethod.CBD ||
     method === PaymentMethod.TEMPO
+  );
+}
+
+// =====================================================
+// VALID PAYABLE SETTLEMENT METHOD
+// =====================================================
+
+export function isValidPayableSettlementMethod(
+  method: PaymentMethod
+) {
+  return (
+    method === PaymentMethod.CASH ||
+    method === PaymentMethod.TRANSFER ||
+    method === PaymentMethod.COD ||
+    method === PaymentMethod.CBD
   );
 }
 
@@ -249,29 +288,12 @@ export async function getPayable(
 
 // =====================================================
 // GET CURRENT PETTY CASH BALANCE
-//
-// outletId = null
-// -> PETTY CASH PUSAT
-//
-// outletId = 1
-// -> PETTY CASH OUTLET 1
-//
-// HANYA APPROVED
-//
-// Fungsi ini tetap dipertahankan untuk kompatibilitas
-// dengan bagian lain aplikasi.
 // =====================================================
 
 export async function getCurrentPettyCashBalance(
   tx: Prisma.TransactionClient,
   outletId: number | null
 ) {
-  /*
-  -------------------------------------------------------
-  SEKARANG SALDO UTAMA DIAMBIL DARI ACCOUNT
-  -------------------------------------------------------
-  */
-
   const account =
     await tx.pettyCashAccount.findFirst({
       where: {
@@ -289,87 +311,21 @@ export async function getCurrentPettyCashBalance(
       },
     });
 
-  if (account) {
-    return roundMoney(
-      Number(
-        account.currentBalance ??
-          account.openingBalance ??
-          0
-      )
-    );
+  if (!account) {
+    return 0;
   }
 
-  /*
-  -------------------------------------------------------
-  FALLBACK
-
-  Kalau account belum ditemukan, jangan langsung
-  menganggap ada saldo dari transaksi lain.
-
-  Tetap hitung dari transaksi APPROVED sebagai
-  fallback kompatibilitas.
-  -------------------------------------------------------
-  */
-
-  const approvedTransactions =
-    await tx.pettyCash.findMany({
-      where: {
-        outletId,
-        status:
-          PettyCashStatus.APPROVED,
-      },
-
-      select: {
-        type: true,
-        amount: true,
-      },
-    });
-
-  let balance = 0;
-
-  for (
-    const trx of approvedTransactions
-  ) {
-    const amount =
-      Number(trx.amount) || 0;
-
-    if (
-      trx.type ===
-      PettyCashType.IN
-    ) {
-      balance += amount;
-    } else if (
-      trx.type ===
-      PettyCashType.OUT
-    ) {
-      balance -= amount;
-    }
-  }
-
-  return roundMoney(balance);
+  return roundMoney(
+    Number(
+      account.currentBalance ??
+        account.openingBalance ??
+        0
+    )
+  );
 }
 
 // =====================================================
 // PROCESS PAYMENT
-//
-// CASH
-// -> PAYMENT PAID
-// -> PETTY CASH OUT
-//
-// COD
-// -> PAYMENT PAID
-// -> PETTY CASH OUT
-//
-// CBD
-// -> PAYMENT PAID
-// -> PETTY CASH OUT
-//
-// TRANSFER
-// -> PAYMENT PAID SAJA
-//
-// TEMPO
-// -> PURCHASE PAYABLE
-//
 // =====================================================
 
 export async function processPayment(
@@ -377,9 +333,12 @@ export async function processPayment(
 ) {
   const amount =
     roundMoney(
-      Number(
-        input.amount
-      )
+      Number(input.amount)
+    );
+
+  const method =
+    normalizePaymentMethod(
+      input.method
     );
 
   // ===================================================
@@ -387,13 +346,22 @@ export async function processPayment(
   // ===================================================
 
   if (
-    !Number.isFinite(
-      amount
-    ) ||
+    !Number.isFinite(amount) ||
     amount <= 0
   ) {
     throw new Error(
       "Jumlah pembayaran harus lebih dari 0"
+    );
+  }
+
+  if (
+    !method ||
+    !isValidPurchasePaymentMethod(
+      method
+    )
+  ) {
+    throw new Error(
+      "Metode pembayaran tidak valid"
     );
   }
 
@@ -419,9 +387,21 @@ export async function processPayment(
     );
   }
 
+  const hasCentralPurchase =
+    Number.isInteger(
+      input.purchaseId
+    ) &&
+    Number(input.purchaseId) > 0;
+
+  const hasOutletPurchase =
+    Number.isInteger(
+      input.outletPurchaseId
+    ) &&
+    Number(input.outletPurchaseId) > 0;
+
   if (
-    !input.purchaseId &&
-    !input.outletPurchaseId
+    !hasCentralPurchase &&
+    !hasOutletPurchase
   ) {
     throw new Error(
       "Purchase tidak valid"
@@ -429,30 +409,20 @@ export async function processPayment(
   }
 
   if (
-    input.purchaseId &&
-    input.outletPurchaseId
+    hasCentralPurchase &&
+    hasOutletPurchase
   ) {
     throw new Error(
       "Payment tidak boleh memiliki Purchase Pusat dan Purchase Outlet sekaligus"
     );
   }
 
-  if (
-    !isValidPurchasePaymentMethod(
-      input.method
-    )
-  ) {
-    throw new Error(
-      "Metode pembayaran tidak valid"
-    );
-  }
-
   // ===================================================
-  // OUTLET SECURITY
+  // OUTLET VALIDATION
   // ===================================================
 
   if (
-    input.outletPurchaseId &&
+    hasOutletPurchase &&
     !input.outletId
   ) {
     throw new Error(
@@ -461,7 +431,7 @@ export async function processPayment(
   }
 
   if (
-    input.purchaseId &&
+    hasCentralPurchase &&
     input.outletId !== null &&
     input.outletId !== undefined
   ) {
@@ -483,28 +453,28 @@ export async function processPayment(
       let purchaseTotal = 0;
 
       let purchaseNumber =
-        input.purchaseNumber ??
-        "";
+        input.purchaseNumber ?? "";
 
       let supplierId =
         input.supplierId;
 
       let outletId =
-        input.outletId ??
-        null;
+        input.outletId ?? null;
+
+      let purchasePaymentMethod:
+        | PaymentMethod
+        | null = null;
 
       // =================================================
       // 1. LOAD PURCHASE PUSAT
       // =================================================
 
-      if (
-        input.purchaseId
-      ) {
+      if (hasCentralPurchase) {
         const purchase =
           await tx.purchase.findUnique({
             where: {
               id:
-                input.purchaseId,
+                input.purchaseId!,
             },
           });
 
@@ -527,15 +497,27 @@ export async function processPayment(
         supplierId =
           purchase.supplierId;
 
-        outletId =
-          null;
+        outletId = null;
+
+        purchasePaymentMethod =
+          normalizePaymentMethod(
+            purchase.paymentMethod
+          );
 
         if (
-          purchase.paymentMethod !==
-          input.method
+          !purchasePaymentMethod
         ) {
           throw new Error(
-            "Metode pembayaran tidak sesuai dengan Purchase"
+            "Metode pembayaran Purchase Pusat tidak valid"
+          );
+        }
+
+        if (
+          supplierId !==
+          input.supplierId
+        ) {
+          throw new Error(
+            "Supplier pembayaran tidak sesuai dengan Purchase"
           );
         }
       }
@@ -544,14 +526,12 @@ export async function processPayment(
       // 2. LOAD PURCHASE OUTLET
       // =================================================
 
-      if (
-        input.outletPurchaseId
-      ) {
+      if (hasOutletPurchase) {
         const purchase =
           await tx.outletPurchase.findUnique({
             where: {
               id:
-                input.outletPurchaseId,
+                input.outletPurchaseId!,
             },
           });
 
@@ -577,44 +557,567 @@ export async function processPayment(
         outletId =
           purchase.outletId;
 
+        purchasePaymentMethod =
+          normalizePaymentMethod(
+            purchase.paymentMethod
+          );
+
         if (
-          purchase.paymentMethod !==
-          input.method
+          !purchasePaymentMethod
         ) {
           throw new Error(
-            "Metode pembayaran tidak sesuai dengan Purchase Outlet"
+            "Metode pembayaran Purchase Outlet tidak valid"
+          );
+        }
+
+        if (
+          input.outletId !==
+          purchase.outletId
+        ) {
+          throw new Error(
+            "Outlet pembayaran tidak sesuai dengan Purchase Outlet"
+          );
+        }
+
+        if (
+          supplierId !==
+          input.supplierId
+        ) {
+          throw new Error(
+            "Supplier pembayaran tidak sesuai dengan Purchase Outlet"
           );
         }
       }
 
       // =================================================
-      // 3. VALIDATE TOTAL
+      // 3. FIND PAYABLE
       // =================================================
 
-      if (
-        Math.abs(
-          amount -
-            purchaseTotal
-        ) > 0.01
+      let payable = null;
+
+      if (input.payableId) {
+        payable =
+          await tx.purchasePayable.findUnique({
+            where: {
+              id:
+                input.payableId,
+            },
+          });
+
+        if (!payable) {
+          throw new Error(
+            "Purchase Payable tidak ditemukan"
+          );
+        }
+
+        // ---------------------------------------------
+        // PURCHASE PUSAT
+        // ---------------------------------------------
+
+        if (hasCentralPurchase) {
+          if (
+            payable.purchaseId !==
+            input.purchaseId
+          ) {
+            throw new Error(
+              "Purchase Payable tidak sesuai dengan Purchase Pusat"
+            );
+          }
+
+          if (
+            payable.outletPurchaseId !==
+            null
+          ) {
+            throw new Error(
+              "Purchase Payable bukan milik Purchase Pusat"
+            );
+          }
+        }
+
+        // ---------------------------------------------
+        // PURCHASE OUTLET
+        // ---------------------------------------------
+
+        if (hasOutletPurchase) {
+          if (
+            payable.outletPurchaseId !==
+            input.outletPurchaseId
+          ) {
+            throw new Error(
+              "Purchase Payable tidak sesuai dengan Purchase Outlet"
+            );
+          }
+
+          if (
+            payable.purchaseId !==
+            null
+          ) {
+            throw new Error(
+              "Purchase Payable bukan milik Purchase Outlet"
+            );
+          }
+        }
+      } else if (
+        hasCentralPurchase
       ) {
-        throw new Error(
-          `Jumlah pembayaran Rp ${amount.toLocaleString(
-            "id-ID"
-          )} tidak sama dengan total Purchase Rp ${purchaseTotal.toLocaleString(
-            "id-ID"
-          )}`
-        );
+        payable =
+          await tx.purchasePayable.findUnique({
+            where: {
+              purchaseId:
+                input.purchaseId!,
+            },
+          });
+      } else if (
+        hasOutletPurchase
+      ) {
+        payable =
+          await tx.purchasePayable.findUnique({
+            where: {
+              outletPurchaseId:
+                input.outletPurchaseId!,
+            },
+          });
       }
 
       // =================================================
-      // 4. TEMPO
+      // 4. PAYABLE LOGIC
+      // =================================================
+
+      const outstanding =
+        payable
+          ? roundMoney(
+              Number(
+                payable.outstanding
+              )
+            )
+          : 0;
+
+      // =================================================
+      // PAYABLE EXISTING
+      // =================================================
+      //
+      // Kalau Purchase punya payable, berarti Purchase
+      // tersebut adalah TEMPO.
+      //
+      // Payment yang masuk sekarang berarti pelunasan.
+      //
+      // CASH/COD/CBD:
+      //   Payment + Petty Cash OUT
+      //
+      // TRANSFER:
+      //   Payment saja
+      //
+      // TEMPO:
+      //   Tidak boleh menjadi metode pelunasan.
+      // =================================================
+
+      if (payable) {
+        if (
+          purchasePaymentMethod !==
+          PaymentMethod.TEMPO
+        ) {
+          throw new Error(
+            "Purchase non-TEMPO tidak boleh memiliki Purchase Payable"
+          );
+        }
+
+        if (
+          outstanding <= 0.01
+        ) {
+          throw new Error(
+            "Purchase Payable sudah lunas"
+          );
+        }
+
+        if (
+          !isValidPayableSettlementMethod(
+            method
+          )
+        ) {
+          throw new Error(
+            "Pelunasan Purchase Payable harus menggunakan CASH, TRANSFER, COD, atau CBD"
+          );
+        }
+
+        if (
+          amount >
+          outstanding + 0.01
+        ) {
+          throw new Error(
+            `Jumlah pembayaran Rp ${amount.toLocaleString(
+              "id-ID"
+            )} melebihi sisa hutang Rp ${outstanding.toLocaleString(
+              "id-ID"
+            )}`
+          );
+        }
+
+        const oldPaid =
+          roundMoney(
+            Number(
+              payable.paidAmount
+            )
+          );
+
+        const newPaid =
+          roundMoney(
+            oldPaid + amount
+          );
+
+        const newOutstanding =
+          roundMoney(
+            Math.max(
+              0,
+              outstanding - amount
+            )
+          );
+
+        const newStatus =
+          newOutstanding <= 0.01
+            ? "PAID"
+            : newPaid > 0
+            ? "PARTIAL"
+            : "OUTSTANDING";
+
+        // ---------------------------------------------
+        // PETTY CASH
+        // ---------------------------------------------
+
+        let pettyCashAccount:
+          | {
+              id: number;
+              outletId: number | null;
+              openingBalance: any;
+              currentBalance: any;
+              isActive: boolean;
+              code: string;
+              name: string;
+            }
+          | null = null;
+
+        let pettyCashBalanceBefore =
+          0;
+
+        if (
+          isPettyCashPaymentMethod(
+            method
+          )
+        ) {
+          pettyCashAccount =
+            await tx.pettyCashAccount.findFirst({
+              where: {
+                outletId,
+                isActive: true,
+              },
+
+              orderBy: {
+                id: "asc",
+              },
+            });
+
+          if (
+            !pettyCashAccount
+          ) {
+            throw new Error(
+              outletId === null
+                ? "Akun Petty Cash Pusat belum tersedia atau tidak aktif"
+                : "Akun Petty Cash Outlet belum tersedia atau tidak aktif"
+            );
+          }
+
+          pettyCashBalanceBefore =
+            roundMoney(
+              Number(
+                pettyCashAccount.currentBalance ??
+                  pettyCashAccount.openingBalance ??
+                  0
+              )
+            );
+
+          if (
+            amount >
+            pettyCashBalanceBefore + 0.01
+          ) {
+            throw new Error(
+              `${
+                outletId === null
+                  ? "Petty Cash Pusat"
+                  : "Petty Cash Outlet"
+              } tidak mencukupi. Saldo tersedia Rp ${pettyCashBalanceBefore.toLocaleString(
+                "id-ID"
+              )}, pembayaran Rp ${amount.toLocaleString(
+                "id-ID"
+              )}`
+            );
+          }
+        }
+
+        // ---------------------------------------------
+        // PAYMENT NUMBER
+        // ---------------------------------------------
+
+        const paymentNumber =
+          await generatePaymentNumber(
+            tx,
+            paymentDate
+          );
+
+        // ---------------------------------------------
+        // CREATE PAYMENT
+        // ---------------------------------------------
+
+        const payment =
+          await tx.payment.create({
+            data: {
+              number:
+                paymentNumber,
+
+              purchaseId:
+                hasCentralPurchase
+                  ? input.purchaseId!
+                  : null,
+
+              outletPurchaseId:
+                hasOutletPurchase
+                  ? input.outletPurchaseId!
+                  : null,
+
+              supplierId,
+
+              paymentDate,
+
+              amount,
+
+              method,
+
+              status:
+                PaymentStatus.PAID,
+
+              referenceNumber:
+                input.referenceNumber ??
+                null,
+
+              note:
+                input.remarks ??
+                null,
+
+              createdBy:
+                input.userId,
+
+              approvedBy:
+                input.userId,
+
+              approvedAt:
+                paymentDate,
+            },
+          });
+
+        // ---------------------------------------------
+        // UPDATE PAYABLE
+        // ---------------------------------------------
+
+        const updatedPayable =
+          await tx.purchasePayable.update({
+            where: {
+              id:
+                payable.id,
+            },
+
+            data: {
+              paidAmount:
+                newPaid,
+
+              outstanding:
+                newOutstanding,
+
+              status:
+                newStatus,
+            },
+          });
+
+        // ---------------------------------------------
+        // PETTY CASH OUT
+        // ---------------------------------------------
+
+        let pettyCash = null;
+
+        if (
+          isPettyCashPaymentMethod(
+            method
+          )
+        ) {
+          if (
+            !pettyCashAccount
+          ) {
+            throw new Error(
+              "Akun Petty Cash tidak ditemukan"
+            );
+          }
+
+          const balanceBefore =
+            pettyCashBalanceBefore;
+
+          const balanceAfter =
+            roundMoney(
+              balanceBefore -
+                amount
+            );
+
+          const pettyCashNumber =
+            await generatePettyCashNumber(
+              tx,
+              paymentDate
+            );
+
+          pettyCash =
+            await tx.pettyCash.create({
+              data: {
+                number:
+                  pettyCashNumber,
+
+                trxDate:
+                  paymentDate,
+
+                type:
+                  PettyCashType.OUT,
+
+                category:
+                  "PURCHASE",
+
+                description:
+                  `Pelunasan hutang ${method} Purchase ${purchaseNumber}`,
+
+                amount,
+
+                balanceBefore,
+
+                balanceAfter,
+
+                accountId:
+                  pettyCashAccount.id,
+
+                paymentId:
+                  payment.id,
+
+                outletId,
+
+                createdBy:
+                  input.userId,
+
+                approvedBy:
+                  input.userId,
+
+                status:
+                  PettyCashStatus.APPROVED,
+
+                approvedAt:
+                  paymentDate,
+              },
+            });
+
+          await tx.pettyCashAccount.update({
+            where: {
+              id:
+                pettyCashAccount.id,
+            },
+
+            data: {
+              currentBalance:
+                balanceAfter,
+            },
+          });
+        }
+
+        return {
+          type:
+            "PAYABLE_PAYMENT" as const,
+
+          payment,
+
+          payable: {
+            id:
+              updatedPayable.id,
+
+            amount:
+              roundMoney(
+                Number(
+                  updatedPayable.amount
+                )
+              ),
+
+            paidAmount:
+              roundMoney(
+                Number(
+                  updatedPayable.paidAmount
+                )
+              ),
+
+            outstanding:
+              roundMoney(
+                Number(
+                  updatedPayable.outstanding
+                )
+              ),
+
+            status:
+              updatedPayable.status,
+          },
+
+          pettyCash:
+            pettyCash
+              ? {
+                  id:
+                    pettyCash.id,
+
+                  number:
+                    pettyCash.number,
+
+                  amount:
+                    Number(
+                      pettyCash.amount
+                    ),
+
+                  balanceBefore:
+                    Number(
+                      pettyCash.balanceBefore
+                    ),
+
+                  balanceAfter:
+                    Number(
+                      pettyCash.balanceAfter
+                    ),
+
+                  outletId:
+                    pettyCash.outletId,
+
+                  accountId:
+                    pettyCash.accountId,
+                }
+              : null,
+        };
+      }
+
+      // =================================================
+      // 5. TEMPO
+      // =================================================
+      //
+      // TEMPO:
+      // - TIDAK CREATE PAYMENT
+      // - CREATE PAYABLE
+      // - TIDAK POTONG PETTY CASH
       // =================================================
 
       if (
-        isTempoPaymentMethod(
-          input.method
-        )
+        method ===
+        PaymentMethod.TEMPO
       ) {
+        // Purchase TEMPO tidak boleh sudah punya payable
+        if (payable) {
+          throw new Error(
+            "Purchase Payable untuk Purchase ini sudah tersedia"
+          );
+        }
+
         const payableData = {
           supplierId,
 
@@ -642,50 +1145,24 @@ export async function processPayment(
             "OUTSTANDING",
         };
 
-        let payable;
-
-        // =============================================
-        // PURCHASE PUSAT
-        // =============================================
+        let createdPayable;
 
         if (
-          input.purchaseId
+          hasCentralPurchase
         ) {
-          payable =
-            await tx.purchasePayable.upsert({
-              where: {
+          createdPayable =
+            await tx.purchasePayable.create({
+              data: {
                 purchaseId:
-                  input.purchaseId,
-              },
-
-              update:
-                payableData,
-
-              create: {
-                purchaseId:
-                  input.purchaseId,
+                  input.purchaseId!,
 
                 ...payableData,
               },
             });
-        }
-
-        // =============================================
-        // PURCHASE OUTLET
-        // =============================================
-
-        else {
-          payable =
-            await tx.purchasePayable.upsert({
-              where: {
-                outletPurchaseId:
-                  input.outletPurchaseId!,
-              },
-
-              update:
-                payableData,
-
-              create: {
+        } else {
+          createdPayable =
+            await tx.purchasePayable.create({
+              data: {
                 outletPurchaseId:
                   input.outletPurchaseId!,
 
@@ -698,52 +1175,118 @@ export async function processPayment(
           type:
             "PAYABLE" as const,
 
-          payment:
-            null,
+          payment: null,
 
           payable: {
             id:
-              payable.id,
+              createdPayable.id,
 
             amount:
               roundMoney(
                 Number(
-                  payable.amount
+                  createdPayable.amount
                 )
               ),
 
             paidAmount:
               roundMoney(
                 Number(
-                  payable.paidAmount
+                  createdPayable.paidAmount
                 )
               ),
 
             outstanding:
               roundMoney(
                 Number(
-                  payable.outstanding
+                  createdPayable.outstanding
                 )
               ),
 
             status:
-              payable.status,
+              createdPayable.status,
           },
 
-          pettyCash:
-            null,
+          pettyCash: null,
         };
       }
 
       // =================================================
-      // 5. PETTY CASH ACCOUNT
+      // 6. NON-TEMPO PURCHASE
+      // =================================================
       //
-      // UNTUK CASH / COD / CBD
+      // CASH / COD / CBD / TRANSFER
       //
-      // PENTING:
-      // accountId harus ditentukan SEBELUM PAYMENT
-      // dibuat supaya seluruh proses berada dalam
-      // transaction yang sama.
+      // WAJIB SAMA DENGAN METODE PURCHASE.
+      // =================================================
+
+      if (
+        !purchasePaymentMethod
+      ) {
+        throw new Error(
+          "Purchase belum memiliki metode pembayaran"
+        );
+      }
+
+      const normalizedPurchaseMethod =
+        normalizePaymentMethod(
+          purchasePaymentMethod
+        );
+
+      if (
+        !normalizedPurchaseMethod
+      ) {
+        throw new Error(
+          "Metode pembayaran Purchase tidak valid"
+        );
+      }
+
+      if (
+        normalizedPurchaseMethod ===
+        PaymentMethod.TEMPO
+      ) {
+        throw new Error(
+          "Purchase TEMPO harus diproses sebagai Purchase Payable"
+        );
+      }
+
+      if (
+        normalizedPurchaseMethod !==
+        method
+      ) {
+        throw new Error(
+          `Metode pembayaran tidak sesuai dengan Purchase. Metode Purchase: ${normalizedPurchaseMethod}, metode pembayaran: ${method}`
+        );
+      }
+
+      // =================================================
+      // 7. PAYMENT AMOUNT
+      // =================================================
+
+      if (
+        Math.abs(
+          amount -
+            purchaseTotal
+        ) > 0.01
+      ) {
+        throw new Error(
+          `Jumlah pembayaran Rp ${amount.toLocaleString(
+            "id-ID"
+          )} tidak sama dengan total Purchase Rp ${purchaseTotal.toLocaleString(
+            "id-ID"
+          )}`
+        );
+      }
+
+      // =================================================
+      // 8. PETTY CASH
+      // =================================================
+      //
+      // HANYA:
+      // CASH
+      // COD
+      // CBD
+      //
+      // TRANSFER TIDAK MASUK SINI.
       // =================================================
 
       let pettyCashAccount:
@@ -763,7 +1306,7 @@ export async function processPayment(
 
       if (
         isPettyCashPaymentMethod(
-          input.method
+          method
         )
       ) {
         pettyCashAccount =
@@ -778,22 +1321,15 @@ export async function processPayment(
             },
           });
 
-        if (!pettyCashAccount) {
-          const owner =
-            outletId === null
-              ? "Pusat"
-              : "Outlet";
-
+        if (
+          !pettyCashAccount
+        ) {
           throw new Error(
-            `Akun Petty Cash ${owner} belum tersedia atau tidak aktif`
+            outletId === null
+              ? "Akun Petty Cash Pusat belum tersedia atau tidak aktif"
+              : "Akun Petty Cash Outlet belum tersedia atau tidak aktif"
           );
         }
-
-        /*
-        ---------------------------------------------------
-        SALDO BERJALAN DARI ACCOUNT
-        ---------------------------------------------------
-        */
 
         pettyCashBalanceBefore =
           roundMoney(
@@ -804,23 +1340,16 @@ export async function processPayment(
             )
           );
 
-        /*
-        ---------------------------------------------------
-        VALIDATE SALDO
-        ---------------------------------------------------
-        */
-
         if (
           amount >
-          pettyCashBalanceBefore
+          pettyCashBalanceBefore + 0.01
         ) {
-          const owner =
-            outletId
-              ? "Petty Cash outlet"
-              : "Petty Cash pusat";
-
           throw new Error(
-            `${owner} tidak mencukupi. Saldo tersedia Rp ${pettyCashBalanceBefore.toLocaleString(
+            `${
+              outletId === null
+                ? "Petty Cash Pusat"
+                : "Petty Cash Outlet"
+            } tidak mencukupi. Saldo tersedia Rp ${pettyCashBalanceBefore.toLocaleString(
               "id-ID"
             )}, pembayaran Rp ${amount.toLocaleString(
               "id-ID"
@@ -830,7 +1359,7 @@ export async function processPayment(
       }
 
       // =================================================
-      // 6. PAYMENT NUMBER
+      // 9. PAYMENT NUMBER
       // =================================================
 
       const paymentNumber =
@@ -840,7 +1369,7 @@ export async function processPayment(
         );
 
       // =================================================
-      // 7. CREATE PAYMENT
+      // 10. CREATE PAYMENT
       // =================================================
 
       const payment =
@@ -850,12 +1379,14 @@ export async function processPayment(
               paymentNumber,
 
             purchaseId:
-              input.purchaseId ??
-              null,
+              hasCentralPurchase
+                ? input.purchaseId!
+                : null,
 
             outletPurchaseId:
-              input.outletPurchaseId ??
-              null,
+              hasOutletPurchase
+                ? input.outletPurchaseId!
+                : null,
 
             supplierId,
 
@@ -863,8 +1394,7 @@ export async function processPayment(
 
             amount,
 
-            method:
-              input.method,
+            method,
 
             status:
               PaymentStatus.PAID,
@@ -889,31 +1419,19 @@ export async function processPayment(
         });
 
       // =================================================
-      // 8. PETTY CASH
-      //
-      // CASH / COD / CBD
-      //
-      // SEKARANG:
-      // - accountId DIISI
-      // - balanceBefore dari account
-      // - balanceAfter dihitung
-      // - currentBalance ACCOUNT diperbarui
+      // 11. PETTY CASH OUT
       // =================================================
 
       let pettyCash = null;
 
       if (
         isPettyCashPaymentMethod(
-          input.method
+          method
         )
       ) {
-        /*
-        ---------------------------------------------------
-        ACCOUNT HARUS SUDAH ADA
-        ---------------------------------------------------
-        */
-
-        if (!pettyCashAccount) {
+        if (
+          !pettyCashAccount
+        ) {
           throw new Error(
             "Akun Petty Cash tidak ditemukan"
           );
@@ -928,32 +1446,11 @@ export async function processPayment(
               amount
           );
 
-        /*
-        ---------------------------------------------------
-        PETTY CASH NUMBER
-        ---------------------------------------------------
-        */
-
         const pettyCashNumber =
           await generatePettyCashNumber(
             tx,
             paymentDate
           );
-
-        /*
-        ---------------------------------------------------
-        CREATE PETTY CASH
-        ---------------------------------------------------
-
-        INI BAGIAN PENTING:
-
-        accountId:
-        -> mengikat transaksi ke akun Petty Cash
-           yang benar.
-
-        outletId:
-        -> tetap menyimpan lokasi transaksi.
-        */
 
         pettyCash =
           await tx.pettyCash.create({
@@ -971,7 +1468,7 @@ export async function processPayment(
                 "PURCHASE",
 
               description:
-                `Pembayaran ${input.method} Purchase ${purchaseNumber}`,
+                `Pembayaran ${method} Purchase ${purchaseNumber}`,
 
               amount,
 
@@ -1001,15 +1498,6 @@ export async function processPayment(
             },
           });
 
-        /*
-        ---------------------------------------------------
-        UPDATE CURRENT BALANCE ACCOUNT
-        ---------------------------------------------------
-
-        Karena transaksi langsung APPROVED,
-        saldo akun juga langsung berkurang.
-        */
-
         await tx.pettyCashAccount.update({
           where: {
             id:
@@ -1024,11 +1512,7 @@ export async function processPayment(
       }
 
       // =================================================
-      // 9. TRANSFER
-      //
-      // PAYMENT SAJA
-      //
-      // TIDAK ADA PETTY CASH
+      // 12. RETURN
       // =================================================
 
       return {
@@ -1037,8 +1521,7 @@ export async function processPayment(
 
         payment,
 
-        payable:
-          null,
+        payable: null,
 
         pettyCash:
           pettyCash
@@ -1075,11 +1558,8 @@ export async function processPayment(
     },
 
     {
-      maxWait:
-        5000,
-
-      timeout:
-        10000,
+      maxWait: 5000,
+      timeout: 10000,
     }
   );
 }

@@ -23,16 +23,18 @@ import {
 // =====================================================
 
 async function getCurrentUser() {
-  const cookieStore = await cookies();
-
-  const session = cookieStore.get("erp-session");
-
-  if (!session) {
-    return null;
-  }
-
   try {
-    const data = JSON.parse(session.value);
+    const cookieStore = await cookies();
+
+    const session =
+      cookieStore.get("erp-session");
+
+    if (!session?.value) {
+      return null;
+    }
+
+    const data =
+      JSON.parse(session.value);
 
     const userId = Number(
       data?.user?.id ??
@@ -59,30 +61,47 @@ async function getCurrentUser() {
         outletId: true,
       },
     });
-  } catch {
+  } catch (error) {
+    console.error(
+      "GET CURRENT USER TOP UP ERROR:",
+      error
+    );
+
     return null;
   }
 }
 
 // =====================================================
 // TOP UP PETTY CASH
+// =====================================================
 //
 // PUSAT
-// outletId = null
+// - outletId = null
+// - menggunakan PettyCashAccount Pusat
 //
 // OUTLET
-// outletId = user.outletId
+// - outletId = ID outlet
+// - menggunakan PettyCashAccount Outlet
 //
-// TIDAK ADA:
-// - Cash Account
-// - Bank
-// - Cash Ledger
+// TOP UP:
+// - ADMIN / MANAGER saja
+// - langsung APPROVED
+// - langsung menambah currentBalance account
+//
+// SUMBER SALDO UTAMA:
+// PettyCashAccount.currentBalance
+//
+// PettyCash hanya menjadi ledger / riwayat transaksi.
 // =====================================================
 
 export async function POST(
   req: NextRequest
 ) {
   try {
+    // ===================================================
+    // CURRENT USER
+    // ===================================================
+
     const user =
       await getCurrentUser();
 
@@ -92,7 +111,9 @@ export async function POST(
           success: false,
           message: "Tidak login",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
     }
 
@@ -102,9 +123,15 @@ export async function POST(
           success: false,
           message: "User tidak aktif",
         },
-        { status: 403 }
+        {
+          status: 403,
+        }
       );
     }
+
+    // ===================================================
+    // ACCESS
+    // ===================================================
 
     if (
       user.role !== Role.ADMIN &&
@@ -116,9 +143,15 @@ export async function POST(
           message:
             "Tidak memiliki akses Top Up Petty Cash",
         },
-        { status: 403 }
+        {
+          status: 403,
+        }
       );
     }
+
+    // ===================================================
+    // BODY
+    // ===================================================
 
     const body =
       await req.json();
@@ -135,23 +168,40 @@ export async function POST(
         ? null
         : Number(body.outletId);
 
+    const requestedAccountId =
+      body.accountId === null ||
+      body.accountId === undefined ||
+      body.accountId === ""
+        ? null
+        : Number(body.accountId);
+
     const referenceNumber =
-      body.referenceNumber
-        ? String(
+      body.referenceNumber ===
+        undefined ||
+      body.referenceNumber === null ||
+      String(
+        body.referenceNumber
+      ).trim() === ""
+        ? null
+        : String(
             body.referenceNumber
-          ).trim()
-        : null;
+          ).trim();
 
     const remarks =
-      body.remarks
-        ? String(
+      body.remarks ===
+        undefined ||
+      body.remarks === null ||
+      String(
+        body.remarks
+      ).trim() === ""
+        ? null
+        : String(
             body.remarks
-          ).trim()
-        : null;
+          ).trim();
 
-    // =================================================
+    // ===================================================
     // VALIDATE AMOUNT
-    // =================================================
+    // ===================================================
 
     if (
       !Number.isFinite(amount) ||
@@ -163,13 +213,15 @@ export async function POST(
           message:
             "Jumlah Top Up harus lebih dari 0",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    // =================================================
-    // VALIDATE OUTLET
-    // =================================================
+    // ===================================================
+    // VALIDATE OUTLET ID
+    // ===================================================
 
     if (
       requestedOutletId !== null &&
@@ -186,15 +238,46 @@ export async function POST(
           message:
             "Outlet tidak valid",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
+
+    // ===================================================
+    // VALIDATE ACCOUNT ID
+    // ===================================================
+
+    if (
+      requestedAccountId !== null &&
+      (
+        !Number.isInteger(
+          requestedAccountId
+        ) ||
+        requestedAccountId <= 0
+      )
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Akun Petty Cash tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // ===================================================
+    // TRANSACTION
+    // ===================================================
 
     const result =
       await prisma.$transaction(
         async (tx) => {
           // =============================================
-          // CHECK OUTLET
+          // VALIDATE OUTLET
           // =============================================
 
           let outletName =
@@ -208,6 +291,12 @@ export async function POST(
                 where: {
                   id:
                     requestedOutletId,
+                },
+
+                select: {
+                  id: true,
+                  name: true,
+                  active: true,
                 },
               });
 
@@ -228,35 +317,90 @@ export async function POST(
           }
 
           // =============================================
-          // AMBIL SALDO PETTY CASH TERAKHIR
+          // FIND PETTY CASH ACCOUNT
           // =============================================
 
-          const last =
-            await tx.pettyCash.findFirst({
-              where: {
-                outletId:
-                  requestedOutletId,
+          let account;
 
-                status:
-                  PettyCashStatus.APPROVED,
-              },
+          if (
+            requestedAccountId !== null
+          ) {
+            account =
+              await tx.pettyCashAccount.findUnique(
+                {
+                  where: {
+                    id:
+                      requestedAccountId,
+                  },
+                }
+              );
 
-              orderBy: [
+            if (!account) {
+              throw new Error(
+                "Akun Petty Cash tidak ditemukan"
+              );
+            }
+
+            if (!account.isActive) {
+              throw new Error(
+                "Akun Petty Cash tidak aktif"
+              );
+            }
+
+            // -------------------------------------------
+            // ACCOUNT HARUS SESUAI OUTLET
+            // -------------------------------------------
+
+            if (
+              account.outletId !==
+              requestedOutletId
+            ) {
+              throw new Error(
+                account.outletId === null
+                  ? "Akun Petty Cash Pusat tidak sesuai dengan outlet transaksi"
+                  : "Akun Petty Cash Outlet tidak sesuai dengan outlet transaksi"
+              );
+            }
+          } else {
+            // ===========================================
+            // ACCOUNT TIDAK DIPILIH
+            // OTOMATIS CARI AKUN SESUAI OUTLET
+            // ===========================================
+
+            account =
+              await tx.pettyCashAccount.findFirst(
                 {
-                  trxDate:
-                    "desc",
-                },
-                {
-                  id:
-                    "desc",
-                },
-              ],
-            });
+                  where: {
+                    outletId:
+                      requestedOutletId,
+
+                    isActive: true,
+                  },
+
+                  orderBy: {
+                    id: "asc",
+                  },
+                }
+              );
+
+            if (!account) {
+              throw new Error(
+                requestedOutletId === null
+                  ? "Akun Petty Cash Pusat belum tersedia"
+                  : "Akun Petty Cash Outlet belum tersedia"
+              );
+            }
+          }
+
+          // =============================================
+          // SALDO DARI ACCOUNT
+          // =============================================
 
           const balanceBefore =
             roundMoney(
               Number(
-                last?.balanceAfter ??
+                account.currentBalance ??
+                  account.openingBalance ??
                   0
               )
             );
@@ -278,7 +422,7 @@ export async function POST(
             );
 
           // =============================================
-          // CREATE PETTY CASH IN
+          // CREATE PETTY CASH
           // =============================================
 
           const pettyCash =
@@ -305,6 +449,9 @@ export async function POST(
 
                 balanceAfter,
 
+                accountId:
+                  account.id,
+
                 paymentId:
                   null,
 
@@ -325,17 +472,40 @@ export async function POST(
               },
             });
 
+          // =============================================
+          // UPDATE ACCOUNT BALANCE
+          // =============================================
+
+          const updatedAccount =
+            await tx.pettyCashAccount.update({
+              where: {
+                id:
+                  account.id,
+              },
+
+              data: {
+                currentBalance:
+                  balanceAfter,
+              },
+            });
+
           return {
             pettyCash,
+            updatedAccount,
             balanceBefore,
             balanceAfter,
           };
         }
       );
 
+    // ===================================================
+    // RESPONSE
+    // ===================================================
+
     return NextResponse.json(
       {
         success: true,
+
         message:
           "Petty Cash berhasil di-Top Up",
 
@@ -345,6 +515,9 @@ export async function POST(
 
           number:
             result.pettyCash.number,
+
+          accountId:
+            result.pettyCash.accountId,
 
           outletId:
             result.pettyCash.outletId,
@@ -360,12 +533,23 @@ export async function POST(
           balanceAfter:
             result.balanceAfter,
 
+          currentBalance:
+            Number(
+              result.updatedAccount
+                .currentBalance
+            ),
+
           referenceNumber,
 
           remarks,
+
+          status:
+            result.pettyCash.status,
         },
       },
-      { status: 201 }
+      {
+        status: 201,
+      }
     );
   } catch (error) {
     console.error(
@@ -383,7 +567,9 @@ export async function POST(
         success: false,
         message,
       },
-      { status: 400 }
+      {
+        status: 400,
+      }
     );
   }
 }

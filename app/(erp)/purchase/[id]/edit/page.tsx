@@ -25,6 +25,33 @@ type PurchaseItem = {
 };
 
 // =====================================================
+// PAYMENT METHOD
+// =====================================================
+
+const PAYMENT_METHODS = [
+  {
+    value: "CASH",
+    label: "Cash",
+  },
+  {
+    value: "TRANSFER",
+    label: "Transfer",
+  },
+  {
+    value: "COD",
+    label: "COD",
+  },
+  {
+    value: "CBD",
+    label: "CBD",
+  },
+  {
+    value: "TEMPO",
+    label: "Tempo",
+  },
+];
+
+// =====================================================
 // FORMAT NUMBER
 // =====================================================
 
@@ -320,7 +347,6 @@ function BarangSearch({
       ref={ref}
       className="relative min-w-[300px]"
     >
-
       {/* INPUT */}
 
       <input
@@ -339,9 +365,7 @@ function BarangSearch({
 
       {open && (
         <div className="absolute left-0 top-full z-[100] mt-1 w-full overflow-hidden rounded-xl border border-[#D5E5DC] bg-white shadow-xl">
-
           <div className="max-h-64 overflow-y-auto">
-
             {filteredBarangs.length === 0 ? (
               <div className="px-4 py-5 text-center text-sm text-gray-400">
                 Barang tidak ditemukan
@@ -366,7 +390,6 @@ function BarangSearch({
                         : "bg-white"
                     }`}
                   >
-
                     <div className="font-semibold text-[#18352D]">
                       {barang.code}
                     </div>
@@ -382,17 +405,13 @@ function BarangSearch({
                         </span>
                       )}
                     </div>
-
                   </button>
                 )
               )
             )}
-
           </div>
-
         </div>
       )}
-
     </div>
   );
 }
@@ -417,6 +436,9 @@ export default function EditPurchasePage() {
     useState<Barang[]>([]);
 
   const [supplierId, setSupplierId] =
+    useState("");
+
+  const [paymentMethod, setPaymentMethod] =
     useState("");
 
   const [remarks, setRemarks] =
@@ -489,6 +511,12 @@ export default function EditPurchasePage() {
         String(
           data.supplierId ?? ""
         )
+      );
+
+      setPaymentMethod(
+        String(
+          data.paymentMethod ?? ""
+        ).toUpperCase()
       );
 
       setRemarks(
@@ -629,6 +657,28 @@ export default function EditPurchasePage() {
       return;
     }
 
+    if (!paymentMethod) {
+      alert(
+        "Metode pembayaran wajib dipilih"
+      );
+
+      return;
+    }
+
+    if (
+      !PAYMENT_METHODS.some(
+        (method) =>
+          method.value ===
+          paymentMethod
+      )
+    ) {
+      alert(
+        "Metode pembayaran tidak valid"
+      );
+
+      return;
+    }
+
     if (items.length === 0) {
       alert(
         "Barang belum dipilih"
@@ -690,6 +740,9 @@ export default function EditPurchasePage() {
             supplierId:
               Number(supplierId),
 
+            paymentMethod:
+              paymentMethod,
+
             remarks,
 
             items: items.map(
@@ -721,6 +774,11 @@ export default function EditPurchasePage() {
         !res.ok ||
         !json.success
       ) {
+        console.error(
+          "UPDATE PURCHASE RESPONSE:",
+          json
+        );
+
         alert(
           json.message ||
             "Gagal mengubah Purchase Order"
@@ -787,11 +845,8 @@ export default function EditPurchasePage() {
   ) {
     return (
       <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
-
         <div className="mx-auto max-w-5xl">
-
           <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
-
             <h1 className="text-xl font-bold text-red-700">
               Purchase Order tidak dapat diedit
             </h1>
@@ -814,11 +869,8 @@ export default function EditPurchasePage() {
             >
               Kembali ke Detail
             </Link>
-
           </div>
-
         </div>
-
       </div>
     );
   }
@@ -829,15 +881,12 @@ export default function EditPurchasePage() {
 
   return (
     <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
-
       <div className="mx-auto max-w-6xl">
 
         {/* HEADER */}
 
         <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-
           <div>
-
             <p className="text-sm font-medium text-[#497F70]">
               Purchase Order
             </p>
@@ -849,7 +898,6 @@ export default function EditPurchasePage() {
             <p className="mt-1 text-sm text-gray-500">
               {purchase.number}
             </p>
-
           </div>
 
           <Link
@@ -858,7 +906,6 @@ export default function EditPurchasePage() {
           >
             Batal
           </Link>
-
         </div>
 
         <form
@@ -870,11 +917,9 @@ export default function EditPurchasePage() {
           <div className="mb-6 rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
 
             <div className="border-b border-[#E5ECE9] px-5 py-4">
-
               <h2 className="font-bold text-[#18352D]">
                 Informasi Purchase Order
               </h2>
-
             </div>
 
             <div className="grid gap-5 p-5 md:grid-cols-2">
@@ -882,7 +927,6 @@ export default function EditPurchasePage() {
               {/* NO PO */}
 
               <div>
-
                 <label className="mb-2 block text-sm font-semibold text-gray-700">
                   No. PO
                 </label>
@@ -895,13 +939,11 @@ export default function EditPurchasePage() {
                   disabled
                   className="w-full rounded-xl border border-[#D5E5DC] bg-gray-100 px-4 py-3 text-sm text-gray-500"
                 />
-
               </div>
 
               {/* SUPPLIER */}
 
               <div>
-
                 <label className="mb-2 block text-sm font-semibold text-gray-700">
                   Supplier
                 </label>
@@ -915,7 +957,6 @@ export default function EditPurchasePage() {
                   }
                   className="w-full rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
                 >
-
                   <option value="">
                     Pilih Supplier
                   </option>
@@ -936,15 +977,50 @@ export default function EditPurchasePage() {
                       </option>
                     )
                   )}
-
                 </select>
+              </div>
 
+              {/* METODE PEMBAYARAN */}
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  Metode Pembayaran
+                </label>
+
+                <select
+                  value={paymentMethod}
+                  onChange={(e) =>
+                    setPaymentMethod(
+                      e.target.value
+                    )
+                  }
+                  required
+                  className="w-full rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
+                >
+                  <option value="">
+                    Pilih Metode Pembayaran
+                  </option>
+
+                  {PAYMENT_METHODS.map(
+                    (method) => (
+                      <option
+                        key={
+                          method.value
+                        }
+                        value={
+                          method.value
+                        }
+                      >
+                        {method.label}
+                      </option>
+                    )
+                  )}
+                </select>
               </div>
 
               {/* KETERANGAN */}
 
               <div className="md:col-span-2">
-
                 <label className="mb-2 block text-sm font-semibold text-gray-700">
                   Keterangan
                 </label>
@@ -960,11 +1036,9 @@ export default function EditPurchasePage() {
                   placeholder="Keterangan Purchase Order..."
                   className="w-full rounded-xl border border-[#D5E5DC] bg-white px-4 py-3 text-sm outline-none focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
                 />
-
               </div>
 
             </div>
-
           </div>
 
           {/* DETAIL BARANG */}
@@ -974,7 +1048,6 @@ export default function EditPurchasePage() {
             <div className="flex flex-col gap-3 border-b border-[#E5ECE9] px-5 py-4 md:flex-row md:items-center md:justify-between">
 
               <div>
-
                 <h2 className="font-bold text-[#18352D]">
                   Detail Barang
                 </h2>
@@ -982,7 +1055,6 @@ export default function EditPurchasePage() {
                 <p className="mt-1 text-xs text-gray-500">
                   Ubah barang, qty, dan harga Purchase Order.
                 </p>
-
               </div>
 
               <button
@@ -1000,7 +1072,6 @@ export default function EditPurchasePage() {
               <table className="min-w-full text-sm">
 
                 <thead className="bg-[#F5F8F6]">
-
                   <tr className="border-b border-[#E5ECE9]">
 
                     <th className="px-4 py-3 text-left font-semibold text-[#35564C]">
@@ -1028,7 +1099,6 @@ export default function EditPurchasePage() {
                     </th>
 
                   </tr>
-
                 </thead>
 
                 <tbody>
@@ -1150,11 +1220,9 @@ export default function EditPurchasePage() {
                           {/* SUBTOTAL */}
 
                           <td className="whitespace-nowrap px-4 py-4 text-right font-semibold text-[#18352D]">
-
                             {formatRupiah(
                               subtotal
                             )}
-
                           </td>
 
                           {/* HAPUS */}
@@ -1238,7 +1306,6 @@ export default function EditPurchasePage() {
         </form>
 
       </div>
-
     </div>
   );
 }

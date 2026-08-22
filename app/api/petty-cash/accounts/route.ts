@@ -1,28 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { Role } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
 
 /*
 ===========================================================
-PETTY CASH ACCOUNTS API
-===========================================================
-
-PUSAT
-- outletId = null
-
-OUTLET
-- outletId = ID outlet
-
-ADMIN / MANAGER
-- dapat melihat semua akun
-- dapat membuat akun PUSAT
-- dapat membuat akun outlet
-
-OUTLET_ADMIN
-- hanya dapat melihat akun outlet sendiri
-- hanya dapat membuat akun outlet sendiri
-- tidak boleh membuat akun PUSAT
+CURRENT USER
 ===========================================================
 */
 
@@ -36,37 +20,39 @@ async function getCurrentUser() {
       return null;
     }
 
-    let sessionData: any;
+    let data: any;
 
     try {
-      sessionData = JSON.parse(session.value);
+      data = JSON.parse(session.value);
     } catch {
       return null;
     }
 
-    const sessionUser =
-      sessionData?.user ?? sessionData;
+    const userId = Number(
+      data?.user?.id ??
+        data?.id
+    );
 
-    const userId = Number(sessionUser?.id);
-
-    if (!Number.isInteger(userId) || userId <= 0) {
+    if (
+      !Number.isInteger(userId) ||
+      userId <= 0
+    ) {
       return null;
     }
 
-    const user = await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
-
-      select: {
-        id: true,
-        username: true,
-        fullname: true,
-        role: true,
-        active: true,
-        outletId: true,
-      },
-    });
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+        select: {
+          id: true,
+          fullname: true,
+          role: true,
+          active: true,
+          outletId: true,
+        },
+      });
 
     if (!user || !user.active) {
       return null;
@@ -75,7 +61,7 @@ async function getCurrentUser() {
     return user;
   } catch (error) {
     console.error(
-      "PETTY CASH ACCOUNTS CURRENT USER ERROR:",
+      "GET CURRENT USER PETTY CASH ACCOUNTS ERROR:",
       error
     );
 
@@ -85,19 +71,62 @@ async function getCurrentUser() {
 
 /*
 ===========================================================
-GET
+ROLE HELPERS
+===========================================================
+*/
+
+function isCentralAdmin(role: Role) {
+  return (
+    role === Role.ADMIN ||
+    role === Role.MANAGER
+  );
+}
+
+function isOutletAdmin(role: Role) {
+  return (
+    role === Role.OUTLET_ADMIN ||
+    role === Role.ADMIN_OUTLET
+  );
+}
+
+/*
+===========================================================
+GET PETTY CASH ACCOUNTS
+===========================================================
+
+ADMIN / MANAGER
+----------------
+Boleh melihat:
+
+1. Petty Cash Pusat
+2. Petty Cash seluruh outlet
+
+OUTLET ADMIN
+------------
+Hanya:
+
+1. Petty Cash outlet miliknya
+
+PUSAT
+------
+outletId = null
+
+OUTLET
+------
+outletId = user.outletId
 ===========================================================
 */
 
 export async function GET() {
   try {
-    const user = await getCurrentUser();
+    const user =
+      await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unauthorized",
+          message: "Tidak login",
         },
         {
           status: 401,
@@ -105,18 +134,21 @@ export async function GET() {
       );
     }
 
-    const allowedRoles = [
-      Role.ADMIN,
-      Role.MANAGER,
-      Role.OUTLET_ADMIN,
-    ];
+    /*
+    ========================================================
+    ACCESS
+    ========================================================
+    */
 
-    if (!allowedRoles.includes(user.role)) {
+    if (
+      !isCentralAdmin(user.role) &&
+      !isOutletAdmin(user.role)
+    ) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Anda tidak memiliki akses ke akun petty cash.",
+            "Anda tidak memiliki akses ke akun Petty Cash.",
         },
         {
           status: 403,
@@ -126,41 +158,71 @@ export async function GET() {
 
     /*
     ========================================================
-    FILTER ACCOUNT
+    WHERE
     ========================================================
     */
 
-    const where: any = {};
+    let where: any = {
+      isActive: true,
+    };
 
-    if (user.role === Role.OUTLET_ADMIN) {
+    /*
+    --------------------------------------------------------
+    OUTLET ADMIN
+    --------------------------------------------------------
+    */
+
+    if (isOutletAdmin(user.role)) {
       if (!user.outletId) {
-        return NextResponse.json({
-          success: true,
-          data: [],
-          outlets: [],
-        });
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "User outlet belum memiliki outlet.",
+          },
+          {
+            status: 400,
+          }
+        );
       }
 
-      where.outletId = user.outletId;
+      where = {
+        isActive: true,
+        outletId: user.outletId,
+      };
     }
 
     /*
-    ========================================================
-    ACCOUNTS
-    ========================================================
+    --------------------------------------------------------
+    CENTRAL ADMIN
+    --------------------------------------------------------
+
+    Tidak menggunakan findUnique outletId=null.
+
+    Kita menggunakan findMany sehingga akun Pusat
+    (outletId null) dan semua akun outlet dapat diambil.
+    --------------------------------------------------------
     */
 
     const accounts =
       await prisma.pettyCashAccount.findMany({
         where,
 
-        include: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          type: true,
+          outletId: true,
+          openingBalance: true,
+          currentBalance: true,
+          isActive: true,
+
           outlet: {
             select: {
               id: true,
               code: true,
               name: true,
-              active: true,
             },
           },
         },
@@ -177,60 +239,60 @@ export async function GET() {
 
     /*
     ========================================================
-    OUTLETS
+    RESPONSE
     ========================================================
     */
-
-    let outlets: any[] = [];
-
-    if (user.role === Role.OUTLET_ADMIN) {
-      if (user.outletId) {
-        const outlet =
-          await prisma.outlet.findUnique({
-            where: {
-              id: user.outletId,
-            },
-
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              active: true,
-            },
-          });
-
-        if (outlet) {
-          outlets = [outlet];
-        }
-      }
-    } else {
-      outlets =
-        await prisma.outlet.findMany({
-          where: {
-            active: true,
-          },
-
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            active: true,
-          },
-
-          orderBy: {
-            name: "asc",
-          },
-        });
-    }
 
     return NextResponse.json({
       success: true,
-      data: accounts,
-      outlets,
+
+      data: accounts.map(
+        (account) => ({
+          id: account.id,
+
+          code: account.code,
+
+          name: account.name,
+
+          type: account.type,
+
+          outletId:
+            account.outletId,
+
+          openingBalance:
+            Number(
+              account.openingBalance ?? 0
+            ),
+
+          currentBalance:
+            Number(
+              account.currentBalance ?? 0
+            ),
+
+          active:
+            Boolean(
+              account.isActive
+            ),
+
+          outlet:
+            account.outlet
+              ? {
+                  id:
+                    account.outlet.id,
+
+                  code:
+                    account.outlet.code,
+
+                  name:
+                    account.outlet.name,
+                }
+              : null,
+        })
+      ),
     });
   } catch (error) {
     console.error(
-      "GET /api/petty-cash/accounts ERROR:",
+      "GET PETTY CASH ACCOUNTS ERROR:",
       error
     );
 
@@ -238,362 +300,9 @@ export async function GET() {
       {
         success: false,
         message:
-          "Gagal mengambil data akun petty cash.",
-      },
-      {
-        status: 500,
-      }
-    );
-  }
-}
-
-/*
-===========================================================
-POST
-===========================================================
-*/
-
-export async function POST(req: NextRequest) {
-  try {
-    const user = await getCurrentUser();
-
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Unauthorized",
-        },
-        {
-          status: 401,
-        }
-      );
-    }
-
-    const allowedRoles = [
-      Role.ADMIN,
-      Role.MANAGER,
-      Role.OUTLET_ADMIN,
-    ];
-
-    if (!allowedRoles.includes(user.role)) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Anda tidak memiliki izin membuat akun petty cash.",
-        },
-        {
-          status: 403,
-        }
-      );
-    }
-
-    const body = await req.json();
-
-    /*
-    ========================================================
-    BASIC FIELD
-    ========================================================
-    */
-
-    const code =
-      typeof body.code === "string"
-        ? body.code.trim()
-        : "";
-
-    const name =
-      typeof body.name === "string"
-        ? body.name.trim()
-        : "";
-
-    const openingBalance =
-      Number(body.openingBalance ?? 0);
-
-    const isActive =
-      body.isActive === undefined
-        ? true
-        : Boolean(body.isActive);
-
-    /*
-    ========================================================
-    OUTLET ID
-    ========================================================
-    */
-
-    let outletId: number | null = null;
-
-    if (
-      body.outletId !== undefined &&
-      body.outletId !== null &&
-      body.outletId !== ""
-    ) {
-      outletId = Number(body.outletId);
-
-      if (
-        !Number.isInteger(outletId) ||
-        outletId <= 0
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Outlet tidak valid.",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-    }
-
-    /*
-    ========================================================
-    OUTLET ADMIN
-    ========================================================
-    */
-
-    if (user.role === Role.OUTLET_ADMIN) {
-      if (!user.outletId) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "User outlet belum ditentukan.",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-
-      /*
-       * Outlet admin TIDAK BOLEH membuat PUSAT.
-       */
-
-      if (outletId === null) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "OUTLET_ADMIN hanya dapat membuat akun petty cash outlet sendiri.",
-          },
-          {
-            status: 403,
-          }
-        );
-      }
-
-      /*
-       * Paksa outlet sesuai user.
-       */
-
-      if (outletId !== user.outletId) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Anda tidak dapat membuat akun untuk outlet lain.",
-          },
-          {
-            status: 403,
-          }
-        );
-      }
-    }
-
-    /*
-    ========================================================
-    VALIDATION
-    ========================================================
-    */
-
-    if (!code) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Kode akun wajib diisi.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    if (!name) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Nama akun wajib diisi.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    if (
-      !Number.isFinite(openingBalance) ||
-      openingBalance < 0
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Saldo awal tidak valid.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /*
-    ========================================================
-    VALIDATE OUTLET
-    ========================================================
-    */
-
-    if (outletId !== null) {
-      const outlet =
-        await prisma.outlet.findUnique({
-          where: {
-            id: outletId,
-          },
-
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            active: true,
-          },
-        });
-
-      if (!outlet) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Outlet tidak ditemukan.",
-          },
-          {
-            status: 404,
-          }
-        );
-      }
-
-      if (!outlet.active) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Outlet tersebut tidak aktif.",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-    }
-
-    /*
-    ========================================================
-    DUPLICATE CODE
-    ========================================================
-    */
-
-    const duplicate =
-      await prisma.pettyCashAccount.findFirst({
-        where: {
-          code,
-        },
-
-        select: {
-          id: true,
-          code: true,
-          name: true,
-        },
-      });
-
-    if (duplicate) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            `Kode akun "${code}" sudah digunakan.`,
-        },
-        {
-          status: 409,
-        }
-      );
-    }
-
-    /*
-    ========================================================
-    CREATE
-    ========================================================
-    */
-
-    const account =
-      await prisma.pettyCashAccount.create({
-        data: {
-          code,
-          name,
-          openingBalance,
-
-          /*
-           * currentBalance mengikuti saldo awal
-           * saat akun baru dibuat.
-           */
-          currentBalance: openingBalance,
-
-          isActive,
-
-          outletId,
-        },
-
-        include: {
-          outlet: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              active: true,
-            },
-          },
-        },
-      });
-
-    return NextResponse.json(
-      {
-        success: true,
-        message:
-          "Akun petty cash berhasil dibuat.",
-        data: account,
-      },
-      {
-        status: 201,
-      }
-    );
-  } catch (error: any) {
-    console.error(
-      "POST /api/petty-cash/accounts ERROR:",
-      error
-    );
-
-    if (error?.code === "P2002") {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Kode akun petty cash sudah digunakan.",
-        },
-        {
-          status: 409,
-        }
-      );
-    }
-
-    return NextResponse.json(
-      {
-        success: false,
-        message:
-          "Gagal membuat akun petty cash.",
+          error instanceof Error
+            ? error.message
+            : "Gagal mengambil akun Petty Cash.",
       },
       {
         status: 500,

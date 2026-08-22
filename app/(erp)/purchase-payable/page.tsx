@@ -86,6 +86,51 @@ type Payment = {
   [key: string]: any;
 };
 
+/*
+ * =========================================================
+ * PURCHASE PAYABLE
+ * =========================================================
+ *
+ * PurchasePayable menjadi sumber utama:
+ *
+ * - amount
+ * - paidAmount
+ * - outstanding
+ * - status
+ *
+ * Payment hanya digunakan sebagai fallback
+ * untuk data lama yang belum mempunyai
+ * PurchasePayable.
+ * =========================================================
+ */
+type PurchasePayable = {
+  id: number;
+
+  purchaseId?: number | null;
+
+  outletPurchaseId?: number | null;
+
+  supplierId?: number | null;
+
+  outletId?: number | null;
+
+  invoiceNumber?: string | null;
+
+  invoiceDate?: string | null;
+
+  dueDate?: string | null;
+
+  amount?: number;
+
+  paidAmount?: number;
+
+  outstanding?: number;
+
+  status?: string;
+
+  [key: string]: any;
+};
+
 type PayableStatus =
   | "BELUM BAYAR"
   | "SEBAGIAN"
@@ -95,12 +140,28 @@ type SourceType = "PUSAT" | "OUTLET";
 
 type PayableRow = {
   source: SourceType;
+
   sourceKey: string;
+
+  /*
+   * =======================================================
+   * ID UTAMA PEMBAYARAN
+   * =======================================================
+   *
+   * Semua pembayaran baru menggunakan:
+   *
+   * /payment?payableId=XX
+   *
+   * Bukan lagi purchaseId / outletPurchaseId.
+   */
+  payableId: number | null;
 
   purchase: Purchase | OutletPurchase;
 
   total: number;
+
   paid: number;
+
   remaining: number;
 
   status: PayableStatus;
@@ -282,6 +343,78 @@ function getOutletPurchasePaymentId(
   return null;
 }
 
+function getPayableAmount(
+  payable: PurchasePayable | undefined,
+  purchaseTotal: number
+) {
+  if (!payable) {
+    return purchaseTotal;
+  }
+
+  const amount = Number(
+    payable.amount
+  );
+
+  if (
+    Number.isFinite(amount) &&
+    amount >= 0
+  ) {
+    return amount;
+  }
+
+  return purchaseTotal;
+}
+
+function getPayablePaidAmount(
+  payable: PurchasePayable | undefined
+) {
+  if (!payable) {
+    return null;
+  }
+
+  const paidAmount = Number(
+    payable.paidAmount
+  );
+
+  if (
+    Number.isFinite(paidAmount) &&
+    paidAmount >= 0
+  ) {
+    return paidAmount;
+  }
+
+  return 0;
+}
+
+function getPayableOutstanding(
+  payable: PurchasePayable | undefined,
+  total: number,
+  paid: number
+) {
+  if (!payable) {
+    return Math.max(
+      0,
+      total - paid
+    );
+  }
+
+  const outstanding = Number(
+    payable.outstanding
+  );
+
+  if (
+    Number.isFinite(outstanding) &&
+    outstanding >= 0
+  ) {
+    return outstanding;
+  }
+
+  return Math.max(
+    0,
+    total - paid
+  );
+}
+
 function StatusBadge({
   status,
 }: {
@@ -370,6 +503,9 @@ export default function PurchasePayablePage() {
   const [payments, setPayments] =
     useState<Payment[]>([]);
 
+  const [payables, setPayables] =
+    useState<PurchasePayable[]>([]);
+
   const [loading, setLoading] =
     useState(true);
 
@@ -419,6 +555,7 @@ export default function PurchasePayablePage() {
         purchaseResponse,
         outletPurchaseResponse,
         paymentResponse,
+        payableResponse,
       ] = await Promise.all([
         fetch("/api/purchase", {
           cache: "no-store",
@@ -429,6 +566,10 @@ export default function PurchasePayablePage() {
         }),
 
         fetch("/api/payment", {
+          cache: "no-store",
+        }),
+
+        fetch("/api/purchase-payable", {
           cache: "no-store",
         }),
       ]);
@@ -451,6 +592,12 @@ export default function PurchasePayablePage() {
         );
       }
 
+      if (!payableResponse.ok) {
+        throw new Error(
+          "Gagal mengambil data Purchase Payable."
+        );
+      }
+
       const purchaseJson =
         await purchaseResponse.json();
 
@@ -459,6 +606,9 @@ export default function PurchasePayablePage() {
 
       const paymentJson =
         await paymentResponse.json();
+
+      const payableJson =
+        await payableResponse.json();
 
       const purchaseData =
         Array.isArray(purchaseJson)
@@ -501,6 +651,19 @@ export default function PurchasePayablePage() {
           ? paymentJson.payments
           : [];
 
+      const payableData =
+        Array.isArray(payableJson)
+          ? payableJson
+          : Array.isArray(
+              payableJson?.data
+            )
+          ? payableJson.data
+          : Array.isArray(
+              payableJson?.payables
+            )
+          ? payableJson.payables
+          : [];
+
       setPurchases(
         purchaseData as Purchase[]
       );
@@ -511,6 +674,10 @@ export default function PurchasePayablePage() {
 
       setPayments(
         paymentData as Payment[]
+      );
+
+      setPayables(
+        payableData as PurchasePayable[]
       );
     } catch (err: any) {
       console.error(
@@ -526,6 +693,7 @@ export default function PurchasePayablePage() {
       setPurchases([]);
       setOutletPurchases([]);
       setPayments([]);
+      setPayables([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -538,6 +706,12 @@ export default function PurchasePayablePage() {
 
   const payableRows =
     useMemo<PayableRow[]>(() => {
+      /*
+       * =====================================================
+       * PAYMENT MAP
+       * =====================================================
+       */
+
       const pusatPaymentMap =
         new Map<
           number,
@@ -596,16 +770,73 @@ export default function PurchasePayablePage() {
 
       /*
        * =====================================================
-       * GABUNG DATA DENGAN MAP
-       *
-       * INI YANG MENCEGAH DUPLIKAT:
-       *
-       * pusat-1
-       * outlet-1
-       *
-       * tetap boleh ada bersamaan.
-       *
-       * Tetapi pusat-1 tidak boleh muncul dua kali.
+       * PURCHASE PAYABLE MAP
+       * =====================================================
+       */
+
+      const pusatPayableMap =
+        new Map<
+          number,
+          PurchasePayable
+        >();
+
+      const outletPayableMap =
+        new Map<
+          number,
+          PurchasePayable
+        >();
+
+      for (const payable of payables) {
+        if (
+          payable.purchaseId !== null &&
+          payable.purchaseId !== undefined
+        ) {
+          const purchaseId =
+            Number(
+              payable.purchaseId
+            );
+
+          if (
+            Number.isInteger(
+              purchaseId
+            ) &&
+            purchaseId > 0
+          ) {
+            pusatPayableMap.set(
+              purchaseId,
+              payable
+            );
+          }
+        }
+
+        if (
+          payable.outletPurchaseId !==
+            null &&
+          payable.outletPurchaseId !==
+            undefined
+        ) {
+          const outletPurchaseId =
+            Number(
+              payable.outletPurchaseId
+            );
+
+          if (
+            Number.isInteger(
+              outletPurchaseId
+            ) &&
+            outletPurchaseId > 0
+          ) {
+            outletPayableMap.set(
+              outletPurchaseId,
+              payable
+            );
+          }
+        }
+      }
+
+      /*
+       * =====================================================
+       * UNIQUE ROW MAP
        * =====================================================
        */
 
@@ -633,9 +864,14 @@ export default function PurchasePayablePage() {
         const sourceKey =
           `pusat-${purchase.id}`;
 
-        const total =
+        const purchaseTotal =
           Number(
             purchase.total || 0
+          );
+
+        const payable =
+          pusatPayableMap.get(
+            purchase.id
           );
 
         const purchasePayments =
@@ -643,32 +879,79 @@ export default function PurchasePayablePage() {
             purchase.id
           ) || [];
 
-        const paid =
-          purchasePayments.reduce(
-            (
-              sum,
-              payment
-            ) =>
-              sum +
-              getPaymentAmount(
-                payment
-              ),
-            0
+        /*
+         * PurchasePayable menjadi
+         * sumber utama nominal.
+         */
+        const total =
+          getPayableAmount(
+            payable,
+            purchaseTotal
           );
 
-        const remaining =
-          Math.max(
-            0,
-            total - paid
-          );
+        let paid = 0;
+
+        let remaining = total;
+
+        if (payable) {
+          paid =
+            Math.max(
+              0,
+              getPayablePaidAmount(
+                payable
+              ) || 0
+            );
+
+          remaining =
+            getPayableOutstanding(
+              payable,
+              total,
+              paid
+            );
+        } else {
+          /*
+           * Fallback data lama.
+           */
+          paid =
+            purchasePayments.reduce(
+              (
+                sum,
+                payment
+              ) =>
+                sum +
+                getPaymentAmount(
+                  payment
+                ),
+              0
+            );
+
+          remaining =
+            Math.max(
+              0,
+              total - paid
+            );
+        }
 
         let status: PayableStatus;
 
+        const payableStatus =
+          String(
+            payable?.status || ""
+          ).toUpperCase();
+
         if (
+          payableStatus ===
+            "PAID" ||
+          payableStatus ===
+            "LUNAS" ||
           remaining <= 0
         ) {
           status = "LUNAS";
         } else if (
+          payableStatus ===
+            "PARTIAL" ||
+          payableStatus ===
+            "SEBAGIAN" ||
           paid > 0
         ) {
           status = "SEBAGIAN";
@@ -677,25 +960,29 @@ export default function PurchasePayablePage() {
             "BELUM BAYAR";
         }
 
-        /*
-         * Jika data pusat ID yang sama
-         * masuk dua kali dari API,
-         * entry kedua akan menggantikan
-         * entry pertama, bukan membuat
-         * React row kedua.
-         */
         uniqueRows.set(
           sourceKey,
           {
             source: "PUSAT",
+
             sourceKey,
+
+            payableId:
+              payable?.id ?? null,
+
             purchase,
+
             total,
+
             paid,
+
             remaining,
+
             status,
+
             payments:
               purchasePayments,
+
             outlet: null,
           }
         );
@@ -719,9 +1006,14 @@ export default function PurchasePayablePage() {
         const sourceKey =
           `outlet-${purchase.id}`;
 
-        const total =
+        const purchaseTotal =
           Number(
             purchase.total || 0
+          );
+
+        const payable =
+          outletPayableMap.get(
+            purchase.id
           );
 
         const purchasePayments =
@@ -729,32 +1021,79 @@ export default function PurchasePayablePage() {
             purchase.id
           ) || [];
 
-        const paid =
-          purchasePayments.reduce(
-            (
-              sum,
-              payment
-            ) =>
-              sum +
-              getPaymentAmount(
-                payment
-              ),
-            0
+        /*
+         * PurchasePayable menjadi
+         * sumber utama nominal.
+         */
+        const total =
+          getPayableAmount(
+            payable,
+            purchaseTotal
           );
 
-        const remaining =
-          Math.max(
-            0,
-            total - paid
-          );
+        let paid = 0;
+
+        let remaining = total;
+
+        if (payable) {
+          paid =
+            Math.max(
+              0,
+              getPayablePaidAmount(
+                payable
+              ) || 0
+            );
+
+          remaining =
+            getPayableOutstanding(
+              payable,
+              total,
+              paid
+            );
+        } else {
+          /*
+           * Fallback data lama.
+           */
+          paid =
+            purchasePayments.reduce(
+              (
+                sum,
+                payment
+              ) =>
+                sum +
+                getPaymentAmount(
+                  payment
+                ),
+              0
+            );
+
+          remaining =
+            Math.max(
+              0,
+              total - paid
+            );
+        }
 
         let status: PayableStatus;
 
+        const payableStatus =
+          String(
+            payable?.status || ""
+          ).toUpperCase();
+
         if (
+          payableStatus ===
+            "PAID" ||
+          payableStatus ===
+            "LUNAS" ||
           remaining <= 0
         ) {
           status = "LUNAS";
         } else if (
+          payableStatus ===
+            "PARTIAL" ||
+          payableStatus ===
+            "SEBAGIAN" ||
           paid > 0
         ) {
           status = "SEBAGIAN";
@@ -767,14 +1106,25 @@ export default function PurchasePayablePage() {
           sourceKey,
           {
             source: "OUTLET",
+
             sourceKey,
+
+            payableId:
+              payable?.id ?? null,
+
             purchase,
+
             total,
+
             paid,
+
             remaining,
+
             status,
+
             payments:
               purchasePayments,
+
             outlet:
               purchase.outlet ||
               null,
@@ -803,6 +1153,7 @@ export default function PurchasePayablePage() {
       purchases,
       outletPurchases,
       payments,
+      payables,
     ]);
 
   const suppliers =
@@ -1005,6 +1356,10 @@ export default function PurchasePayablePage() {
   return (
     <div className="min-h-screen bg-[#F5F7F6]">
 
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
+
       <div className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-[1600px] px-6 py-6">
 
@@ -1125,6 +1480,10 @@ export default function PurchasePayablePage() {
         "
       >
 
+        {/* =====================================================
+            ERROR
+        ===================================================== */}
+
         {error && (
           <div
             className="
@@ -1159,7 +1518,9 @@ export default function PurchasePayablePage() {
           </div>
         )}
 
-        {/* SUMMARY */}
+        {/* =====================================================
+            SUMMARY
+        ===================================================== */}
 
         <div
           className="
@@ -1170,6 +1531,8 @@ export default function PurchasePayablePage() {
             xl:grid-cols-4
           "
         >
+
+          {/* TOTAL HUTANG */}
 
           <div
             className="
@@ -1235,6 +1598,8 @@ export default function PurchasePayablePage() {
             </p>
           </div>
 
+          {/* TOTAL PURCHASE */}
+
           <div
             className="
               rounded-2xl
@@ -1294,6 +1659,7 @@ export default function PurchasePayablePage() {
             </div>
 
             <div className="mt-3 flex gap-4 text-xs text-slate-500">
+
               <span>
                 Pusat:{" "}
                 <b className="text-slate-700">
@@ -1307,8 +1673,11 @@ export default function PurchasePayablePage() {
                   {summary.outlet}
                 </b>
               </span>
+
             </div>
           </div>
+
+          {/* SUDAH DIBAYAR */}
 
           <div
             className="
@@ -1372,6 +1741,8 @@ export default function PurchasePayablePage() {
               Total pembayaran tercatat
             </p>
           </div>
+
+          {/* STATUS */}
 
           <div
             className="
@@ -1459,7 +1830,9 @@ export default function PurchasePayablePage() {
 
         </div>
 
-        {/* FILTER */}
+        {/* =====================================================
+            FILTER
+        ===================================================== */}
 
         <div
           className="
@@ -1657,12 +2030,15 @@ export default function PurchasePayablePage() {
                 type="button"
                 onClick={() => {
                   setSearch("");
+
                   setStatusFilter(
                     "SEMUA"
                   );
+
                   setSourceFilter(
                     "SEMUA"
                   );
+
                   setSupplierFilter(
                     "SEMUA"
                   );
@@ -1731,7 +2107,9 @@ export default function PurchasePayablePage() {
 
         </div>
 
-        {/* TABLE */}
+        {/* =====================================================
+            TABLE
+        ===================================================== */}
 
         <div
           className="
@@ -1903,11 +2281,24 @@ export default function PurchasePayablePage() {
                       const rowKey =
                         row.sourceKey;
 
+                      /*
+                       * =================================================
+                       * PAYMENT URL BARU
+                       * =================================================
+                       *
+                       * Pembayaran sekarang menggunakan
+                       * PurchasePayable.id sebagai identitas.
+                       */
                       const paymentUrl =
-                        row.source ===
-                        "PUSAT"
-                          ? `/payment?purchaseId=${purchase.id}`
-                          : `/payment?outletPurchaseId=${purchase.id}`;
+                        row.payableId
+                          ? `/payment?payableId=${row.payableId}`
+                          : null;
+
+                      const canPay =
+                        row.remaining > 0 &&
+                        row.payableId !==
+                          null &&
+                        row.payableId > 0;
 
                       return (
                         <tr
@@ -1918,9 +2309,13 @@ export default function PurchasePayablePage() {
                           "
                         >
 
+                          {/* NO */}
+
                           <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-slate-400">
                             {index + 1}
                           </td>
+
+                          {/* SUMBER */}
 
                           <td className="whitespace-nowrap px-5 py-4">
 
@@ -1965,6 +2360,8 @@ export default function PurchasePayablePage() {
 
                           </td>
 
+                          {/* PURCHASE */}
+
                           <td className="whitespace-nowrap px-5 py-4">
 
                             <div>
@@ -1980,9 +2377,18 @@ export default function PurchasePayablePage() {
                                 · ID #
                                 {purchase.id}
                               </p>
+
+                              {row.payableId && (
+                                <p className="mt-1 text-[10px] font-medium text-[#527A6B]">
+                                  Payable #
+                                  {row.payableId}
+                                </p>
+                              )}
                             </div>
 
                           </td>
+
+                          {/* SUPPLIER */}
 
                           <td className="px-5 py-4">
 
@@ -2000,6 +2406,8 @@ export default function PurchasePayablePage() {
                             </div>
 
                           </td>
+
+                          {/* OUTLET */}
 
                           <td className="px-5 py-4">
 
@@ -2025,11 +2433,15 @@ export default function PurchasePayablePage() {
 
                           </td>
 
+                          {/* TANGGAL */}
+
                           <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600">
                             {formatDate(
                               purchase.purchaseDate
                             )}
                           </td>
+
+                          {/* TOTAL */}
 
                           <td className="whitespace-nowrap px-5 py-4 text-right text-sm font-semibold text-slate-700">
                             {formatRupiah(
@@ -2037,11 +2449,15 @@ export default function PurchasePayablePage() {
                             )}
                           </td>
 
+                          {/* DIBAYAR */}
+
                           <td className="whitespace-nowrap px-5 py-4 text-right text-sm font-semibold text-emerald-600">
                             {formatRupiah(
                               row.paid
                             )}
                           </td>
+
+                          {/* SISA */}
 
                           <td className="whitespace-nowrap px-5 py-4 text-right">
 
@@ -2060,6 +2476,8 @@ export default function PurchasePayablePage() {
 
                           </td>
 
+                          {/* STATUS */}
+
                           <td className="whitespace-nowrap px-5 py-4 text-center">
                             <StatusBadge
                               status={
@@ -2068,10 +2486,36 @@ export default function PurchasePayablePage() {
                             />
                           </td>
 
+                          {/* AKSI */}
+
                           <td className="whitespace-nowrap px-5 py-4 text-center">
 
-                            {row.remaining >
+                            {row.remaining <=
                             0 ? (
+                              <span
+                                className="
+                                  inline-flex
+                                  items-center
+                                  gap-1.5
+                                  rounded-lg
+                                  border
+                                  border-emerald-200
+                                  bg-emerald-50
+                                  px-3
+                                  py-2
+                                  text-[11px]
+                                  font-bold
+                                  text-emerald-700
+                                "
+                              >
+                                <CheckCircle2
+                                  size={13}
+                                />
+
+                                Lunas
+                              </span>
+                            ) : canPay &&
+                              paymentUrl ? (
                               <Link
                                 href={
                                   paymentUrl
@@ -2105,20 +2549,21 @@ export default function PurchasePayablePage() {
                                   gap-1.5
                                   rounded-lg
                                   border
-                                  border-emerald-200
-                                  bg-emerald-50
+                                  border-amber-200
+                                  bg-amber-50
                                   px-3
                                   py-2
                                   text-[11px]
                                   font-bold
-                                  text-emerald-700
+                                  text-amber-700
                                 "
                               >
-                                <CheckCircle2
+                                <AlertCircle
                                   size={13}
                                 />
 
-                                Lunas
+                                Payable belum
+                                tersedia
                               </span>
                             )}
 
@@ -2130,6 +2575,10 @@ export default function PurchasePayablePage() {
                   )}
 
                 </tbody>
+
+                {/* =====================================================
+                    FOOTER TOTAL
+                ===================================================== */}
 
                 <tfoot
                   className="
@@ -2210,6 +2659,10 @@ export default function PurchasePayablePage() {
 
         </div>
 
+        {/* =====================================================
+            INFORMATION
+        ===================================================== */}
+
         <div
           className="
             mt-4
@@ -2251,9 +2704,36 @@ export default function PurchasePayablePage() {
             APPROVED, RECEIVED,
             COMPLETED, PARTIAL, atau
             CLOSED dihitung sebagai
-            payable. Pembayaran dihitung
-            berdasarkan Purchase yang
-            bersangkutan.
+            payable. Untuk Purchase yang
+            sudah memiliki data
+            <b className="text-slate-700">
+              {" "}
+              PurchasePayable
+            </b>
+            , nilai Total, Dibayar, Sisa
+            Hutang, dan status menggunakan
+            data PurchasePayable.
+            <br />
+            <br />
+            Tombol
+            <b className="text-slate-700">
+              {" "}
+              Bayar
+            </b>{" "}
+            menggunakan
+            <b className="text-slate-700">
+              {" "}
+              PurchasePayable ID
+            </b>{" "}
+            sebagai identitas transaksi:
+            <b className="text-slate-700">
+              {" "}
+              /payment?payableId=...
+            </b>
+            . Payment lama tetap digunakan
+            sebagai fallback untuk data
+            PurchasePayable yang belum
+            tersedia.
           </p>
 
         </div>

@@ -126,7 +126,7 @@ export default function ApprovePage() {
    * -> /api/purchase/[id]/approve
    *
    * OUTLET
-   * -> /api/outlet-purchase/[id]/approve
+   * -> /api/outlet/purchase/[id]/approve
    *
    * Sesuaikan path endpoint outlet jika folder API kamu
    * menggunakan nama route yang berbeda.
@@ -177,7 +177,7 @@ export default function ApprovePage() {
        */
 
       const endpoint = isOutlet
-        ? `/api/outlet-purchase/${purchase.id}/approve`
+        ? `/api/outlet/purchase/${purchase.id}/approve`
         : `/api/purchase/${purchase.id}/approve`;
 
       const res = await fetch(endpoint, {

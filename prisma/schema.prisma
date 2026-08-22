@@ -28,6 +28,9 @@ model User {
 
   purchaseComments PurchaseComment[]
   outletStockOuts  OutletStockOut[]
+
+  chatParticipants ChatParticipant[]
+  chatMessages     ChatMessage[]
 }
 
 model Outlet {
@@ -126,16 +129,20 @@ model Session {
 }
 
 model Supplier {
-  id            Int      @id @default(autoincrement())
-  code          String   @unique
+  id            Int     @id @default(autoincrement())
+  code          String  @unique
   name          String
   address       String?
   city          String?
   phone         String?
   email         String?
   contactPerson String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+
+  // Jangka waktu pembayaran supplier jika PO menggunakan TEMPO
+  tempoDays Int @default(30)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   MasterHarga  MasterHarga[]
   priceSummary PriceSummary[]
@@ -349,8 +356,23 @@ model Payment {
   amount Float @default(0)
 
   method PaymentMethod @default(CASH)
-
   status PaymentStatus @default(PENDING)
+
+  // =====================================================
+  // AKUN PEMBAYARAN WAJIB
+  // =====================================================
+  // Menentukan uang pembayaran berasal dari akun mana.
+  // CASH / COD / CBD:
+  //   saldo akun akan berkurang.
+  //
+  // TRANSFER:
+  //   wajib pilih akun, tetapi tidak mengurangi petty cash.
+  //
+  // TEMPO:
+  //   wajib pilih akun sebagai akun pembayaran hutang,
+  //   tetapi tidak mengurangi saldo saat PO dibuat.
+  // =====================================================
+  accountId Int?
 
   referenceNumber String?
   note            String?
@@ -366,9 +388,12 @@ model Payment {
   outletPurchase OutletPurchase? @relation(fields: [outletPurchaseId], references: [id])
   supplier       Supplier        @relation(fields: [supplierId], references: [id])
 
+  account PettyCashAccount? @relation(fields: [accountId], references: [id])
+
   @@index([purchaseId])
   @@index([outletPurchaseId])
   @@index([supplierId])
+  @@index([accountId])
   @@index([paymentDate])
   @@index([status])
   @@index([method])
@@ -435,6 +460,8 @@ model PettyCashAccount {
   updatedAt DateTime @updatedAt
 
   transactions PettyCash[]
+
+  payments Payment[]
 
   outlet Outlet? @relation(fields: [outletId], references: [id], onDelete: Cascade)
 
@@ -928,6 +955,56 @@ model OutletTransferItem {
 
   @@index([transferId])
   @@index([barangId])
+}
+
+// =====================================================
+// GLOBAL CHAT
+// =====================================================
+
+model ChatConversation {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ChatParticipant[]
+  messages     ChatMessage[]
+
+  @@index([updatedAt])
+}
+
+model ChatParticipant {
+  id             Int @id @default(autoincrement())
+  conversationId Int
+  userId         Int
+
+  lastReadAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@index([conversationId])
+}
+
+model ChatMessage {
+  id             Int @id @default(autoincrement())
+  conversationId Int
+  senderId       Int
+
+  message String
+
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User             @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@index([readAt])
 }
 
 enum Role {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
+  PaymentMethod,
   PurchaseStatus,
   OutletPurchaseStatus,
   Role,
@@ -37,29 +38,33 @@ async function getCurrentUser() {
    */
 
   try {
-    const session = await prisma.session.findUnique({
-      where: {
-        token: sessionCookie.value,
-      },
+    const session =
+      await prisma.session.findUnique({
+        where: {
+          token: sessionCookie.value,
+        },
 
-      select: {
-        expiresAt: true,
+        select: {
+          expiresAt: true,
 
-        user: {
-          select: {
-            id: true,
-            username: true,
-            fullname: true,
-            role: true,
-            active: true,
-            outletId: true,
+          user: {
+            select: {
+              id: true,
+              username: true,
+              fullname: true,
+              role: true,
+              active: true,
+              outletId: true,
+            },
           },
         },
-      },
-    });
+      });
 
     if (session) {
-      if (session.expiresAt < new Date()) {
+      if (
+        session.expiresAt <
+        new Date()
+      ) {
         return null;
       }
 
@@ -83,9 +88,10 @@ async function getCurrentUser() {
    */
 
   try {
-    const parsed = JSON.parse(
-      sessionCookie.value
-    );
+    const parsed =
+      JSON.parse(
+        sessionCookie.value
+      );
 
     const userId = Number(
       parsed?.user?.id ??
@@ -230,11 +236,11 @@ export async function GET(
  *
  * PAYMENT METHOD:
  *
+ * CASH
  * TRANSFER
  * COD
  * CBD
- *
- * CASH TIDAK DIGUNAKAN.
+ * TEMPO
  *
  * =========================================================
  */
@@ -327,22 +333,14 @@ export async function PUT(
      * VALIDASI PAYMENT METHOD
      * =====================================================
      *
-     * HANYA:
-     *
+     * CASH
      * TRANSFER
      * COD
      * CBD
-     *
-     * Tidak ada CASH.
+     * TEMPO
      *
      * =====================================================
      */
-
-    const allowedPaymentMethods = [
-      "TRANSFER",
-      "COD",
-      "CBD",
-    ];
 
     const selectedPaymentMethod =
       String(
@@ -351,17 +349,22 @@ export async function PUT(
         .trim()
         .toUpperCase();
 
+    const allowedPaymentMethods =
+      Object.values(
+        PaymentMethod
+      );
+
     if (
       !selectedPaymentMethod ||
       !allowedPaymentMethods.includes(
-        selectedPaymentMethod
+        selectedPaymentMethod as PaymentMethod
       )
     ) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Metode pembayaran wajib dipilih. Pilihan: Transfer, COD, atau CBD.",
+            "Metode pembayaran wajib dipilih. Pilihan: Cash, Transfer, COD, CBD, atau Tempo.",
         },
         {
           status: 400,
@@ -404,6 +407,9 @@ export async function PUT(
       /*
        * Kalau frontend tidak mengirim tanggal,
        * pertahankan tanggal lama.
+       *
+       * Nilai ini akan diganti setelah purchase
+       * ditemukan di bawah.
        */
       finalPurchaseDate =
         new Date();
@@ -592,17 +598,15 @@ export async function PUT(
                 /*
                  * PAYMENT METHOD
                  *
-                 * HANYA:
+                 * CASH
                  * TRANSFER
                  * COD
                  * CBD
+                 * TEMPO
                  */
 
                 paymentMethod:
-                  selectedPaymentMethod as
-                    | "TRANSFER"
-                    | "COD"
-                    | "CBD",
+                  selectedPaymentMethod as PaymentMethod,
 
                 /*
                  * KETERANGAN

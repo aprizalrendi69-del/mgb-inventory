@@ -1,16 +1,68 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+
 import {
   OutletPurchaseStatus,
+  PaymentMethod,
+  PaymentStatus,
+  PettyCashStatus,
+  PettyCashType,
   Role,
 } from "@prisma/client";
+
 import { cookies } from "next/headers";
 
 /*
- * =========================================================
- * GET CURRENT USER
- * =========================================================
- */
+===========================================================
+APPROVE PURCHASE OUTLET API
+===========================================================
+
+PAYMENT RULE
+-----------------------------------------------------------
+CASH
+COD
+CBD
+    -> langsung PAID
+    -> mengurangi Petty Cash Outlet
+    -> membuat transaksi Petty Cash OUT
+
+TRANSFER
+    -> langsung PAID
+    -> TIDAK mengurangi Petty Cash
+    -> TIDAK membuat hutang
+
+TEMPO
+    -> tidak mengurangi Petty Cash
+    -> membuat PurchasePayable
+    -> Payment tidak dibuat
+
+PETTY CASH
+-----------------------------------------------------------
+Setiap outlet mempunyai account sendiri.
+
+Outlet 1
+    account.outletId = 1
+
+Outlet 2
+    account.outletId = 2
+
+Pusat
+    account.outletId = null
+
+Purchase Outlet SELALU:
+    account.outletId === purchase.outletId
+
+Tidak boleh menggunakan:
+    account Pusat
+    account Outlet lain
+===========================================================
+*/
+
+/*
+===========================================================
+GET CURRENT USER
+===========================================================
+*/
 
 async function getCurrentUser() {
   const cookieStore = await cookies();
@@ -19,40 +71,45 @@ async function getCurrentUser() {
     cookieStore.get("session") ||
     cookieStore.get("erp-session");
 
-  if (!sessionCookie) {
+  if (!sessionCookie?.value) {
     return null;
   }
 
-  let userId: number | null = null;
-
   /*
-   * -------------------------------------------------------
-   * SESSION DATABASE
-   * -------------------------------------------------------
-   */
+  ---------------------------------------------------------
+  PRIORITAS:
+  DATABASE SESSION
+  ---------------------------------------------------------
+  */
 
   try {
-    const session = await prisma.session.findUnique({
-      where: {
-        token: sessionCookie.value,
-      },
-      select: {
-        expiresAt: true,
-        user: {
-          select: {
-            id: true,
-            fullname: true,
-            username: true,
-            role: true,
-            active: true,
-            outletId: true,
+    const session =
+      await prisma.session.findUnique({
+        where: {
+          token: sessionCookie.value,
+        },
+
+        select: {
+          expiresAt: true,
+
+          user: {
+            select: {
+              id: true,
+              username: true,
+              fullname: true,
+              role: true,
+              active: true,
+              outletId: true,
+            },
           },
         },
-      },
-    });
+      });
 
     if (session) {
-      if (session.expiresAt < new Date()) {
+      if (
+        session.expiresAt <
+        new Date()
+      ) {
         return null;
       }
 
@@ -70,61 +127,163 @@ async function getCurrentUser() {
   }
 
   /*
-   * -------------------------------------------------------
-   * FALLBACK ERP JSON SESSION
-   * -------------------------------------------------------
-   */
+  ---------------------------------------------------------
+  FALLBACK JSON SESSION
+  ---------------------------------------------------------
+  */
 
   try {
-    const parsed = JSON.parse(
-      sessionCookie.value
+    const parsed =
+      JSON.parse(
+        sessionCookie.value
+      );
+
+    const userId =
+      Number(
+        parsed?.user?.id ??
+          parsed?.id ??
+          0
+      );
+
+    if (
+      !Number.isInteger(userId) ||
+      userId <= 0
+    ) {
+      return null;
+    }
+
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+
+        select: {
+          id: true,
+          username: true,
+          fullname: true,
+          role: true,
+          active: true,
+          outletId: true,
+        },
+      });
+
+    if (!user || !user.active) {
+      return null;
+    }
+
+    return user;
+  } catch (error) {
+    console.error(
+      "JSON SESSION CHECK ERROR:",
+      error
     );
 
-    userId = Number(
-      parsed?.user?.id ??
-        parsed?.id ??
-        0
-    );
-  } catch {
     return null;
   }
-
-  if (!userId || !Number.isInteger(userId)) {
-    return null;
-  }
-
-  /*
-   * -------------------------------------------------------
-   * AMBIL USER TERBARU DARI DATABASE
-   * -------------------------------------------------------
-   */
-
-  const user = await prisma.user.findUnique({
-    where: {
-      id: userId,
-    },
-    select: {
-      id: true,
-      fullname: true,
-      username: true,
-      role: true,
-      active: true,
-      outletId: true,
-    },
-  });
-
-  if (!user || !user.active) {
-    return null;
-  }
-
-  return user;
 }
 
 /*
- * =========================================================
- * POST APPROVE PURCHASE OUTLET
- * =========================================================
- */
+===========================================================
+GENERATE PAYMENT NUMBER
+===========================================================
+*/
+
+async function generatePaymentNumber(
+  tx: any,
+  paymentDate: Date
+) {
+  const year =
+    paymentDate.getFullYear();
+
+  const month = String(
+    paymentDate.getMonth() + 1
+  ).padStart(2, "0");
+
+  const period =
+    `${year}${month}`;
+
+  const document =
+    await tx.documentNumber.upsert({
+      where: {
+        type_period: {
+          type: "PAYMENT",
+          period,
+        },
+      },
+
+      create: {
+        type: "PAYMENT",
+        prefix: "PAY",
+        period,
+        lastNumber: 1,
+      },
+
+      update: {
+        lastNumber: {
+          increment: 1,
+        },
+      },
+    });
+
+  return `${document.prefix}-${period}-${String(
+    document.lastNumber
+  ).padStart(5, "0")}`;
+}
+
+/*
+===========================================================
+GENERATE PETTY CASH NUMBER
+===========================================================
+*/
+
+async function generatePettyCashNumber(
+  tx: any,
+  trxDate: Date
+) {
+  const year =
+    trxDate.getFullYear();
+
+  const month = String(
+    trxDate.getMonth() + 1
+  ).padStart(2, "0");
+
+  const period =
+    `${year}${month}`;
+
+  const document =
+    await tx.documentNumber.upsert({
+      where: {
+        type_period: {
+          type: "PETTY_CASH",
+          period,
+        },
+      },
+
+      create: {
+        type: "PETTY_CASH",
+        prefix: "PC",
+        period,
+        lastNumber: 1,
+      },
+
+      update: {
+        lastNumber: {
+          increment: 1,
+        },
+      },
+    });
+
+  return `${document.prefix}-${period}-${String(
+    document.lastNumber
+  ).padStart(5, "0")}`;
+}
+
+/*
+===========================================================
+POST APPROVE PURCHASE OUTLET
+===========================================================
+*/
 
 export async function POST(
   req: Request,
@@ -138,17 +297,21 @@ export async function POST(
 ) {
   try {
     /*
-     * =====================================================
-     * PARAMETER
-     * =====================================================
-     */
+    ========================================================
+    1. PURCHASE ID
+    ========================================================
+    */
 
-    const { id } = await params;
+    const { id } =
+      await params;
 
-    const purchaseId = Number(id);
+    const purchaseId =
+      Number(id);
 
     if (
-      !Number.isInteger(purchaseId) ||
+      !Number.isInteger(
+        purchaseId
+      ) ||
       purchaseId <= 0
     ) {
       return NextResponse.json(
@@ -164,12 +327,13 @@ export async function POST(
     }
 
     /*
-     * =====================================================
-     * USER LOGIN
-     * =====================================================
-     */
+    ========================================================
+    2. USER
+    ========================================================
+    */
 
-    const user = await getCurrentUser();
+    const user =
+      await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
@@ -185,19 +349,17 @@ export async function POST(
     }
 
     /*
-     * =====================================================
-     * ROLE SECURITY
-     *
-     * APPROVE PURCHASE OUTLET:
-     *
-     * ADMIN
-     * PURCHASING
-     *
-     * MANAGER TIDAK BOLEH APPROVE
-     * OUTLET_ADMIN TIDAK BOLEH APPROVE
-     * ROLE LAIN TIDAK BOLEH APPROVE
-     * =====================================================
-     */
+    ========================================================
+    3. ACCESS
+    ========================================================
+    
+    Yang boleh approve:
+      ADMIN
+      PURCHASING
+
+    OUTLET_ADMIN tidak boleh approve.
+    ========================================================
+    */
 
     const allowedRoles: Role[] = [
       Role.ADMIN,
@@ -205,7 +367,9 @@ export async function POST(
     ];
 
     if (
-      !allowedRoles.includes(user.role)
+      !allowedRoles.includes(
+        user.role
+      )
     ) {
       return NextResponse.json(
         {
@@ -220,37 +384,19 @@ export async function POST(
     }
 
     /*
-     * =====================================================
-     * REQUEST BODY
-     *
-     * Endpoint approve tidak membutuhkan body.
-     * Tetap parsing jika dikirim untuk menjaga kompatibilitas.
-     * =====================================================
-     */
-
-    try {
-      await req.json();
-    } catch {
-      // Body boleh kosong.
-    }
-
-    /*
-     * =====================================================
-     * TRANSACTION
-     *
-     * SEMUA DATA PURCHASE DIAMBIL ULANG DI DALAM
-     * TRANSACTION AGAR TIDAK MENGGUNAKAN DATA STALE.
-     * =====================================================
-     */
+    ========================================================
+    4. TRANSACTION
+    ========================================================
+    */
 
     const result =
       await prisma.$transaction(
         async (tx) => {
           /*
-           * -------------------------------------------------
-           * AMBIL PURCHASE TERBARU
-           * -------------------------------------------------
-           */
+          ==================================================
+          GET PURCHASE
+          ==================================================
+          */
 
           const purchase =
             await tx.outletPurchase.findUnique({
@@ -259,30 +405,11 @@ export async function POST(
               },
 
               include: {
-                supplier: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
-
-                outlet: {
-                  select: {
-                    id: true,
-                    code: true,
-                    name: true,
-                  },
-                },
-
-                items: {
-                  select: {
-                    id: true,
-                    barangId: true,
-                    qty: true,
-                    price: true,
-                    subtotal: true,
-                  },
-                },
+                supplier: true,
+                outlet: true,
+                items: true,
+                payable: true,
+                payments: true,
               },
             });
 
@@ -293,10 +420,10 @@ export async function POST(
           }
 
           /*
-           * -------------------------------------------------
-           * VALIDASI STATUS
-           * -------------------------------------------------
-           */
+          ==================================================
+          STATUS
+          ==================================================
+          */
 
           if (
             purchase.status !==
@@ -308,24 +435,30 @@ export async function POST(
           }
 
           /*
-           * -------------------------------------------------
-           * VALIDASI OUTLET
-           *
-           * Purchase Outlet wajib memiliki outlet.
-           * -------------------------------------------------
-           */
+          ==================================================
+          OUTLET
+          ==================================================
+          */
 
-          if (!purchase.outletId) {
+          if (
+            !purchase.outletId
+          ) {
             throw new Error(
               "Purchase Outlet tidak memiliki outlet"
             );
           }
 
+          if (!purchase.outlet) {
+            throw new Error(
+              "Outlet Purchase tidak ditemukan"
+            );
+          }
+
           /*
-           * -------------------------------------------------
-           * VALIDASI SUPPLIER
-           * -------------------------------------------------
-           */
+          ==================================================
+          SUPPLIER
+          ==================================================
+          */
 
           if (!purchase.supplier) {
             throw new Error(
@@ -334,10 +467,10 @@ export async function POST(
           }
 
           /*
-           * -------------------------------------------------
-           * VALIDASI ITEM
-           * -------------------------------------------------
-           */
+          ==================================================
+          ITEM
+          ==================================================
+          */
 
           if (
             !purchase.items ||
@@ -348,18 +481,24 @@ export async function POST(
             );
           }
 
-          /*
-           * -------------------------------------------------
-           * VALIDASI ITEM
-           * -------------------------------------------------
-           */
+          for (
+            const item of
+              purchase.items
+          ) {
+            const qty =
+              Number(
+                item.qty
+              );
 
-          for (const item of purchase.items) {
-            const qty = Number(item.qty);
-            const price = Number(item.price);
+            const price =
+              Number(
+                item.price
+              );
 
             if (
-              !Number.isFinite(qty) ||
+              !Number.isFinite(
+                qty
+              ) ||
               qty <= 0
             ) {
               throw new Error(
@@ -368,40 +507,548 @@ export async function POST(
             }
 
             if (
-              !Number.isFinite(price) ||
+              !Number.isFinite(
+                price
+              ) ||
               price < 0
             ) {
               throw new Error(
                 "Terdapat harga barang yang tidak valid"
               );
             }
-
-            if (!item.barangId) {
-              throw new Error(
-                "Terdapat item Purchase Outlet tanpa barang"
-              );
-            }
           }
 
           /*
-           * -------------------------------------------------
-           * APPROVE ATOMIC
-           *
-           * PENTING:
-           * updateMany memakai:
-           *
-           * id = purchaseId
-           * status = DRAFT
-           *
-           * Jadi jika ada 2 request approve bersamaan,
-           * hanya SATU yang bisa mengubah DRAFT -> APPROVED.
-           * -------------------------------------------------
-           */
+          ==================================================
+          HITUNG TOTAL
+          ==================================================
+          */
+
+          const calculatedTotal =
+            purchase.items.reduce(
+              (
+                sum,
+                item
+              ) =>
+                sum +
+                Number(
+                  item.qty
+                ) *
+                Number(
+                  item.price
+                ),
+              0
+            );
+
+          if (
+            !Number.isFinite(
+              calculatedTotal
+            ) ||
+            calculatedTotal <= 0
+          ) {
+            throw new Error(
+              "Total Purchase Outlet tidak valid"
+            );
+          }
+
+          const total =
+            calculatedTotal;
+
+          /*
+          ==================================================
+          PAYMENT METHOD
+          ==================================================
+          */
+
+          const paymentMethod =
+            purchase.paymentMethod;
+
+          const isPettyCashPayment =
+            paymentMethod ===
+              PaymentMethod.CASH ||
+            paymentMethod ===
+              PaymentMethod.COD ||
+            paymentMethod ===
+              PaymentMethod.CBD;
+
+          const isTransfer =
+            paymentMethod ===
+            PaymentMethod.TRANSFER;
+
+          const isTempo =
+            paymentMethod ===
+            PaymentMethod.TEMPO;
+
+          /*
+          ==================================================
+          VALIDATE PAYMENT METHOD
+          ==================================================
+          */
+
+          if (
+            !isPettyCashPayment &&
+            !isTransfer &&
+            !isTempo
+          ) {
+            throw new Error(
+              "Metode pembayaran Purchase Outlet tidak valid"
+            );
+          }
+
+          /*
+          ==================================================
+          PAYMENT
+          ==================================================
+          */
+
+          let payment:
+            | any
+            | null = null;
+
+          /*
+          ==================================================
+          PETTY CASH
+          ==================================================
+          */
+
+          let pettyCash:
+            | any
+            | null = null;
+
+          /*
+          ==================================================
+          PAYABLE
+          ==================================================
+          */
+
+          let payable:
+            | any
+            | null = null;
+
+          /*
+          ==================================================
+          5A. CASH / COD / CBD
+          ==================================================
+
+          RULE:
+
+          - harus memakai Petty Cash outlet
+          - saldo harus cukup
+          - Payment langsung PAID
+          - Petty Cash langsung berkurang
+          - Petty Cash transaction langsung APPROVED
+          ==================================================
+          */
+
+          if (
+            isPettyCashPayment
+          ) {
+            /*
+            ------------------------------------------------
+            CARI ACCOUNT OUTLET
+            ------------------------------------------------
+            */
+
+            const account =
+              await tx.pettyCashAccount.findFirst({
+                where: {
+                  outletId:
+                    purchase.outletId,
+
+                  isActive: true,
+                },
+
+                orderBy: {
+                  id: "asc",
+                },
+              });
+
+            if (!account) {
+              throw new Error(
+                `Akun Petty Cash untuk outlet ${purchase.outlet.name} belum tersedia`
+              );
+            }
+
+            /*
+            ------------------------------------------------
+            PASTIKAN ACCOUNT BENAR-BENAR OUTLET
+            ------------------------------------------------
+            */
+
+            if (
+              account.outletId !==
+              purchase.outletId
+            ) {
+              throw new Error(
+                "Akun Petty Cash tidak sesuai dengan outlet Purchase"
+              );
+            }
+
+            /*
+            ------------------------------------------------
+            SALDO
+            ------------------------------------------------
+            */
+
+            const balanceBefore =
+              Number(
+                account.currentBalance ??
+                  account.openingBalance ??
+                  0
+              );
+
+            if (
+              !Number.isFinite(
+                balanceBefore
+              )
+            ) {
+              throw new Error(
+                `Saldo Petty Cash outlet ${purchase.outlet.name} tidak valid`
+              );
+            }
+
+            if (
+              balanceBefore <
+              total
+            ) {
+              throw new Error(
+                `Saldo Petty Cash outlet ${purchase.outlet.name} tidak mencukupi. Saldo tersedia Rp ${balanceBefore.toLocaleString(
+                  "id-ID"
+                )}, pembayaran Rp ${total.toLocaleString(
+                  "id-ID"
+                )}.`
+              );
+            }
+
+            const balanceAfter =
+              balanceBefore -
+              total;
+
+            /*
+            ------------------------------------------------
+            GENERATE PAYMENT NUMBER
+            ------------------------------------------------
+            */
+
+            const paymentNumber =
+              await generatePaymentNumber(
+                tx,
+                purchase.purchaseDate
+              );
+
+            /*
+            ------------------------------------------------
+            PAYMENT = PAID
+            ------------------------------------------------
+            */
+
+            payment =
+              await tx.payment.create({
+                data: {
+                  number:
+                    paymentNumber,
+
+                  outletPurchaseId:
+                    purchase.id,
+
+                  supplierId:
+                    purchase.supplierId,
+
+                  paymentDate:
+                    purchase.purchaseDate,
+
+                  amount:
+                    total,
+
+                  method:
+                    paymentMethod,
+
+                  status:
+                    PaymentStatus.PAID,
+
+                  note:
+                    `Pembayaran ${paymentMethod} Purchase Outlet ${purchase.number} - ${purchase.outlet.name}`,
+
+                  createdBy:
+                    user.id,
+
+                  approvedBy:
+                    user.id,
+
+                  approvedAt:
+                    new Date(),
+                },
+              });
+
+            /*
+            ------------------------------------------------
+            UPDATE PETTY CASH ACCOUNT
+            ------------------------------------------------
+            */
+
+            const updatedAccount =
+              await tx.pettyCashAccount.updateMany({
+                where: {
+                  id:
+                    account.id,
+
+                  isActive: true,
+
+                  outletId:
+                    purchase.outletId,
+
+                  currentBalance: {
+                    gte: total,
+                  },
+                },
+
+                data: {
+                  currentBalance:
+                    balanceAfter,
+                },
+              });
+
+            if (
+              updatedAccount.count !==
+              1
+            ) {
+              throw new Error(
+                "Saldo Petty Cash berubah atau tidak mencukupi. Silakan refresh dan coba lagi."
+              );
+            }
+
+            /*
+            ------------------------------------------------
+            PETTY CASH TRANSACTION
+            ------------------------------------------------
+            */
+
+            const pettyCashNumber =
+              await generatePettyCashNumber(
+                tx,
+                purchase.purchaseDate
+              );
+
+            pettyCash =
+              await tx.pettyCash.create({
+                data: {
+                  number:
+                    pettyCashNumber,
+
+                  trxDate:
+                    purchase.purchaseDate,
+
+                  type:
+                    PettyCashType.OUT,
+
+                  category:
+                    "PURCHASE",
+
+                  description:
+                    `Pembayaran ${paymentMethod} Purchase Outlet ${purchase.number} - ${purchase.supplier.name}`,
+
+                  amount:
+                    total,
+
+                  balanceBefore,
+
+                  balanceAfter,
+
+                  accountId:
+                    account.id,
+
+                  paymentId:
+                    payment.id,
+
+                  outletId:
+                    purchase.outletId,
+
+                  createdBy:
+                    user.id,
+
+                  approvedBy:
+                    user.id,
+
+                  status:
+                    PettyCashStatus.APPROVED,
+
+                  approvedAt:
+                    new Date(),
+                },
+              });
+          }
+
+          /*
+          ==================================================
+          5B. TRANSFER
+          ==================================================
+
+          RULE:
+
+          - langsung PAID
+          - tidak mengurangi Petty Cash
+          - tidak membuat PurchasePayable
+          ==================================================
+          */
+
+          if (
+            isTransfer
+          ) {
+            const paymentNumber =
+              await generatePaymentNumber(
+                tx,
+                purchase.purchaseDate
+              );
+
+            payment =
+              await tx.payment.create({
+                data: {
+                  number:
+                    paymentNumber,
+
+                  outletPurchaseId:
+                    purchase.id,
+
+                  supplierId:
+                    purchase.supplierId,
+
+                  paymentDate:
+                    purchase.purchaseDate,
+
+                  amount:
+                    total,
+
+                  method:
+                    PaymentMethod.TRANSFER,
+
+                  /*
+                  PENTING:
+                  TRANSFER langsung LUNAS
+                  */
+
+                  status:
+                    PaymentStatus.PAID,
+
+                  note:
+                    `Pembayaran TRANSFER Purchase Outlet ${purchase.number}`,
+
+                  createdBy:
+                    user.id,
+
+                  approvedBy:
+                    user.id,
+
+                  approvedAt:
+                    new Date(),
+                },
+              });
+
+            /*
+            PENTING:
+
+            Tidak ada:
+              pettyCashAccount.update
+
+            Tidak ada:
+              pettyCash.create
+
+            Tidak ada:
+              purchasePayable.create
+            */
+          }
+
+          /*
+          ==================================================
+          5C. TEMPO
+          ==================================================
+
+          RULE:
+
+          - tidak membuat Payment
+          - tidak mengurangi Petty Cash
+          - membuat hutang supplier
+          ==================================================
+          */
+
+          if (
+            isTempo
+          ) {
+            /*
+            ------------------------------------------------
+            CEK DUPLIKAT HUTANG
+            ------------------------------------------------
+            */
+
+            if (
+              purchase.payable
+            ) {
+              throw new Error(
+                "Hutang untuk Purchase Outlet ini sudah ada"
+              );
+            }
+
+            /*
+            ------------------------------------------------
+            CREATE PAYABLE
+            ------------------------------------------------
+            */
+
+            payable =
+              await tx.purchasePayable.create({
+                data: {
+                  purchaseId:
+                    null,
+
+                  outletPurchaseId:
+                    purchase.id,
+
+                  supplierId:
+                    purchase.supplierId,
+
+                  outletId:
+                    purchase.outletId,
+
+                  invoiceNumber:
+                    `INV-${purchase.number}`,
+
+                  invoiceDate:
+                    purchase.purchaseDate,
+
+                  dueDate:
+                    null,
+
+                  amount:
+                    total,
+
+                  paidAmount:
+                    0,
+
+                  outstanding:
+                    total,
+
+                  status:
+                    "OUTSTANDING",
+                },
+              });
+          }
+
+          /*
+          ==================================================
+          6. APPROVE PURCHASE ATOMIC
+          ==================================================
+
+          Hanya boleh DRAFT -> APPROVED.
+
+          Jika user lain sudah approve,
+          update count = 0.
+          ==================================================
+          */
 
           const updated =
             await tx.outletPurchase.updateMany({
               where: {
-                id: purchase.id,
+                id:
+                  purchaseId,
 
                 status:
                   OutletPurchaseStatus.DRAFT,
@@ -410,56 +1057,60 @@ export async function POST(
               data: {
                 status:
                   OutletPurchaseStatus.APPROVED,
+
+                total,
               },
             });
 
-          /*
-           * Tidak ada row yang berhasil diubah berarti
-           * purchase sudah diproses request lain.
-           */
-
-          if (updated.count !== 1) {
+          if (
+            updated.count !== 1
+          ) {
             throw new Error(
               "Purchase Outlet sudah diproses oleh user lain"
             );
           }
 
           /*
-           * -------------------------------------------------
-           * HISTORY
-           * -------------------------------------------------
-           */
+          ==================================================
+          7. HISTORY
+          ==================================================
+          */
 
           await tx.history.create({
             data: {
-              transactionType: "PURCHASE",
+              transactionType:
+                "PURCHASE",
 
               referenceNumber:
                 purchase.number,
 
               description:
-                `Approve Purchase Outlet ${purchase.number} - ${purchase.supplier.name} - ${purchase.outlet.name}`,
+                `Approve Purchase Outlet ${purchase.number} - ${purchase.supplier.name} - ${purchase.outlet.name} - Pembayaran ${paymentMethod}`,
 
-              userId: user.id,
+              userId:
+                user.id,
             },
           });
 
           /*
-           * -------------------------------------------------
-           * AMBIL HASIL TERBARU
-           * -------------------------------------------------
-           */
+          ==================================================
+          8. GET APPROVED PURCHASE
+          ==================================================
+          */
 
           const approved =
             await tx.outletPurchase.findUnique({
               where: {
-                id: purchase.id,
+                id:
+                  purchase.id,
               },
 
               include: {
                 supplier: true,
                 outlet: true,
                 items: true,
+                payable: true,
+                payments: true,
               },
             });
 
@@ -469,98 +1120,184 @@ export async function POST(
             );
           }
 
-          return approved;
+          /*
+          ==================================================
+          RETURN
+          ==================================================
+          */
+
+          return {
+            purchase:
+              approved,
+
+            payment,
+
+            pettyCash,
+
+            payable,
+          };
+        },
+        {
+          maxWait: 10000,
+          timeout: 20000,
         }
       );
 
     /*
-     * =====================================================
-     * RESPONSE
-     * =====================================================
-     */
+    ========================================================
+    9. MESSAGE
+    ========================================================
+    */
+
+    const paymentMethod =
+      result.purchase.paymentMethod;
+
+    let message =
+      "Purchase Outlet berhasil diapprove.";
+
+    /*
+    --------------------------------------------------------
+    CASH / COD / CBD
+    --------------------------------------------------------
+    */
+
+    if (
+      paymentMethod ===
+        PaymentMethod.CASH ||
+      paymentMethod ===
+        PaymentMethod.COD ||
+      paymentMethod ===
+        PaymentMethod.CBD
+    ) {
+      message =
+        `Purchase Outlet berhasil diapprove dan Petty Cash ${result.purchase.outlet.name} berkurang Rp ${Number(
+          result.purchase.total
+        ).toLocaleString(
+          "id-ID"
+        )}.`;
+    }
+
+    /*
+    --------------------------------------------------------
+    TRANSFER
+    --------------------------------------------------------
+    */
+
+    if (
+      paymentMethod ===
+      PaymentMethod.TRANSFER
+    ) {
+      message =
+        "Purchase Outlet berhasil diapprove. Pembayaran TRANSFER langsung LUNAS dan tidak mengurangi Petty Cash.";
+    }
+
+    /*
+    --------------------------------------------------------
+    TEMPO
+    --------------------------------------------------------
+    */
+
+    if (
+      paymentMethod ===
+      PaymentMethod.TEMPO
+    ) {
+      message =
+        "Purchase Outlet berhasil diapprove. Pembayaran TEMPO tidak mengurangi Petty Cash dan hutang supplier berhasil dibuat.";
+    }
+
+    /*
+    ========================================================
+    10. RESPONSE
+    ========================================================
+    */
 
     return NextResponse.json({
       success: true,
 
-      message:
-        "Purchase Outlet berhasil diapprove",
+      message,
 
       data: result,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(
       "APPROVE OUTLET PURCHASE ERROR:",
       error
     );
 
     const message =
-      error?.message ||
-      "Approve Purchase Outlet gagal";
+      error instanceof Error
+        ? error.message
+        : "Approve Purchase Outlet gagal";
+
+    let status = 500;
 
     /*
-     * =====================================================
-     * ERROR RESPONSE
-     * =====================================================
-     */
+    --------------------------------------------------------
+    404
+    --------------------------------------------------------
+    */
 
     if (
       message.includes(
         "tidak ditemukan"
       )
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message,
-        },
-        {
-          status: 404,
-        }
-      );
+      status = 404;
     }
+
+    /*
+    --------------------------------------------------------
+    403
+    --------------------------------------------------------
+    */
 
     if (
       message.includes(
-        "tidak dapat diapprove"
-      ) ||
-      message.includes(
-        "sudah diproses"
-      ) ||
-      message.includes(
-        "tidak memiliki barang"
-      ) ||
-      message.includes(
-        "tidak memiliki outlet"
-      ) ||
-      message.includes(
-        "Supplier"
-      ) ||
-      message.includes(
-        "qty"
-      ) ||
-      message.includes(
-        "harga"
+        "tidak memiliki akses"
       )
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message,
-        },
-        {
-          status: 400,
-        }
-      );
+      status = 403;
+    }
+
+    /*
+    --------------------------------------------------------
+    400
+    --------------------------------------------------------
+    */
+
+    if (
+      message.includes(
+        "sudah"
+      ) ||
+      message.includes(
+        "tidak valid"
+      ) ||
+      message.includes(
+        "tidak mencukupi"
+      ) ||
+      message.includes(
+        "belum"
+      ) ||
+      message.includes(
+        "tidak memiliki"
+      ) ||
+      message.includes(
+        "tidak sesuai"
+      ) ||
+      message.includes(
+        "berubah"
+      )
+    ) {
+      status = 400;
     }
 
     return NextResponse.json(
       {
         success: false,
-        message:
-          "Approve Purchase Outlet gagal",
+        message,
       },
       {
-        status: 500,
+        status,
       }
     );
   }
