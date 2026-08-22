@@ -24,6 +24,9 @@ type Barang = {
   category: string | null;
   brand: string | null;
   unit: string;
+  baseUnit: string | null;
+  conversionRate: number;
+  minimumStock: number;
 };
 
 type OutletBarang = {
@@ -60,6 +63,8 @@ export default function OutletMasterBarangPage() {
     category: "",
     brand: "",
     unit: "",
+    baseUnit: "",
+    conversionRate: "1",
     harga: "",
     minimumStock: "",
   });
@@ -154,6 +159,8 @@ export default function OutletMasterBarangPage() {
         "Gagal mengambil master barang:",
         error
       );
+
+      setData([]);
     } finally {
       setLoading(false);
     }
@@ -173,6 +180,8 @@ export default function OutletMasterBarangPage() {
       category: "",
       brand: "",
       unit: "",
+      baseUnit: "",
+      conversionRate: "1",
       harga: "",
       minimumStock: "",
     });
@@ -208,6 +217,14 @@ export default function OutletMasterBarangPage() {
       return;
     }
 
+    const conversionRate =
+      Number(form.conversionRate) || 1;
+
+    if (conversionRate <= 0) {
+      alert("Konversi harus lebih besar dari 0");
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -219,6 +236,8 @@ export default function OutletMasterBarangPage() {
         category: form.category.trim(),
         brand: form.brand.trim(),
         unit: form.unit.trim(),
+        baseUnit: form.baseUnit.trim(),
+        conversionRate,
         harga: Number(form.harga) || 0,
         minimumStock:
           Number(form.minimumStock) || 0,
@@ -277,7 +296,9 @@ export default function OutletMasterBarangPage() {
   ) {
     const file = e.target.files?.[0];
 
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     const selectedOutlet =
       user?.role === "OUTLET_ADMIN"
@@ -348,25 +369,23 @@ export default function OutletMasterBarangPage() {
 
   return (
     <div className="p-6">
-
       {/* =====================================================
           HEADER
       ===================================================== */}
 
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-
         <div>
           <h1 className="text-2xl font-bold text-[#29483A]">
             Master Barang Outlet
           </h1>
 
           <p className="mt-1 text-sm text-gray-500">
-            Kelola barang yang tersedia pada masing-masing outlet
+            Kelola barang yang tersedia pada
+            masing-masing outlet
           </p>
         </div>
 
         <div className="flex gap-2">
-
           {/* IMPORT EXCEL */}
 
           <label
@@ -383,7 +402,6 @@ export default function OutletMasterBarangPage() {
               font-semibold
               text-white
               hover:bg-[#42685A]
-              disabled:cursor-not-allowed
             "
           >
             <Upload size={17} />
@@ -424,10 +442,8 @@ export default function OutletMasterBarangPage() {
             "
           >
             <Plus size={17} />
-
             Tambah Barang
           </button>
-
         </div>
       </div>
 
@@ -436,7 +452,6 @@ export default function OutletMasterBarangPage() {
       ===================================================== */}
 
       <div className="mb-5 rounded-xl border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-800">
-
         <div className="font-semibold">
           Format Excel Import
         </div>
@@ -453,7 +468,6 @@ export default function OutletMasterBarangPage() {
           Barang harus sudah terdaftar di Master
           Barang Central.
         </div>
-
       </div>
 
       {/* =====================================================
@@ -472,7 +486,6 @@ export default function OutletMasterBarangPage() {
         "
       >
         <div className="flex flex-col gap-3 md:flex-row">
-
           {/* FILTER OUTLET */}
 
           {user?.role !== "OUTLET_ADMIN" && (
@@ -515,7 +528,6 @@ export default function OutletMasterBarangPage() {
           {/* SEARCH */}
 
           <div className="relative flex-1">
-
             <Search
               size={18}
               className="
@@ -546,7 +558,6 @@ export default function OutletMasterBarangPage() {
                 focus:border-[#527A6B]
               "
             />
-
           </div>
 
           {/* REFRESH */}
@@ -583,7 +594,6 @@ export default function OutletMasterBarangPage() {
 
             Refresh
           </button>
-
         </div>
       </div>
 
@@ -602,13 +612,9 @@ export default function OutletMasterBarangPage() {
         "
       >
         <div className="overflow-x-auto">
-
           <table className="w-full text-sm">
-
             <thead className="bg-[#EEF5F1]">
-
               <tr>
-
                 <th className="px-4 py-3 text-left">
                   No
                 </th>
@@ -637,6 +643,18 @@ export default function OutletMasterBarangPage() {
                   Satuan
                 </th>
 
+                <th className="px-4 py-3 text-left">
+                  Satuan Dasar
+                </th>
+
+                <th className="px-4 py-3 text-center">
+                  Konversi
+                </th>
+
+                <th className="px-4 py-3 text-right">
+                  Minimum Stock
+                </th>
+
                 <th className="px-4 py-3 text-right">
                   Harga
                 </th>
@@ -644,17 +662,14 @@ export default function OutletMasterBarangPage() {
                 <th className="px-4 py-3 text-center">
                   Status
                 </th>
-
               </tr>
-
             </thead>
 
             <tbody>
-
               {loading ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={12}
                     className="py-10 text-center text-gray-500"
                   >
                     <RefreshCw
@@ -668,7 +683,7 @@ export default function OutletMasterBarangPage() {
               ) : data.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={12}
                     className="py-14 text-center"
                   >
                     <Package
@@ -677,87 +692,153 @@ export default function OutletMasterBarangPage() {
                     />
 
                     <p className="font-semibold text-gray-500">
-                      Belum ada master barang outlet
+                      Belum ada master barang
+                      outlet
                     </p>
                   </td>
                 </tr>
               ) : (
-                data.map((item, index) => (
-                  <tr
-                    key={item.id}
-                    className="
-                      border-t
-                      border-gray-100
-                      hover:bg-gray-50
-                    "
-                  >
+                data.map((item, index) => {
+                  const conversionRate =
+                    Number(
+                      item.barang
+                        .conversionRate || 1
+                    );
 
-                    <td className="px-4 py-3">
-                      {index + 1}
-                    </td>
+                  return (
+                    <tr
+                      key={item.id}
+                      className="
+                        border-t
+                        border-gray-100
+                        hover:bg-gray-50
+                      "
+                    >
+                      <td className="px-4 py-3">
+                        {index + 1}
+                      </td>
 
-                    <td className="px-4 py-3 font-semibold">
-                      {item.outlet.code}
-                    </td>
+                      <td className="px-4 py-3 font-semibold">
+                        {item.outlet.code}
+                      </td>
 
-                    <td className="px-4 py-3 font-medium">
-                      {item.barang.code}
-                    </td>
+                      <td className="px-4 py-3 font-medium">
+                        {item.barang.code}
+                      </td>
 
-                    <td className="px-4 py-3 text-gray-500">
-                      {item.barang.barcode || "-"}
-                    </td>
+                      <td className="px-4 py-3 text-gray-500">
+                        {item.barang.barcode ||
+                          "-"}
+                      </td>
 
-                    <td className="px-4 py-3 font-semibold">
-                      {item.barang.name}
-                    </td>
+                      <td className="px-4 py-3 font-semibold">
+                        {item.barang.name}
+                      </td>
 
-                    <td className="px-4 py-3">
-                      {item.barang.category || "-"}
-                    </td>
+                      <td className="px-4 py-3">
+                        {item.barang.category ||
+                          "-"}
+                      </td>
 
-                    <td className="px-4 py-3">
-                      {item.barang.unit}
-                    </td>
+                      {/* SATUAN TRANSAKSI */}
 
-                    <td className="px-4 py-3 text-right">
-                      Rp{" "}
-                      {Number(
-                        item.harga || 0
-                      ).toLocaleString("id-ID")}
-                    </td>
+                      <td className="px-4 py-3 font-medium">
+                        {item.barang.unit}
+                      </td>
 
-                    <td className="px-4 py-3 text-center">
+                      {/* SATUAN DASAR */}
 
-                      <span
-                        className={`
-                          rounded-full
-                          px-3
-                          py-1
-                          text-xs
-                          font-semibold
-                          ${
-                            item.aktif
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
-                          }
-                        `}
-                      >
-                        {item.aktif
-                          ? "Aktif"
-                          : "Nonaktif"}
-                      </span>
+                      <td className="px-4 py-3 font-medium">
+                        {item.barang.baseUnit ||
+                          "-"}
+                      </td>
 
-                    </td>
+                      {/* KONVERSI */}
 
-                  </tr>
-                ))
+                      <td className="px-4 py-3 text-center">
+                        {item.barang.baseUnit ? (
+                          <div>
+                            <div className="font-bold text-[#29483A]">
+                              {conversionRate.toLocaleString(
+                                "id-ID"
+                              )}
+                            </div>
+
+                            <div className="mt-0.5 whitespace-nowrap text-xs text-gray-500">
+                              1{" "}
+                              {item.barang
+                                .unit}{" "}
+                              ={" "}
+                              {conversionRate.toLocaleString(
+                                "id-ID"
+                              )}{" "}
+                              {
+                                item.barang
+                                  .baseUnit
+                              }
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">
+                            -
+                          </span>
+                        )}
+                      </td>
+
+                      {/* MINIMUM STOCK */}
+
+                      <td className="px-4 py-3 text-right">
+                        {Number(
+                          item.barang
+                            .minimumStock ||
+                            0
+                        ).toLocaleString(
+                          "id-ID"
+                        )}{" "}
+                        <span className="text-xs text-gray-500">
+                          {item.barang.unit}
+                        </span>
+                      </td>
+
+                      {/* HARGA */}
+
+                      <td className="px-4 py-3 text-right">
+                        Rp{" "}
+                        {Number(
+                          item.harga || 0
+                        ).toLocaleString(
+                          "id-ID"
+                        )}
+                      </td>
+
+                      {/* STATUS */}
+
+                      <td className="px-4 py-3 text-center">
+                        <span
+                          className={`
+                            rounded-full
+                            px-3
+                            py-1
+                            text-xs
+                            font-semibold
+                            ${
+                              item.aktif
+                                ? "bg-green-100 text-green-700"
+                                : "bg-red-100 text-red-700"
+                            }
+                          `}
+                        >
+                          {item.aktif
+                            ? "Aktif"
+                            : "Nonaktif"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
-
             </tbody>
-
           </table>
-
         </div>
       </div>
 
@@ -778,17 +859,16 @@ export default function OutletMasterBarangPage() {
             p-4
           "
         >
-
           <div
             className="
               w-full
-              max-w-2xl
+              max-w-3xl
+              overflow-hidden
               rounded-2xl
               bg-white
               shadow-xl
             "
           >
-
             {/* FORM HEADER */}
 
             <div
@@ -801,17 +881,15 @@ export default function OutletMasterBarangPage() {
                 py-4
               "
             >
-
               <div>
-
                 <h2 className="text-lg font-bold text-[#29483A]">
                   Tambah Master Barang Outlet
                 </h2>
 
                 <p className="text-xs text-gray-500">
-                  Tambahkan barang dari Master Barang Central
+                  Tambahkan barang dari Master
+                  Barang Central
                 </p>
-
               </div>
 
               <button
@@ -827,21 +905,18 @@ export default function OutletMasterBarangPage() {
               >
                 <X size={19} />
               </button>
-
             </div>
 
             {/* FORM */}
 
             <form
               onSubmit={handleSubmit}
-              className="space-y-4 p-6"
+              className="max-h-[80vh] space-y-4 overflow-y-auto p-6"
             >
-
               {/* OUTLET */}
 
               {user?.role !== "OUTLET_ADMIN" && (
                 <div>
-
                   <label className="mb-1 block text-sm font-semibold">
                     Outlet
                   </label>
@@ -863,9 +938,10 @@ export default function OutletMasterBarangPage() {
                       border-gray-300
                       px-4
                       py-2.5
+                      outline-none
+                      focus:border-[#527A6B]
                     "
                   >
-
                     <option value="">
                       Pilih Outlet
                     </option>
@@ -879,18 +955,14 @@ export default function OutletMasterBarangPage() {
                         {outlet.name}
                       </option>
                     ))}
-
                   </select>
-
                 </div>
               )}
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
                 {/* KODE */}
 
                 <div>
-
                   <label className="mb-1 block text-sm font-semibold">
                     Kode Barang *
                   </label>
@@ -911,16 +983,16 @@ export default function OutletMasterBarangPage() {
                       border-gray-300
                       px-4
                       py-2.5
+                      outline-none
+                      focus:border-[#527A6B]
                     "
                     placeholder="Kode Barang Central"
                   />
-
                 </div>
 
                 {/* BARCODE */}
 
                 <div>
-
                   <label className="mb-1 block text-sm font-semibold">
                     Barcode
                   </label>
@@ -930,7 +1002,8 @@ export default function OutletMasterBarangPage() {
                     onChange={(e) =>
                       setForm({
                         ...form,
-                        barcode: e.target.value,
+                        barcode:
+                          e.target.value,
                       })
                     }
                     className="
@@ -940,15 +1013,16 @@ export default function OutletMasterBarangPage() {
                       border-gray-300
                       px-4
                       py-2.5
+                      outline-none
+                      focus:border-[#527A6B]
                     "
+                    placeholder="Barcode"
                   />
-
                 </div>
 
                 {/* NAMA */}
 
                 <div className="md:col-span-2">
-
                   <label className="mb-1 block text-sm font-semibold">
                     Nama Barang *
                   </label>
@@ -969,15 +1043,16 @@ export default function OutletMasterBarangPage() {
                       border-gray-300
                       px-4
                       py-2.5
+                      outline-none
+                      focus:border-[#527A6B]
                     "
+                    placeholder="Nama barang"
                   />
-
                 </div>
 
                 {/* KATEGORI */}
 
                 <div>
-
                   <label className="mb-1 block text-sm font-semibold">
                     Kategori
                   </label>
@@ -998,15 +1073,15 @@ export default function OutletMasterBarangPage() {
                       border-gray-300
                       px-4
                       py-2.5
+                      outline-none
+                      focus:border-[#527A6B]
                     "
                   />
-
                 </div>
 
                 {/* BRAND */}
 
                 <div>
-
                   <label className="mb-1 block text-sm font-semibold">
                     Brand
                   </label>
@@ -1016,7 +1091,8 @@ export default function OutletMasterBarangPage() {
                     onChange={(e) =>
                       setForm({
                         ...form,
-                        brand: e.target.value,
+                        brand:
+                          e.target.value,
                       })
                     }
                     className="
@@ -1026,17 +1102,17 @@ export default function OutletMasterBarangPage() {
                       border-gray-300
                       px-4
                       py-2.5
+                      outline-none
+                      focus:border-[#527A6B]
                     "
                   />
-
                 </div>
 
-                {/* SATUAN */}
+                {/* SATUAN TRANSAKSI */}
 
                 <div>
-
                   <label className="mb-1 block text-sm font-semibold">
-                    Satuan *
+                    Satuan Transaksi *
                   </label>
 
                   <input
@@ -1055,28 +1131,32 @@ export default function OutletMasterBarangPage() {
                       border-gray-300
                       px-4
                       py-2.5
+                      outline-none
+                      focus:border-[#527A6B]
                     "
-                    placeholder="PCS / BOX / KG"
+                    placeholder="DUS / BOX / KG / PCS"
                   />
 
+                  <p className="mt-1 text-xs text-gray-500">
+                    Satuan yang digunakan saat
+                    transaksi.
+                  </p>
                 </div>
 
-                {/* HARGA */}
+                {/* SATUAN DASAR */}
 
                 <div>
-
                   <label className="mb-1 block text-sm font-semibold">
-                    Harga
+                    Satuan Dasar
                   </label>
 
                   <input
-                    type="number"
-                    min="0"
-                    value={form.harga}
+                    value={form.baseUnit}
                     onChange={(e) =>
                       setForm({
                         ...form,
-                        harga: e.target.value,
+                        baseUnit:
+                          e.target.value,
                       })
                     }
                     className="
@@ -1086,15 +1166,63 @@ export default function OutletMasterBarangPage() {
                       border-gray-300
                       px-4
                       py-2.5
+                      outline-none
+                      focus:border-[#527A6B]
                     "
+                    placeholder="PCS"
                   />
 
+                  <p className="mt-1 text-xs text-gray-500">
+                    Contoh: 1 DUS = 24 PCS.
+                  </p>
+                </div>
+
+                {/* KONVERSI */}
+
+                <div>
+                  <label className="mb-1 block text-sm font-semibold">
+                    Konversi ke Satuan Dasar
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0.000001"
+                    step="any"
+                    value={
+                      form.conversionRate
+                    }
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        conversionRate:
+                          e.target.value,
+                      })
+                    }
+                    className="
+                      w-full
+                      rounded-xl
+                      border
+                      border-gray-300
+                      px-4
+                      py-2.5
+                      outline-none
+                      focus:border-[#527A6B]
+                    "
+                    placeholder="24"
+                  />
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    1 {form.unit || "Unit"} ={" "}
+                    {form.conversionRate ||
+                      "1"}{" "}
+                    {form.baseUnit ||
+                      "Satuan Dasar"}
+                  </p>
                 </div>
 
                 {/* MINIMUM STOCK */}
 
                 <div>
-
                   <label className="mb-1 block text-sm font-semibold">
                     Minimum Stock
                   </label>
@@ -1102,7 +1230,10 @@ export default function OutletMasterBarangPage() {
                   <input
                     type="number"
                     min="0"
-                    value={form.minimumStock}
+                    step="any"
+                    value={
+                      form.minimumStock
+                    }
                     onChange={(e) =>
                       setForm({
                         ...form,
@@ -1117,17 +1248,92 @@ export default function OutletMasterBarangPage() {
                       border-gray-300
                       px-4
                       py-2.5
+                      outline-none
+                      focus:border-[#527A6B]
                     "
+                    placeholder="0"
                   />
 
+                  <p className="mt-1 text-xs text-gray-500">
+                    Minimum stock dalam satuan
+                    transaksi.
+                  </p>
                 </div>
 
+                {/* HARGA */}
+
+                <div>
+                  <label className="mb-1 block text-sm font-semibold">
+                    Harga
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={form.harga}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        harga:
+                          e.target.value,
+                      })
+                    }
+                    className="
+                      w-full
+                      rounded-xl
+                      border
+                      border-gray-300
+                      px-4
+                      py-2.5
+                      outline-none
+                      focus:border-[#527A6B]
+                    "
+                    placeholder="0"
+                  />
+                </div>
               </div>
+
+              {/* CONVERSION PREVIEW */}
+
+              {(form.unit ||
+                form.baseUnit) && (
+                <div
+                  className="
+                    rounded-xl
+                    border
+                    border-[#D7E5DE]
+                    bg-[#F4F8F5]
+                    p-4
+                  "
+                >
+                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Preview Konversi
+                  </div>
+
+                  <div className="mt-1 text-lg font-bold text-[#29483A]">
+                    1{" "}
+                    {form.unit ||
+                      "Satuan Transaksi"}{" "}
+                    ={" "}
+                    {form.conversionRate ||
+                      "1"}{" "}
+                    {form.baseUnit ||
+                      "Satuan Dasar"}
+                  </div>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    Contoh: jika Unit = DUS,
+                    Satuan Dasar = PCS dan
+                    Konversi = 24, maka 1 DUS
+                    setara dengan 24 PCS.
+                  </p>
+                </div>
+              )}
 
               {/* BUTTON */}
 
-              <div className="flex justify-end gap-2 pt-3">
-
+              <div className="flex justify-end gap-2 border-t pt-4">
                 <button
                   type="button"
                   onClick={() =>
@@ -1136,10 +1342,13 @@ export default function OutletMasterBarangPage() {
                   className="
                     rounded-xl
                     border
+                    border-gray-300
                     px-5
                     py-2.5
                     text-sm
                     font-semibold
+                    text-gray-700
+                    hover:bg-gray-50
                   "
                 >
                   Batal
@@ -1156,6 +1365,8 @@ export default function OutletMasterBarangPage() {
                     text-sm
                     font-semibold
                     text-white
+                    hover:bg-[#1F382D]
+                    disabled:cursor-not-allowed
                     disabled:opacity-50
                   "
                 >
@@ -1163,16 +1374,11 @@ export default function OutletMasterBarangPage() {
                     ? "Menyimpan..."
                     : "Simpan"}
                 </button>
-
               </div>
-
             </form>
-
           </div>
-
         </div>
       )}
-
     </div>
   );
 }

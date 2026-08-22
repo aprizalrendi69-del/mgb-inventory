@@ -19,7 +19,7 @@ async function getCurrentUser() {
 
     const userId = Number(
       sessionData?.id ??
-      sessionData?.user?.id
+        sessionData?.user?.id
     );
 
     if (!Number.isInteger(userId) || userId <= 0) {
@@ -84,7 +84,27 @@ function isAllowedRole(role: string) {
  * SUMBER DATA:
  * OutletBarang
  *
- * Barang tetap berasal dari Master Barang Central.
+ * BARANG:
+ * -> tetap mengambil master Barang Central
+ *
+ * SATUAN:
+ *
+ * unit            = satuan transaksi / satuan utama
+ * baseUnit        = satuan dasar
+ * conversionRate  = jumlah satuan dasar dalam 1 satuan utama
+ *
+ * Contoh:
+ *
+ * unit           = DUS
+ * baseUnit       = PCS
+ * conversionRate = 24
+ *
+ * Artinya:
+ *
+ * 1 DUS = 24 PCS
+ *
+ * Stock Outlet tetap disimpan pada satuan utama
+ * Barang.unit agar konsisten dengan sistem pusat.
  * =========================================================
  */
 
@@ -191,7 +211,9 @@ export async function GET(req: NextRequest) {
     }
 
     /*
+     * =====================================================
      * HANYA BARANG CENTRAL
+     * =====================================================
      */
 
     where.barang = {
@@ -199,7 +221,9 @@ export async function GET(req: NextRequest) {
     };
 
     /*
+     * =====================================================
      * SEARCH
+     * =====================================================
      */
 
     if (search) {
@@ -228,7 +252,7 @@ export async function GET(req: NextRequest) {
 
     /*
      * =====================================================
-     * GET
+     * GET MASTER BARANG OUTLET
      * =====================================================
      */
 
@@ -242,6 +266,8 @@ export async function GET(req: NextRequest) {
           barangId: true,
           harga: true,
           aktif: true,
+          createdAt: true,
+          updatedAt: true,
 
           outlet: {
             select: {
@@ -260,9 +286,32 @@ export async function GET(req: NextRequest) {
               name: true,
               category: true,
               brand: true,
+
+              /*
+               * =================================================
+               * SATUAN
+               * =================================================
+               *
+               * unit:
+               * satuan transaksi utama.
+               *
+               * baseUnit:
+               * satuan dasar.
+               *
+               * conversionRate:
+               * 1 unit = conversionRate baseUnit.
+               */
+
               unit: true,
+              baseUnit: true,
+              conversionRate: true,
+
               source: true,
               active: true,
+
+              minimumStock: true,
+              purchasePrice: true,
+              sellingPrice: true,
 
               outletStocks: {
                 where:
@@ -293,6 +342,91 @@ export async function GET(req: NextRequest) {
 
     /*
      * =====================================================
+     * FORMAT DATA
+     *
+     * Kita tambahkan informasi konversi yang siap
+     * digunakan oleh frontend outlet.
+     *
+     * Contoh:
+     *
+     * unit = DUS
+     * baseUnit = PCS
+     * conversionRate = 24
+     *
+     * conversionLabel = "1 DUS = 24 PCS"
+     * =====================================================
+     */
+
+    const formattedData = data.map(
+      (item) => {
+        const conversionRate =
+          Number(
+            item.barang.conversionRate
+          ) > 0
+            ? Number(
+                item.barang.conversionRate
+              )
+            : 1;
+
+        const unit =
+          item.barang.unit || "";
+
+        const baseUnit =
+          item.barang.baseUnit ||
+          unit;
+
+        const hasConversion =
+          Boolean(
+            baseUnit &&
+              unit &&
+              baseUnit !== unit &&
+              conversionRate > 1
+          );
+
+        return {
+          ...item,
+
+          barang: {
+            ...item.barang,
+
+            /*
+             * Nilai asli master
+             */
+            unit,
+            baseUnit,
+            conversionRate,
+
+            /*
+             * Informasi tambahan untuk UI
+             */
+            hasConversion,
+
+            conversionLabel:
+              hasConversion
+                ? `1 ${unit} = ${conversionRate} ${baseUnit}`
+                : `1 ${unit}`,
+
+            /*
+             * Stock outlet tetap menggunakan
+             * satuan utama Barang.unit.
+             */
+            stockUnit: unit,
+
+            /*
+             * Jika frontend membutuhkan tampilan
+             * stock dalam satuan dasar.
+             */
+            stockBaseUnit:
+              hasConversion
+                ? baseUnit
+                : unit,
+          },
+        };
+      }
+    );
+
+    /*
+     * =====================================================
      * RESPONSE
      * =====================================================
      */
@@ -305,9 +439,20 @@ export async function GET(req: NextRequest) {
         outletId,
       },
 
-      total: data.length,
+      total: formattedData.length,
 
-      data,
+      data: formattedData,
+
+      meta: {
+        stockUnitPolicy:
+          "OutletStock disimpan menggunakan satuan utama Barang.unit.",
+
+        conversionPolicy:
+          "Konversi mengikuti Barang.baseUnit dan Barang.conversionRate dari Master Barang Central.",
+
+        example:
+          "Jika unit = DUS, baseUnit = PCS, conversionRate = 24, maka 1 DUS = 24 PCS.",
+      },
     });
   } catch (error: any) {
     console.error(
@@ -332,6 +477,16 @@ export async function GET(req: NextRequest) {
  * POST
  *
  * DAFTARKAN BARANG CENTRAL KE OUTLET
+ *
+ * SATUAN TIDAK DIINPUT ULANG DI OUTLET.
+ *
+ * Outlet otomatis mengikuti:
+ *
+ * Barang.unit
+ * Barang.baseUnit
+ * Barang.conversionRate
+ *
+ * dari Master Barang Central.
  * =========================================================
  */
 
@@ -381,7 +536,7 @@ export async function POST(req: NextRequest) {
       Number(body?.barangId);
 
     const harga =
-      Number(body?.harga || 0);
+      Number(body?.harga ?? 0);
 
     /*
      * =====================================================
@@ -447,6 +602,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    /*
+     * =====================================================
+     * VALIDASI HARGA
+     * =====================================================
+     */
+
     if (
       !Number.isFinite(harga) ||
       harga < 0
@@ -506,6 +667,8 @@ export async function POST(req: NextRequest) {
     /*
      * =====================================================
      * CEK BARANG CENTRAL
+     *
+     * SEKALIGUS AMBIL SATUAN
      * =====================================================
      */
 
@@ -522,8 +685,18 @@ export async function POST(req: NextRequest) {
           code: true,
           name: true,
           barcode: true,
+
+          /*
+           * SATUAN MASTER
+           */
+          unit: true,
+          baseUnit: true,
+          conversionRate: true,
+
           minimumStock: true,
           purchasePrice: true,
+          sellingPrice: true,
+
           source: true,
         },
       });
@@ -541,6 +714,56 @@ export async function POST(req: NextRequest) {
 
     /*
      * =====================================================
+     * VALIDASI KONVERSI MASTER
+     * =====================================================
+     *
+     * conversionRate minimal 1.
+     *
+     * Kalau baseUnit kosong:
+     * dianggap sama dengan unit.
+     *
+     * Kita tidak mengubah data master di sini.
+     */
+
+    const conversionRate =
+      Number(
+        barang.conversionRate
+      );
+
+    if (
+      !Number.isFinite(conversionRate) ||
+      conversionRate <= 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            `Konversi satuan barang ${barang.code} tidak valid. Conversion rate harus lebih besar dari 0.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const unit =
+      barang.unit?.trim() || "";
+
+    const baseUnit =
+      barang.baseUnit?.trim() ||
+      unit;
+
+    if (!unit) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            `Satuan utama barang ${barang.code} belum diatur di Master Barang Central.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    /*
+     * =====================================================
      * TRANSACTION
      *
      * OutletBarang + OutletStock
@@ -551,7 +774,9 @@ export async function POST(req: NextRequest) {
       await prisma.$transaction(
         async (tx) => {
           /*
+           * =================================================
            * CEK OUTLET BARANG
+           * =================================================
            */
 
           const existing =
@@ -570,6 +795,8 @@ export async function POST(req: NextRequest) {
              *
              * jangan duplicate.
              * aktifkan kembali.
+             *
+             * Satuan tetap mengikuti Master Barang.
              */
 
             const updated =
@@ -590,7 +817,9 @@ export async function POST(req: NextRequest) {
               });
 
             /*
-             * Pastikan OutletStock ada.
+             * =================================================
+             * PASTIKAN STOCK OUTLET ADA
+             * =================================================
              */
 
             await tx.outletStock.upsert({
@@ -607,8 +836,10 @@ export async function POST(req: NextRequest) {
                 outletId,
                 barangId,
                 stock: 0,
+
                 minimumStock:
                   barang.minimumStock || 0,
+
                 averageCost:
                   barang.purchasePrice || 0,
               },
@@ -618,7 +849,9 @@ export async function POST(req: NextRequest) {
           }
 
           /*
+           * =================================================
            * BUAT OUTLET BARANG
+           * =================================================
            */
 
           const outletBarang =
@@ -637,7 +870,27 @@ export async function POST(req: NextRequest) {
             });
 
           /*
+           * =================================================
            * BUAT STOCK OUTLET
+           * =================================================
+           *
+           * Stock disimpan dalam satuan utama Barang.unit.
+           *
+           * Contoh:
+           *
+           * unit = DUS
+           * baseUnit = PCS
+           * conversionRate = 24
+           *
+           * stock = 10
+           *
+           * berarti:
+           *
+           * 10 DUS = 240 PCS
+           *
+           * BUKAN:
+           *
+           * stock = 240
            */
 
           await tx.outletStock.upsert({
@@ -654,8 +907,10 @@ export async function POST(req: NextRequest) {
               outletId,
               barangId,
               stock: 0,
+
               minimumStock:
                 barang.minimumStock || 0,
+
               averageCost:
                 barang.purchasePrice || 0,
             },
@@ -665,6 +920,39 @@ export async function POST(req: NextRequest) {
         }
       );
 
+    /*
+     * =====================================================
+     * RESPONSE DATA
+     * =====================================================
+     */
+
+    const resultBarang =
+      result.barang;
+
+    const resultConversionRate =
+      Number(
+        resultBarang.conversionRate
+      ) > 0
+        ? Number(
+            resultBarang.conversionRate
+          )
+        : 1;
+
+    const resultUnit =
+      resultBarang.unit || "";
+
+    const resultBaseUnit =
+      resultBarang.baseUnit ||
+      resultUnit;
+
+    const hasConversion =
+      Boolean(
+        resultUnit &&
+          resultBaseUnit &&
+          resultUnit !== resultBaseUnit &&
+          resultConversionRate > 1
+      );
+
     return NextResponse.json(
       {
         success: true,
@@ -672,7 +960,51 @@ export async function POST(req: NextRequest) {
         message:
           "Barang berhasil didaftarkan ke Master Barang Outlet",
 
-        data: result,
+        data: {
+          ...result,
+
+          barang: {
+            ...resultBarang,
+
+            /*
+             * Satuan Master Central
+             */
+            unit: resultUnit,
+            baseUnit: resultBaseUnit,
+            conversionRate:
+              resultConversionRate,
+
+            hasConversion,
+
+            conversionLabel:
+              hasConversion
+                ? `1 ${resultUnit} = ${resultConversionRate} ${resultBaseUnit}`
+                : `1 ${resultUnit}`,
+
+            stockUnit: resultUnit,
+            stockBaseUnit:
+              hasConversion
+                ? resultBaseUnit
+                : resultUnit,
+          },
+        },
+
+        unit: {
+          unit: resultUnit,
+          baseUnit: resultBaseUnit,
+          conversionRate:
+            resultConversionRate,
+
+          hasConversion,
+
+          conversionLabel:
+            hasConversion
+              ? `1 ${resultUnit} = ${resultConversionRate} ${resultBaseUnit}`
+              : `1 ${resultUnit}`,
+
+          policy:
+            "Satuan outlet mengikuti Master Barang Central dan tidak disimpan ulang di OutletBarang.",
+        },
       },
       { status: 201 }
     );

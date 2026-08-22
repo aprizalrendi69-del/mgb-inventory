@@ -6,98 +6,152 @@ import { cookies } from "next/headers";
  * =========================================================
  * GET /api/outlet/stock/history
  *
- * HISTORY SELURUH AKTIVITAS BARANG OUTLET
+ * HISTORY STOCK OUTLET
  *
- * SUMBER DATA:
+ * SATUAN MENGIKUTI MASTER BARANG
  *
- * 1. OutletReceiptItem
- *    -> Barang masuk dari supplier
+ * Barang.unit           = SATUAN TRANSAKSI
+ * Barang.baseUnit       = SATUAN DASAR
+ * Barang.conversionRate = KONVERSI
  *
- * 2. OutletTransferItem
- *    -> Barang masuk dari gudang pusat / outlet lain
+ * Contoh:
  *
- * 3. DeliveryItem
- *    -> Barang dikirim dari gudang pusat ke outlet
+ * unit           = Dus
+ * baseUnit       = PCS
+ * conversionRate = 24
  *
- * 4. OutletStockOut
- *    -> Pemakaian / waste outlet
+ * 1 Dus = 24 PCS
  *
- * 5. StockOpnameItem
- *    -> Stock opname outlet
+ * =========================================================
  *
- * 6. OutletPurchaseItem
- *    -> PO outlet
- *       (INFORMASI, bukan stock movement)
+ * ATURAN:
  *
- * TIDAK MEMASUKKAN:
+ * OutletStock.stock = BASE UNIT
  *
- * - StockCard
- * - StockMutation
+ * Contoh:
  *
- * Karena kedua model tersebut adalah stock pusat
- * dan tidak mempunyai outletId.
+ * Receipt 10 Dus
+ * -> 240 PCS
  *
- * StockOpnameHistory juga tidak ditampilkan sebagai
- * transaksi terpisah agar Stock Opname tidak muncul dua kali.
- *
- * ---------------------------------------------------------
- *
- * ACCESS:
- *
- * ADMIN
- * -> semua outlet
- * -> bisa filter outletId
- *
- * MANAGER
- * -> semua outlet
- * -> bisa filter outletId
- *
- * OUTLET_ADMIN
- * -> hanya outlet miliknya
- * -> outletId dari query diabaikan
- *
- * ---------------------------------------------------------
- *
- * QUERY:
- *
- * /api/outlet/stock/history
- *
- * /api/outlet/stock/history?outletId=1
- *
- * /api/outlet/stock/history?barangId=10
- *
- * /api/outlet/stock/history?outletId=1&barangId=10
- *
- * /api/outlet/stock/history?outletId=1&barangId=10&limit=100
+ * Stock Out 2 Dus
+ * -> 48 PCS
  *
  * =========================================================
  */
 
 type HistoryDirection = "IN" | "OUT" | "INFO";
 
+type BarangUnitInfo = {
+  id: number;
+  code: string;
+  name: string;
+  unit: string;
+  baseUnit: string | null;
+  conversionRate: number;
+  barcode: string | null;
+};
+
 type HistoryRow = {
   id: string;
   date: Date;
-
   type: string;
   direction: HistoryDirection;
-
   number: string | null;
 
   outletId: number | null;
   barangId: number;
 
+  /*
+   * Qty selalu BASE UNIT.
+   */
   qty: number;
+
+  /*
+   * Qty asli transaksi.
+   */
+  transactionQty: number | null;
+
+  /*
+   * Unit transaksi dari Master Barang.
+   */
+  transactionUnit: string | null;
 
   stockBefore: number | null;
   stockAfter: number | null;
 
   status: string | null;
-
   description: string | null;
-
   source: string;
 };
+
+/*
+ * =========================================================
+ * MASTER BARANG
+ * =========================================================
+ */
+
+function getConversionRate(barang: BarangUnitInfo): number {
+  const rate = Number(barang.conversionRate);
+
+  if (!Number.isFinite(rate) || rate <= 0) {
+    return 1;
+  }
+
+  return rate;
+}
+
+function getTransactionUnit(barang: BarangUnitInfo): string {
+  return (
+    barang.unit?.trim() ||
+    barang.baseUnit?.trim() ||
+    ""
+  );
+}
+
+function getBaseUnit(barang: BarangUnitInfo): string {
+  return (
+    barang.baseUnit?.trim() ||
+    barang.unit?.trim() ||
+    ""
+  );
+}
+
+/*
+ * =========================================================
+ * KONVERSI KE BASE UNIT
+ *
+ * qty transaksi:
+ *
+ * 10 Dus
+ *
+ * conversionRate:
+ *
+ * 24
+ *
+ * hasil:
+ *
+ * 240 PCS
+ * =========================================================
+ */
+
+function toBaseQty(
+  qty: number,
+  barang: BarangUnitInfo
+): number {
+  const safeQty = Number(qty);
+
+  if (!Number.isFinite(safeQty)) {
+    return 0;
+  }
+
+  return safeQty * getConversionRate(barang);
+}
+
+/*
+ * =========================================================
+ * GET
+ * =========================================================
+ */
 
 export async function GET(req: NextRequest) {
   try {
@@ -106,6 +160,7 @@ export async function GET(req: NextRequest) {
     // =====================================================
 
     const cookieStore = await cookies();
+
     const session = cookieStore.get("erp-session");
 
     if (!session) {
@@ -155,7 +210,7 @@ export async function GET(req: NextRequest) {
     }
 
     // =====================================================
-    // 3. USER LOGIN
+    // 3. USER
     // =====================================================
 
     const user = await prisma.user.findUnique({
@@ -309,18 +364,12 @@ export async function GET(req: NextRequest) {
 
     let outletId: number | null = null;
 
-    // -----------------------------------------------------
-    // OUTLET ADMIN
-    // -----------------------------------------------------
-
+    /*
+     * OUTLET_ADMIN:
+     *
+     * WAJIB menggunakan outletId dari session.
+     */
     if (user.role === "OUTLET_ADMIN") {
-      /*
-       * OUTLET_ADMIN SELALU MENGGUNAKAN outletId
-       * DARI SESSION.
-       *
-       * Query outletId sengaja diabaikan.
-       */
-
       if (
         !user.outletId ||
         !Number.isInteger(user.outletId) ||
@@ -341,11 +390,15 @@ export async function GET(req: NextRequest) {
       outletId = user.outletId;
     }
 
-    // -----------------------------------------------------
-    // ADMIN / MANAGER
-    // -----------------------------------------------------
-
-    else if (
+    /*
+     * ADMIN / MANAGER:
+     *
+     * Bisa melihat semua outlet.
+     *
+     * Jika outletId diberikan,
+     * maka filter outlet digunakan.
+     */
+    if (
       user.role === "ADMIN" ||
       user.role === "MANAGER"
     ) {
@@ -427,13 +480,7 @@ export async function GET(req: NextRequest) {
     // 11. VALIDASI BARANG
     // =====================================================
 
-    let selectedBarang: {
-      id: number;
-      code: string;
-      name: string;
-      unit: string;
-      barcode: string | null;
-    } | null = null;
+    let selectedBarang: BarangUnitInfo | null = null;
 
     if (barangId !== null) {
       selectedBarang =
@@ -447,6 +494,8 @@ export async function GET(req: NextRequest) {
             code: true,
             name: true,
             unit: true,
+            baseUnit: true,
+            conversionRate: true,
             barcode: true,
           },
         });
@@ -465,7 +514,7 @@ export async function GET(req: NextRequest) {
     }
 
     // =====================================================
-    // 12. HISTORY ARRAY
+    // 12. HISTORY
     // =====================================================
 
     const history: HistoryRow[] = [];
@@ -473,7 +522,9 @@ export async function GET(req: NextRequest) {
     // =====================================================
     // 13. OUTLET RECEIPT
     //
-    // Barang masuk dari supplier
+    // Supplier -> Outlet
+    //
+    // MOVEMENT IN
     // =====================================================
 
     const receiptWhere: any = {};
@@ -529,6 +580,8 @@ export async function GET(req: NextRequest) {
               code: true,
               name: true,
               unit: true,
+              baseUnit: true,
+              conversionRate: true,
               barcode: true,
             },
           },
@@ -542,40 +595,69 @@ export async function GET(req: NextRequest) {
       });
 
     for (const item of receiptItems) {
+      const barang =
+        item.barang as BarangUnitInfo;
+
+      const transactionQty =
+        Number(item.qty);
+
+      const baseQty =
+        toBaseQty(
+          transactionQty,
+          barang
+        );
+
+      if (baseQty <= 0) {
+        continue;
+      }
+
       history.push({
         id: `OUTLET_RECEIPT-${item.id}`,
 
-        date: item.receipt.receiptDate,
+        date:
+          item.receipt.receiptDate,
 
         type: "OUTLET_RECEIPT",
 
         direction: "IN",
 
-        number: item.receipt.number,
+        number:
+          item.receipt.number,
 
-        outletId: item.receipt.outlet.id,
+        outletId:
+          item.receipt.outlet.id,
 
-        barangId: item.barangId,
+        barangId:
+          item.barangId,
 
-        qty: Number(item.qty),
+        qty: baseQty,
+
+        transactionQty,
+
+        transactionUnit:
+          getTransactionUnit(barang),
 
         stockBefore: null,
         stockAfter: null,
 
         status: "RECEIVED",
 
-        description: item.receipt.supplier
-          ? `Barang masuk dari supplier ${item.receipt.supplier.name}`
-          : "Barang masuk dari supplier",
+        description:
+          item.receipt.supplier
+            ? `Barang masuk dari supplier ${item.receipt.supplier.name}`
+            : "Barang masuk dari supplier",
 
-        source: "OutletReceiptItem",
+        source:
+          "OutletReceiptItem",
       });
     }
 
     // =====================================================
     // 14. OUTLET TRANSFER
     //
-    // Barang masuk dari pusat / outlet lain
+    // Pusat / Outlet lain -> Outlet
+    //
+    // MOVEMENT IN
     // =====================================================
 
     const transferWhere: any = {};
@@ -632,6 +714,8 @@ export async function GET(req: NextRequest) {
               code: true,
               name: true,
               unit: true,
+              baseUnit: true,
+              conversionRate: true,
               barcode: true,
             },
           },
@@ -645,16 +729,6 @@ export async function GET(req: NextRequest) {
       });
 
     for (const item of transferItems) {
-      const sourceName =
-        item.transfer.sourceOutlet?.name ||
-        "Gudang Pusat";
-
-      /*
-       * Hanya barang yang benar-benar diterima
-       * dianggap sebagai transaksi masuk.
-       *
-       * Jika receivedQty = 0, transfer belum diterima.
-       */
       const receivedQty =
         Number(item.receivedQty);
 
@@ -662,43 +736,70 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
+      const barang =
+        item.barang as BarangUnitInfo;
+
+      const baseQty =
+        toBaseQty(
+          receivedQty,
+          barang
+        );
+
+      const sourceName =
+        item.transfer.sourceOutlet?.name ||
+        "Gudang Pusat";
+
       history.push({
-        id: `TRANSFER-${item.id}`,
+        id:
+          `TRANSFER-${item.id}`,
 
-        date: item.transfer.transferDate,
+        date:
+          item.transfer.transferDate,
 
-        type: "TRANSFER_IN",
+        type:
+          "TRANSFER_IN",
 
-        direction: "IN",
+        direction:
+          "IN",
 
-        number: item.transfer.number,
+        number:
+          item.transfer.number,
 
-        outletId: item.transfer.outlet.id,
+        outletId:
+          item.transfer.outlet.id,
 
-        barangId: item.barangId,
+        barangId:
+          item.barangId,
 
-        qty: receivedQty,
+        qty:
+          baseQty,
+
+        transactionQty:
+          receivedQty,
+
+        transactionUnit:
+          getTransactionUnit(barang),
 
         stockBefore: null,
         stockAfter: null,
 
-        status: item.transfer.status,
+        status:
+          item.transfer.status,
 
         description:
           `Barang masuk dari ${sourceName}`,
 
-        source: "OutletTransferItem",
+        source:
+          "OutletTransferItem",
       });
     }
 
     // =====================================================
-    // 15. DELIVERY KE OUTLET
+    // 15. DELIVERY
     //
-    // Delivery hanya diambil jika:
+    // Gudang Pusat -> Outlet
     //
-    // Delivery.outletId = outlet tujuan
-    //
-    // Jadi delivery customer tidak ikut.
+    // MOVEMENT IN
     // =====================================================
 
     const deliveryWhere: any = {
@@ -708,7 +809,8 @@ export async function GET(req: NextRequest) {
     };
 
     if (outletId !== null) {
-      deliveryWhere.outletId = outletId;
+      deliveryWhere.outletId =
+        outletId;
     }
 
     if (barangId !== null) {
@@ -752,6 +854,18 @@ export async function GET(req: NextRequest) {
               barangId: true,
               qty: true,
               note: true,
+
+              barang: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  unit: true,
+                  baseUnit: true,
+                  conversionRate: true,
+                  barcode: true,
+                },
+              },
             },
           },
         },
@@ -762,23 +876,9 @@ export async function GET(req: NextRequest) {
       });
 
     for (const delivery of deliveries) {
-      /*
-       * outletId sudah dipastikan tidak null
-       * oleh where di atas.
-       */
-
       if (delivery.outletId === null) {
         continue;
       }
-
-      /*
-       * Delivery belum tentu sudah benar-benar
-       * menjadi stock outlet.
-       *
-       * Hanya RELEASED / DELIVERED yang dianggap
-       * sebagai transaksi barang keluar dari pusat
-       * menuju outlet.
-       */
 
       if (
         delivery.status !== "RELEASED" &&
@@ -788,33 +888,64 @@ export async function GET(req: NextRequest) {
       }
 
       for (const item of delivery.items) {
+        const barang =
+          item.barang as BarangUnitInfo;
+
+        const transactionQty =
+          Number(item.qty);
+
+        const baseQty =
+          toBaseQty(
+            transactionQty,
+            barang
+          );
+
+        if (baseQty <= 0) {
+          continue;
+        }
+
         history.push({
-          id: `DELIVERY-${item.id}`,
+          id:
+            `DELIVERY-${item.id}`,
 
-          date: delivery.deliveryDate,
+          date:
+            delivery.deliveryDate,
 
-          type: "DELIVERY_IN",
+          type:
+            "DELIVERY_IN",
 
-          direction: "IN",
+          direction:
+            "IN",
 
-          number: delivery.number,
+          number:
+            delivery.number,
 
-          outletId: delivery.outletId,
+          outletId:
+            delivery.outletId,
 
-          barangId: item.barangId,
+          barangId:
+            item.barangId,
 
-          qty: Number(item.qty),
+          qty:
+            baseQty,
+
+          transactionQty,
+
+          transactionUnit:
+            getTransactionUnit(barang),
 
           stockBefore: null,
           stockAfter: null,
 
-          status: delivery.status,
+          status:
+            delivery.status,
 
           description:
             item.note ||
             "Barang dikirim dari gudang pusat ke outlet",
 
-          source: "DeliveryItem",
+          source:
+            "DeliveryItem",
         });
       }
     }
@@ -822,17 +953,21 @@ export async function GET(req: NextRequest) {
     // =====================================================
     // 16. OUTLET STOCK OUT
     //
-    // Pemakaian / waste
+    // Pemakaian / Waste
+    //
+    // MOVEMENT OUT
     // =====================================================
 
     const stockOutWhere: any = {};
 
     if (outletId !== null) {
-      stockOutWhere.outletId = outletId;
+      stockOutWhere.outletId =
+        outletId;
     }
 
     if (barangId !== null) {
-      stockOutWhere.barangId = barangId;
+      stockOutWhere.barangId =
+        barangId;
     }
 
     const stockOuts =
@@ -868,6 +1003,8 @@ export async function GET(req: NextRequest) {
               code: true,
               name: true,
               unit: true,
+              baseUnit: true,
+              conversionRate: true,
               barcode: true,
             },
           },
@@ -886,64 +1023,75 @@ export async function GET(req: NextRequest) {
       });
 
     for (const item of stockOuts) {
-      /*
-       * Stock hanya berkurang dari netQty.
-       *
-       * Contoh:
-       *
-       * qtyProcessed = 10
-       * wasteQty     = 2
-       * netQty       = 8
-       *
-       * Maka stock keluar = 8.
-       */
-
-      const qty =
+      const transactionQty =
         Number(item.netQty) > 0
           ? Number(item.netQty)
           : Number(item.qtyProcessed);
 
-      if (qty <= 0) {
+      if (transactionQty <= 0) {
         continue;
       }
 
+      const barang =
+        item.barang as BarangUnitInfo;
+
+      const baseQty =
+        toBaseQty(
+          transactionQty,
+          barang
+        );
+
       history.push({
-        id: `STOCK_OUT-${item.id}`,
+        id:
+          `STOCK_OUT-${item.id}`,
 
-        date: item.trxDate,
+        date:
+          item.trxDate,
 
-        type: "STOCK_OUT",
+        type:
+          "STOCK_OUT",
 
-        direction: "OUT",
+        direction:
+          "OUT",
 
-        number: item.number,
+        number:
+          item.number,
 
-        outletId: item.outletId,
+        outletId:
+          item.outletId,
 
-        barangId: item.barangId,
+        barangId:
+          item.barangId,
 
-        qty,
+        qty:
+          baseQty,
+
+        transactionQty,
+
+        transactionUnit:
+          getTransactionUnit(barang),
 
         stockBefore: null,
         stockAfter: null,
 
-        status: item.status,
+        status:
+          item.status,
 
         description:
           item.note ||
           `Pemakaian / ${item.type}`,
 
-        source: "OutletStockOut",
+        source:
+          "OutletStockOut",
       });
     }
 
     // =====================================================
     // 17. STOCK OPNAME
     //
-    // HANYA StockOpnameItem
+    // Stock Opname menggunakan BASE UNIT.
     //
-    // StockOpnameHistory tidak ditampilkan sebagai
-    // transaksi terpisah agar tidak duplicate.
+    // BUKAN movement tambahan.
     // =====================================================
 
     const opnameItemWhere: any = {};
@@ -955,7 +1103,8 @@ export async function GET(req: NextRequest) {
     }
 
     if (barangId !== null) {
-      opnameItemWhere.barangId = barangId;
+      opnameItemWhere.barangId =
+        barangId;
     }
 
     const opnameItems =
@@ -977,6 +1126,8 @@ export async function GET(req: NextRequest) {
               code: true,
               name: true,
               unit: true,
+              baseUnit: true,
+              conversionRate: true,
               barcode: true,
             },
           },
@@ -1017,56 +1168,70 @@ export async function GET(req: NextRequest) {
       const difference =
         Number(item.difference);
 
-      /*
-       * Stock opname bukan transaksi stock biasa.
-       *
-       * Karena SO hanya audit fisik:
-       *
-       * direction = INFO
-       *
-       * stockBefore = systemQty
-       * stockAfter  = physicalQty
-       *
-       * qty = difference
-       */
+      const barang =
+        item.barang as BarangUnitInfo;
+
+      const baseUnit =
+        getBaseUnit(barang);
 
       history.push({
-        id: `STOCK_OPNAME-${item.id}`,
+        id:
+          `STOCK_OPNAME-${item.id}`,
 
-        date: item.opname.date,
+        date:
+          item.opname.date,
 
-        type: "STOCK_OPNAME",
+        type:
+          "STOCK_OPNAME",
 
-        direction: "INFO",
+        direction:
+          "INFO",
 
-        number: item.opname.code,
+        number:
+          item.opname.code,
 
-        outletId: item.opname.outletId,
+        outletId:
+          item.opname.outletId,
 
-        barangId: item.barangId,
+        barangId:
+          item.barangId,
 
-        qty: difference,
+        /*
+         * Opname sudah base unit.
+         */
+        qty:
+          difference,
 
-        stockBefore: systemQty,
+        transactionQty:
+          null,
 
-        stockAfter: physicalQty,
+        transactionUnit:
+          baseUnit,
 
-        status: item.opname.status,
+        stockBefore:
+          systemQty,
+
+        stockAfter:
+          physicalQty,
+
+        status:
+          item.opname.status,
 
         description:
           item.note ||
-          `Stock opname: sistem ${systemQty}, fisik ${physicalQty}, selisih ${difference}`,
+          `Stock opname: sistem ${systemQty} ${baseUnit}, fisik ${physicalQty} ${baseUnit}, selisih ${difference} ${baseUnit}`,
 
-        source: "StockOpnameItem",
+        source:
+          "StockOpnameItem",
       });
     }
 
     // =====================================================
     // 18. OUTLET PURCHASE
     //
-    // PO outlet ditampilkan sebagai INFO.
+    // INFO SAJA
     //
-    // PO bukan stock movement.
+    // BUKAN STOCK MOVEMENT
     // =====================================================
 
     const purchaseWhere: any = {};
@@ -1078,7 +1243,8 @@ export async function GET(req: NextRequest) {
     }
 
     if (barangId !== null) {
-      purchaseWhere.barangId = barangId;
+      purchaseWhere.barangId =
+        barangId;
     }
 
     const purchaseItems =
@@ -1125,6 +1291,8 @@ export async function GET(req: NextRequest) {
               code: true,
               name: true,
               unit: true,
+              baseUnit: true,
+              conversionRate: true,
               barcode: true,
             },
           },
@@ -1138,40 +1306,69 @@ export async function GET(req: NextRequest) {
       });
 
     for (const item of purchaseItems) {
+      const barang =
+        item.barang as BarangUnitInfo;
+
+      const transactionQty =
+        Number(item.qty);
+
+      const baseQty =
+        toBaseQty(
+          transactionQty,
+          barang
+        );
+
       history.push({
-        id: `OUTLET_PURCHASE-${item.id}`,
+        id:
+          `OUTLET_PURCHASE-${item.id}`,
 
-        date: item.purchase.purchaseDate,
+        date:
+          item.purchase.purchaseDate,
 
-        type: "OUTLET_PURCHASE",
+        type:
+          "OUTLET_PURCHASE",
 
-        direction: "INFO",
+        direction:
+          "INFO",
 
-        number: item.purchase.number,
+        number:
+          item.purchase.number,
 
-        outletId: item.purchase.outlet.id,
+        outletId:
+          item.purchase.outlet.id,
 
-        barangId: item.barangId,
+        barangId:
+          item.barangId,
 
-        qty: Number(item.qty),
+        qty:
+          baseQty,
 
-        stockBefore: null,
-        stockAfter: null,
+        transactionQty,
 
-        status: item.purchase.status,
+        transactionUnit:
+          getTransactionUnit(barang),
 
-        description: item.purchase.supplier
-          ? `PO ke supplier ${item.purchase.supplier.name}`
-          : "Purchase Order outlet",
+        stockBefore:
+          null,
 
-        source: "OutletPurchaseItem",
+        stockAfter:
+          null,
+
+        status:
+          item.purchase.status,
+
+        description:
+          item.purchase.supplier
+            ? `PO ke supplier ${item.purchase.supplier.name}`
+            : "Purchase Order outlet",
+
+        source:
+          "OutletPurchaseItem",
       });
     }
 
     // =====================================================
-    // 19. SORT HISTORY
-    //
-    // Terbaru -> terlama
+    // 19. SORT
     // =====================================================
 
     history.sort(
@@ -1182,9 +1379,6 @@ export async function GET(req: NextRequest) {
 
     // =====================================================
     // 20. LIMIT
-    //
-    // Limit dilakukan SETELAH semua sumber
-    // digabung dan diurutkan.
     // =====================================================
 
     const totalBeforeLimit =
@@ -1196,8 +1390,9 @@ export async function GET(req: NextRequest) {
     // =====================================================
     // 21. MASTER BARANG
     //
-    // Satu query saja untuk melengkapi barang
-    // yang muncul di history.
+    // Ambil ulang dari Master Barang
+    // untuk memastikan unit/conversion
+    // selalu mengikuti master terbaru.
     // =====================================================
 
     const barangIds = [
@@ -1222,17 +1417,25 @@ export async function GET(req: NextRequest) {
               code: true,
               name: true,
               unit: true,
+              baseUnit: true,
+              conversionRate: true,
               barcode: true,
             },
           })
         : [];
 
-    const barangMap = new Map(
-      barangList.map((barang) => [
-        barang.id,
-        barang,
-      ])
-    );
+    const barangMap =
+      new Map<
+        number,
+        BarangUnitInfo
+      >(
+        barangList.map(
+          (barang) => [
+            barang.id,
+            barang as BarangUnitInfo,
+          ]
+        )
+      );
 
     // =====================================================
     // 22. FORMAT DATA
@@ -1245,48 +1448,110 @@ export async function GET(req: NextRequest) {
             item.barangId
           ) || null;
 
+        const conversionRate =
+          barang
+            ? getConversionRate(barang)
+            : 1;
+
+        const transactionUnit =
+          barang
+            ? getTransactionUnit(barang)
+            : item.transactionUnit;
+
+        const baseUnit =
+          barang
+            ? getBaseUnit(barang)
+            : null;
+
+        const baseQty =
+          Number(item.qty);
+
+        const transactionQty =
+          item.transactionQty !== null
+            ? Number(item.transactionQty)
+            : null;
+
         return {
-          id: item.id,
+          id:
+            item.id,
 
-          date: item.date,
+          date:
+            item.date,
 
-          type: item.type,
+          type:
+            item.type,
 
-          direction: item.direction,
+          direction:
+            item.direction,
 
-          number: item.number,
+          number:
+            item.number,
 
-          outletId: item.outletId,
+          outletId:
+            item.outletId,
 
-          barangId: item.barangId,
+          barangId:
+            item.barangId,
 
           barang,
 
-          qty: Number(item.qty),
+          /*
+           * BASE UNIT
+           */
+          qty:
+            baseQty,
+
+          baseQty,
+
+          baseUnit,
+
+          /*
+           * TRANSACTION UNIT
+           */
+          transactionQty,
+
+          transactionUnit,
+
+          /*
+           * KONVERSI MASTER BARANG
+           */
+          conversionRate,
+
+          conversionLabel:
+            barang &&
+            conversionRate !== 1
+              ? `1 ${transactionUnit} = ${conversionRate} ${baseUnit}`
+              : `1 ${transactionUnit}`,
 
           stockBefore:
             item.stockBefore === null
               ? null
-              : Number(item.stockBefore),
+              : Number(
+                  item.stockBefore
+                ),
 
           stockAfter:
             item.stockAfter === null
               ? null
-              : Number(item.stockAfter),
+              : Number(
+                  item.stockAfter
+                ),
 
-          status: item.status,
+          status:
+            item.status,
 
           description:
             item.description,
 
-          source: item.source,
+          source:
+            item.source,
         };
       });
 
     // =====================================================
     // 23. SUMMARY
     //
-    // SUMMARY DARI DATA YANG DIKEMBALIKAN
+    // SEMUA MOVEMENT = BASE UNIT
     // =====================================================
 
     const stockIn =
@@ -1298,7 +1563,7 @@ export async function GET(req: NextRequest) {
         .reduce(
           (total, item) =>
             total +
-            Number(item.qty),
+            Number(item.baseQty),
           0
         );
 
@@ -1311,7 +1576,7 @@ export async function GET(req: NextRequest) {
         .reduce(
           (total, item) =>
             total +
-            Number(item.qty),
+            Number(item.baseQty),
           0
         );
 
@@ -1322,7 +1587,7 @@ export async function GET(req: NextRequest) {
       ).length;
 
     // =====================================================
-    // 24. SUMMARY PER TYPE
+    // 24. BY TYPE
     // =====================================================
 
     const byType: Record<
@@ -1343,16 +1608,27 @@ export async function GET(req: NextRequest) {
       success: true,
 
       scope: {
-        role: user.role,
+        role:
+          user.role,
+
         outletId,
       },
 
       user: {
-        id: user.id,
-        fullname: user.fullname,
-        role: user.role,
-        outletId: user.outletId,
-        outlet: user.outlet,
+        id:
+          user.id,
+
+        fullname:
+          user.fullname,
+
+        role:
+          user.role,
+
+        outletId:
+          user.outletId,
+
+        outlet:
+          user.outlet,
       },
 
       filter: {
@@ -1362,14 +1638,18 @@ export async function GET(req: NextRequest) {
       },
 
       selected: {
-        outlet: selectedOutlet,
-        barang: selectedBarang,
+        outlet:
+          selectedOutlet,
+
+        barang:
+          selectedBarang,
       },
 
       data,
 
       summary: {
-        total: data.length,
+        total:
+          data.length,
 
         totalBeforeLimit,
 
@@ -1389,7 +1669,31 @@ export async function GET(req: NextRequest) {
         limit,
 
         hasMore:
-          totalBeforeLimit > limit,
+          totalBeforeLimit >
+          limit,
+
+        /*
+         * SISTEM SATUAN
+         *
+         * STOCK:
+         * BASE UNIT
+         *
+         * TRANSAKSI:
+         * MASTER BARANG.unit
+         */
+        unitSystem: {
+          stockStorageUnit:
+            "BASE_UNIT",
+
+          transactionUnit:
+            "BARANG_UNIT",
+
+          baseUnit:
+            "Barang.baseUnit",
+
+          conversionRate:
+            "Barang.conversionRate",
+        },
 
         sources: [
           "OutletReceiptItem",
@@ -1419,7 +1723,7 @@ export async function GET(req: NextRequest) {
         ],
 
         note:
-          "History merupakan gabungan aktivitas barang yang berkaitan dengan outlet. Receipt, Transfer, Delivery, dan Stock Out merupakan transaksi pergerakan barang. Stock Opname dan Purchase Order hanya bersifat informasi dan tidak digunakan untuk menghitung stock OutletStock.",
+          "Satuan transaksi, satuan dasar, dan conversionRate selalu mengikuti Master Barang. OutletStock menggunakan BASE UNIT. Qty transaksi dikembalikan dalam Barang.unit dan qty/baseQty dikembalikan dalam Barang.baseUnit.",
       },
     });
   } catch (error: any) {
@@ -1431,6 +1735,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
+
         message:
           error?.message ||
           "Gagal mengambil history stock outlet",

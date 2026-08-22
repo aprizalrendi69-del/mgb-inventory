@@ -41,11 +41,39 @@ export async function GET(req: NextRequest) {
         id: true,
         code: true,
         name: true,
+
+        // =====================================================
+        // SATUAN TRANSAKSI
+        // =====================================================
         unit: true,
+
+        // =====================================================
+        // SATUAN DASAR + KONVERSI
+        //
+        // Contoh:
+        // unit           = DUS
+        // baseUnit       = PCS
+        // conversionRate = 24
+        //
+        // Artinya:
+        // 1 DUS = 24 PCS
+        // =====================================================
+        baseUnit: true,
+        conversionRate: true,
+
         barcode: true,
+
+        // =====================================================
+        // STOCK UTAMA
+        // =====================================================
         stock: true,
         minimumStock: true,
         purchasePrice: true,
+
+        // =====================================================
+        // INVENTORY
+        // Digunakan sebagai fallback / informasi tambahan.
+        // =====================================================
         inventory: {
           select: {
             stock: true,
@@ -66,7 +94,9 @@ export async function GET(req: NextRequest) {
      * STOCK OPNAME TERAKHIR PUSAT
      *
      * Stock Opname pusat = opname tanpa outletId.
-     * Pada schema yang sekarang outletId bersifat optional.
+     *
+     * Kita tetap mempertahankan logic sebelumnya agar
+     * halaman Stock Pusat tidak berubah perilakunya.
      * =====================================================
      */
     const opnameItems =
@@ -99,6 +129,7 @@ export async function GET(req: NextRequest) {
               physicalQty: true,
               difference: true,
               note: true,
+
               opname: {
                 select: {
                   id: true,
@@ -110,6 +141,10 @@ export async function GET(req: NextRequest) {
             },
           })
         : [];
+
+    // =====================================================
+    // MAP STOCK OPNAME TERAKHIR PER BARANG
+    // =====================================================
 
     const lastOpnameMap = new Map<
       number,
@@ -126,58 +161,179 @@ export async function GET(req: NextRequest) {
     >();
 
     for (const item of opnameItems) {
+      /*
+       * Karena data sudah diurutkan date DESC,
+       * item pertama yang masuk ke map adalah opname
+       * terbaru untuk barang tersebut.
+       */
       if (!lastOpnameMap.has(item.barangId)) {
         lastOpnameMap.set(item.barangId, {
           opnameId: item.opname.id,
           code: item.opname.code,
           date: item.opname.date,
           status: item.opname.status,
-          systemQty: Number(item.systemQty || 0),
-          physicalQty: Number(item.physicalQty || 0),
-          difference: Number(item.difference || 0),
+
+          systemQty: Number(
+            item.systemQty ?? 0
+          ),
+
+          physicalQty: Number(
+            item.physicalQty ?? 0
+          ),
+
+          difference: Number(
+            item.difference ?? 0
+          ),
+
           note: item.note ?? null,
         });
       }
     }
 
+    // =====================================================
+    // BUILD RESPONSE
+    // =====================================================
+
     const data = barang.map((item) => {
       /*
-       * Stock utama tetap mengambil Barang.stock.
+       * ===================================================
+       * STOCK TRANSAKSI
        *
-       * Inventory digunakan sebagai fallback / informasi
-       * tambahan apabila tersedia.
+       * PENTING:
+       * Stock ini TIDAK dikonversi.
+       *
+       * Contoh:
+       * Barang.stock = 10
+       * unit        = DUS
+       *
+       * Maka:
+       * stock = 10 DUS
+       * ===================================================
        */
       const systemStock = Number(
-        item.stock ?? item.inventory?.stock ?? 0
+        item.stock ??
+          item.inventory?.stock ??
+          0
       );
 
+      /*
+       * ===================================================
+       * MINIMUM STOCK
+       *
+       * Tetap menggunakan satuan transaksi.
+       * ===================================================
+       */
       const minimumStock = Number(
         item.minimumStock ??
           item.inventory?.minimumStock ??
           0
       );
 
+      /*
+       * ===================================================
+       * KONVERSI
+       *
+       * Schema menggunakan conversionRate.
+       *
+       * Frontend StockPusatPage menggunakan field
+       * "conversion", sehingga kita normalisasi di API.
+       *
+       * Jika conversionRate tidak tersedia / invalid,
+       * fallback ke 1.
+       * ===================================================
+       */
+      const rawConversion =
+        Number(item.conversionRate ?? 1);
+
+      const conversion =
+        Number.isFinite(rawConversion) &&
+        rawConversion > 0
+          ? rawConversion
+          : 1;
+
+      /*
+       * ===================================================
+       * SATUAN DASAR
+       *
+       * Jika baseUnit kosong, fallback ke unit transaksi.
+       *
+       * Contoh:
+       *
+       * unit     = DUS
+       * baseUnit = PCS
+       *
+       * hasil:
+       * 1 DUS = 24 PCS
+       * ===================================================
+       */
+      const baseUnit =
+        item.baseUnit?.trim() ||
+        item.unit;
+
+      /*
+       * ===================================================
+       * AVERAGE COST
+       * ===================================================
+       */
+      const averageCost = Number(
+        item.inventory?.averageCost ??
+          item.purchasePrice ??
+          0
+      );
+
       return {
         id: item.id,
-        barangId: item.id,
-        stock: systemStock,
-        minimumStock,
-        averageCost: Number(
-          item.inventory?.averageCost ??
-            item.purchasePrice ??
-            0
-        ),
 
+        // Stock record menggunakan barangId yang sama
+        // karena halaman Stock Pusat mengambil stock dari
+        // master Barang.stock.
+        barangId: item.id,
+
+        // =================================================
+        // STOCK TRANSAKSI
+        // =================================================
+        stock: systemStock,
+
+        // =================================================
+        // MINIMUM STOCK
+        // =================================================
+        minimumStock,
+
+        // =================================================
+        // AVERAGE COST
+        // =================================================
+        averageCost,
+
+        // =================================================
+        // DATA BARANG
+        // =================================================
         barang: {
           id: item.id,
           code: item.code,
           name: item.name,
+
+          // Satuan transaksi
           unit: item.unit,
+
+          // Satuan dasar
+          baseUnit,
+
+          // Normalisasi:
+          // conversionRate -> conversion
+          //
+          // Agar langsung kompatibel dengan
+          // StockPusatPage yang sudah kamu kirim.
+          conversion,
+
           barcode: item.barcode,
         },
 
+        // =================================================
+        // STOCK OPNAME TERAKHIR
+        // =================================================
         lastOpname:
-          lastOpnameMap.get(item.id) ?? null,
+          lastOpnameMap.get(item.id) ??
+          null,
       };
     });
 
@@ -186,7 +342,10 @@ export async function GET(req: NextRequest) {
       data,
     });
   } catch (error: any) {
-    console.error("GET CENTRAL STOCK ERROR:", error);
+    console.error(
+      "GET CENTRAL STOCK ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {

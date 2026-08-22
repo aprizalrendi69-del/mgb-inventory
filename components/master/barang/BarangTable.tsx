@@ -21,7 +21,8 @@ export default function BarangTable({
 }) {
   const router = useRouter();
 
-  const [selected, setSelected] = useState<number[]>([]);
+  const [selected, setSelected] =
+    useState<number[]>([]);
 
   function toggle(id: number) {
     setSelected((old) =>
@@ -32,34 +33,47 @@ export default function BarangTable({
   }
 
   function toggleAll() {
-    if (selected.length === data.length) {
+    if (
+      selected.length === data.length
+    ) {
       setSelected([]);
     } else {
-      setSelected(data.map((item) => item.id));
+      setSelected(
+        data.map((item) => item.id)
+      );
     }
   }
 
   function cetakBarcode() {
     if (selected.length === 0) {
-      alert("Pilih minimal satu barang");
+      alert(
+        "Pilih minimal satu barang"
+      );
       return;
     }
 
-    const ids = selected.join(",");
+    const ids =
+      selected.join(",");
 
     router.push(
       `/master-barang/barcode?ids=${ids}`
     );
   }
 
-  function cetakBarcodeSatu(id: number) {
+  function cetakBarcodeSatu(
+    id: number
+  ) {
     router.push(
       `/master-barang/barcode?ids=${id}`
     );
   }
 
-  async function hapus(id: number) {
-    const ok = confirm("Hapus barang ini?");
+  async function hapus(
+    id: number
+  ) {
+    const ok = confirm(
+      "Hapus barang ini?"
+    );
 
     if (!ok) return;
 
@@ -71,13 +85,16 @@ export default function BarangTable({
         }
       );
 
-      const json = await res.json();
+      const json =
+        await res.json();
 
       if (json.success) {
         reload();
 
         setSelected((old) =>
-          old.filter((x) => x !== id)
+          old.filter(
+            (x) => x !== id
+          )
         );
       } else {
         alert(
@@ -88,13 +105,14 @@ export default function BarangTable({
     } catch (error) {
       console.error(error);
 
-      alert("Gagal menghapus barang");
+      alert(
+        "Gagal menghapus barang"
+      );
     }
   }
 
   return (
     <div>
-
       {/* TOOLBAR */}
 
       <div
@@ -109,7 +127,6 @@ export default function BarangTable({
           md:justify-between
         "
       >
-
         <div className="text-sm text-gray-500">
           Total Barang{" "}
           <span className="font-semibold text-[#18352D]">
@@ -120,7 +137,9 @@ export default function BarangTable({
         <button
           type="button"
           onClick={cetakBarcode}
-          disabled={selected.length === 0}
+          disabled={
+            selected.length === 0
+          }
           className="
             inline-flex
             items-center
@@ -162,25 +181,21 @@ export default function BarangTable({
             </span>
           )}
         </button>
-
       </div>
 
       {/* TABLE */}
 
       <div className="overflow-x-auto">
-
-        <table className="min-w-[1250px] w-full text-sm">
-
+        <table className="min-w-[1450px] w-full text-sm">
           <thead className="bg-[#F5F8F6]">
-
             <tr className="border-b border-[#E5ECE9]">
-
               <th className="px-5 py-4 text-center font-semibold text-[#35564C]">
                 <input
                   type="checkbox"
                   checked={
                     data.length > 0 &&
-                    selected.length === data.length
+                    selected.length ===
+                      data.length
                   }
                   onChange={toggleAll}
                   className="h-4 w-4 accent-[#497F70]"
@@ -204,7 +219,15 @@ export default function BarangTable({
               </th>
 
               <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
-                Satuan
+                Satuan Transaksi
+              </th>
+
+              <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
+                Satuan Dasar
+              </th>
+
+              <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
+                Konversi
               </th>
 
               <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
@@ -230,17 +253,14 @@ export default function BarangTable({
               <th className="px-5 py-4 text-center font-semibold text-[#35564C]">
                 Aksi
               </th>
-
             </tr>
-
           </thead>
 
           <tbody>
-
             {data.length === 0 && (
               <tr>
                 <td
-                  colSpan={12}
+                  colSpan={14}
                   className="
                     px-5
                     py-14
@@ -254,9 +274,18 @@ export default function BarangTable({
             )}
 
             {data.map((item) => {
-
               const isOutlet =
                 item.source === "OUTLET";
+
+              const conversionRate =
+                Number(
+                  item.conversionRate ?? 1
+                ) || 1;
+
+              const baseUnit =
+                item.baseUnit ||
+                item.unit ||
+                "-";
 
               return (
                 <tr
@@ -268,26 +297,27 @@ export default function BarangTable({
                     hover:bg-[#FAFCFB]
 
                     ${
-                      selected.includes(item.id)
+                      selected.includes(
+                        item.id
+                      )
                         ? "bg-[#F0F7F3]"
                         : ""
                     }
                   `}
                 >
-
                   {/* CHECKBOX */}
 
                   <td className="px-5 py-4 text-center">
-
                     <input
                       type="checkbox"
-                      checked={selected.includes(item.id)}
+                      checked={selected.includes(
+                        item.id
+                      )}
                       onChange={() =>
                         toggle(item.id)
                       }
                       className="h-4 w-4 accent-[#497F70]"
                     />
-
                   </td>
 
                   {/* KODE */}
@@ -299,41 +329,61 @@ export default function BarangTable({
                   {/* BARCODE */}
 
                   <td className="px-5 py-4 text-gray-500">
-                    {item.barcode || "-"}
+                    {item.barcode ||
+                      "-"}
                   </td>
 
                   {/* NAMA */}
 
                   <td className="px-5 py-4">
-
                     <div className="font-semibold text-[#18352D]">
                       {item.name}
                     </div>
-
                   </td>
 
                   {/* KATEGORI */}
 
                   <td className="px-5 py-4 text-gray-600">
-                    {typeof item.category === "object"
+                    {typeof item.category ===
+                    "object"
                       ? item.category?.name
-                      : item.category || "-"}
+                      : item.category ||
+                        "-"}
                   </td>
 
-                  {/* SATUAN */}
+                  {/* SATUAN TRANSAKSI */}
 
                   <td className="px-5 py-4 text-gray-600">
-                    {typeof item.unit === "object"
-                      ? item.unit?.name
-                      : item.unit || "-"}
+                    {item.unit || "-"}
+                  </td>
+
+                  {/* SATUAN DASAR */}
+
+                  <td className="px-5 py-4">
+                    <span className="font-semibold text-[#35564C]">
+                      {baseUnit}
+                    </span>
+                  </td>
+
+                  {/* KONVERSI */}
+
+                  <td className="px-5 py-4 text-gray-600">
+                    1{" "}
+                    {item.unit ||
+                      "Satuan"}{" "}
+                    ={" "}
+                    <span className="font-semibold text-[#18352D]">
+                      {conversionRate.toLocaleString(
+                        "id-ID"
+                      )}
+                    </span>{" "}
+                    {baseUnit}
                   </td>
 
                   {/* SUMBER */}
 
                   <td className="px-5 py-4">
-
                     {isOutlet ? (
-
                       <span
                         className="
                           inline-flex
@@ -348,13 +398,13 @@ export default function BarangTable({
                           text-[#A86400]
                         "
                       >
-                        <Store size={13} />
+                        <Store
+                          size={13}
+                        />
 
                         Outlet
                       </span>
-
                     ) : (
-
                       <span
                         className="
                           inline-flex
@@ -369,27 +419,25 @@ export default function BarangTable({
                           text-[#497F70]
                         "
                       >
-                        <Warehouse size={13} />
+                        <Warehouse
+                          size={13}
+                        />
 
                         Pusat
                       </span>
-
                     )}
-
                   </td>
 
                   {/* OUTLET */}
 
                   <td className="px-5 py-4 text-gray-600">
-
-                    {item.outlet?.name || "-"}
-
+                    {item.outlet?.name ||
+                      "-"}
                   </td>
 
                   {/* STOCK */}
 
                   <td className="px-5 py-4 text-right">
-
                     <span
                       className="
                         inline-flex
@@ -403,37 +451,39 @@ export default function BarangTable({
                         text-[#35564C]
                       "
                     >
-                      {item.stock ?? 0}
+                      {item.stock ??
+                        0}{" "}
+                      {item.unit || ""}
                     </span>
-
                   </td>
 
                   {/* HARGA BELI */}
 
                   <td className="px-5 py-4 text-right text-gray-600">
-
                     Rp{" "}
                     {Number(
-                      item.purchasePrice ?? 0
-                    ).toLocaleString("id-ID")}
-
+                      item.purchasePrice ??
+                        0
+                    ).toLocaleString(
+                      "id-ID"
+                    )}
                   </td>
 
                   {/* HARGA JUAL */}
 
                   <td className="px-5 py-4 text-right text-gray-600">
-
                     Rp{" "}
                     {Number(
-                      item.sellingPrice ?? 0
-                    ).toLocaleString("id-ID")}
-
+                      item.sellingPrice ??
+                        0
+                    ).toLocaleString(
+                      "id-ID"
+                    )}
                   </td>
 
                   {/* AKSI */}
 
                   <td className="px-5 py-4">
-
                     <div
                       className="
                         flex
@@ -442,14 +492,13 @@ export default function BarangTable({
                         gap-2
                       "
                     >
-
-                      {/* BARCODE */}
-
                       <button
                         type="button"
                         title="Cetak Barcode"
                         onClick={() =>
-                          cetakBarcodeSatu(item.id)
+                          cetakBarcodeSatu(
+                            item.id
+                          )
                         }
                         className="
                           inline-flex
@@ -467,10 +516,10 @@ export default function BarangTable({
                           hover:border-[#497F70]
                         "
                       >
-                        <Barcode size={17} />
+                        <Barcode
+                          size={17}
+                        />
                       </button>
-
-                      {/* EDIT */}
 
                       <Link
                         href={`/master-barang/${item.id}/edit`}
@@ -491,10 +540,10 @@ export default function BarangTable({
                           hover:border-[#497F70]
                         "
                       >
-                        <Pencil size={16} />
+                        <Pencil
+                          size={16}
+                        />
                       </Link>
-
-                      {/* HAPUS */}
 
                       <button
                         type="button"
@@ -518,23 +567,18 @@ export default function BarangTable({
                           hover:border-red-200
                         "
                       >
-                        <Trash2 size={16} />
+                        <Trash2
+                          size={16}
+                        />
                       </button>
-
                     </div>
-
                   </td>
-
                 </tr>
               );
             })}
-
           </tbody>
-
         </table>
-
       </div>
-
     </div>
   );
 }

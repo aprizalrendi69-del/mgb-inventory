@@ -88,7 +88,7 @@ model OutletStockOut {
 
   outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
   barang Barang @relation(fields: [barangId], references: [id])
-  user   User?  @relation(fields: [userId], references: [id])
+  user   User? @relation(fields: [userId], references: [id])
 
   @@index([outletId])
   @@index([barangId])
@@ -137,9 +137,7 @@ model Supplier {
   phone         String?
   email         String?
   contactPerson String?
-
-  // Jangka waktu pembayaran supplier jika PO menggunakan TEMPO
-  tempoDays Int @default(30)
+  tempoDays     Int @default(30)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -178,6 +176,21 @@ model Barang {
   category       String?
   brand          String?
   unit           String
+
+  // ==========================================
+  // SATUAN DASAR & KONVERSI
+  // ==========================================
+  // Contoh:
+  // unit = Dus
+  // baseUnit = PCS
+  // conversionRate = 24
+  //
+  // Artinya:
+  // 1 Dus = 24 PCS
+  // ==========================================
+  baseUnit       String?
+  conversionRate Float    @default(1)
+
   minimumStock   Float    @default(0)
   stock          Float    @default(0)
   purchasePrice  Float    @default(0)
@@ -358,20 +371,6 @@ model Payment {
   method PaymentMethod @default(CASH)
   status PaymentStatus @default(PENDING)
 
-  // =====================================================
-  // AKUN PEMBAYARAN WAJIB
-  // =====================================================
-  // Menentukan uang pembayaran berasal dari akun mana.
-  // CASH / COD / CBD:
-  //   saldo akun akan berkurang.
-  //
-  // TRANSFER:
-  //   wajib pilih akun, tetapi tidak mengurangi petty cash.
-  //
-  // TEMPO:
-  //   wajib pilih akun sebagai akun pembayaran hutang,
-  //   tetapi tidak mengurangi saldo saat PO dibuat.
-  // =====================================================
   accountId Int?
 
   referenceNumber String?
@@ -452,8 +451,6 @@ model PettyCashAccount {
 
   isActive Boolean @default(true)
 
-  // NULL = akun petty cash pusat
-  // TERISI = akun petty cash outlet tertentu
   outletId Int?
 
   createdAt DateTime @default(now())

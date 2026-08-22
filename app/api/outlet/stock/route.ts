@@ -7,7 +7,7 @@ import { cookies } from "next/headers";
  * GET STOCK OUTLET
  * =========================================================
  *
- * ROLE:
+ * ATURAN:
  *
  * ADMIN
  * -> bisa melihat semua outlet
@@ -19,78 +19,167 @@ import { cookies } from "next/headers";
  *
  * OUTLET_ADMIN
  * -> hanya bisa melihat outlet miliknya
- * -> outletId dari URL DIABAIKAN
+ * -> outletId dari URL diabaikan
  *
  * =========================================================
- * SUMBER DATA
+ * SATUAN
  * =========================================================
  *
- * STOCK SISTEM:
- * -> OutletStock.stock
+ * SATUAN UTAMA TETAP:
  *
- * STOCK OPNAME:
- * -> hanya informasi / audit
+ * Barang.unit
  *
- * Endpoint ini READ ONLY.
+ * Jangan mengganti satuan utama dengan baseUnit.
  *
- * TIDAK ADA:
+ * Contoh:
+ *
+ * unit           = DUS
+ * baseUnit       = PCS
+ * conversionRate = 24
+ *
+ * Tampilan utama:
+ *
+ * 10 DUS
+ *
+ * Informasi konversi:
+ *
+ * 10 DUS = 240 PCS
+ *
+ * =========================================================
+ * STOCK
+ * =========================================================
+ *
+ * Endpoint ini hanya READ.
+ *
+ * Tidak melakukan:
+ *
+ * -> adjustment
+ * -> stock opname adjustment
  * -> update OutletStock
- * -> adjustment stock
- * -> perubahan stock karena SO
- *
- * =========================================================
- * RESPONSE PER STOCK
- * =========================================================
- *
- * {
- *   ...stock,
- *
- *   lastOpname: {
- *      opnameId,
- *      code,
- *      date,
- *      status,
- *      systemQty,
- *      physicalQty,
- *      difference,
- *      note
- *   },
- *
- *   opnameHistory: [
- *      {
- *        opnameId,
- *        code,
- *        date,
- *        status,
- *        systemQty,
- *        physicalQty,
- *        difference,
- *        note
- *      }
- *   ]
- * }
- *
- * Dengan demikian halaman Stock Outlet cukup memakai
- * SATU API ini untuk:
- *
- * -> Stock Sistem
- * -> SO Terakhir
- * -> Fisik
- * -> Selisih
- * -> Status SO
- * -> History SO
+ * -> update Barang.stock
  *
  * =========================================================
  */
 
-export async function GET(req: NextRequest) {
+type BarangUnitInfo = {
+  id: number;
+  code: string;
+  name: string;
+  unit: string;
+  baseUnit: string | null;
+  conversionRate: number;
+  barcode: string | null;
+  purchasePrice: number;
+  sellingPrice: number;
+  minimumStock: number;
+};
+
+function getSafeNumber(value: unknown): number {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+
+  return number;
+}
+
+function getConversionRate(
+  barang: BarangUnitInfo
+): number {
+  const rate = Number(barang.conversionRate);
+
+  if (!Number.isFinite(rate) || rate <= 0) {
+    return 1;
+  }
+
+  return rate;
+}
+
+/*
+ * SATUAN UTAMA.
+ *
+ * Selalu ambil dari Barang.unit terlebih dahulu.
+ */
+function getMainUnit(
+  barang: BarangUnitInfo
+): string {
+  return (
+    String(barang.unit || "").trim() ||
+    String(barang.baseUnit || "").trim() ||
+    ""
+  );
+}
+
+function getBaseUnit(
+  barang: BarangUnitInfo
+): string {
+  return (
+    String(barang.baseUnit || "").trim() ||
+    getMainUnit(barang)
+  );
+}
+
+/*
+ * Stock utama menggunakan satuan Barang.unit.
+ *
+ * Nilai stock yang diterima dari OutletStock
+ * dianggap sebagai stock utama yang sudah digunakan
+ * oleh sistem outlet.
+ *
+ * Konversi hanya ditampilkan sebagai informasi tambahan.
+ */
+function calculateConvertedStock(
+  stockQty: number,
+  barang: BarangUnitInfo
+) {
+  const mainUnit = getMainUnit(barang);
+  const baseUnit = getBaseUnit(barang);
+  const conversionRate = getConversionRate(barang);
+
+  /*
+   * Stock setelah konversi.
+   *
+   * Contoh:
+   *
+   * stock = 10
+   * unit = DUS
+   * baseUnit = PCS
+   * rate = 24
+   *
+   * convertedQty = 240 PCS
+   */
+  const convertedQty =
+    stockQty * conversionRate;
+
+  return {
+    mainQty: stockQty,
+    mainUnit,
+
+    convertedQty,
+    convertedUnit: baseUnit,
+
+    conversionRate,
+
+    conversionLabel:
+      conversionRate !== 1
+        ? `1 ${mainUnit} = ${conversionRate} ${baseUnit}`
+        : `1 ${mainUnit}`,
+  };
+}
+
+export async function GET(
+  req: NextRequest
+) {
   try {
     // =====================================================
     // 1. SESSION
     // =====================================================
 
     const cookieStore = await cookies();
-    const session = cookieStore.get("erp-session");
+
+    const session =
+      cookieStore.get("erp-session");
 
     if (!session) {
       return NextResponse.json(
@@ -111,7 +200,9 @@ export async function GET(req: NextRequest) {
     let sessionData: any;
 
     try {
-      sessionData = JSON.parse(session.value);
+      sessionData = JSON.parse(
+        session.value
+      );
     } catch {
       return NextResponse.json(
         {
@@ -124,9 +215,14 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const userId = Number(sessionData?.id);
+    const userId = Number(
+      sessionData?.id
+    );
 
-    if (!Number.isInteger(userId) || userId <= 0) {
+    if (
+      !Number.isInteger(userId) ||
+      userId <= 0
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -142,29 +238,30 @@ export async function GET(req: NextRequest) {
     // 3. USER LOGIN
     // =====================================================
 
-    const user = await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
 
-      select: {
-        id: true,
-        username: true,
-        fullname: true,
-        role: true,
-        active: true,
-        outletId: true,
+        select: {
+          id: true,
+          username: true,
+          fullname: true,
+          role: true,
+          active: true,
+          outletId: true,
 
-        outlet: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            active: true,
+          outlet: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              active: true,
+            },
           },
         },
-      },
-    });
+      });
 
     if (!user) {
       return NextResponse.json(
@@ -204,7 +301,11 @@ export async function GET(req: NextRequest) {
       "OUTLET_ADMIN",
     ];
 
-    if (!allowedRoles.includes(user.role)) {
+    if (
+      !allowedRoles.includes(
+        user.role
+      )
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -221,25 +322,29 @@ export async function GET(req: NextRequest) {
     // 6. QUERY PARAMETER
     // =====================================================
 
-    const { searchParams } = new URL(req.url);
+    const { searchParams } =
+      new URL(req.url);
 
     const outletIdParam =
       searchParams.get("outletId");
 
-    let outletId: number | null = null;
+    let outletId:
+      | number
+      | null = null;
 
     // =====================================================
     // 7. OUTLET ADMIN
-    //
-    // WAJIB menggunakan outletId dari session.
-    //
-    // outletId dari URL diabaikan.
     // =====================================================
 
-    if (user.role === "OUTLET_ADMIN") {
+    if (
+      user.role ===
+      "OUTLET_ADMIN"
+    ) {
       if (
         !user.outletId ||
-        !Number.isInteger(user.outletId) ||
+        !Number.isInteger(
+          user.outletId
+        ) ||
         user.outletId <= 0
       ) {
         return NextResponse.json(
@@ -254,29 +359,35 @@ export async function GET(req: NextRequest) {
         );
       }
 
-      outletId = user.outletId;
+      /*
+       * SECURITY:
+       *
+       * outletId dari URL tidak dipercaya.
+       */
+      outletId =
+        user.outletId;
     }
 
     // =====================================================
     // 8. ADMIN / MANAGER
-    //
-    // Tanpa outletId:
-    // -> semua outlet
-    //
-    // Dengan outletId:
-    // -> outlet tertentu
     // =====================================================
 
     else if (
       user.role === "ADMIN" ||
       user.role === "MANAGER"
     ) {
-      if (outletIdParam !== null) {
+      if (
+        outletIdParam !== null
+      ) {
         const parsedOutletId =
-          Number(outletIdParam);
+          Number(
+            outletIdParam
+          );
 
         if (
-          !Number.isInteger(parsedOutletId) ||
+          !Number.isInteger(
+            parsedOutletId
+          ) ||
           parsedOutletId <= 0
         ) {
           return NextResponse.json(
@@ -291,7 +402,8 @@ export async function GET(req: NextRequest) {
           );
         }
 
-        outletId = parsedOutletId;
+        outletId =
+          parsedOutletId;
       }
     }
 
@@ -299,26 +411,40 @@ export async function GET(req: NextRequest) {
     // 9. VALIDASI OUTLET
     // =====================================================
 
-    if (outletId !== null) {
-      const outlet =
-        await prisma.outlet.findUnique({
-          where: {
-            id: outletId,
-          },
+    let selectedOutlet:
+      | {
+          id: number;
+          code: string;
+          name: string;
+          active: boolean;
+        }
+      | null = null;
 
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            active: true,
-          },
-        });
+    if (
+      outletId !== null
+    ) {
+      selectedOutlet =
+        await prisma.outlet.findUnique(
+          {
+            where: {
+              id: outletId,
+            },
 
-      if (!outlet) {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              active: true,
+            },
+          }
+        );
+
+      if (!selectedOutlet) {
         return NextResponse.json(
           {
             success: false,
-            message: "Outlet tidak ditemukan",
+            message:
+              "Outlet tidak ditemukan",
           },
           {
             status: 404,
@@ -326,11 +452,14 @@ export async function GET(req: NextRequest) {
         );
       }
 
-      if (!outlet.active) {
+      if (
+        !selectedOutlet.active
+      ) {
         return NextResponse.json(
           {
             success: false,
-            message: "Outlet sedang tidak aktif",
+            message:
+              "Outlet sedang tidak aktif",
           },
           {
             status: 400,
@@ -347,151 +476,155 @@ export async function GET(req: NextRequest) {
       outletId?: number;
     } = {};
 
-    if (outletId !== null) {
-      stockWhere.outletId = outletId;
+    if (
+      outletId !== null
+    ) {
+      stockWhere.outletId =
+        outletId;
     }
 
     // =====================================================
     // 11. AMBIL OUTLET STOCK
-    //
-    // STOCK SISTEM HANYA DARI:
-    //
-    // OutletStock.stock
-    //
-    // TIDAK menggunakan:
-    //
-    // Barang.stock
     // =====================================================
 
     const stocks =
-      await prisma.outletStock.findMany({
-        where: stockWhere,
+      await prisma.outletStock.findMany(
+        {
+          where: stockWhere,
 
-        select: {
-          id: true,
-          outletId: true,
-          barangId: true,
-          stock: true,
-          minimumStock: true,
-          averageCost: true,
+          select: {
+            id: true,
+            outletId: true,
+            barangId: true,
+            stock: true,
+            minimumStock: true,
+            averageCost: true,
 
-          outlet: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-            },
-          },
-
-          barang: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              unit: true,
-              barcode: true,
-
-              purchasePrice: true,
-              sellingPrice: true,
-              minimumStock: true,
-            },
-          },
-        },
-
-        orderBy: [
-          {
             outlet: {
-              name: "asc",
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
             },
-          },
-          {
+
             barang: {
-              name: "asc",
+              select: {
+                id: true,
+                code: true,
+                name: true,
+
+                /*
+                 * SATUAN UTAMA.
+                 *
+                 * Ini yang dipakai frontend sebagai
+                 * satuan utama.
+                 */
+                unit: true,
+
+                /*
+                 * Informasi tambahan konversi.
+                 */
+                baseUnit: true,
+                conversionRate: true,
+
+                barcode: true,
+
+                purchasePrice: true,
+                sellingPrice: true,
+                minimumStock: true,
+              },
             },
           },
-        ],
-      });
+
+          orderBy: [
+            {
+              outlet: {
+                name: "asc",
+              },
+            },
+            {
+              barang: {
+                name: "asc",
+              },
+            },
+          ],
+        }
+      );
 
     // =====================================================
-    // 12. AMBIL SEMUA STOCK OPNAME YANG RELEVAN
-    //
-    // Kita ambil history lengkap.
-    //
-    // Urutan:
-    // terbaru -> terlama
-    //
-    // Ini membuat item pertama yang ditemukan
-    // menjadi SO terakhir untuk barang tersebut.
+    // 12. STOCK OPNAME
     // =====================================================
 
     const opnameWhere: {
       outletId?: number;
     } = {};
 
-    if (outletId !== null) {
-      opnameWhere.outletId = outletId;
+    if (
+      outletId !== null
+    ) {
+      opnameWhere.outletId =
+        outletId;
     }
 
     const opnameList =
-      await prisma.stockOpname.findMany({
-        where: opnameWhere,
+      await prisma.stockOpname.findMany(
+        {
+          where: opnameWhere,
 
-        orderBy: [
-          {
-            date: "desc",
-          },
-          {
-            id: "desc",
-          },
-        ],
-
-        select: {
-          id: true,
-          code: true,
-          outletId: true,
-          date: true,
-          status: true,
-          createdAt: true,
-          approvedBy: true,
-
-          outlet: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
+          orderBy: [
+            {
+              date: "desc",
             },
-          },
+            {
+              id: "desc",
+            },
+          ],
 
-          items: {
-            select: {
-              id: true,
-              barangId: true,
-              systemQty: true,
-              physicalQty: true,
-              difference: true,
-              note: true,
+          select: {
+            id: true,
+            code: true,
+            outletId: true,
+            date: true,
+            status: true,
+            createdAt: true,
+            approvedBy: true,
 
-              barang: {
-                select: {
-                  id: true,
-                  code: true,
-                  name: true,
-                  unit: true,
+            outlet: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
+            },
+
+            items: {
+              select: {
+                id: true,
+                barangId: true,
+                systemQty: true,
+                physicalQty: true,
+                difference: true,
+                note: true,
+
+                barang: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                    unit: true,
+                    baseUnit: true,
+                    conversionRate: true,
+                  },
                 },
               },
             },
           },
-        },
-      });
+        }
+      );
 
     // =====================================================
-    // 13. MAP HISTORY PER OUTLET + BARANG
-    //
-    // Struktur:
-    //
-    // outletId-barangId
-    //
-    // -> semua history SO barang tersebut
+    // 13. MAP HISTORY OPNAME
     // =====================================================
 
     type OpnameHistoryItem = {
@@ -513,6 +646,8 @@ export async function GET(req: NextRequest) {
         code: string;
         name: string;
         unit: string;
+        baseUnit: string | null;
+        conversionRate: number;
       } | null;
     };
 
@@ -526,46 +661,99 @@ export async function GET(req: NextRequest) {
     // 14. BANGUN HISTORY
     // =====================================================
 
-    for (const opname of opnameList) {
-      for (const item of opname.items) {
+    for (
+      const opname of opnameList
+    ) {
+      for (
+        const item of opname.items
+      ) {
         const key =
           `${opname.outletId}-${item.barangId}`;
 
         const history =
-          opnameHistoryByBarang.get(key) || [];
+          opnameHistoryByBarang.get(
+            key
+          ) || [];
+
+        const conversionRate =
+          Number(
+            item.barang
+              ?.conversionRate ?? 1
+          );
+
+        const safeConversionRate =
+          Number.isFinite(
+            conversionRate
+          ) &&
+          conversionRate > 0
+            ? conversionRate
+            : 1;
 
         history.push({
-          opnameId: opname.id,
-          code: opname.code,
-          outletId: opname.outletId,
-          date: opname.date,
-          status: opname.status,
-          createdAt: opname.createdAt,
+          opnameId:
+            opname.id,
+
+          code:
+            opname.code,
+
+          outletId:
+            opname.outletId!,
+
+          date:
+            opname.date,
+
+          status:
+            opname.status,
+
+          createdAt:
+            opname.createdAt,
+
           approvedBy:
-            opname.approvedBy ?? null,
+            opname.approvedBy ??
+            null,
 
-          systemQty: Number(
-            item.systemQty ?? 0
-          ),
+          systemQty:
+            getSafeNumber(
+              item.systemQty
+            ),
 
-          physicalQty: Number(
-            item.physicalQty ?? 0
-          ),
+          physicalQty:
+            getSafeNumber(
+              item.physicalQty
+            ),
 
-          difference: Number(
-            item.difference ?? 0
-          ),
+          difference:
+            getSafeNumber(
+              item.difference
+            ),
 
-          note: item.note ?? null,
+          note:
+            item.note ??
+            null,
 
-          barang: item.barang
-            ? {
-                id: item.barang.id,
-                code: item.barang.code,
-                name: item.barang.name,
-                unit: item.barang.unit,
-              }
-            : null,
+          barang:
+            item.barang
+              ? {
+                  id:
+                    item.barang.id,
+
+                  code:
+                    item.barang.code,
+
+                  name:
+                    item.barang.name,
+
+                  unit:
+                    item.barang.unit,
+
+                  baseUnit:
+                    item.barang
+                      .baseUnit,
+
+                  conversionRate:
+                    safeConversionRate,
+                }
+              : null,
         });
 
         opnameHistoryByBarang.set(
@@ -576,62 +764,229 @@ export async function GET(req: NextRequest) {
     }
 
     // =====================================================
-    // 15. GABUNGKAN STOCK + LAST OPNAME + HISTORY
+    // 15. GABUNGKAN STOCK
     // =====================================================
 
-    const data = stocks.map(
-      (stock) => {
-        const key =
-          `${stock.outletId}-${stock.barangId}`;
+    const data =
+      stocks.map(
+        (stock) => {
+          const key =
+            `${stock.outletId}-${stock.barangId}`;
 
-        const opnameHistory =
-          opnameHistoryByBarang.get(key) || [];
+          const opnameHistory =
+            opnameHistoryByBarang.get(
+              key
+            ) || [];
 
-        /*
-         * Karena opnameList sudah diurutkan
-         * terbaru -> terlama,
-         *
-         * history[0] = SO terakhir.
-         */
+          const lastOpname =
+            opnameHistory.length > 0
+              ? opnameHistory[0]
+              : null;
 
-        const lastOpname =
-          opnameHistory.length > 0
-            ? opnameHistory[0]
-            : null;
+          const barang =
+            stock.barang as BarangUnitInfo;
 
-        return {
-          ...stock,
+          /*
+           * SATUAN UTAMA.
+           *
+           * Tidak diganti baseUnit.
+           */
+          const mainUnit =
+            getMainUnit(barang);
 
-          // =================================================
-          // NORMALISASI NUMBER
-          // =================================================
+          const baseUnit =
+            getBaseUnit(barang);
 
-          stock: Number(
-            stock.stock ?? 0
-          ),
+          const conversionRate =
+            getConversionRate(barang);
 
-          minimumStock: Number(
-            stock.minimumStock ?? 0
-          ),
+          /*
+           * Stock utama.
+           */
+          const stockQty =
+            getSafeNumber(
+              stock.stock
+            );
 
-          averageCost: Number(
-            stock.averageCost ?? 0
-          ),
+          /*
+           * Stock setelah konversi.
+           *
+           * Hanya informasi tambahan.
+           */
+          const converted =
+            calculateConvertedStock(
+              stockQty,
+              barang
+            );
 
-          // =================================================
-          // SO TERAKHIR
-          // =================================================
+          /*
+           * Minimum stock.
+           */
+          const minimumStock =
+            getSafeNumber(
+              stock.minimumStock
+            );
 
-          lastOpname,
+          const minimumConvertedQty =
+            minimumStock *
+            conversionRate;
 
-          // =================================================
-          // HISTORY SO LENGKAP
-          // =================================================
+          return {
+            ...stock,
 
-          opnameHistory,
-        };
-      }
-    );
+            /*
+             * =================================================
+             * STOCK UTAMA
+             * =================================================
+             *
+             * Tetap menggunakan angka stock yang sekarang.
+             */
+            stock: stockQty,
+
+            minimumStock,
+
+            averageCost:
+              getSafeNumber(
+                stock.averageCost
+              ),
+
+            /*
+             * =================================================
+             * BARANG
+             * =================================================
+             */
+            barang: {
+              ...stock.barang,
+
+              /*
+               * SATUAN LAMA / UTAMA
+               */
+              unit:
+                stock.barang.unit,
+
+              /*
+               * INFORMASI KONVERSI
+               */
+              baseUnit,
+
+              conversionRate,
+
+              /*
+               * Untuk frontend.
+               */
+              displayUnit:
+                mainUnit,
+
+              conversionLabel:
+                converted.conversionLabel,
+
+              /*
+               * Stock utama.
+               */
+              stockDisplayQty:
+                stockQty,
+
+              stockDisplayUnit:
+                mainUnit,
+
+              /*
+               * Stock setelah konversi.
+               */
+              convertedStockQty:
+                converted.convertedQty,
+
+              convertedStockUnit:
+                converted.convertedUnit,
+
+              /*
+               * Minimum stock.
+               */
+              minimumStockDisplayQty:
+                minimumStock,
+
+              minimumStockDisplayUnit:
+                mainUnit,
+
+              minimumStockConvertedQty:
+                minimumConvertedQty,
+
+              minimumStockConvertedUnit:
+                baseUnit,
+            },
+
+            /*
+             * =================================================
+             * FIELD UTAMA STOCK
+             * =================================================
+             */
+
+            displayQty:
+              stockQty,
+
+            displayUnit:
+              mainUnit,
+
+            /*
+             * =================================================
+             * STOCK SETELAH KONVERSI
+             * =================================================
+             */
+
+            convertedStockQty:
+              converted.convertedQty,
+
+            convertedStockUnit:
+              converted.convertedUnit,
+
+            /*
+             * =================================================
+             * KONVERSI
+             * =================================================
+             */
+
+            baseQty:
+              stockQty,
+
+            baseUnit,
+
+            conversionRate,
+
+            conversionLabel:
+              converted.conversionLabel,
+
+            /*
+             * =================================================
+             * MINIMUM
+             * =================================================
+             */
+
+            minimumStockBaseQty:
+              minimumStock,
+
+            minimumStockDisplayQty:
+              minimumStock,
+
+            minimumStockDisplayUnit:
+              mainUnit,
+
+            minimumStockConvertedQty:
+              minimumConvertedQty,
+
+            minimumStockConvertedUnit:
+              baseUnit,
+
+            /*
+             * =================================================
+             * STOCK OPNAME
+             * =================================================
+             */
+
+            lastOpname,
+
+            opnameHistory,
+          };
+        }
+      );
 
     // =====================================================
     // 16. SUMMARY
@@ -639,16 +994,35 @@ export async function GET(req: NextRequest) {
 
     const totalStockQty =
       data.reduce(
-        (total, item) =>
+        (
+          total,
+          item
+        ) =>
           total +
-          Number(item.stock || 0),
+          getSafeNumber(
+            item.stock
+          ),
+        0
+      );
+
+    const totalConvertedStockQty =
+      data.reduce(
+        (
+          total,
+          item
+        ) =>
+          total +
+          getSafeNumber(
+            item.convertedStockQty
+          ),
         0
       );
 
     const itemsWithOpname =
       data.filter(
         (item) =>
-          item.lastOpname !== null
+          item.lastOpname !==
+          null
       ).length;
 
     const itemsWithoutOpname =
@@ -660,7 +1034,8 @@ export async function GET(req: NextRequest) {
         (item) =>
           String(
             item.status
-          ).toUpperCase() === "APPROVED"
+          ).toUpperCase() ===
+          "APPROVED"
       ).length;
 
     const pendingOpnameCount =
@@ -691,55 +1066,110 @@ export async function GET(req: NextRequest) {
 
       user: {
         id: user.id,
-        fullname: user.fullname,
+        fullname:
+          user.fullname,
         role: user.role,
-        outletId: user.outletId,
+        outletId:
+          user.outletId,
+        outlet:
+          user.outlet,
       },
 
-      /*
-       * ===================================================
-       * DATA UTAMA
-       * ===================================================
-       *
-       * stock:
-       * -> OutletStock.stock
-       *
-       * lastOpname:
-       * -> SO terakhir barang
-       *
-       * opnameHistory:
-       * -> seluruh history SO barang
-       */
+      selected: {
+        outlet:
+          selectedOutlet,
+      },
 
       data,
 
-      // ===================================================
-      // META
-      // ===================================================
+      summary: {
+        totalStockItems:
+          data.length,
 
-      meta: {
-        totalStockItems: data.length,
-
+        /*
+         * Stock utama.
+         */
         totalStockQty,
+
+        /*
+         * Stock setelah konversi.
+         */
+        totalConvertedStockQty,
 
         itemsWithOpname,
 
         itemsWithoutOpname,
 
-        opnameLoaded: opnameList.length,
+        opnameLoaded:
+          opnameList.length,
+
+        approvedOpnameCount,
+
+        pendingOpnameCount,
+      },
+
+      meta: {
+        totalStockItems:
+          data.length,
+
+        totalStockQty,
+
+        totalConvertedStockQty,
+
+        itemsWithOpname,
+
+        itemsWithoutOpname,
+
+        opnameLoaded:
+          opnameList.length,
 
         approvedOpnameCount,
 
         pendingOpnameCount,
 
+        /*
+         * Stock utama tidak diubah
+         * oleh endpoint ini.
+         */
         stockSource:
           "OutletStock.stock",
 
         stockLocked: true,
 
-        opnameIsInformational: true,
+        opnameIsInformational:
+          true,
 
-        adjustmentRequiresApproval: true,
+        adjustmentRequiresApproval:
+          true,
+
+        /*
+         * =================================================
+         * SATUAN
+         * =================================================
+         */
+
+        mainUnitSource:
+          "Barang.unit",
+
+        conversionSource:
+          "Barang.conversionRate",
+
+        convertedUnitSource:
+          "Barang.baseUnit",
+
+        unitSystem: {
+          mainUnit:
+            "Barang.unit",
+
+          convertedUnit:
+            "Barang.baseUnit",
+
+          conversionRate:
+            "Barang.conversionRate",
+
+          rule:
+            "Stock utama tetap menggunakan Barang.unit. Stock setelah konversi hanya informasi tambahan.",
+        },
       },
     });
   } catch (error: any) {

@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import {
   Search,
   RefreshCw,
@@ -37,21 +42,80 @@ type LastOpname = {
   note: string | null;
 };
 
+type Barang = {
+  id: number;
+  code: string;
+  name: string;
+
+  /*
+   * SATUAN UTAMA / LAMA
+   */
+  unit: string;
+
+  /*
+   * INFORMASI KONVERSI
+   */
+  baseUnit: string | null;
+  conversionRate: number;
+
+  barcode: string | null;
+
+  purchasePrice: number;
+  sellingPrice: number;
+  minimumStock: number;
+
+  displayUnit?: string;
+  conversionLabel?: string;
+
+  stockDisplayQty?: number;
+  stockDisplayUnit?: string;
+
+  convertedStockQty?: number;
+  convertedStockUnit?: string;
+
+  minimumStockDisplayQty?: number;
+  minimumStockDisplayUnit?: string;
+
+  minimumStockConvertedQty?: number;
+  minimumStockConvertedUnit?: string;
+};
+
 type Stock = {
   id: number;
   outletId: number;
   barangId: number;
+
+  /*
+   * STOCK UTAMA
+   */
   stock: number;
+
   minimumStock: number;
   averageCost: number;
 
-  barang: {
-    id: number;
-    code: string;
-    name: string;
-    unit: string;
-    barcode: string | null;
-  };
+  /*
+   * FIELD TAMBAHAN DARI API
+   */
+  displayQty?: number;
+  displayUnit?: string;
+
+  convertedStockQty?: number;
+  convertedStockUnit?: string;
+
+  baseQty?: number;
+  baseUnit?: string;
+
+  conversionRate?: number;
+  conversionLabel?: string;
+
+  minimumStockBaseQty?: number;
+  minimumStockDisplayQty?: number;
+  minimumStockDisplayUnit?: string;
+
+  minimumStockConvertedQty?: number;
+  minimumStockConvertedUnit?: string;
+
+  barang: Barang;
 
   outlet: {
     id: number;
@@ -65,6 +129,15 @@ type Stock = {
 type ApiResponse = {
   success: boolean;
   data: Stock[];
+
+  summary?: {
+    totalStockItems?: number;
+    totalStockQty?: number;
+    totalConvertedStockQty?: number;
+    itemsWithOpname?: number;
+    itemsWithoutOpname?: number;
+  };
+
   message?: string;
 };
 
@@ -80,45 +153,68 @@ type HistoryRow = {
   id: string;
   date: string;
   type: string;
-  direction: "IN" | "OUT" | "INFO";
+  direction:
+    | "IN"
+    | "OUT"
+    | "INFO";
+
   number: string | null;
+
   outletId: number | null;
   barangId: number;
+
   qty: number;
+
   stockBefore: number | null;
   stockAfter: number | null;
+
   status: string | null;
+
   description: string | null;
+
   source: string;
+
   barang: HistoryBarang | null;
 };
 
 type HistoryResponse = {
   success: boolean;
   data: HistoryRow[];
+
   summary?: {
     total: number;
     stockIn: number;
     stockOut: number;
     informational: number;
   };
+
   message?: string;
 };
 
 export default function OutletStockPage() {
-  const [data, setData] = useState<Stock[]>([]);
-  const [outlets, setOutlets] = useState<Outlet[]>([]);
+  const [data, setData] =
+    useState<Stock[]>([]);
 
-  const [outletId, setOutletId] = useState("");
-  const [search, setSearch] = useState("");
+  const [outlets, setOutlets] =
+    useState<Outlet[]>([]);
 
-  const [loading, setLoading] = useState(true);
-  const [loadingOutlet, setLoadingOutlet] = useState(true);
+  const [outletId, setOutletId] =
+    useState("");
 
-  const [error, setError] = useState("");
+  const [search, setSearch] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [loadingOutlet, setLoadingOutlet] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
 
   // =====================================================
-  // HISTORY MODAL
+  // HISTORY
   // =====================================================
 
   const [selectedHistory, setSelectedHistory] =
@@ -149,11 +245,13 @@ export default function OutletStockPage() {
     try {
       setLoadingOutlet(true);
 
-      const res = await fetch("/api/outlet", {
-        cache: "no-store",
-      });
+      const res =
+        await fetch("/api/outlet", {
+          cache: "no-store",
+        });
 
-      const result = await res.json();
+      const result =
+        await res.json();
 
       if (!res.ok) {
         throw new Error(
@@ -162,11 +260,14 @@ export default function OutletStockPage() {
         );
       }
 
-      const list = Array.isArray(result)
-        ? result
-        : Array.isArray(result?.data)
-        ? result.data
-        : [];
+      const list =
+        Array.isArray(result)
+          ? result
+          : Array.isArray(
+              result?.data
+            )
+          ? result.data
+          : [];
 
       setOutlets(list);
     } catch (error) {
@@ -196,14 +297,18 @@ export default function OutletStockPage() {
         ? `/api/outlet/stock?outletId=${selectedOutlet}`
         : "/api/outlet/stock";
 
-      const res = await fetch(url, {
-        cache: "no-store",
-      });
+      const res =
+        await fetch(url, {
+          cache: "no-store",
+        });
 
       const result: ApiResponse =
         await res.json();
 
-      if (!res.ok || !result.success) {
+      if (
+        !res.ok ||
+        !result.success
+      ) {
         throw new Error(
           result.message ||
             "Gagal mengambil stock outlet"
@@ -242,7 +347,7 @@ export default function OutletStockPage() {
   }, []);
 
   // =====================================================
-  // FILTER OUTLET
+  // OUTLET CHANGE
   // =====================================================
 
   function handleOutletChange(
@@ -256,34 +361,42 @@ export default function OutletStockPage() {
   // SEARCH
   // =====================================================
 
-  const filteredData = useMemo(() => {
-    const keyword =
-      search.toLowerCase().trim();
+  const filteredData =
+    useMemo(() => {
+      const keyword =
+        search
+          .toLowerCase()
+          .trim();
 
-    if (!keyword) {
-      return data;
-    }
+      if (!keyword) {
+        return data;
+      }
 
-    return data.filter((item) => {
-      const code =
-        item.barang?.code
-          ?.toLowerCase() || "";
+      return data.filter(
+        (item) => {
+          const code =
+            item.barang?.code
+              ?.toLowerCase() ||
+            "";
 
-      const name =
-        item.barang?.name
-          ?.toLowerCase() || "";
+          const name =
+            item.barang?.name
+              ?.toLowerCase() ||
+            "";
 
-      const barcode =
-        item.barang?.barcode
-          ?.toLowerCase() || "";
+          const barcode =
+            item.barang?.barcode
+              ?.toLowerCase() ||
+            "";
 
-      return (
-        code.includes(keyword) ||
-        name.includes(keyword) ||
-        barcode.includes(keyword)
+          return (
+            code.includes(keyword) ||
+            name.includes(keyword) ||
+            barcode.includes(keyword)
+          );
+        }
       );
-    });
-  }, [data, search]);
+    }, [data, search]);
 
   // =====================================================
   // STATUS STOCK
@@ -323,9 +436,9 @@ export default function OutletStockPage() {
   function getOpnameStatus(
     status?: string
   ) {
-    const value = String(
-      status || ""
-    ).toUpperCase();
+    const value =
+      String(status || "")
+        .toUpperCase();
 
     if (value === "APPROVED") {
       return {
@@ -337,7 +450,8 @@ export default function OutletStockPage() {
 
     if (
       value === "COUNTING" ||
-      value === "PENDING"
+      value === "PENDING" ||
+      value === "WAITING"
     ) {
       return {
         text: "MENUNGGU",
@@ -362,7 +476,7 @@ export default function OutletStockPage() {
   }
 
   // =====================================================
-  // HISTORY TYPE LABEL
+  // HISTORY TYPE
   // =====================================================
 
   function getHistoryType(
@@ -371,7 +485,8 @@ export default function OutletStockPage() {
     switch (type) {
       case "OUTLET_RECEIPT":
         return {
-          text: "Barang Masuk Supplier",
+          text:
+            "Barang Masuk Supplier",
           className:
             "bg-green-100 text-green-700",
         };
@@ -392,7 +507,8 @@ export default function OutletStockPage() {
 
       case "STOCK_OUT":
         return {
-          text: "Pemakaian / Waste",
+          text:
+            "Pemakaian / Waste",
           className:
             "bg-red-100 text-red-700",
         };
@@ -406,7 +522,8 @@ export default function OutletStockPage() {
 
       case "STOCK_OPNAME_HISTORY":
         return {
-          text: "History Stock Opname",
+          text:
+            "History Stock Opname",
           className:
             "bg-purple-100 text-purple-700",
         };
@@ -436,7 +553,9 @@ export default function OutletStockPage() {
   ) {
     return Number(
       value ?? 0
-    ).toLocaleString("id-ID");
+    ).toLocaleString("id-ID", {
+      maximumFractionDigits: 4,
+    });
   }
 
   // =====================================================
@@ -448,7 +567,8 @@ export default function OutletStockPage() {
   ) {
     if (!value) return "-";
 
-    const date = new Date(value);
+    const date =
+      new Date(value);
 
     if (
       Number.isNaN(
@@ -477,7 +597,8 @@ export default function OutletStockPage() {
   ) {
     if (!value) return "-";
 
-    const date = new Date(value);
+    const date =
+      new Date(value);
 
     if (
       Number.isNaN(
@@ -500,44 +621,75 @@ export default function OutletStockPage() {
   }
 
   // =====================================================
-  // TOTAL STOCK
+  // STOCK UTAMA
   // =====================================================
 
-  const totalStock = useMemo(() => {
-    return filteredData.reduce(
-      (total, item) =>
-        total +
-        Number(item.stock || 0),
-      0
-    );
-  }, [filteredData]);
+  const totalStock =
+    useMemo(() => {
+      return filteredData.reduce(
+        (
+          total,
+          item
+        ) =>
+          total +
+          Number(
+            item.stock || 0
+          ),
+        0
+      );
+    }, [filteredData]);
 
   // =====================================================
-  // TOTAL BARANG SO
+  // STOCK KONVERSI
   // =====================================================
 
-  const totalWithOpname = useMemo(() => {
-    return filteredData.filter(
-      (item) =>
-        item.lastOpname !== null
-    ).length;
-  }, [filteredData]);
+  const totalConvertedStock =
+    useMemo(() => {
+      return filteredData.reduce(
+        (
+          total,
+          item
+        ) =>
+          total +
+          Number(
+            item.convertedStockQty ||
+              0
+          ),
+        0
+      );
+    }, [filteredData]);
 
   // =====================================================
-  // TOTAL SELISIH SO
+  // TOTAL SO
   // =====================================================
 
-  const totalDifference = useMemo(() => {
-    return filteredData.reduce(
-      (total, item) =>
-        total +
-        Number(
-          item.lastOpname
-            ?.difference || 0
-        ),
-      0
-    );
-  }, [filteredData]);
+  const totalWithOpname =
+    useMemo(() => {
+      return filteredData.filter(
+        (item) =>
+          item.lastOpname !== null
+      ).length;
+    }, [filteredData]);
+
+  // =====================================================
+  // TOTAL SELISIH
+  // =====================================================
+
+  const totalDifference =
+    useMemo(() => {
+      return filteredData.reduce(
+        (
+          total,
+          item
+        ) =>
+          total +
+          Number(
+            item.lastOpname
+              ?.difference || 0
+          ),
+        0
+      );
+    }, [filteredData]);
 
   // =====================================================
   // SELECTED OUTLET
@@ -566,13 +718,6 @@ export default function OutletStockPage() {
       const params =
         new URLSearchParams();
 
-      /*
-       * Kalau filter outlet sedang dipilih,
-       * gunakan outlet tersebut.
-       *
-       * Kalau kosong, gunakan outlet dari
-       * row stock yang diklik.
-       */
       const targetOutletId =
         outletId ||
         String(stock.outletId);
@@ -587,12 +732,13 @@ export default function OutletStockPage() {
         String(stock.barangId)
       );
 
-      const res = await fetch(
-        `/api/outlet/stock/history?${params.toString()}`,
-        {
-          cache: "no-store",
-        }
-      );
+      const res =
+        await fetch(
+          `/api/outlet/stock/history?${params.toString()}`,
+          {
+            cache: "no-store",
+          }
+        );
 
       const result: HistoryResponse =
         await res.json();
@@ -608,7 +754,9 @@ export default function OutletStockPage() {
       }
 
       setHistoryData(
-        Array.isArray(result.data)
+        Array.isArray(
+          result.data
+        )
           ? result.data
           : []
       );
@@ -616,27 +764,26 @@ export default function OutletStockPage() {
       setHistorySummary({
         total:
           Number(
-            result.summary?.total ||
-              0
+            result.summary
+              ?.total || 0
           ),
 
         stockIn:
           Number(
-            result.summary?.stockIn ||
-              0
+            result.summary
+              ?.stockIn || 0
           ),
 
         stockOut:
           Number(
-            result.summary?.stockOut ||
-              0
+            result.summary
+              ?.stockOut || 0
           ),
 
         informational:
           Number(
             result.summary
-              ?.informational ||
-              0
+              ?.informational || 0
           ),
       });
     } catch (error: any) {
@@ -693,7 +840,8 @@ export default function OutletStockPage() {
 
             <p className="mt-1 text-sm text-gray-500">
               Persediaan outlet dengan
-              informasi stock opname dan
+              informasi stock opname,
+              konversi satuan, dan
               riwayat transaksi barang
             </p>
           </div>
@@ -752,19 +900,22 @@ export default function OutletStockPage() {
         </div>
 
         <div>
+
           <p className="text-sm font-bold text-[#285346]">
             Stock outlet terkunci
           </p>
 
           <p className="mt-1 text-xs leading-5 text-[#56766B]">
-            Angka stock di halaman ini
-            adalah stock sistem dan tidak
-            dapat diubah secara manual.
-            Hasil stock opname ditampilkan
-            sebagai informasi kontrol.
-            Seluruh transaksi barang dapat
-            dilihat melalui tombol History.
+            Stock utama menggunakan
+            satuan barang seperti pada
+            Stock Gudang Pusat.
+            Informasi konversi ditampilkan
+            sebagai tambahan dan tidak
+            mengubah satuan utama.
+            Hasil stock opname hanya
+            menjadi informasi kontrol.
           </p>
+
         </div>
 
       </div>
@@ -790,6 +941,7 @@ export default function OutletStockPage() {
           {/* OUTLET */}
 
           <div>
+
             <label className="mb-2 block text-sm font-semibold text-[#35564C]">
               Filter Outlet
             </label>
@@ -873,11 +1025,13 @@ export default function OutletStockPage() {
               />
 
             </div>
+
           </div>
 
           {/* SEARCH */}
 
           <div>
+
             <label className="mb-2 block text-sm font-semibold text-[#35564C]">
               Cari Barang
             </label>
@@ -924,6 +1078,7 @@ export default function OutletStockPage() {
               />
 
             </div>
+
           </div>
 
         </div>
@@ -965,6 +1120,7 @@ export default function OutletStockPage() {
           <div className="flex items-center justify-between">
 
             <div>
+
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
                 Jenis Barang
               </p>
@@ -974,6 +1130,7 @@ export default function OutletStockPage() {
                   filteredData.length
                 )}
               </p>
+
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
@@ -991,6 +1148,7 @@ export default function OutletStockPage() {
           <div className="flex items-center justify-between">
 
             <div>
+
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
                 Total Qty Stock
               </p>
@@ -1000,6 +1158,12 @@ export default function OutletStockPage() {
                   totalStock
                 )}
               </p>
+
+              <p className="mt-1 text-[11px] text-gray-400">
+                Satuan mengikuti Master
+                Barang
+              </p>
+
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
@@ -1017,6 +1181,7 @@ export default function OutletStockPage() {
           <div className="flex items-center justify-between">
 
             <div>
+
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
                 Sudah SO
               </p>
@@ -1034,6 +1199,7 @@ export default function OutletStockPage() {
                 )}{" "}
                 barang
               </p>
+
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
@@ -1053,6 +1219,7 @@ export default function OutletStockPage() {
           <div className="flex items-center justify-between">
 
             <div>
+
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
                 Selisih SO Terakhir
               </p>
@@ -1073,6 +1240,7 @@ export default function OutletStockPage() {
                   totalDifference
                 )}
               </p>
+
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
@@ -1096,14 +1264,18 @@ export default function OutletStockPage() {
         <div className="flex flex-col gap-4 border-b border-[#E5ECE9] px-5 py-4 md:flex-row md:items-center md:justify-between md:px-6">
 
           <div>
+
             <h2 className="font-semibold text-[#18352D]">
               Persediaan Outlet
             </h2>
 
             <p className="mt-1 text-xs text-gray-500">
-              Stock sistem dan hasil stock
-              opname terakhir
+              Stock utama menggunakan
+              satuan barang. Konversi
+              ditampilkan sebagai informasi
+              tambahan.
             </p>
+
           </div>
 
           <div className="flex items-center gap-2 text-xs text-gray-400">
@@ -1120,7 +1292,7 @@ export default function OutletStockPage() {
 
         <div className="overflow-x-auto">
 
-          <table className="min-w-[1450px] w-full text-sm">
+          <table className="min-w-[1550px] w-full text-sm">
 
             <thead className="bg-[#F5F8F6]">
 
@@ -1148,6 +1320,10 @@ export default function OutletStockPage() {
 
                 <th className="px-5 py-4 text-right font-semibold text-[#35564C]">
                   Stock Sistem
+                </th>
+
+                <th className="px-5 py-4 text-right font-semibold text-[#35564C]">
+                  Setelah Konversi
                 </th>
 
                 <th className="px-5 py-4 text-right font-semibold text-[#35564C]">
@@ -1187,8 +1363,9 @@ export default function OutletStockPage() {
               {loading ? (
 
                 <tr>
+
                   <td
-                    colSpan={13}
+                    colSpan={14}
                     className="px-5 py-14 text-center"
                   >
 
@@ -1202,13 +1379,15 @@ export default function OutletStockPage() {
                     </p>
 
                   </td>
+
                 </tr>
 
               ) : filteredData.length === 0 ? (
 
                 <tr>
+
                   <td
-                    colSpan={13}
+                    colSpan={14}
                     className="px-5 py-14 text-center"
                   >
 
@@ -1218,7 +1397,8 @@ export default function OutletStockPage() {
                     />
 
                     <p className="font-medium text-gray-500">
-                      Belum ada data stock outlet
+                      Belum ada data stock
+                      outlet
                     </p>
 
                     <p className="mt-1 text-xs text-gray-400">
@@ -1227,12 +1407,16 @@ export default function OutletStockPage() {
                     </p>
 
                   </td>
+
                 </tr>
 
               ) : (
 
                 filteredData.map(
-                  (item, index) => {
+                  (
+                    item,
+                    index
+                  ) => {
 
                     const stockStatus =
                       getStatus(
@@ -1250,12 +1434,45 @@ export default function OutletStockPage() {
                     const difference =
                       Number(
                         lastOpname
-                          ?.difference || 0
+                          ?.difference ||
+                          0
                       );
 
                     const opnameStatus =
                       getOpnameStatus(
                         lastOpname?.status
+                      );
+
+                    /*
+                     * SATUAN UTAMA.
+                     */
+                    const mainUnit =
+                      item.barang
+                        ?.unit ||
+                      item.displayUnit ||
+                      "-";
+
+                    /*
+                     * STOCK SETELAH KONVERSI.
+                     */
+                    const convertedQty =
+                      Number(
+                        item.convertedStockQty ||
+                          0
+                      );
+
+                    const convertedUnit =
+                      item.convertedStockUnit ||
+                      item.barang
+                        ?.baseUnit ||
+                      "";
+
+                    const conversionRate =
+                      Number(
+                        item.conversionRate ||
+                          item.barang
+                            ?.conversionRate ||
+                          1
                       );
 
                     return (
@@ -1269,73 +1486,153 @@ export default function OutletStockPage() {
                         "
                       >
 
+                        {/* NO */}
+
                         <td className="px-5 py-4 text-gray-500">
                           {index + 1}
                         </td>
 
+                        {/* OUTLET */}
+
                         <td className="px-5 py-4">
 
                           <div className="font-semibold text-[#18352D]">
-                            {item.outlet?.name ||
+                            {item.outlet
+                              ?.name ||
                               "-"}
                           </div>
 
                           <div className="text-xs text-gray-400">
-                            {item.outlet?.code ||
+                            {item.outlet
+                              ?.code ||
                               "-"}
                           </div>
 
                         </td>
 
+                        {/* KODE */}
+
                         <td className="px-5 py-4 font-semibold text-[#35564C]">
-                          {item.barang?.code ||
+                          {item.barang
+                            ?.code ||
                             "-"}
                         </td>
+
+                        {/* BARANG */}
 
                         <td className="px-5 py-4">
 
                           <div className="font-medium text-[#18352D]">
-                            {item.barang?.name ||
+                            {item.barang
+                              ?.name ||
                               "-"}
                           </div>
 
-                          {item.barang?.barcode && (
+                          {item.barang
+                            ?.barcode && (
                             <div className="text-xs text-gray-400">
-                              {item.barang.barcode}
+                              {
+                                item.barang
+                                  .barcode
+                              }
                             </div>
                           )}
 
                         </td>
 
-                        <td className="px-5 py-4 text-gray-600">
-                          {item.barang?.unit ||
-                            "-"}
+                        {/* SATUAN */}
+
+                        <td className="px-5 py-4">
+
+                          <div className="font-semibold text-[#35564C]">
+                            {mainUnit}
+                          </div>
+
+                          {conversionRate !==
+                            1 &&
+                            item.barang
+                              ?.baseUnit && (
+                              <div className="mt-1 text-[11px] text-gray-400">
+                                1{" "}
+                                {mainUnit}{" "}
+                                ={" "}
+                                {
+                                  conversionRate
+                                }{" "}
+                                {
+                                  item.barang
+                                    .baseUnit
+                                }
+                              </div>
+                            )}
+
                         </td>
+
+                        {/* STOCK SISTEM */}
 
                         <td className="px-5 py-4 text-right">
 
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex flex-col items-end">
 
-                            <LockKeyhole
-                              size={13}
-                              className="text-gray-400"
-                            />
+                            <div className="flex items-center gap-2">
 
-                            <span className="font-bold text-[#18352D]">
-                              {formatNumber(
-                                Number(
-                                  item.stock
-                                )
-                              )}
-                            </span>
+                              <LockKeyhole
+                                size={13}
+                                className="text-gray-400"
+                              />
+
+                              <span className="font-bold text-[#18352D]">
+                                {formatNumber(
+                                  Number(
+                                    item.stock
+                                  )
+                                )}{" "}
+                                {mainUnit}
+                              </span>
+
+                            </div>
 
                           </div>
 
                         </td>
 
+                        {/* STOCK SETELAH KONVERSI */}
+
+                        <td className="px-5 py-4 text-right">
+
+                          {conversionRate !==
+                            1 &&
+                          convertedUnit ? (
+                            <div>
+
+                              <div className="font-bold text-[#497F70]">
+                                {formatNumber(
+                                  convertedQty
+                                )}{" "}
+                                {
+                                  convertedUnit
+                                }
+                              </div>
+
+                              <div className="mt-1 text-[10px] text-gray-400">
+                                Hasil konversi
+                              </div>
+
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">
+                              -
+                            </span>
+                          )}
+
+                        </td>
+
+                        {/* SO TERAKHIR */}
+
                         <td className="px-5 py-4 text-right">
 
                           {lastOpname ? (
+
                             <div>
 
                               <div className="font-semibold text-[#35564C]">
@@ -1345,75 +1642,112 @@ export default function OutletStockPage() {
                               </div>
 
                               <div className="mt-0.5 text-[11px] text-gray-400">
-                                {lastOpname.code}
+                                {
+                                  lastOpname.code
+                                }
                               </div>
 
                             </div>
+
                           ) : (
+
                             <span className="text-xs text-gray-400">
                               Belum ada SO
                             </span>
+
                           )}
 
                         </td>
 
+                        {/* FISIK */}
+
                         <td className="px-5 py-4 text-right">
 
                           {lastOpname ? (
+
                             <span className="font-bold text-[#18352D]">
                               {formatNumber(
                                 Number(
                                   lastOpname.physicalQty
                                 )
-                              )}
+                              )}{" "}
+                              {mainUnit}
                             </span>
+
                           ) : (
+
                             <span className="text-gray-400">
                               -
                             </span>
+
                           )}
 
                         </td>
+
+                        {/* SELISIH */}
 
                         <td className="px-5 py-4 text-right">
 
                           {!lastOpname ? (
+
                             <span className="text-gray-400">
                               -
                             </span>
+
                           ) : difference > 0 ? (
+
                             <span className="inline-flex items-center gap-1 font-bold text-green-700">
+
                               <ArrowUp
                                 size={14}
                               />
+
                               +
                               {formatNumber(
                                 difference
-                              )}
+                              )}{" "}
+                              {mainUnit}
+
                             </span>
+
                           ) : difference < 0 ? (
+
                             <span className="inline-flex items-center gap-1 font-bold text-red-700">
+
                               <ArrowDown
                                 size={14}
                               />
+
                               {formatNumber(
                                 difference
-                              )}
+                              )}{" "}
+                              {mainUnit}
+
                             </span>
+
                           ) : (
+
                             <span className="inline-flex items-center gap-1 font-semibold text-gray-500">
+
                               <Minus
                                 size={14}
                               />
-                              0
+
+                              0{" "}
+                              {mainUnit}
+
                             </span>
+
                           )}
 
                         </td>
 
+                        {/* STATUS SO */}
+
                         <td className="px-5 py-4 text-center">
 
                           {lastOpname ? (
+
                             <span
                               className={`
                                 inline-flex
@@ -1429,21 +1763,53 @@ export default function OutletStockPage() {
                                 opnameStatus.text
                               }
                             </span>
+
                           ) : (
+
                             <span className="text-xs text-gray-400">
                               -
                             </span>
+
                           )}
 
                         </td>
 
-                        <td className="px-5 py-4 text-right text-gray-600">
-                          {formatNumber(
-                            Number(
-                              item.minimumStock
-                            )
-                          )}
+                        {/* MINIMUM */}
+
+                        <td className="px-5 py-4 text-right">
+
+                          <div className="font-medium text-gray-600">
+                            {formatNumber(
+                              Number(
+                                item.minimumStock
+                              )
+                            )}{" "}
+                            {mainUnit}
+                          </div>
+
+                          {conversionRate !==
+                            1 &&
+                            item.minimumStockConvertedQty !==
+                              undefined &&
+                            item.barang
+                              ?.baseUnit && (
+                              <div className="mt-1 text-[10px] text-gray-400">
+                                ≈{" "}
+                                {formatNumber(
+                                  Number(
+                                    item.minimumStockConvertedQty
+                                  )
+                                )}{" "}
+                                {
+                                  item.barang
+                                    .baseUnit
+                                }
+                              </div>
+                            )}
+
                         </td>
+
+                        {/* STATUS STOCK */}
 
                         <td className="px-5 py-4 text-center">
 
@@ -1464,6 +1830,8 @@ export default function OutletStockPage() {
                           </span>
 
                         </td>
+
+                        {/* HISTORY */}
 
                         <td className="px-5 py-4 text-center">
 
@@ -1533,7 +1901,9 @@ export default function OutletStockPage() {
             bg-black/40
             p-4
           "
-          onMouseDown={(event) => {
+          onMouseDown={(
+            event
+          ) => {
             if (
               event.target ===
               event.currentTarget
@@ -1545,9 +1915,7 @@ export default function OutletStockPage() {
 
           <div className="flex max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
 
-            {/* =================================================
-                MODAL HEADER
-            ================================================= */}
+            {/* HEADER */}
 
             <div className="flex items-start justify-between border-b border-[#E5ECE9] px-6 py-5">
 
@@ -1566,7 +1934,11 @@ export default function OutletStockPage() {
                     </h2>
 
                     <p className="mt-0.5 text-sm text-gray-500">
-                      {selectedHistory.barang.name}
+                      {
+                        selectedHistory
+                          .barang
+                          .name
+                      }
                     </p>
 
                   </div>
@@ -1576,12 +1948,20 @@ export default function OutletStockPage() {
                 <div className="mt-3 flex flex-wrap gap-2">
 
                   <span className="rounded-full bg-[#EAF3EF] px-3 py-1 text-xs font-semibold text-[#497F70]">
-                    {selectedHistory.barang.code}
+                    {
+                      selectedHistory
+                        .barang
+                        .code
+                    }
                   </span>
 
                   <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
                     Satuan:{" "}
-                    {selectedHistory.barang.unit}
+                    {
+                      selectedHistory
+                        .barang
+                        .unit
+                    }
                   </span>
 
                   <span className="rounded-full bg-[#FFF8E7] px-3 py-1 text-xs font-semibold text-[#8A6A1E]">
@@ -1590,12 +1970,48 @@ export default function OutletStockPage() {
                       Number(
                         selectedHistory.stock
                       )
-                    )}
+                    )}{" "}
+                    {
+                      selectedHistory
+                        .barang
+                        .unit
+                    }
                   </span>
+
+                  {Number(
+                    selectedHistory
+                      .conversionRate ||
+                      selectedHistory
+                        .barang
+                        .conversionRate ||
+                      1
+                  ) !== 1 &&
+                    selectedHistory
+                      .barang
+                      .baseUnit && (
+                      <span className="rounded-full bg-[#EDF6F1] px-3 py-1 text-xs font-semibold text-[#497F70]">
+                        Setelah Konversi:{" "}
+                        {formatNumber(
+                          Number(
+                            selectedHistory.convertedStockQty ||
+                              0
+                          )
+                        )}{" "}
+                        {
+                          selectedHistory
+                            .barang
+                            .baseUnit
+                        }
+                      </span>
+                    )}
 
                   <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
                     Outlet:{" "}
-                    {selectedHistory.outlet.name}
+                    {
+                      selectedHistory
+                        .outlet
+                        .name
+                    }
                   </span>
 
                 </div>
@@ -1604,7 +2020,9 @@ export default function OutletStockPage() {
 
               <button
                 type="button"
-                onClick={closeHistory}
+                onClick={
+                  closeHistory
+                }
                 className="
                   flex
                   h-9
@@ -1623,9 +2041,7 @@ export default function OutletStockPage() {
 
             </div>
 
-            {/* =================================================
-                HISTORY SUMMARY
-            ================================================= */}
+            {/* HISTORY SUMMARY */}
 
             <div className="grid grid-cols-2 gap-3 border-b border-[#E5ECE9] bg-[#FAFCFB] p-5 md:grid-cols-4">
 
@@ -1725,9 +2141,7 @@ export default function OutletStockPage() {
 
             </div>
 
-            {/* =================================================
-                MODAL BODY
-            ================================================= */}
+            {/* MODAL BODY */}
 
             <div className="min-h-0 flex-1 overflow-y-auto p-6">
 
@@ -1741,12 +2155,14 @@ export default function OutletStockPage() {
                   />
 
                   <p className="font-medium text-gray-500">
-                    Memuat history transaksi...
+                    Memuat history
+                    transaksi...
                   </p>
 
                   <p className="mt-1 text-xs text-gray-400">
-                    Mengambil seluruh transaksi
-                    barang outlet.
+                    Mengambil seluruh
+                    transaksi barang
+                    outlet.
                   </p>
 
                 </div>
@@ -1761,7 +2177,8 @@ export default function OutletStockPage() {
                   />
 
                   <p className="font-semibold text-red-700">
-                    Gagal mengambil history
+                    Gagal mengambil
+                    history
                   </p>
 
                   <p className="mt-1 text-sm text-red-600">
@@ -1792,7 +2209,8 @@ export default function OutletStockPage() {
 
                 </div>
 
-              ) : historyData.length === 0 ? (
+              ) : historyData.length ===
+                0 ? (
 
                 <div className="rounded-2xl border border-dashed border-[#DDE9E4] px-6 py-16 text-center">
 
@@ -1802,12 +2220,14 @@ export default function OutletStockPage() {
                   />
 
                   <p className="font-medium text-gray-500">
-                    Belum ada history transaksi
+                    Belum ada history
+                    transaksi
                   </p>
 
                   <p className="mt-1 text-xs text-gray-400">
-                    Barang ini belum memiliki
-                    transaksi yang tercatat.
+                    Barang ini belum
+                    memiliki transaksi
+                    yang tercatat.
                   </p>
 
                 </div>
@@ -1949,7 +2369,9 @@ export default function OutletStockPage() {
                                       ${type.className}
                                     `}
                                   >
-                                    {type.text}
+                                    {
+                                      type.text
+                                    }
                                   </span>
 
                                 </td>
@@ -1970,6 +2392,7 @@ export default function OutletStockPage() {
                                 <td className="px-4 py-4 text-right">
 
                                   {isIn ? (
+
                                     <span className="inline-flex items-center gap-1 font-bold text-green-700">
 
                                       <ArrowDownCircle
@@ -1984,10 +2407,13 @@ export default function OutletStockPage() {
                                       )}
 
                                     </span>
+
                                   ) : (
+
                                     <span className="text-gray-300">
                                       -
                                     </span>
+
                                   )}
 
                                 </td>
@@ -1997,6 +2423,7 @@ export default function OutletStockPage() {
                                 <td className="px-4 py-4 text-right">
 
                                   {isOut ? (
+
                                     <span className="inline-flex items-center gap-1 font-bold text-red-700">
 
                                       <ArrowUpCircle
@@ -2011,10 +2438,13 @@ export default function OutletStockPage() {
                                       )}
 
                                     </span>
+
                                   ) : (
+
                                     <span className="text-gray-300">
                                       -
                                     </span>
+
                                   )}
 
                                 </td>
@@ -2024,15 +2454,19 @@ export default function OutletStockPage() {
                                 <td className="px-4 py-4 text-center">
 
                                   {history.status ? (
+
                                     <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-600">
                                       {
                                         history.status
                                       }
                                     </span>
+
                                   ) : (
+
                                     <span className="text-gray-300">
                                       -
                                     </span>
+
                                   )}
 
                                 </td>
@@ -2054,10 +2488,12 @@ export default function OutletStockPage() {
                                       null ||
                                       history.stockAfter !==
                                         null) && (
+
                                       <div className="mt-1 text-[11px] text-gray-400">
 
                                         Stock:
                                         {" "}
+
                                         {history.stockBefore !==
                                         null
                                           ? formatNumber(
@@ -2079,6 +2515,7 @@ export default function OutletStockPage() {
                                           : "-"}
 
                                       </div>
+
                                     )}
 
                                   </div>
@@ -2102,9 +2539,7 @@ export default function OutletStockPage() {
 
             </div>
 
-            {/* =================================================
-                FOOTER
-            ================================================= */}
+            {/* FOOTER */}
 
             <div className="flex items-center justify-between border-t border-[#E5ECE9] bg-[#FAFCFB] px-6 py-4">
 
@@ -2123,7 +2558,9 @@ export default function OutletStockPage() {
 
               <button
                 type="button"
-                onClick={closeHistory}
+                onClick={
+                  closeHistory
+                }
                 className="
                   rounded-xl
                   bg-[#497F70]

@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 
-// =====================================================
-// CURRENT USER
-// =====================================================
+/*
+ * =========================================================
+ * CURRENT USER
+ * =========================================================
+ */
 
 async function getCurrentUser() {
   const cookieStore = await cookies();
@@ -15,7 +17,10 @@ async function getCurrentUser() {
   try {
     const sessionData = JSON.parse(session.value);
 
-    const userId = Number(sessionData?.id);
+    const userId = Number(
+      sessionData?.id ??
+        sessionData?.user?.id
+    );
 
     if (!Number.isInteger(userId) || userId <= 0) {
       return null;
@@ -25,6 +30,7 @@ async function getCurrentUser() {
       where: {
         id: userId,
       },
+
       select: {
         id: true,
         role: true,
@@ -43,9 +49,11 @@ async function getCurrentUser() {
   }
 }
 
-// =====================================================
-// ROLE
-// =====================================================
+/*
+ * =========================================================
+ * ROLE
+ * =========================================================
+ */
 
 function isCenterUser(role: string) {
   return (
@@ -58,9 +66,11 @@ function isOutletAdmin(role: string) {
   return role === "OUTLET_ADMIN";
 }
 
-// =====================================================
-// ID
-// =====================================================
+/*
+ * =========================================================
+ * ID
+ * =========================================================
+ */
 
 function validId(value: unknown) {
   const id = Number(value);
@@ -71,9 +81,60 @@ function validId(value: unknown) {
   );
 }
 
-// =====================================================
-// GET DETAIL
-// =====================================================
+/*
+ * =========================================================
+ * NUMBER
+ * =========================================================
+ */
+
+function normalizeNumber(
+  value: unknown,
+  fallback = 0
+) {
+  const number = Number(value);
+
+  return Number.isFinite(number)
+    ? number
+    : fallback;
+}
+
+function normalizeConversionRate(
+  value: unknown
+) {
+  const rate = Number(value);
+
+  if (!Number.isFinite(rate) || rate <= 0) {
+    return 1;
+  }
+
+  return rate;
+}
+
+/*
+ * =========================================================
+ * GET DETAIL
+ *
+ * Mengembalikan:
+ *
+ * unit
+ * baseUnit
+ * conversionRate
+ *
+ * serta:
+ *
+ * stock
+ * baseStock
+ *
+ * Contoh:
+ *
+ * unit = Dus
+ * baseUnit = PCS
+ * conversionRate = 24
+ * stock = 5
+ *
+ * baseStock = 120 PCS
+ * =========================================================
+ */
 
 export async function GET(
   req: NextRequest,
@@ -84,9 +145,11 @@ export async function GET(
   }
 ) {
   try {
-    // ===================================================
-    // SESSION
-    // ===================================================
+    /*
+     * ===================================================
+     * SESSION
+     * ===================================================
+     */
 
     const user = await getCurrentUser();
 
@@ -101,9 +164,11 @@ export async function GET(
       );
     }
 
-    // ===================================================
-    // ROLE
-    // ===================================================
+    /*
+     * ===================================================
+     * ROLE
+     * ===================================================
+     */
 
     if (
       !isCenterUser(user.role) &&
@@ -118,9 +183,11 @@ export async function GET(
       );
     }
 
-    // ===================================================
-    // ID
-    // ===================================================
+    /*
+     * ===================================================
+     * ID
+     * ===================================================
+     */
 
     const { id } = await context.params;
 
@@ -135,11 +202,14 @@ export async function GET(
       );
     }
 
-    const outletBarangId = Number(id);
+    const outletBarangId =
+      Number(id);
 
-    // ===================================================
-    // QUERY
-    // ===================================================
+    /*
+     * ===================================================
+     * QUERY
+     * ===================================================
+     */
 
     const data =
       await prisma.outletBarang.findUnique({
@@ -169,9 +239,11 @@ export async function GET(
       );
     }
 
-    // ===================================================
-    // SECURITY OUTLET ADMIN
-    // ===================================================
+    /*
+     * ===================================================
+     * SECURITY OUTLET ADMIN
+     * ===================================================
+     */
 
     if (isOutletAdmin(user.role)) {
       if (!user.outletId) {
@@ -200,9 +272,142 @@ export async function GET(
       }
     }
 
+    /*
+     * ===================================================
+     * BARANG HARUS CENTRAL
+     * ===================================================
+     */
+
+    if (data.barang.source !== "CENTRAL") {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Barang outlet harus berasal dari Master Barang Central",
+        },
+        { status: 400 }
+      );
+    }
+
+    /*
+     * ===================================================
+     * SATUAN
+     * ===================================================
+     */
+
+    const conversionRate =
+      normalizeConversionRate(
+        data.barang.conversionRate
+      );
+
+    const unit =
+      data.barang.unit || "";
+
+    const baseUnit =
+      data.barang.baseUnit || unit;
+
+    /*
+     * ===================================================
+     * STOCK OUTLET
+     * ===================================================
+     */
+
+    const stockRecord =
+      data.barang.outletStocks.find(
+        (stock) =>
+          stock.outletId ===
+          data.outletId
+      ) ?? null;
+
+    const stock =
+      normalizeNumber(
+        stockRecord?.stock,
+        0
+      );
+
+    const minimumStock =
+      normalizeNumber(
+        stockRecord?.minimumStock ??
+          data.barang.minimumStock,
+        0
+      );
+
+    const averageCost =
+      normalizeNumber(
+        stockRecord?.averageCost,
+        0
+      );
+
+    const baseStock =
+      stock * conversionRate;
+
+    const baseMinimumStock =
+      minimumStock * conversionRate;
+
+    /*
+     * ===================================================
+     * RESPONSE
+     * ===================================================
+     */
+
     return NextResponse.json({
       success: true,
-      data,
+
+      data: {
+        ...data,
+
+        barang: {
+          ...data.barang,
+
+          unit,
+
+          baseUnit,
+
+          conversionRate,
+
+          outletStock: stockRecord
+            ? {
+                ...stockRecord,
+
+                stock,
+
+                minimumStock,
+
+                averageCost,
+
+                baseStock,
+
+                baseMinimumStock,
+
+                unit,
+
+                baseUnit,
+
+                conversionRate,
+              }
+            : {
+                id: null,
+
+                stock: 0,
+
+                minimumStock,
+
+                averageCost,
+
+                updatedAt: null,
+
+                baseStock: 0,
+
+                baseMinimumStock,
+
+                unit,
+
+                baseUnit,
+
+                conversionRate,
+              },
+        },
+      },
     });
   } catch (error: any) {
     console.error(
@@ -222,20 +427,27 @@ export async function GET(
   }
 }
 
-// =====================================================
-// PUT
-//
-// Hanya boleh mengubah:
-// - harga outlet
-// - aktif
-//
-// TIDAK BOLEH mengubah:
-// - barangId
-// - outletId
-// - Barang pusat
-// - stock
-// - averageCost
-// =====================================================
+/*
+ * =========================================================
+ * PUT
+ *
+ * Yang boleh diubah:
+ * - harga outlet
+ * - aktif
+ *
+ * Yang TIDAK boleh diubah:
+ * - barangId
+ * - outletId
+ * - unit
+ * - baseUnit
+ * - conversionRate
+ * - Barang pusat
+ * - stock
+ * - averageCost
+ *
+ * Satuan selalu mengikuti Master Barang Central.
+ * =========================================================
+ */
 
 export async function PUT(
   req: NextRequest,
@@ -246,9 +458,11 @@ export async function PUT(
   }
 ) {
   try {
-    // ===================================================
-    // SESSION
-    // ===================================================
+    /*
+     * ===================================================
+     * SESSION
+     * ===================================================
+     */
 
     const user = await getCurrentUser();
 
@@ -263,9 +477,11 @@ export async function PUT(
       );
     }
 
-    // ===================================================
-    // ROLE
-    // ===================================================
+    /*
+     * ===================================================
+     * ROLE
+     * ===================================================
+     */
 
     if (
       !isCenterUser(user.role) &&
@@ -280,9 +496,11 @@ export async function PUT(
       );
     }
 
-    // ===================================================
-    // ID
-    // ===================================================
+    /*
+     * ===================================================
+     * ID
+     * ===================================================
+     */
 
     const { id } = await context.params;
 
@@ -297,11 +515,14 @@ export async function PUT(
       );
     }
 
-    const outletBarangId = Number(id);
+    const outletBarangId =
+      Number(id);
 
-    // ===================================================
-    // DATA EXISTING
-    // ===================================================
+    /*
+     * ===================================================
+     * DATA EXISTING
+     * ===================================================
+     */
 
     const existing =
       await prisma.outletBarang.findUnique({
@@ -326,9 +547,11 @@ export async function PUT(
       );
     }
 
-    // ===================================================
-    // SECURITY OUTLET ADMIN
-    // ===================================================
+    /*
+     * ===================================================
+     * SECURITY OUTLET ADMIN
+     * ===================================================
+     */
 
     if (isOutletAdmin(user.role)) {
       if (!user.outletId) {
@@ -357,9 +580,11 @@ export async function PUT(
       }
     }
 
-    // ===================================================
-    // OUTLET AKTIF
-    // ===================================================
+    /*
+     * ===================================================
+     * OUTLET AKTIF
+     * ===================================================
+     */
 
     if (!existing.outlet.active) {
       return NextResponse.json(
@@ -372,9 +597,11 @@ export async function PUT(
       );
     }
 
-    // ===================================================
-    // BARANG HARUS CENTRAL
-    // ===================================================
+    /*
+     * ===================================================
+     * BARANG HARUS CENTRAL
+     * ===================================================
+     */
 
     if (existing.barang.source !== "CENTRAL") {
       return NextResponse.json(
@@ -387,9 +614,11 @@ export async function PUT(
       );
     }
 
-    // ===================================================
-    // BODY
-    // ===================================================
+    /*
+     * ===================================================
+     * BODY
+     * ===================================================
+     */
 
     let body: any;
 
@@ -405,9 +634,11 @@ export async function PUT(
       );
     }
 
-    // ===================================================
-    // HARGA
-    // ===================================================
+    /*
+     * ===================================================
+     * HARGA
+     * ===================================================
+     */
 
     let harga = Number(
       existing.harga ?? 0
@@ -435,9 +666,11 @@ export async function PUT(
       }
     }
 
-    // ===================================================
-    // AKTIF
-    // ===================================================
+    /*
+     * ===================================================
+     * AKTIF
+     * ===================================================
+     */
 
     let aktif = Boolean(
       existing.aktif
@@ -463,9 +696,13 @@ export async function PUT(
       aktif = body.aktif;
     }
 
-    // ===================================================
-    // UPDATE
-    // ===================================================
+    /*
+     * ===================================================
+     * UPDATE
+     *
+     * Satuan TIDAK diubah.
+     * ===================================================
+     */
 
     const updated =
       await prisma.outletBarang.update({
@@ -484,11 +721,36 @@ export async function PUT(
         },
       });
 
+    /*
+     * ===================================================
+     * SATUAN RESPONSE
+     * ===================================================
+     */
+
+    const conversionRate =
+      normalizeConversionRate(
+        updated.barang.conversionRate
+      );
+
+    const unit =
+      updated.barang.unit || "";
+
+    const baseUnit =
+      updated.barang.baseUnit || unit;
+
     return NextResponse.json({
       success: true,
+
       message:
         "Barang outlet berhasil diperbarui",
-      data: updated,
+
+      data: {
+        ...updated,
+
+        unit,
+        baseUnit,
+        conversionRate,
+      },
     });
   } catch (error: any) {
     console.error(
@@ -508,16 +770,19 @@ export async function PUT(
   }
 }
 
-// =====================================================
-// DELETE
-//
-// Hanya menghapus relasi OutletBarang.
-// TIDAK menghapus Barang pusat.
-// TIDAK menghapus OutletStock.
-//
-// Barang yang masih memiliki stock > 0
-// tidak boleh dihapus.
-// =====================================================
+/*
+ * =========================================================
+ * DELETE
+ *
+ * Hanya menghapus relasi OutletBarang.
+ *
+ * TIDAK menghapus:
+ * - Barang Central
+ * - OutletStock
+ *
+ * Barang dengan stock > 0 tidak boleh dihapus.
+ * =========================================================
+ */
 
 export async function DELETE(
   req: NextRequest,
@@ -528,9 +793,11 @@ export async function DELETE(
   }
 ) {
   try {
-    // ===================================================
-    // SESSION
-    // ===================================================
+    /*
+     * ===================================================
+     * SESSION
+     * ===================================================
+     */
 
     const user = await getCurrentUser();
 
@@ -545,9 +812,11 @@ export async function DELETE(
       );
     }
 
-    // ===================================================
-    // ROLE
-    // ===================================================
+    /*
+     * ===================================================
+     * ROLE
+     * ===================================================
+     */
 
     if (
       !isCenterUser(user.role) &&
@@ -562,9 +831,11 @@ export async function DELETE(
       );
     }
 
-    // ===================================================
-    // ID
-    // ===================================================
+    /*
+     * ===================================================
+     * ID
+     * ===================================================
+     */
 
     const { id } = await context.params;
 
@@ -579,11 +850,14 @@ export async function DELETE(
       );
     }
 
-    const outletBarangId = Number(id);
+    const outletBarangId =
+      Number(id);
 
-    // ===================================================
-    // DATA EXISTING
-    // ===================================================
+    /*
+     * ===================================================
+     * DATA EXISTING
+     * ===================================================
+     */
 
     const existing =
       await prisma.outletBarang.findUnique({
@@ -608,9 +882,11 @@ export async function DELETE(
       );
     }
 
-    // ===================================================
-    // SECURITY OUTLET ADMIN
-    // ===================================================
+    /*
+     * ===================================================
+     * SECURITY OUTLET ADMIN
+     * ===================================================
+     */
 
     if (isOutletAdmin(user.role)) {
       if (!user.outletId) {
@@ -639,9 +915,11 @@ export async function DELETE(
       }
     }
 
-    // ===================================================
-    // OUTLET AKTIF
-    // ===================================================
+    /*
+     * ===================================================
+     * OUTLET AKTIF
+     * ===================================================
+     */
 
     if (!existing.outlet.active) {
       return NextResponse.json(
@@ -654,9 +932,13 @@ export async function DELETE(
       );
     }
 
-    // ===================================================
-    // CEK STOCK
-    // ===================================================
+    /*
+     * ===================================================
+     * CEK STOCK
+     *
+     * Stock tetap dalam unit transaksi.
+     * ===================================================
+     */
 
     const stock =
       await prisma.outletStock.findUnique({
@@ -676,22 +958,44 @@ export async function DELETE(
       });
 
     const currentStock =
-      Number(stock?.stock ?? 0);
+      normalizeNumber(
+        stock?.stock,
+        0
+      );
 
     if (currentStock > 0) {
+      const conversionRate =
+        normalizeConversionRate(
+          existing.barang.conversionRate
+        );
+
+      const baseStock =
+        currentStock *
+        conversionRate;
+
+      const unit =
+        existing.barang.unit || "";
+
+      const baseUnit =
+        existing.barang.baseUnit ||
+        unit;
+
       return NextResponse.json(
         {
           success: false,
+
           message:
-            `Barang tidak dapat dihapus karena stock outlet masih ${currentStock}`,
+            `Barang tidak dapat dihapus karena stock outlet masih ${currentStock} ${unit} (${baseStock} ${baseUnit})`,
         },
         { status: 400 }
       );
     }
 
-    // ===================================================
-    // DELETE
-    // ===================================================
+    /*
+     * ===================================================
+     * DELETE
+     * ===================================================
+     */
 
     await prisma.outletBarang.delete({
       where: {
@@ -701,6 +1005,7 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
+
       message:
         "Barang berhasil dihapus dari master outlet",
     });

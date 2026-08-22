@@ -41,7 +41,17 @@ type LastOpname = {
 type Stock = {
   id: number;
   barangId: number;
+
+  /**
+   * STOCK TRANSAKSI
+   *
+   * Contoh:
+   * 10 DUS
+   *
+   * Nilai ini TIDAK dikonversi.
+   */
   stock: number;
+
   minimumStock: number;
   averageCost: number;
 
@@ -49,7 +59,31 @@ type Stock = {
     id: number;
     code: string;
     name: string;
+
+    /**
+     * Satuan transaksi.
+     *
+     * Contoh:
+     * DUS
+     */
     unit: string;
+
+    /**
+     * Satuan dasar.
+     *
+     * Contoh:
+     * PCS
+     */
+    baseUnit?: string | null;
+
+    /**
+     * Konversi satuan transaksi -> satuan dasar.
+     *
+     * Contoh:
+     * 1 DUS = 24 PCS
+     */
+    conversion?: number | null;
+
     barcode: string | null;
   };
 
@@ -67,6 +101,8 @@ type HistoryBarang = {
   code: string;
   name: string;
   unit: string;
+  baseUnit?: string | null;
+  conversion?: number | null;
   barcode: string | null;
 };
 
@@ -226,6 +262,82 @@ export default function StockPusatPage() {
   }
 
   // =====================================================
+  // SATUAN / KONVERSI
+  // =====================================================
+
+  /**
+   * Mengambil nilai konversi.
+   *
+   * Jika conversion tidak tersedia atau invalid,
+   * fallback ke 1 agar stock dasar tetap aman.
+   */
+  function getConversion(
+    item: Stock
+  ) {
+    const conversion =
+      Number(
+        item.barang?.conversion ?? 1
+      );
+
+    if (
+      !Number.isFinite(conversion) ||
+      conversion <= 0
+    ) {
+      return 1;
+    }
+
+    return conversion;
+  }
+
+  /**
+   * Stock transaksi.
+   *
+   * Contoh:
+   * 10 DUS
+   */
+  function getTransactionStock(
+    item: Stock
+  ) {
+    return Number(
+      item.stock || 0
+    );
+  }
+
+  /**
+   * Stock dasar.
+   *
+   * Contoh:
+   *
+   * stock = 10
+   * conversion = 24
+   *
+   * 10 × 24 = 240 PCS
+   */
+  function getBaseStock(
+    item: Stock
+  ) {
+    const stock =
+      getTransactionStock(item);
+
+    const conversion =
+      getConversion(item);
+
+    return stock * conversion;
+  }
+
+  /**
+   * Minimum stock juga tetap menggunakan
+   * satuan transaksi.
+   */
+  function getMinimumStock(
+    item: Stock
+  ) {
+    return Number(
+      item.minimumStock || 0
+    );
+  }
+
+  // =====================================================
   // SEARCH + FILTER
   // =====================================================
 
@@ -246,11 +358,21 @@ export default function StockPusatPage() {
         item.barang?.barcode
           ?.toLowerCase() || "";
 
+      const unit =
+        item.barang?.unit
+          ?.toLowerCase() || "";
+
+      const baseUnit =
+        item.barang?.baseUnit
+          ?.toLowerCase() || "";
+
       const matchesSearch =
         !keyword ||
         code.includes(keyword) ||
         name.includes(keyword) ||
-        barcode.includes(keyword);
+        barcode.includes(keyword) ||
+        unit.includes(keyword) ||
+        baseUnit.includes(keyword);
 
       if (!matchesSearch) {
         return false;
@@ -450,7 +572,16 @@ export default function StockPusatPage() {
     return filteredData.reduce(
       (total, item) =>
         total +
-        Number(item.stock || 0),
+        getTransactionStock(item),
+      0
+    );
+  }, [filteredData]);
+
+  const totalBaseStock = useMemo(() => {
+    return filteredData.reduce(
+      (total, item) =>
+        total +
+        getBaseStock(item),
       0
     );
   }, [filteredData]);
@@ -745,6 +876,61 @@ export default function StockPusatPage() {
         </div>
 
         {/* =================================================
+            INFO KONVERSI
+        ================================================= */}
+
+        <div className="mb-6 overflow-hidden rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 via-white to-[#F8FBFF]">
+
+          <div className="flex flex-col gap-4 p-5 md:flex-row md:items-start md:justify-between md:px-6">
+
+            <div className="flex items-start gap-3">
+
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
+                <Boxes size={19} />
+              </div>
+
+              <div>
+
+                <p className="text-sm font-bold text-blue-800">
+                  Tampilan Stock Dasar
+                </p>
+
+                <p className="mt-1 max-w-4xl text-xs leading-5 text-blue-700/80">
+                  Stock transaksi tetap menggunakan
+                  satuan utama barang. Stock dasar hanya
+                  merupakan hasil perhitungan untuk
+                  monitoring berdasarkan konversi satuan.
+                  Transaksi PO, Receive, Barang Keluar,
+                  Transfer, dan Stock Opname tidak
+                  dikonversi.
+                </p>
+
+                <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-blue-100 bg-white px-3 py-2 text-[11px] font-semibold text-blue-700">
+                  <span>
+                    Stock Dasar =
+                  </span>
+
+                  <span className="rounded bg-blue-50 px-2 py-1">
+                    Stock Transaksi
+                  </span>
+
+                  <span>×</span>
+
+                  <span className="rounded bg-blue-50 px-2 py-1">
+                    Konversi
+                  </span>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* =================================================
             ERROR
         ================================================= */}
 
@@ -811,7 +997,7 @@ export default function StockPusatPage() {
 
           </div>
 
-          {/* TOTAL STOCK */}
+          {/* TOTAL STOCK TRANSAKSI */}
 
           <div className="group relative overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-[0_4px_18px_rgba(30,70,58,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(30,70,58,0.08)]">
 
@@ -822,7 +1008,7 @@ export default function StockPusatPage() {
               <div>
 
                 <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-gray-400">
-                  Total Qty Stock
+                  Total Stock Transaksi
                 </p>
 
                 <p className="mt-2 text-[28px] font-bold tracking-tight text-[#18352D]">
@@ -830,13 +1016,47 @@ export default function StockPusatPage() {
                 </p>
 
                 <p className="mt-1 text-xs text-gray-400">
-                  Akumulasi stock sistem
+                  Akumulasi sesuai satuan transaksi
                 </p>
 
               </div>
 
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EEF6F3] text-[#497F70]">
                 <Boxes size={20} />
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* STOCK DASAR */}
+
+          <div className="group relative overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-[0_4px_18px_rgba(30,70,58,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(30,70,58,0.08)]">
+
+            <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#EEF5FB]" />
+
+            <div className="relative flex items-start justify-between">
+
+              <div>
+
+                <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-gray-400">
+                  Total Stock Dasar
+                </p>
+
+                <p className="mt-2 text-[28px] font-bold tracking-tight text-[#18352D]">
+                  {formatNumber(
+                    totalBaseStock
+                  )}
+                </p>
+
+                <p className="mt-1 text-xs text-gray-400">
+                  Hasil konversi untuk monitoring
+                </p>
+
+              </div>
+
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EEF5FB] text-blue-600">
+                <Package size={20} />
               </div>
 
             </div>
@@ -871,51 +1091,6 @@ export default function StockPusatPage() {
 
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#F2F0FA] text-purple-600">
                 <ClipboardCheck size={20} />
-              </div>
-
-            </div>
-
-          </div>
-
-          {/* DIFFERENCE */}
-
-          <div className="group relative overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-[0_4px_18px_rgba(30,70,58,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(30,70,58,0.08)]">
-
-            <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#FFF8E7]" />
-
-            <div className="relative flex items-start justify-between">
-
-              <div>
-
-                <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-gray-400">
-                  Selisih SO Terakhir
-                </p>
-
-                <p
-                  className={`mt-2 text-[28px] font-bold tracking-tight ${
-                    totalDifference === 0
-                      ? "text-[#18352D]"
-                      : totalDifference > 0
-                      ? "text-emerald-600"
-                      : "text-red-600"
-                  }`}
-                >
-                  {totalDifference > 0
-                    ? "+"
-                    : ""}
-                  {formatNumber(
-                    totalDifference
-                  )}
-                </p>
-
-                <p className="mt-1 text-xs text-gray-400">
-                  Akumulasi selisih
-                </p>
-
-              </div>
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#FFF8E7] text-[#9A751D]">
-                <TrendingUp size={20} />
               </div>
 
             </div>
@@ -1230,8 +1405,9 @@ export default function StockPusatPage() {
               </div>
 
               <p className="mt-1.5 text-xs text-gray-400">
-                Stock sistem, stock opname terakhir,
-                dan status persediaan.
+                Stock transaksi, stock dasar,
+                stock opname terakhir, dan status
+                persediaan.
               </p>
 
             </div>
@@ -1253,7 +1429,7 @@ export default function StockPusatPage() {
 
           <div className="overflow-x-auto">
 
-            <table className="min-w-[1450px] w-full text-sm">
+            <table className="min-w-[1600px] w-full text-sm">
 
               <thead className="bg-[#F7F9F8]">
 
@@ -1268,7 +1444,15 @@ export default function StockPusatPage() {
                   </th>
 
                   <th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                    Stock Sistem
+                    Stock Transaksi
+                  </th>
+
+                  <th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                    Konversi
+                  </th>
+
+                  <th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                    Stock Dasar
                   </th>
 
                   <th className="px-5 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-gray-400">
@@ -1310,7 +1494,7 @@ export default function StockPusatPage() {
                   <tr>
 
                     <td
-                      colSpan={10}
+                      colSpan={12}
                       className="px-5 py-16 text-center"
                     >
 
@@ -1341,7 +1525,7 @@ export default function StockPusatPage() {
                   <tr>
 
                     <td
-                      colSpan={10}
+                      colSpan={12}
                       className="px-5 py-16 text-center"
                     >
 
@@ -1382,7 +1566,10 @@ export default function StockPusatPage() {
                 ) : (
 
                   filteredData.map(
-                    (item, index) => {
+                    (
+                      item,
+                      index
+                    ) => {
 
                       const stockStatus =
                         getStatus(
@@ -1411,6 +1598,31 @@ export default function StockPusatPage() {
                           lastOpname?.status
                         );
 
+                      const transactionStock =
+                        getTransactionStock(
+                          item
+                        );
+
+                      const conversion =
+                        getConversion(
+                          item
+                        );
+
+                      const baseStock =
+                        getBaseStock(
+                          item
+                        );
+
+                      const transactionUnit =
+                        item.barang
+                          ?.unit ||
+                        "-";
+
+                      const baseUnit =
+                        item.barang
+                          ?.baseUnit ||
+                        transactionUnit;
+
                       return (
                         <tr
                           key={item.id}
@@ -1422,7 +1634,10 @@ export default function StockPusatPage() {
                           <td className="px-5 py-4 text-xs font-medium text-gray-400">
                             {String(
                               index + 1
-                            ).padStart(2, "0")}
+                            ).padStart(
+                              2,
+                              "0"
+                            )}
                           </td>
 
                           {/* BARANG */}
@@ -1456,9 +1671,17 @@ export default function StockPusatPage() {
                                   <span className="h-1 w-1 rounded-full bg-gray-300" />
 
                                   <span className="text-[11px] text-gray-400">
-                                    {item.barang
-                                      ?.unit ||
-                                      "-"}
+                                    Satuan:{" "}
+                                    {
+                                      transactionUnit
+                                    }
+                                  </span>
+
+                                  <span className="h-1 w-1 rounded-full bg-gray-300" />
+
+                                  <span className="text-[11px] text-blue-500">
+                                    Dasar:{" "}
+                                    {baseUnit}
                                   </span>
 
                                 </div>
@@ -1481,23 +1704,71 @@ export default function StockPusatPage() {
 
                           </td>
 
-                          {/* SYSTEM STOCK */}
+                          {/* STOCK TRANSAKSI */}
 
                           <td className="px-5 py-4 text-right">
 
-                            <div className="inline-flex items-center gap-2 rounded-xl bg-[#F7F9F8] px-3 py-2">
+                            <div className="inline-flex flex-col items-end gap-1 rounded-xl bg-[#F7F9F8] px-3 py-2">
 
-                              <LockKeyhole
-                                size={12}
-                                className="text-gray-400"
-                              />
+                              <div className="flex items-center gap-2">
 
-                              <span className="text-base font-bold text-[#18352D]">
+                                <LockKeyhole
+                                  size={12}
+                                  className="text-gray-400"
+                                />
+
+                                <span className="text-base font-bold text-[#18352D]">
+                                  {formatNumber(
+                                    transactionStock
+                                  )}
+                                </span>
+
+                                <span className="text-[11px] font-semibold text-[#497F70]">
+                                  {transactionUnit}
+                                </span>
+
+                              </div>
+
+                            </div>
+
+                          </td>
+
+                          {/* KONVERSI */}
+
+                          <td className="px-5 py-4 text-right">
+
+                            <div className="inline-flex flex-col items-end">
+
+                              <span className="rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700">
+                                1 {transactionUnit}
+                              </span>
+
+                              <span className="mt-1 text-[10px] font-semibold text-gray-400">
+                                ={" "}
                                 {formatNumber(
-                                  Number(
-                                    item.stock
-                                  )
+                                  conversion
+                                )}{" "}
+                                {baseUnit}
+                              </span>
+
+                            </div>
+
+                          </td>
+
+                          {/* STOCK DASAR */}
+
+                          <td className="px-5 py-4 text-right">
+
+                            <div className="inline-flex flex-col items-end rounded-xl bg-[#EEF5FB] px-3 py-2">
+
+                              <span className="text-base font-bold text-blue-800">
+                                {formatNumber(
+                                  baseStock
                                 )}
+                              </span>
+
+                              <span className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-500">
+                                {baseUnit}
                               </span>
 
                             </div>
@@ -1551,13 +1822,21 @@ export default function StockPusatPage() {
 
                             {lastOpname ? (
 
-                              <span className="font-bold text-[#18352D]">
-                                {formatNumber(
-                                  Number(
-                                    lastOpname.physicalQty
-                                  )
-                                )}
-                              </span>
+                              <div className="inline-flex flex-col items-end">
+
+                                <span className="font-bold text-[#18352D]">
+                                  {formatNumber(
+                                    Number(
+                                      lastOpname.physicalQty
+                                    )
+                                  )}
+                                </span>
+
+                                <span className="text-[10px] text-gray-400">
+                                  {transactionUnit}
+                                </span>
+
+                              </div>
 
                             ) : (
 
@@ -1590,7 +1869,8 @@ export default function StockPusatPage() {
                                 +
                                 {formatNumber(
                                   difference
-                                )}
+                                )}{" "}
+                                {transactionUnit}
 
                               </span>
 
@@ -1604,7 +1884,8 @@ export default function StockPusatPage() {
 
                                 {formatNumber(
                                   difference
-                                )}
+                                )}{" "}
+                                {transactionUnit}
 
                               </span>
 
@@ -1616,7 +1897,8 @@ export default function StockPusatPage() {
                                   size={13}
                                 />
 
-                                0
+                                0{" "}
+                                {transactionUnit}
 
                               </span>
 
@@ -1652,13 +1934,21 @@ export default function StockPusatPage() {
 
                           <td className="px-5 py-4 text-right">
 
-                            <span className="font-semibold text-gray-600">
-                              {formatNumber(
-                                Number(
-                                  item.minimumStock
-                                )
-                              )}
-                            </span>
+                            <div className="inline-flex flex-col items-end">
+
+                              <span className="font-semibold text-gray-600">
+                                {formatNumber(
+                                  Number(
+                                    item.minimumStock
+                                  )
+                                )}
+                              </span>
+
+                              <span className="text-[10px] text-gray-400">
+                                {transactionUnit}
+                              </span>
+
+                            </div>
 
                           </td>
 
@@ -1741,7 +2031,7 @@ export default function StockPusatPage() {
 
                 <span className="flex items-center gap-1.5">
                   <LockKeyhole size={12} />
-                  Data stock bersifat sistem
+                  Stock transaksi tidak dikonversi
                 </span>
 
               </div>
@@ -1827,13 +2117,65 @@ export default function StockPusatPage() {
                         }
                       </span>
 
+                      {selectedHistory
+                        .barang
+                        ?.baseUnit && (
+                        <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">
+                          Dasar:{" "}
+                          {
+                            selectedHistory
+                              .barang
+                              .baseUnit
+                          }
+                        </span>
+                      )}
+
+                      {selectedHistory
+                        .barang
+                        ?.conversion &&
+                        Number(
+                          selectedHistory
+                            .barang
+                            .conversion
+                        ) > 0 && (
+                          <span className="rounded-lg bg-indigo-50 px-2.5 py-1 text-[10px] font-bold text-indigo-700">
+                            1{" "}
+                            {
+                              selectedHistory
+                                .barang
+                                .unit
+                            }{" "}
+                            ={" "}
+                            {formatNumber(
+                              Number(
+                                selectedHistory
+                                  .barang
+                                  .conversion
+                              )
+                            )}{" "}
+                            {
+                              selectedHistory
+                                .barang
+                                .baseUnit ||
+                              selectedHistory
+                                .barang
+                                .unit
+                            }
+                          </span>
+                        )}
+
                       <span className="rounded-lg bg-[#FFF8E7] px-2.5 py-1 text-[10px] font-bold text-[#8A6A1E]">
                         Stock:{" "}
                         {formatNumber(
                           Number(
                             selectedHistory.stock
                           )
-                        )}
+                        )}{" "}
+                        {
+                          selectedHistory
+                            .barang
+                            .unit
+                        }
                       </span>
 
                       <span className="rounded-lg bg-[#EAF3EF] px-2.5 py-1 text-[10px] font-bold text-[#497F70]">
