@@ -1,0 +1,3 @@
+-- Intentionally empty.
+-- OutletSale and OutletSaleItem were already created by
+-- 20260826000100_add_outlet_pos.

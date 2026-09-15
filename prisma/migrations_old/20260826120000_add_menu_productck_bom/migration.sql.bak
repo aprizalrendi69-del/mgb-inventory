@@ -1,0 +1,144 @@
+
+PRAGMA foreign_keys=OFF;
+
+CREATE TABLE "Menu" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "code" TEXT NOT NULL,
+  "name" TEXT NOT NULL,
+  "category" TEXT,
+  "description" TEXT,
+  "image" TEXT,
+  "price" REAL NOT NULL DEFAULT 0,
+  "active" BOOLEAN NOT NULL DEFAULT 1,
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" DATETIME NOT NULL,
+  CONSTRAINT "Menu_code_key" UNIQUE ("code")
+);
+CREATE INDEX "Menu_category_idx" ON "Menu"("category");
+CREATE INDEX "Menu_active_idx" ON "Menu"("active");
+
+CREATE TABLE "ProductCK" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "code" TEXT NOT NULL,
+  "name" TEXT NOT NULL,
+  "description" TEXT,
+  "outputBarangId" INTEGER NOT NULL,
+  "active" BOOLEAN NOT NULL DEFAULT 1,
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" DATETIME NOT NULL,
+  CONSTRAINT "ProductCK_code_key" UNIQUE ("code"),
+  CONSTRAINT "ProductCK_outputBarangId_key" UNIQUE ("outputBarangId"),
+  CONSTRAINT "ProductCK_outputBarangId_fkey" FOREIGN KEY ("outputBarangId") REFERENCES "Barang" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+CREATE INDEX "ProductCK_active_idx" ON "ProductCK"("active");
+
+CREATE TABLE "Recipe_new" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "code" TEXT NOT NULL,
+  "name" TEXT NOT NULL,
+  "menuId" INTEGER,
+  "productCkId" INTEGER,
+  "outputBarangId" INTEGER,
+  "outputQty" REAL NOT NULL DEFAULT 1,
+  "notes" TEXT,
+  "active" BOOLEAN NOT NULL DEFAULT 1,
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" DATETIME NOT NULL,
+  CONSTRAINT "Recipe_code_key" UNIQUE ("code"),
+  CONSTRAINT "Recipe_menuId_fkey" FOREIGN KEY ("menuId") REFERENCES "Menu" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT "Recipe_productCkId_fkey" FOREIGN KEY ("productCkId") REFERENCES "ProductCK" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT "Recipe_outputBarangId_fkey" FOREIGN KEY ("outputBarangId") REFERENCES "Barang" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+INSERT INTO "Recipe_new"
+("id","code","name","menuId","productCkId","outputBarangId","outputQty","notes","active","createdAt","updatedAt")
+SELECT "id","code","name",NULL,NULL,"outputBarangId","outputQty","notes","active","createdAt","updatedAt"
+FROM "Recipe";
+
+DROP TABLE "Recipe";
+ALTER TABLE "Recipe_new" RENAME TO "Recipe";
+
+CREATE INDEX "Recipe_menuId_idx" ON "Recipe"("menuId");
+CREATE INDEX "Recipe_productCkId_idx" ON "Recipe"("productCkId");
+CREATE INDEX "Recipe_outputBarangId_idx" ON "Recipe"("outputBarangId");
+CREATE INDEX "Recipe_active_idx" ON "Recipe"("active");
+
+-- Preserve the existing manufacture output mapping by wrapping each legacy
+-- output Barang in a ProductCK record. This does not alter Barang or stock.
+INSERT INTO "ProductCK" ("code","name","description","outputBarangId","active","createdAt","updatedAt")
+SELECT
+  'CK-' || printf('%06d', b.id),
+  b.name,
+  'Migrated from existing Recipe output Barang',
+  b.id,
+  b.active,
+  CURRENT_TIMESTAMP,
+  CURRENT_TIMESTAMP
+FROM "Barang" b
+WHERE EXISTS (SELECT 1 FROM "Recipe" r WHERE r.outputBarangId = b.id)
+  AND NOT EXISTS (SELECT 1 FROM "ProductCK" p WHERE p.outputBarangId = b.id);
+
+UPDATE "Recipe"
+SET "productCkId" = (
+  SELECT p.id FROM "ProductCK" p
+  WHERE p.outputBarangId = "Recipe"."outputBarangId"
+)
+WHERE "outputBarangId" IS NOT NULL;
+
+CREATE INDEX "Recipe_menuId_productCkId_idx" ON "Recipe"("menuId","productCkId");
+
+-- Add menu relation to existing POS sale lines without touching existing sales.
+CREATE TABLE "OutletSaleItem_new" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "saleId" INTEGER NOT NULL,
+  "barangId" INTEGER NOT NULL,
+  "menuId" INTEGER,
+  "qty" REAL NOT NULL,
+  "unitPrice" REAL NOT NULL,
+  "subtotal" REAL NOT NULL,
+  CONSTRAINT "OutletSaleItem_saleId_fkey" FOREIGN KEY ("saleId") REFERENCES "OutletSale" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "OutletSaleItem_barangId_fkey" FOREIGN KEY ("barangId") REFERENCES "Barang" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "OutletSaleItem_menuId_fkey" FOREIGN KEY ("menuId") REFERENCES "Menu" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+INSERT INTO "OutletSaleItem_new" ("id","saleId","barangId","menuId","qty","unitPrice","subtotal")
+SELECT "id","saleId","barangId",NULL,"qty","unitPrice","subtotal" FROM "OutletSaleItem";
+DROP TABLE "OutletSaleItem";
+ALTER TABLE "OutletSaleItem_new" RENAME TO "OutletSaleItem";
+CREATE INDEX "OutletSaleItem_saleId_idx" ON "OutletSaleItem"("saleId");
+CREATE INDEX "OutletSaleItem_barangId_idx" ON "OutletSaleItem"("barangId");
+CREATE INDEX "OutletSaleItem_menuId_idx" ON "OutletSaleItem"("menuId");
+
+-- Gangnam BBQ catalog from the provided POS reference. These are master menu
+-- records only; BOMs are intentionally not fabricated where ingredient
+-- quantities are unknown. A menu can be sold only after its BOM is configured.
+INSERT OR IGNORE INTO "Menu"
+("code","name","category","description","price","active","createdAt","updatedAt") VALUES
+('GN-AYCE-199','ALL YOU CAN EAT','PACKAGE','Korean BBQ All You Can Eat',199000,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-GCSG','GO CHU JANG SAENG GYEP SAL','PORK','SPICY-SEASONED GRILLED PORK',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-DJG','DWAE JI GALBI','PORK','SWEET-SEASONED GRILLED PORK',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-CPB','CRISPY PORK BELLY','PORK','CRISPY PORK BELLY',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-SDJ','SUNDUBU JJIGAE','SOUP','SPICY TOFU SOUP',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-KIMCHI','KIMCHI','SIDE DISH','SIDE DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-KOCORI','KOCORI','SIDE DISH','SIDE DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-DANMUJI','DANMUJI','SIDE DISH','SIDE DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-CHIKINMU','CHIKIN MU','SIDE DISH','SIDE DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-JAPCHAE','JAPCHAE','SIDE DISH','SIDE DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-ODENG','ODENG','SIDE DISH','SIDE DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-SUJEONGGWA','SUJEONGGWA','SIDE DISH','SIDE DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-GIMBAB','GIMBAB','SIDE DISH','SIDE DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-BOKKEUMBAP','BOKKEUMBAP','SIDE DISH','SIDE DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-SAENGCHAE','SAENGCHAE','SIDE DISH','SIDE DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-PAJEON','PAJEON','SIDE DISH','SIDE DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-GIMNARI','GIMMARI','SIDE DISH','SIDE DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-MANDU','MANDU','SIDE DISH','SIDE DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-HOTTEOK','HOTTEOK','DESSERT','DESSERT',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-DONKAS','DONKAS','SIDE DISH','SIDE DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-DWAEJIBULGOGI','DWAEJI BULGOGI','PORK','PORK BULGOGI',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-AMERICANO','AMERICANO','DRINK','DRINK',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-MILKPUDDING','MILK PUDDING','DESSERT','DESSERT',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-ESCAMPURMEDAN','ES CAMPUR MEDAN','DESSERT','DESSERT',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-SLICEDFRUIT','SLICED FRUIT','DESSERT','DESSERT',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-TTEOKBOKKI','TTEOKBOKKI','WEEKEND SPECIAL','WEEKEND SPECIAL DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+('GN-JJAJANGMYEON','JJAJANGMYEON','WEEKEND SPECIAL','WEEKEND SPECIAL DISH',0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
+
+PRAGMA foreign_keys=ON;

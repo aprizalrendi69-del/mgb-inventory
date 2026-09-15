@@ -1,0 +1,2 @@
+-- outletId dan index sudah ada di database.
+-- Migration ini hanya menyelaraskan history Prisma.

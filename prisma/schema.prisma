@@ -1,0 +1,1222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id                Int                @id @default(autoincrement())
+  username          String             @unique
+  password          String
+  fullname          String
+  photo             String?
+  role              Role
+  outletId          Int?
+  active            Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  lastSeen          DateTime?
+  chatMessages      ChatMessage[]
+  chatParticipants  ChatParticipant[]
+  deliveryItemVoids DeliveryItem[]     @relation("DeliveryItemVoidedBy")
+  histories         History[]
+  manufactureOrders ManufactureOrder[]
+  outletSales       OutletSale[]
+  outletStockOuts   OutletStockOut[]
+  purchaseComments  PurchaseComment[]
+  sessions          Session[]
+  stockWastes       StockWaste[]
+  outlet            Outlet?            @relation(fields: [outletId], references: [id])
+}
+
+model Outlet {
+  id                Int                @id @default(autoincrement())
+  code              String             @unique
+  name              String
+  address           String?
+  city              String?
+  phone             String?
+  active            Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  sourceBarangs     Barang[]           @relation("BarangSourceOutlet")
+  deliveries        Delivery[]
+  outletBarang      OutletBarang[]
+  purchases         OutletPurchase[]
+  receipts          OutletReceipt[]
+  sales             OutletSale[]
+  stocks            OutletStock[]
+  stockOuts         OutletStockOut[]
+  transfersIn       OutletTransfer[]   @relation("TransferDestinationOutlet")
+  transfersOut      OutletTransfer[]   @relation("TransferSourceOutlet")
+  pettyCash         PettyCash[]
+  pettyCashAccounts PettyCashAccount?
+  purchasePayables  PurchasePayable[]
+  stockOpnames      StockOpname[]
+  users             User[]
+  recipes           Recipe[]
+  manufactureOrders ManufactureOrder[]
+  stockMutations    StockMutation[]
+  outletAdjustments OutletAdjustment[]
+}
+
+model OutletStockOut {
+  id           Int         @id @default(autoincrement())
+  number       String      @unique
+  outletId     Int
+  barangId     Int
+  userId       Int?
+  trxDate      DateTime    @default(now())
+  type         String
+  status       WasteStatus @default(PENDING)
+  qtyProcessed Float
+  wasteQty     Float       @default(0)
+  netQty       Float       @default(0)
+  unitCost     Float       @default(0)
+  totalCost    Float       @default(0)
+  note         String?
+  approvedBy   Int?
+  approvedAt   DateTime?
+  user         User?       @relation(fields: [userId], references: [id])
+  barang       Barang      @relation(fields: [barangId], references: [id])
+  outlet       Outlet      @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@index([outletId])
+  @@index([barangId])
+  @@index([trxDate])
+  @@index([type])
+  @@index([status])
+}
+
+model OutletTransfer {
+  id             Int                  @id @default(autoincrement())
+  number         String               @unique
+  sourceOutletId Int?
+  outletId       Int
+  transferDate   DateTime             @default(now())
+  status         OutletTransferStatus @default(SENT)
+  remarks        String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  outlet         Outlet               @relation("TransferDestinationOutlet", fields: [outletId], references: [id])
+  sourceOutlet   Outlet?              @relation("TransferSourceOutlet", fields: [sourceOutletId], references: [id])
+  items          OutletTransferItem[]
+
+  @@index([sourceOutletId])
+  @@index([outletId])
+}
+
+model Session {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Supplier {
+  id               Int               @id @default(autoincrement())
+  code             String            @unique
+  name             String
+  address          String?
+  city             String?
+  phone            String?
+  email            String?
+  contactPerson    String?
+  tempoDays        Int               @default(30)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  MasterHarga      MasterHarga[]
+  outletPurchases  OutletPurchase[]
+  outletReceipts   OutletReceipt[]
+  payments         Payment[]
+  priceSummary     PriceSummary[]
+  purchases        Purchase[]
+  purchasePayables PurchasePayable[]
+  receipts         Receipt[]
+}
+
+model Customer {
+  id            Int        @id @default(autoincrement())
+  code          String     @unique
+  name          String
+  address       String?
+  city          String?
+  phone         String?
+  email         String?
+  contactPerson String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deliveries    Delivery[]
+}
+
+model Barang {
+  id                    Int                    @id @default(autoincrement())
+  code                  String                 @unique
+  barcode               String?                @unique
+  name                  String
+  category              String?
+  brand                 String?
+  unit                  String
+  baseUnit              String?
+  conversionRate        Float                  @default(1)
+  minimumStock          Float                  @default(0)
+  stock                 Float                  @default(0)
+  purchasePrice         Float                  @default(0)
+  sellingPrice          Float                  @default(0)
+  hasExpired            Boolean                @default(false)
+  active                Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  expiredWarning        Int                    @default(30)
+  source                BarangSource           @default(CENTRAL)
+  sourceOutletId        Int?
+  adjustmentItems       AdjustmentItem[]
+  sourceOutlet          Outlet?                @relation("BarangSourceOutlet", fields: [sourceOutletId], references: [id])
+  batches               BarangBatch[]
+  batchStocks           BatchStock[]
+  deliveryItems         DeliveryItem[]
+  inventory             Inventory?
+  manufactureOrderItems ManufactureOrderItem[]
+  MasterHarga           MasterHarga[]
+  mutationStocks        MutationStock[]
+  outletBarang          OutletBarang[]
+  outletPurchaseItems   OutletPurchaseItem[]
+  outletReceiptItems    OutletReceiptItem[]
+  outletSaleItems       OutletSaleItem[]
+  outletStocks          OutletStock[]
+  outletStockOuts       OutletStockOut[]
+  outletTransferItems   OutletTransferItem[]
+  priceSummary          PriceSummary?
+  productCKOutputs      ProductCK?             @relation("ProductCKOutput")
+  purchaseItems         PurchaseItem[]
+  receiptItems          ReceiptItem[]
+  recipeOutputs         Recipe[]               @relation("RecipeOutput")
+  recipeItems           RecipeItem[]
+  stockCards            StockCard[]
+  stockMutations        StockMutation[]
+  stockOpnameHistory    StockOpnameHistory[]
+  stockOpnameItems      StockOpnameItem[]
+  stockWastes           StockWaste[]
+  outletAdjustmentItems OutletAdjustmentItem[]
+
+  @@index([source])
+  @@index([sourceOutletId])
+}
+
+model BarangBatch {
+  id          Int      @id @default(autoincrement())
+  barangId    Int
+  batchNumber String
+  expiredDate DateTime
+  qty         Float
+  createdAt   DateTime @default(now())
+  barang      Barang   @relation(fields: [barangId], references: [id], onDelete: Cascade)
+}
+
+model Purchase {
+  id            Int               @id @default(autoincrement())
+  number        String            @unique
+  supplierId    Int
+  purchaseDate  DateTime          @default(now())
+  status        PurchaseStatus    @default(DRAFT)
+  paymentMethod PaymentMethod     @default(CASH)
+  remarks       String?
+  total         Float             @default(0)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  payments      Payment[]
+  supplier      Supplier          @relation(fields: [supplierId], references: [id])
+  comments      PurchaseComment[] @relation("PurchaseComments")
+  items         PurchaseItem[]
+  payable       PurchasePayable?
+  receipts      Receipt[]
+}
+
+model PurchaseItem {
+  id          Int      @id @default(autoincrement())
+  purchaseId  Int
+  barangId    Int
+  qty         Float
+  receivedQty Float    @default(0)
+  price       Float
+  discount    Float    @default(0)
+  tax         Float    @default(0)
+  subtotal    Float
+  purchase    Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  barang      Barang   @relation(fields: [barangId], references: [id])
+}
+
+model OutletPurchase {
+  id            Int                  @id @default(autoincrement())
+  number        String               @unique
+  outletId      Int
+  supplierId    Int
+  purchaseDate  DateTime             @default(now())
+  status        OutletPurchaseStatus @default(DRAFT)
+  paymentMethod PaymentMethod        @default(CASH)
+  remarks       String?
+  total         Float                @default(0)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  supplier      Supplier             @relation(fields: [supplierId], references: [id])
+  outlet        Outlet               @relation(fields: [outletId], references: [id])
+  items         OutletPurchaseItem[]
+  receipts      OutletReceipt[]
+  payments      Payment[]
+  comments      PurchaseComment[]    @relation("OutletPurchaseComments")
+  payable       PurchasePayable?
+
+  @@index([outletId])
+  @@index([supplierId])
+  @@index([paymentMethod])
+}
+
+model OutletPurchaseItem {
+  id          Int            @id @default(autoincrement())
+  purchaseId  Int
+  barangId    Int
+  qty         Float
+  receivedQty Float          @default(0)
+  price       Float
+  discount    Float          @default(0)
+  tax         Float          @default(0)
+  subtotal    Float
+  barang      Barang         @relation(fields: [barangId], references: [id])
+  purchase    OutletPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@index([barangId])
+}
+
+model PurchaseComment {
+  id               Int             @id @default(autoincrement())
+  purchaseId       Int?
+  outletPurchaseId Int?
+  userId           Int
+  comment          String
+  createdAt        DateTime        @default(now())
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  outletPurchase   OutletPurchase? @relation("OutletPurchaseComments", fields: [outletPurchaseId], references: [id], onDelete: Cascade)
+  purchase         Purchase?       @relation("PurchaseComments", fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@index([outletPurchaseId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Payment {
+  id               Int               @id @default(autoincrement())
+  number           String            @unique
+  purchaseId       Int?
+  outletPurchaseId Int?
+  payableId        Int?
+  supplierId       Int
+  paymentDate      DateTime          @default(now())
+  amount           Float             @default(0)
+  method           PaymentMethod     @default(CASH)
+  status           PaymentStatus     @default(PENDING)
+  accountId        Int?
+  referenceNumber  String?
+  note             String?
+  createdBy        Int?
+  approvedBy       Int?
+  approvedAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  account          PettyCashAccount? @relation(fields: [accountId], references: [id])
+  supplier         Supplier          @relation(fields: [supplierId], references: [id])
+  outletPurchase   OutletPurchase?   @relation(fields: [outletPurchaseId], references: [id])
+  purchase         Purchase?         @relation(fields: [purchaseId], references: [id])
+  payable          PurchasePayable?  @relation(fields: [payableId], references: [id], onDelete: SetNull)
+
+  @@index([purchaseId])
+  @@index([outletPurchaseId])
+  @@index([payableId])
+  @@index([supplierId])
+  @@index([accountId])
+  @@index([paymentDate])
+  @@index([status])
+  @@index([method])
+}
+
+model PettyCash {
+  id            Int               @id @default(autoincrement())
+  number        String            @unique
+  trxDate       DateTime          @default(now())
+  type          PettyCashType
+  category      String
+  description   String?
+  amount        Float             @default(0)
+  balanceBefore Float             @default(0)
+  balanceAfter  Float             @default(0)
+  accountId     Int?
+  paymentId     Int?
+  outletId      Int?
+  createdBy     Int?
+  approvedBy    Int?
+  status        PettyCashStatus   @default(PENDING)
+  approvedAt    DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  outlet        Outlet?           @relation(fields: [outletId], references: [id])
+  account       PettyCashAccount? @relation(fields: [accountId], references: [id])
+
+  @@index([accountId])
+  @@index([trxDate])
+  @@index([type])
+  @@index([category])
+  @@index([paymentId])
+  @@index([outletId])
+  @@index([status])
+}
+
+model PettyCashAccount {
+  id             Int         @id @default(autoincrement())
+  code           String      @unique
+  name           String
+  openingBalance Float       @default(0)
+  currentBalance Float       @default(0)
+  isActive       Boolean     @default(true)
+  outletId       Int?        @unique
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  payments       Payment[]
+  transactions   PettyCash[]
+  outlet         Outlet?     @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@index([code])
+  @@index([isActive])
+  @@index([outletId])
+}
+
+model OutletReceipt {
+  id            Int      @id @default(autoincrement())
+  number        String   @unique
+  purchaseId    Int
+  outletId      Int
+  supplierId    Int
+  receiptDate   DateTime @default(now())
+  invoiceNumber String?
+  remarks       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  supplier Supplier            @relation(fields: [supplierId], references: [id])
+  outlet   Outlet              @relation(fields: [outletId], references: [id])
+  purchase OutletPurchase      @relation(fields: [purchaseId], references: [id])
+  items    OutletReceiptItem[]
+
+  @@index([outletId])
+  @@index([purchaseId])
+  @@index([invoiceNumber])
+}
+
+model OutletReceiptItem {
+  id        Int           @id @default(autoincrement())
+  receiptId Int
+  barangId  Int
+  qty       Float
+  price     Float
+  subtotal  Float
+  barang    Barang        @relation(fields: [barangId], references: [id])
+  receipt   OutletReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  @@index([receiptId])
+  @@index([barangId])
+}
+
+model OutletStock {
+  id           Int      @id @default(autoincrement())
+  outletId     Int
+  barangId     Int
+  stock        Float    @default(0)
+  minimumStock Float    @default(0)
+  averageCost  Float    @default(0)
+  updatedAt    DateTime @updatedAt
+  barang       Barang   @relation(fields: [barangId], references: [id])
+  outlet       Outlet   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@unique([outletId, barangId])
+  @@index([outletId])
+  @@index([barangId])
+}
+
+model OutletBarang {
+  id        Int      @id @default(autoincrement())
+  outletId  Int
+  barangId  Int
+  harga     Float?   @default(0)
+  aktif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  barang    Barang   @relation(fields: [barangId], references: [id], onDelete: Cascade)
+  outlet    Outlet   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@unique([outletId, barangId])
+}
+
+model OutletSale {
+  id            Int              @id @default(autoincrement())
+  number        String           @unique
+  outletId      Int
+  userId        Int?
+  customerName  String?
+  saleDate      DateTime         @default(now())
+  subtotal      Float            @default(0)
+  discount      Float            @default(0)
+  total         Float            @default(0)
+  paidAmount    Float            @default(0)
+  changeAmount  Float            @default(0)
+  paymentMethod String           @default("CASH")
+  status        OutletSaleStatus @default(PAID)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  voidedAt      DateTime?
+  voidedBy      Int?
+  voidReason    String?
+  voidedById    Int?
+  user          User?            @relation(fields: [userId], references: [id])
+  outlet        Outlet           @relation(fields: [outletId], references: [id])
+  items         OutletSaleItem[]
+
+  @@index([outletId])
+  @@index([userId])
+  @@index([saleDate])
+  @@index([status])
+}
+
+model OutletSaleItem {
+  id        Int        @id @default(autoincrement())
+  saleId    Int
+  barangId  Int?
+  menuId    Int?
+  qty       Float
+  unitPrice Float
+  subtotal  Float
+  menu      Menu?      @relation(fields: [menuId], references: [id])
+  barang    Barang?    @relation(fields: [barangId], references: [id])
+  sale      OutletSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([barangId])
+  @@index([menuId])
+}
+
+model Receipt {
+  id            Int      @id @default(autoincrement())
+  number        String   @unique
+  purchaseId    Int
+  supplierId    Int
+  receiptDate   DateTime @default(now())
+  invoiceNumber String?
+  remarks       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  supplier Supplier      @relation(fields: [supplierId], references: [id])
+  purchase Purchase      @relation(fields: [purchaseId], references: [id])
+  items    ReceiptItem[]
+
+  @@index([purchaseId])
+  @@index([invoiceNumber])
+}
+
+model ReceiptItem {
+  id        Int     @id @default(autoincrement())
+  receiptId Int
+  barangId  Int
+  qty       Float
+  price     Float
+  subtotal  Float
+  barang    Barang  @relation(fields: [barangId], references: [id])
+  receipt   Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+}
+
+model Delivery {
+  id           Int            @id @default(autoincrement())
+  number       String         @unique
+  customerId   Int
+  outletId     Int?
+  deliveryDate DateTime       @default(now())
+  status       DeliveryStatus @default(DRAFT)
+  remarks      String?
+  totalQty     Float          @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  voidReason   String?
+  voidedAt     DateTime?
+  voidedBy     Int?
+  outlet       Outlet?        @relation(fields: [outletId], references: [id])
+  customer     Customer       @relation(fields: [customerId], references: [id])
+  items        DeliveryItem[]
+  suratJalan   SuratJalan?
+}
+
+model DeliveryItem {
+  id         Int       @id @default(autoincrement())
+  deliveryId Int
+  barangId   Int
+  qty        Float
+  price      Float     @default(0)
+  subtotal   Float     @default(0)
+  note       String?
+  voided     Boolean   @default(false)
+  voidedAt   DateTime?
+  voidedById Int?
+  voidReason String?
+  voidedBy   User?     @relation("DeliveryItemVoidedBy", fields: [voidedById], references: [id])
+  barang     Barang    @relation(fields: [barangId], references: [id])
+  delivery   Delivery  @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId])
+  @@index([barangId])
+  @@index([voided])
+  @@index([voidedById])
+}
+
+model SuratJalan {
+  id            Int       @id @default(autoincrement())
+  number        String    @unique
+  deliveryId    Int       @unique
+  driver        String?
+  vehicleNumber String?
+  expedition    String?
+  receiver      String?
+  receiveDate   DateTime?
+  note          String?
+  printed       Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  delivery      Delivery  @relation(fields: [deliveryId], references: [id])
+}
+
+model StockCard {
+  id          Int      @id @default(autoincrement())
+  barangId    Int
+  trxDate     DateTime @default(now())
+  trxType     String
+  trxNumber   String
+  referenceId Int?
+  warehouse   String?  @default("MAIN")
+  qtyIn       Float    @default(0)
+  qtyOut      Float    @default(0)
+  balance     Float
+  unitPrice   Float    @default(0)
+  totalValue  Float    @default(0)
+  note        String?
+  createdAt   DateTime @default(now())
+  barang      Barang   @relation(fields: [barangId], references: [id])
+
+  @@index([barangId])
+  @@index([trxDate])
+}
+
+model MutationStock {
+  id            Int      @id @default(autoincrement())
+  number        String   @unique
+  barangId      Int
+  fromWarehouse String
+  toWarehouse   String
+  qty           Float
+  mutationDate  DateTime @default(now())
+  note          String?
+  createdAt     DateTime @default(now())
+  barang        Barang   @relation(fields: [barangId], references: [id])
+}
+
+model Inventory {
+  id             Int      @id @default(autoincrement())
+  barangId       Int      @unique
+  warehouse      String   @default("MAIN")
+  stock          Float    @default(0)
+  reservedStock  Float    @default(0)
+  availableStock Float    @default(0)
+  minimumStock   Float    @default(0)
+  maximumStock   Float    @default(0)
+  lastPurchase   Float    @default(0)
+  averageCost    Float    @default(0)
+  updatedAt      DateTime @updatedAt
+  barang         Barang   @relation(fields: [barangId], references: [id])
+}
+
+model StockOpname {
+  id         Int                  @id @default(autoincrement())
+  code       String               @unique
+  date       DateTime             @default(now())
+  type       StockOpnameType      @default(WEEKLY)
+  status     String               @default("COUNTING")
+  createdBy  Int?
+  approvedBy Int?
+  outletId   Int?
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  outlet     Outlet?              @relation(fields: [outletId], references: [id])
+  histories  StockOpnameHistory[]
+  items      StockOpnameItem[]
+
+  @@index([outletId])
+  @@index([type])
+  @@index([status])
+  @@index([date])
+}
+
+model StockOpnameItem {
+  id          Int         @id @default(autoincrement())
+  opnameId    Int
+  barangId    Int
+  systemQty   Float
+  physicalQty Float       @default(0)
+  difference  Float       @default(0)
+  note        String?
+  opname      StockOpname @relation(fields: [opnameId], references: [id], onDelete: Cascade)
+  barang      Barang      @relation(fields: [barangId], references: [id])
+}
+
+model Adjustment {
+  id             Int              @id @default(autoincrement())
+  number         String           @unique
+  adjustmentDate DateTime         @default(now())
+  warehouse      String           @default("MAIN")
+  type           String           @default("IN")
+  reason         String?
+  remarks        String?
+  status         String           @default("DRAFT")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  items          AdjustmentItem[]
+}
+
+model AdjustmentItem {
+  id           Int        @id @default(autoincrement())
+  adjustmentId Int
+  barangId     Int
+  qty          Float
+  price        Float      @default(0)
+  type         String     @default("IN")
+  barang       Barang     @relation(fields: [barangId], references: [id])
+  adjustment   Adjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+}
+
+model History {
+  id              Int         @id @default(autoincrement())
+  transactionType HistoryType
+  referenceNumber String?
+  description     String
+  userId          Int?
+  createdAt       DateTime    @default(now())
+  user            User?       @relation(fields: [userId], references: [id])
+}
+
+model Employee {
+  id          Int          @id @default(autoincrement())
+  nik         String       @unique
+  name        String
+  gender      String?
+  position    String
+  department  String?
+  phone       String?
+  address     String?
+  photo       String?
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  attendances Attendance[]
+}
+
+model Attendance {
+  id         Int       @id @default(autoincrement())
+  employeeId Int
+  date       DateTime  @default(now())
+  checkIn    DateTime?
+  checkOut   DateTime?
+  photoIn    String?
+  photoOut   String?
+  note       String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model BatchStock {
+  id          Int      @id @default(autoincrement())
+  barangId    Int
+  batchNumber String
+  expiredDate DateTime
+  qty         Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  barang      Barang   @relation(fields: [barangId], references: [id], onDelete: Cascade)
+
+  @@index([barangId])
+}
+
+model StockMutation {
+  id          Int      @id @default(autoincrement())
+  outletId    Int?
+  barangId    Int
+  type        String
+  qty         Float
+  stockBefore Float
+  stockAfter  Float
+  reference   String?
+  description String?
+  createdAt   DateTime @default(now())
+  outlet      Outlet?  @relation(fields: [outletId], references: [id], onDelete: SetNull)
+  barang      Barang   @relation(fields: [barangId], references: [id])
+
+  @@index([outletId])
+  @@index([barangId])
+}
+
+model Company {
+  id         Int      @id @default(autoincrement())
+  name       String
+  logo       String?
+  address    String?
+  city       String?
+  province   String?
+  postalCode String?
+  phone      String?
+  email      String?
+  website    String?
+  npwp       String?
+  director   String?
+  footer     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model DocumentNumber {
+  id         Int      @id @default(autoincrement())
+  type       String
+  prefix     String
+  period     String
+  lastNumber Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([type, period])
+}
+
+model StockOpnameHistory {
+  id          Int         @id @default(autoincrement())
+  opnameId    Int
+  barangId    Int
+  systemQty   Float
+  physicalQty Float
+  difference  Float
+  createdBy   Int?
+  createdAt   DateTime    @default(now())
+  opname      StockOpname @relation(fields: [opnameId], references: [id], onDelete: Cascade)
+  barang      Barang      @relation(fields: [barangId], references: [id])
+}
+
+model MasterHarga {
+  id             Int       @id @default(autoincrement())
+  barangId       Int
+  supplierId     Int
+  purchaseId     Int?
+  purchaseItemId Int?
+  poNumber       String?
+  hargaLama      Float
+  hargaBaru      Float
+  selisihHarga   Float     @default(0)
+  persenNaik     Float     @default(0)
+  qty            Float     @default(0)
+  total          Float     @default(0)
+  akumulasi      Float     @default(0)
+  status         String
+  receiveDate    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  supplier       Supplier  @relation(fields: [supplierId], references: [id])
+  barang         Barang    @relation(fields: [barangId], references: [id])
+
+  @@index([barangId])
+  @@index([supplierId])
+}
+
+model PurchasePayable {
+  id               Int             @id @default(autoincrement())
+  purchaseId       Int?            @unique
+  outletPurchaseId Int?            @unique
+  supplierId       Int
+  outletId         Int?
+  invoiceNumber    String
+  invoiceDate      DateTime
+  dueDate          DateTime?
+  amount           Float           @default(0)
+  paidAmount       Float           @default(0)
+  outstanding      Float           @default(0)
+  status           String          @default("OUTSTANDING")
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  outlet           Outlet?         @relation(fields: [outletId], references: [id])
+  supplier         Supplier        @relation(fields: [supplierId], references: [id])
+  outletPurchase   OutletPurchase? @relation(fields: [outletPurchaseId], references: [id])
+  purchase         Purchase?       @relation(fields: [purchaseId], references: [id])
+  payments         Payment[]
+
+  @@index([purchaseId])
+  @@index([outletPurchaseId])
+  @@index([supplierId])
+  @@index([outletId])
+  @@index([status])
+}
+
+model PriceSummary {
+  id              Int       @id @default(autoincrement())
+  barangId        Int       @unique
+  supplierId      Int?
+  lastPrice       Float     @default(0)
+  averagePrice    Float     @default(0)
+  highestPrice    Float     @default(0)
+  lowestPrice     Float     @default(0)
+  totalPurchase   Float     @default(0)
+  lastReceiveDate DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  supplier        Supplier? @relation(fields: [supplierId], references: [id])
+  barang          Barang    @relation(fields: [barangId], references: [id])
+
+  @@index([supplierId])
+}
+
+model OutletTransferItem {
+  id          Int   @id @default(autoincrement())
+  transferId  Int
+  barangId    Int
+  qty         Float
+  receivedQty Float @default(0)
+
+  // VOID ITEM
+  voided     Boolean   @default(false)
+  voidedAt   DateTime?
+  voidedById Int?
+  voidReason String?
+
+  barang   Barang         @relation(fields: [barangId], references: [id])
+  transfer OutletTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
+  @@index([transferId])
+  @@index([barangId])
+  @@index([voided])
+}
+
+model ChatConversation {
+  id           Int               @id @default(autoincrement())
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  messages     ChatMessage[]
+  participants ChatParticipant[]
+
+  @@index([updatedAt])
+}
+
+model ChatParticipant {
+  id             Int              @id @default(autoincrement())
+  conversationId Int
+  userId         Int
+  lastReadAt     DateTime?
+  createdAt      DateTime         @default(now())
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@index([conversationId])
+}
+
+model ChatMessage {
+  id             Int              @id @default(autoincrement())
+  conversationId Int
+  senderId       Int
+  message        String
+  createdAt      DateTime         @default(now())
+  readAt         DateTime?
+  sender         User             @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@index([readAt])
+}
+
+model Menu {
+  id          Int              @id @default(autoincrement())
+  code        String           @unique(map: "sqlite_autoindex_Menu_1")
+  name        String
+  category    String?
+  description String?
+  image       String?
+  price       Float            @default(0)
+  active      Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  saleItems   OutletSaleItem[]
+  recipes     Recipe[]
+
+  @@index([category])
+  @@index([active])
+}
+
+model ProductCK {
+  id             Int      @id @default(autoincrement())
+  code           String   @unique(map: "sqlite_autoindex_ProductCK_1")
+  name           String
+  description    String?
+  outputBarangId Int      @unique(map: "sqlite_autoindex_ProductCK_2")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  outputBarang   Barang   @relation("ProductCKOutput", fields: [outputBarangId], references: [id])
+  recipes        Recipe[]
+
+  @@index([active])
+}
+
+model Recipe {
+  id             Int                @id @default(autoincrement())
+  code           String             @unique(map: "sqlite_autoindex_Recipe_1")
+  name           String
+  outletId       Int?
+  menuId         Int?
+  productCkId    Int?
+  outputBarangId Int?
+  outputQty      Float              @default(1)
+  notes          String?
+  active         Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  orders         ManufactureOrder[]
+  outputBarang   Barang?            @relation("RecipeOutput", fields: [outputBarangId], references: [id])
+  productCk      ProductCK?         @relation(fields: [productCkId], references: [id])
+  menu           Menu?              @relation(fields: [menuId], references: [id])
+  outlet         Outlet?            @relation(fields: [outletId], references: [id], onDelete: SetNull)
+  items          RecipeItem[]
+
+  @@index([outletId])
+  @@index([menuId])
+  @@index([productCkId])
+  @@index([outputBarangId])
+  @@index([active])
+  @@index([menuId, productCkId])
+}
+
+model RecipeItem {
+  id       Int     @id @default(autoincrement())
+  recipeId Int
+  barangId Int
+  qty      Float
+  unit     String?
+  maxPrice Float?
+  barang   Barang  @relation(fields: [barangId], references: [id])
+  recipe   Recipe  @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@index([recipeId])
+  @@index([barangId])
+}
+
+model ManufactureOrder {
+  id             Int                    @id @default(autoincrement())
+  number         String                 @unique
+  outletId       Int?
+  recipeId       Int
+  plannedQty     Float
+  producedQty    Float                  @default(0)
+  status         String                 @default("PLANNED")
+  productionDate DateTime               @default(now())
+  note           String?
+  createdBy      Int?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  creator        User?                  @relation(fields: [createdBy], references: [id])
+  outlet         Outlet?                @relation(fields: [outletId], references: [id], onDelete: SetNull)
+  recipe         Recipe                 @relation(fields: [recipeId], references: [id])
+  items          ManufactureOrderItem[]
+
+  @@index([outletId])
+  @@index([recipeId])
+  @@index([productionDate])
+  @@index([status])
+  @@index([createdBy])
+}
+
+model ManufactureOrderItem {
+  id         Int              @id @default(autoincrement())
+  orderId    Int
+  barangId   Int
+  plannedQty Float
+  actualQty  Float            @default(0)
+  barang     Barang           @relation(fields: [barangId], references: [id])
+  order      ManufactureOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([barangId])
+}
+
+model StockWaste {
+  id           Int         @id @default(autoincrement())
+  number       String      @unique
+  barangId     Int
+  userId       Int?
+  trxDate      DateTime    @default(now())
+  type         String
+  status       WasteStatus @default(PENDING)
+  qtyProcessed Float
+  wasteQty     Float       @default(0)
+  netQty       Float       @default(0)
+  unitCost     Float       @default(0)
+  totalCost    Float       @default(0)
+  note         String?
+  approvedBy   Int?
+  approvedAt   DateTime?
+  user         User?       @relation(fields: [userId], references: [id])
+  barang       Barang      @relation(fields: [barangId], references: [id])
+
+  @@index([barangId])
+  @@index([trxDate])
+  @@index([type])
+  @@index([status])
+}
+
+model OutletAdjustment {
+  id             Int      @id @default(autoincrement())
+  number         String   @unique
+  outletId       Int
+  adjustmentDate DateTime @default(now())
+  type           String   @default("IN")
+  reason         String?
+  remarks        String?
+  status         String   @default("DRAFT")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  outlet Outlet                 @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  items  OutletAdjustmentItem[]
+
+  @@index([outletId])
+  @@index([adjustmentDate])
+  @@index([status])
+}
+
+model OutletAdjustmentItem {
+  id                 Int    @id @default(autoincrement())
+  outletAdjustmentId Int
+  barangId           Int
+  qty                Float
+  price              Float  @default(0)
+  type               String @default("IN")
+
+  adjustment OutletAdjustment @relation(fields: [outletAdjustmentId], references: [id], onDelete: Cascade)
+  barang     Barang           @relation(fields: [barangId], references: [id])
+
+  @@index([outletAdjustmentId])
+  @@index([barangId])
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  PURCHASING
+  GUDANG
+  OUTLET_ADMIN
+  KASIR
+}
+
+enum BarangSource {
+  CENTRAL
+  OUTLET
+}
+
+enum PurchaseStatus {
+  DRAFT
+  APPROVED
+  RECEIVED
+}
+
+enum DeliveryStatus {
+  DRAFT
+  RELEASED
+  DELIVERED
+  VOID
+}
+
+enum AdjustmentType {
+  PLUS
+  MINUS
+}
+
+enum HistoryType {
+  MASTER_CREATE
+  STOCK_IN
+  STOCK_OUT
+  ADJUSTMENT
+  PURCHASE
+  RECEIPT
+  DELIVERY
+  STOCK_OPNAME
+}
+
+enum OutletPurchaseStatus {
+  DRAFT
+  APPROVED
+  RECEIVED
+}
+
+enum OutletTransferStatus {
+  SENT
+  PARTIAL
+  RECEIVED
+}
+
+enum WasteStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum StockOpnameType {
+  WEEKLY
+  MONTHLY
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  COD
+  CBD
+  TEMPO
+}
+
+enum OutletSaleStatus {
+  PAID
+  VOID
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+  CANCELLED
+}
+
+enum PettyCashType {
+  IN
+  OUT
+}
+
+enum PettyCashStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}

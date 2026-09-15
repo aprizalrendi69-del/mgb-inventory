@@ -1,0 +1,3 @@
+-- No-op.
+-- The final OutletSaleItem structure and POS void audit fields
+-- are created by 20260826000100_add_outlet_pos.

@@ -1,0 +1,1846 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+import {
+  FileText,
+  Search,
+  FileDown,
+  FileSpreadsheet,
+  Printer,
+  RefreshCw,
+  ShoppingCart,
+  CheckCircle2,
+  Clock3,
+  XCircle,
+  CalendarDays,
+  X,
+  Package,
+  TrendingUp,
+  ReceiptText,
+  ChevronRight,
+} from "lucide-react";
+
+import {
+  exportPurchaseReportPdf,
+} from "@/lib/exportReportPdf";
+
+import {
+  exportReportExcel,
+} from "@/lib/exportReportExcel";
+
+import {
+  printTable,
+} from "@/lib/print";
+
+type PurchaseItem = {
+  id: number;
+  barangId: number | null;
+  kode: string;
+  nama: string;
+  satuan: string;
+  qty: number;
+  harga: number;
+  subtotal: number;
+};
+
+type Purchase = {
+  id: number;
+  number: string;
+  date: string;
+  supplier: string;
+  status: string;
+  total: number;
+  items: PurchaseItem[];
+};
+
+export default function LaporanPurchase() {
+  const [data, setData] = useState<Purchase[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  // =====================================================
+  // LOAD DATA
+  // =====================================================
+
+  async function loadData() {
+    try {
+      setLoading(true);
+
+      const res = await fetch("/api/laporan/purchase", {
+        cache: "no-store",
+      });
+
+      const result = await res.json();
+
+      console.log("LAPORAN PURCHASE:", result);
+
+      if (result.success) {
+        setData(result.data ?? []);
+      } else {
+        setData([]);
+      }
+    } catch (error) {
+      console.error(
+        "Gagal mengambil laporan purchase:",
+        error
+      );
+
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // =====================================================
+  // FORMAT
+  // =====================================================
+
+  function formatNumber(value: any) {
+    return Number(value ?? 0).toLocaleString("id-ID");
+  }
+
+  function formatCurrency(value: any) {
+    return `Rp ${formatNumber(value)}`;
+  }
+
+  function formatDate(value: string) {
+    if (!value) return "-";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+
+    return date.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  function formatDateLong(value: string) {
+    if (!value) return "-";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+
+    return date.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+  // =====================================================
+  // STATUS
+  // =====================================================
+
+  function getStatusValue(status: string) {
+    return String(status ?? "").toUpperCase();
+  }
+
+  function getStatusLabel(status: string) {
+    switch (getStatusValue(status)) {
+      case "DRAFT":
+        return "Draft";
+
+      case "APPROVED":
+        return "Approved";
+
+      case "RECEIVED":
+        return "Received";
+
+      case "CANCELLED":
+        return "Cancelled";
+
+      default:
+        return status || "-";
+    }
+  }
+
+  function getStatusClass(status: string) {
+    switch (getStatusValue(status)) {
+      case "APPROVED":
+        return "border-blue-200 bg-blue-50 text-blue-700";
+
+      case "RECEIVED":
+        return "border-emerald-200 bg-emerald-50 text-emerald-700";
+
+      case "DRAFT":
+        return "border-slate-200 bg-slate-50 text-slate-600";
+
+      case "CANCELLED":
+        return "border-red-200 bg-red-50 text-red-700";
+
+      default:
+        return "border-slate-200 bg-slate-50 text-slate-600";
+    }
+  }
+
+  function getStatusIcon(status: string) {
+    switch (getStatusValue(status)) {
+      case "APPROVED":
+        return <CheckCircle2 size={13} />;
+
+      case "RECEIVED":
+        return <CheckCircle2 size={13} />;
+
+      case "DRAFT":
+        return <Clock3 size={13} />;
+
+      case "CANCELLED":
+        return <XCircle size={13} />;
+
+      default:
+        return <Clock3 size={13} />;
+    }
+  }
+
+  // =====================================================
+  // FILTER
+  // =====================================================
+
+  const filteredData = useMemo(() => {
+    const keyword = search.toLowerCase().trim();
+
+    return data.filter((item) => {
+      const matchesSearch =
+        !keyword ||
+        item.number?.toLowerCase().includes(keyword) ||
+        item.supplier?.toLowerCase().includes(keyword) ||
+        item.items?.some(
+          (barang) =>
+            barang.kode?.toLowerCase().includes(keyword) ||
+            barang.nama?.toLowerCase().includes(keyword)
+        );
+
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        getStatusValue(item.status) === statusFilter;
+
+      const itemDate = item.date
+        ? new Date(item.date)
+            .toISOString()
+            .split("T")[0]
+        : "";
+
+      const matchesStart =
+        !startDate || itemDate >= startDate;
+
+      const matchesEnd =
+        !endDate || itemDate <= endDate;
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesStart &&
+        matchesEnd
+      );
+    });
+  }, [
+    data,
+    search,
+    statusFilter,
+    startDate,
+    endDate,
+  ]);
+
+  // =====================================================
+  // SUMMARY
+  // =====================================================
+
+  const totalPurchase = useMemo(() => {
+    return filteredData.reduce(
+      (sum, item) =>
+        sum + Number(item.total ?? 0),
+      0
+    );
+  }, [filteredData]);
+
+  const totalDraft = useMemo(() => {
+    return filteredData.filter(
+      (item) =>
+        getStatusValue(item.status) === "DRAFT"
+    ).length;
+  }, [filteredData]);
+
+  const totalApproved = useMemo(() => {
+    return filteredData.filter(
+      (item) =>
+        getStatusValue(item.status) === "APPROVED"
+    ).length;
+  }, [filteredData]);
+
+  const totalReceived = useMemo(() => {
+    return filteredData.filter(
+      (item) =>
+        getStatusValue(item.status) === "RECEIVED"
+    ).length;
+  }, [filteredData]);
+
+  const totalItems = useMemo(() => {
+    return filteredData.reduce(
+      (sum, purchase) =>
+        sum +
+        (purchase.items ?? []).reduce(
+          (itemSum, item) =>
+            itemSum + Number(item.qty ?? 0),
+          0
+        ),
+      0
+    );
+  }, [filteredData]);
+
+  const totalJenisBarang = useMemo(() => {
+    return filteredData.reduce(
+      (sum, purchase) =>
+        sum + (purchase.items?.length ?? 0),
+      0
+    );
+  }, [filteredData]);
+
+  // =====================================================
+  // EXPORT
+  // =====================================================
+
+  const columns = [
+    "No",
+    "No PO",
+    "Tanggal",
+    "Supplier",
+    "Status",
+    "Kode Barang",
+    "Nama Barang",
+    "Satuan",
+    "Qty",
+    "Harga",
+    "Subtotal",
+  ];
+
+  const purchaseRows = useMemo(() => {
+    const result: any[][] = [];
+
+    filteredData.forEach((purchase) => {
+      const items = purchase.items ?? [];
+
+      if (items.length === 0) {
+        result.push([
+          1,
+          purchase.number ?? "-",
+          formatDate(purchase.date),
+          purchase.supplier ?? "-",
+          getStatusLabel(purchase.status),
+          "-",
+          "Tidak ada detail barang",
+          "-",
+          0,
+          0,
+          0,
+        ]);
+
+        return;
+      }
+
+      items.forEach((barang, index) => {
+        result.push([
+          index + 1,
+          purchase.number ?? "-",
+          formatDate(purchase.date),
+          purchase.supplier ?? "-",
+          getStatusLabel(purchase.status),
+          barang.kode ?? "-",
+          barang.nama ?? "-",
+          barang.satuan ?? "-",
+          Number(barang.qty ?? 0),
+          Number(barang.harga ?? 0),
+          Number(barang.subtotal ?? 0),
+        ]);
+      });
+    });
+
+    return result;
+  }, [filteredData]);
+
+  const summaryRows = useMemo(() => {
+    return filteredData.map((item, index) => [
+      index + 1,
+      item.number ?? "-",
+      formatDate(item.date),
+      item.supplier ?? "-",
+      getStatusLabel(item.status),
+      formatCurrency(item.total),
+    ]);
+  }, [filteredData]);
+
+  function handleExportPdf() {
+    if (purchaseRows.length === 0) return;
+
+    exportPurchaseReportPdf(
+      "Laporan Purchase Order",
+      columns,
+      purchaseRows
+    );
+  }
+
+  function handleExportExcel() {
+    if (summaryRows.length === 0) return;
+
+    exportReportExcel(
+      "Laporan Purchase Order",
+      [
+        "No",
+        "No PO",
+        "Tanggal",
+        "Supplier",
+        "Status",
+        "Total",
+      ],
+      summaryRows
+    );
+  }
+
+  function handlePrint() {
+    if (summaryRows.length === 0) return;
+
+    printTable(
+      [
+        "No",
+        "No PO",
+        "Tanggal",
+        "Supplier",
+        "Status",
+        "Total",
+      ],
+      summaryRows
+    );
+  }
+
+  function resetFilter() {
+    setSearch("");
+    setStatusFilter("ALL");
+    setStartDate("");
+    setEndDate("");
+  }
+
+  // =====================================================
+  // LOADING
+  // =====================================================
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[65vh] items-center justify-center">
+        <div className="flex flex-col items-center">
+          <div
+            className="
+              relative
+              flex
+              h-16
+              w-16
+              items-center
+              justify-center
+              rounded-2xl
+              bg-[#18352D]
+              text-white
+              shadow-xl
+            "
+          >
+            <span
+              className="
+                absolute
+                inset-0
+                rounded-2xl
+                border
+                border-[#497F70]/30
+              "
+            />
+
+            <RefreshCw
+              size={25}
+              className="animate-spin"
+            />
+          </div>
+
+          <p className="mt-4 text-sm font-semibold text-[#18352D]">
+            Memuat laporan purchase
+          </p>
+
+          <p className="mt-1 text-xs text-gray-400">
+            Menyiapkan data transaksi...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // =====================================================
+  // PAGE
+  // =====================================================
+
+  return (
+    <div className="min-h-full space-y-6 pb-10">
+
+      {/* ================================================= */}
+      {/* PREMIUM HERO */}
+      {/* ================================================= */}
+
+      <section
+        className="
+          relative
+          overflow-hidden
+          rounded-3xl
+          bg-[#18352D]
+          px-6
+          py-7
+          shadow-[0_18px_50px_rgba(24,53,45,0.16)]
+          md:px-8
+          md:py-8
+        "
+      >
+        {/* decorative */}
+        <div
+          className="
+            pointer-events-none
+            absolute
+            -right-20
+            -top-24
+            h-64
+            w-64
+            rounded-full
+            border-[35px]
+            border-white/5
+          "
+        />
+
+        <div
+          className="
+            pointer-events-none
+            absolute
+            -bottom-28
+            right-24
+            h-48
+            w-48
+            rounded-full
+            bg-[#497F70]/20
+            blur-3xl
+          "
+        />
+
+        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+
+          <div className="flex items-start gap-4">
+
+            <div
+              className="
+                flex
+                h-14
+                w-14
+                shrink-0
+                items-center
+                justify-center
+                rounded-2xl
+                bg-white/10
+                text-white
+                ring-1
+                ring-white/15
+                backdrop-blur-sm
+              "
+            >
+              <ReceiptText size={27} />
+            </div>
+
+            <div>
+              <div className="mb-1 flex items-center gap-2">
+                <span
+                  className="
+                    rounded-full
+                    border
+                    border-white/10
+                    bg-white/10
+                    px-2.5
+                    py-1
+                    text-[10px]
+                    font-bold
+                    uppercase
+                    tracking-[0.18em]
+                    text-[#BFDCD2]
+                  "
+                >
+                  MGB ERP
+                </span>
+
+                <span className="text-xs text-white/40">
+                  /
+                </span>
+
+                <span className="text-xs font-medium text-white/55">
+                  Procurement
+                </span>
+              </div>
+
+              <h1 className="text-2xl font-bold tracking-tight text-white md:text-3xl">
+                Laporan Purchase
+              </h1>
+
+              <p className="mt-1.5 max-w-2xl text-sm leading-6 text-white/60">
+                Monitoring Purchase Order, supplier,
+                detail barang, status, dan nilai pembelian
+                secara terpusat.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+
+            <div
+              className="
+                hidden
+                rounded-2xl
+                border
+                border-white/10
+                bg-white/5
+                px-4
+                py-3
+                text-right
+                backdrop-blur-sm
+                sm:block
+              "
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                Purchase Aktif
+              </p>
+
+              <p className="mt-1 text-lg font-bold text-white">
+                {formatNumber(filteredData.length)}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={loadData}
+              disabled={loading}
+              className="
+                inline-flex
+                items-center
+                justify-center
+                gap-2
+                rounded-xl
+                border
+                border-white/10
+                bg-white
+                px-4
+                py-3
+                text-sm
+                font-bold
+                text-[#18352D]
+                shadow-lg
+                transition
+                hover:-translate-y-0.5
+                hover:bg-[#F5FAF7]
+                disabled:cursor-not-allowed
+                disabled:opacity-60
+              "
+            >
+              <RefreshCw size={16} />
+              Refresh
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ================================================= */}
+      {/* KPI */}
+      {/* ================================================= */}
+
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+        {/* TOTAL */}
+
+        <div
+          className="
+            group
+            relative
+            overflow-hidden
+            rounded-2xl
+            border
+            border-[#DDE9E4]
+            bg-white
+            p-5
+            shadow-sm
+            transition
+            hover:-translate-y-0.5
+            hover:shadow-md
+          "
+        >
+          <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-[#EAF3EF] blur-2xl" />
+
+          <div className="relative">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                  Total Purchase
+                </p>
+
+                <p className="mt-2 text-3xl font-bold tracking-tight text-[#18352D]">
+                  {formatNumber(filteredData.length)}
+                </p>
+
+                <p className="mt-1 text-xs text-gray-400">
+                  Purchase Order
+                </p>
+              </div>
+
+              <div
+                className="
+                  flex
+                  h-11
+                  w-11
+                  items-center
+                  justify-center
+                  rounded-xl
+                  bg-[#EAF3EF]
+                  text-[#497F70]
+                  transition
+                  group-hover:scale-105
+                "
+              >
+                <ShoppingCart size={20} />
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-end justify-between border-t border-[#EDF2EF] pt-4">
+              <div>
+                <p className="text-[11px] text-gray-400">
+                  Nilai pembelian
+                </p>
+
+                <p className="mt-1 text-sm font-bold text-[#497F70]">
+                  {formatCurrency(totalPurchase)}
+                </p>
+              </div>
+
+              <TrendingUp
+                size={16}
+                className="text-[#497F70]"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* DRAFT */}
+
+        <div
+          className="
+            group
+            rounded-2xl
+            border
+            border-[#DDE9E4]
+            bg-white
+            p-5
+            shadow-sm
+            transition
+            hover:-translate-y-0.5
+            hover:shadow-md
+          "
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                Draft
+              </p>
+
+              <p className="mt-2 text-3xl font-bold tracking-tight text-[#18352D]">
+                {formatNumber(totalDraft)}
+              </p>
+
+              <p className="mt-1 text-xs text-gray-400">
+                Belum disetujui
+              </p>
+            </div>
+
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+              <Clock3 size={20} />
+            </div>
+          </div>
+
+          <div className="mt-5 border-t border-[#EDF2EF] pt-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-400">
+                Status
+              </span>
+
+              <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-500">
+                DRAFT
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* APPROVED */}
+
+        <div
+          className="
+            group
+            rounded-2xl
+            border
+            border-[#DDE9E4]
+            bg-white
+            p-5
+            shadow-sm
+            transition
+            hover:-translate-y-0.5
+            hover:shadow-md
+          "
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                Approved
+              </p>
+
+              <p className="mt-2 text-3xl font-bold tracking-tight text-[#18352D]">
+                {formatNumber(totalApproved)}
+              </p>
+
+              <p className="mt-1 text-xs text-gray-400">
+                Purchase disetujui
+              </p>
+            </div>
+
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <CheckCircle2 size={20} />
+            </div>
+          </div>
+
+          <div className="mt-5 border-t border-[#EDF2EF] pt-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-400">
+                Status
+              </span>
+
+              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600">
+                APPROVED
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* RECEIVED */}
+
+        <div
+          className="
+            group
+            rounded-2xl
+            border
+            border-[#DDE9E4]
+            bg-white
+            p-5
+            shadow-sm
+            transition
+            hover:-translate-y-0.5
+            hover:shadow-md
+          "
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                Received
+              </p>
+
+              <p className="mt-2 text-3xl font-bold tracking-tight text-[#18352D]">
+                {formatNumber(totalReceived)}
+              </p>
+
+              <p className="mt-1 text-xs text-gray-400">
+                Barang sudah diterima
+              </p>
+            </div>
+
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+              <CheckCircle2 size={20} />
+            </div>
+          </div>
+
+          <div className="mt-5 border-t border-[#EDF2EF] pt-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-400">
+                Total Qty
+              </span>
+
+              <span className="font-bold text-[#497F70]">
+                {formatNumber(totalItems)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ================================================= */}
+      {/* FILTER + EXPORT */}
+      {/* ================================================= */}
+
+      <section
+        className="
+          overflow-hidden
+          rounded-2xl
+          border
+          border-[#DDE9E4]
+          bg-white
+          shadow-sm
+        "
+      >
+        <div className="border-b border-[#EDF2EF] px-5 py-5 md:px-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+
+            <div className="w-full xl:max-w-2xl">
+              <div className="mb-2 flex items-center gap-2">
+                <Search
+                  size={15}
+                  className="text-[#497F70]"
+                />
+
+                <label className="text-xs font-bold uppercase tracking-wider text-[#35564C]">
+                  Pencarian
+                </label>
+              </div>
+
+              <div className="relative">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) =>
+                    setSearch(e.target.value)
+                  }
+                  placeholder="Cari No PO, supplier, kode atau nama barang..."
+                  className="
+                    h-12
+                    w-full
+                    rounded-xl
+                    border
+                    border-[#D5E5DC]
+                    bg-[#FAFCFB]
+                    pl-11
+                    pr-11
+                    text-sm
+                    font-medium
+                    text-gray-700
+                    outline-none
+                    transition
+                    placeholder:text-gray-400
+                    focus:border-[#497F70]
+                    focus:bg-white
+                    focus:ring-4
+                    focus:ring-[#497F70]/5
+                  "
+                />
+
+                <Search
+                  size={17}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="
+                      absolute
+                      right-3
+                      top-1/2
+                      -translate-y-1/2
+                      rounded-lg
+                      p-1.5
+                      text-gray-400
+                      transition
+                      hover:bg-[#EAF3EF]
+                      hover:text-[#497F70]
+                    "
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+
+              <button
+                type="button"
+                onClick={handleExportPdf}
+                disabled={purchaseRows.length === 0}
+                className="
+                  inline-flex
+                  h-12
+                  items-center
+                  justify-center
+                  gap-2
+                  rounded-xl
+                  bg-[#18352D]
+                  px-4
+                  text-sm
+                  font-bold
+                  text-white
+                  shadow-sm
+                  transition
+                  hover:-translate-y-0.5
+                  hover:bg-[#234A40]
+                  disabled:cursor-not-allowed
+                  disabled:opacity-40
+                "
+              >
+                <FileDown size={17} />
+                PDF
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                disabled={summaryRows.length === 0}
+                className="
+                  inline-flex
+                  h-12
+                  items-center
+                  justify-center
+                  gap-2
+                  rounded-xl
+                  border
+                  border-[#D5E5DC]
+                  bg-white
+                  px-4
+                  text-sm
+                  font-bold
+                  text-[#35564C]
+                  transition
+                  hover:-translate-y-0.5
+                  hover:bg-[#F5F8F6]
+                  disabled:cursor-not-allowed
+                  disabled:opacity-40
+                "
+              >
+                <FileSpreadsheet size={17} />
+                Excel
+              </button>
+
+              <button
+                type="button"
+                onClick={handlePrint}
+                disabled={summaryRows.length === 0}
+                className="
+                  inline-flex
+                  h-12
+                  items-center
+                  justify-center
+                  gap-2
+                  rounded-xl
+                  border
+                  border-[#D5E5DC]
+                  bg-white
+                  px-4
+                  text-sm
+                  font-bold
+                  text-[#35564C]
+                  transition
+                  hover:-translate-y-0.5
+                  hover:bg-[#F5F8F6]
+                  disabled:cursor-not-allowed
+                  disabled:opacity-40
+                "
+              >
+                <Printer size={17} />
+                Print
+              </button>
+            </div>
+          </div>
+
+          {/* FILTERS */}
+
+          <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-400">
+                Status
+              </label>
+
+              <select
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value)
+                }
+                className="
+                  h-11
+                  w-full
+                  rounded-xl
+                  border
+                  border-[#D5E5DC]
+                  bg-[#FAFCFB]
+                  px-4
+                  text-sm
+                  font-medium
+                  text-gray-700
+                  outline-none
+                  focus:border-[#497F70]
+                  focus:bg-white
+                  focus:ring-4
+                  focus:ring-[#497F70]/5
+                "
+              >
+                <option value="ALL">
+                  Semua Status
+                </option>
+
+                <option value="DRAFT">
+                  Draft
+                </option>
+
+                <option value="APPROVED">
+                  Approved
+                </option>
+
+                <option value="RECEIVED">
+                  Received
+                </option>
+
+                <option value="CANCELLED">
+                  Cancelled
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-400">
+                Dari Tanggal
+              </label>
+
+              <div className="relative">
+                <CalendarDays
+                  size={16}
+                  className="
+                    absolute
+                    left-3.5
+                    top-1/2
+                    -translate-y-1/2
+                    text-gray-400
+                  "
+                />
+
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) =>
+                    setStartDate(e.target.value)
+                  }
+                  className="
+                    h-11
+                    w-full
+                    rounded-xl
+                    border
+                    border-[#D5E5DC]
+                    bg-[#FAFCFB]
+                    pl-10
+                    pr-4
+                    text-sm
+                    font-medium
+                    text-gray-700
+                    outline-none
+                    focus:border-[#497F70]
+                    focus:bg-white
+                    focus:ring-4
+                    focus:ring-[#497F70]/5
+                  "
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-400">
+                Sampai Tanggal
+              </label>
+
+              <div className="relative">
+                <CalendarDays
+                  size={16}
+                  className="
+                    absolute
+                    left-3.5
+                    top-1/2
+                    -translate-y-1/2
+                    text-gray-400
+                  "
+                />
+
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) =>
+                    setEndDate(e.target.value)
+                  }
+                  className="
+                    h-11
+                    w-full
+                    rounded-xl
+                    border
+                    border-[#D5E5DC]
+                    bg-[#FAFCFB]
+                    pl-10
+                    pr-4
+                    text-sm
+                    font-medium
+                    text-gray-700
+                    outline-none
+                    focus:border-[#497F70]
+                    focus:bg-white
+                    focus:ring-4
+                    focus:ring-[#497F70]/5
+                  "
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* FILTER INFO */}
+
+          <div className="mt-5 flex flex-col gap-3 border-t border-[#EDF2EF] pt-4 sm:flex-row sm:items-center sm:justify-between">
+
+            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+              <span>
+                Menampilkan
+              </span>
+
+              <span className="rounded-full bg-[#EAF3EF] px-2.5 py-1 font-bold text-[#497F70]">
+                {formatNumber(filteredData.length)}
+              </span>
+
+              <span>
+                dari {formatNumber(data.length)} purchase
+              </span>
+
+              <span className="hidden text-gray-300 sm:inline">
+                •
+              </span>
+
+              <span>
+                {formatNumber(totalJenisBarang)} detail barang
+              </span>
+            </div>
+
+            {(search ||
+              statusFilter !== "ALL" ||
+              startDate ||
+              endDate) && (
+              <button
+                type="button"
+                onClick={resetFilter}
+                className="
+                  inline-flex
+                  items-center
+                  gap-1.5
+                  text-xs
+                  font-bold
+                  text-[#497F70]
+                  transition
+                  hover:text-[#18352D]
+                "
+              >
+                <RotateCcwIcon />
+                Reset filter
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* ================================================= */}
+      {/* PURCHASE LIST */}
+      {/* ================================================= */}
+
+      <section
+        className="
+          overflow-hidden
+          rounded-2xl
+          border
+          border-[#DDE9E4]
+          bg-white
+          shadow-sm
+        "
+      >
+
+        {/* SECTION HEADER */}
+
+        <div className="flex flex-col gap-3 border-b border-[#E5ECE9] px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
+
+          <div className="flex items-center gap-3">
+
+            <div
+              className="
+                flex
+                h-10
+                w-10
+                items-center
+                justify-center
+                rounded-xl
+                bg-[#EAF3EF]
+                text-[#497F70]
+              "
+            >
+              <FileText size={18} />
+            </div>
+
+            <div>
+              <h2 className="font-bold text-[#18352D]">
+                Daftar Purchase Order
+              </h2>
+
+              <p className="mt-0.5 text-xs text-gray-400">
+                Purchase Order beserta detail barang
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="rounded-full border border-[#DDE9E4] bg-[#F8FAF9] px-3 py-1.5 text-xs font-bold text-[#497F70]">
+              {formatNumber(filteredData.length)} PO
+            </span>
+
+            <span className="rounded-full border border-[#DDE9E4] bg-[#F8FAF9] px-3 py-1.5 text-xs font-bold text-gray-500">
+              {formatNumber(totalItems)} Qty
+            </span>
+          </div>
+        </div>
+
+        {/* LIST */}
+
+        {filteredData.length === 0 ? (
+          <div className="px-5 py-20 text-center">
+
+            <div
+              className="
+                mx-auto
+                flex
+                h-16
+                w-16
+                items-center
+                justify-center
+                rounded-2xl
+                bg-[#EAF3EF]
+                text-[#497F70]
+              "
+            >
+              <FileText size={27} />
+            </div>
+
+            <p className="mt-4 font-bold text-[#18352D]">
+              Tidak ada data purchase
+            </p>
+
+            <p className="mt-1 text-sm text-gray-400">
+              Coba ubah kata pencarian atau filter
+            </p>
+
+            {(search ||
+              statusFilter !== "ALL" ||
+              startDate ||
+              endDate) && (
+              <button
+                type="button"
+                onClick={resetFilter}
+                className="
+                  mt-5
+                  rounded-xl
+                  bg-[#18352D]
+                  px-4
+                  py-2.5
+                  text-xs
+                  font-bold
+                  text-white
+                  transition
+                  hover:bg-[#234A40]
+                "
+              >
+                Reset Filter
+              </button>
+            )}
+          </div>
+        ) : (
+          <div>
+            {filteredData.map(
+              (item, index) => (
+                <article
+                  key={item.id}
+                  className="
+                    border-b
+                    border-[#E5ECE9]
+                    last:border-b-0
+                  "
+                >
+
+                  {/* PO HEADER */}
+
+                  <div
+                    className="
+                      bg-white
+                      px-5
+                      py-5
+                      transition
+                      hover:bg-[#FCFDFC]
+                      md:px-6
+                    "
+                  >
+
+                    <div
+                      className="
+                        grid
+                        grid-cols-1
+                        gap-5
+                        lg:grid-cols-[48px_minmax(220px,1.35fr)_160px_minmax(200px,1fr)_150px_200px]
+                        lg:items-center
+                      "
+                    >
+
+                      {/* NUMBER */}
+
+                      <div className="hidden lg:block">
+                        <div
+                          className="
+                            flex
+                            h-9
+                            w-9
+                            items-center
+                            justify-center
+                            rounded-xl
+                            bg-[#F4F7F5]
+                            text-xs
+                            font-bold
+                            text-gray-400
+                          "
+                        >
+                          {String(index + 1).padStart(2, "0")}
+                        </div>
+                      </div>
+
+                      {/* PO */}
+
+                      <div className="flex items-center gap-3">
+
+                        <div
+                          className="
+                            flex
+                            h-11
+                            w-11
+                            shrink-0
+                            items-center
+                            justify-center
+                            rounded-xl
+                            bg-[#18352D]
+                            text-white
+                            shadow-sm
+                          "
+                        >
+                          <ShoppingCart size={18} />
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate font-bold text-[#18352D]">
+                              {item.number ?? "-"}
+                            </p>
+
+                            <ChevronRight
+                              size={13}
+                              className="text-gray-300"
+                            />
+                          </div>
+
+                          <p className="mt-0.5 text-[11px] font-medium uppercase tracking-wider text-gray-400">
+                            Purchase Order
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* DATE */}
+
+                      <div>
+                        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                          Tanggal
+                        </p>
+
+                        <p className="text-sm font-semibold text-[#35564C]">
+                          {formatDateLong(item.date)}
+                        </p>
+                      </div>
+
+                      {/* SUPPLIER */}
+
+                      <div>
+                        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                          Supplier
+                        </p>
+
+                        <p className="truncate font-bold text-[#18352D]">
+                          {item.supplier ?? "-"}
+                        </p>
+                      </div>
+
+                      {/* STATUS */}
+
+                      <div>
+                        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 lg:text-center">
+                          Status
+                        </p>
+
+                        <div className="lg:text-center">
+                          <span
+                            className={`
+                              inline-flex
+                              items-center
+                              gap-1.5
+                              rounded-full
+                              border
+                              px-3
+                              py-1.5
+                              text-[11px]
+                              font-bold
+                              ${getStatusClass(item.status)}
+                            `}
+                          >
+                            {getStatusIcon(item.status)}
+                            {getStatusLabel(item.status)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* TOTAL */}
+
+                      <div className="lg:text-right">
+                        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                          Total PO
+                        </p>
+
+                        <p className="text-lg font-bold tracking-tight text-[#497F70]">
+                          {formatCurrency(item.total)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DETAIL */}
+
+                  <div className="bg-[#F7FAF8] px-5 pb-5 md:px-6">
+
+                    <div
+                      className="
+                        overflow-hidden
+                        rounded-2xl
+                        border
+                        border-[#DDE9E4]
+                        bg-white
+                      "
+                    >
+
+                      {/* DETAIL HEADER */}
+
+                      <div
+                        className="
+                          flex
+                          flex-col
+                          gap-3
+                          border-b
+                          border-[#E5ECE9]
+                          bg-[#F9FBFA]
+                          px-4
+                          py-3.5
+                          sm:flex-row
+                          sm:items-center
+                          sm:justify-between
+                        "
+                      >
+
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="
+                              flex
+                              h-8
+                              w-8
+                              items-center
+                              justify-center
+                              rounded-lg
+                              bg-[#EAF3EF]
+                              text-[#497F70]
+                            "
+                          >
+                            <Package size={15} />
+                          </div>
+
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-wider text-[#35564C]">
+                              Detail Barang
+                            </p>
+
+                            <p className="mt-0.5 text-[11px] text-gray-400">
+                              Item pada purchase order
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-[#EAF3EF] px-2.5 py-1 text-[10px] font-bold text-[#497F70]">
+                            {item.items?.length ?? 0} jenis
+                          </span>
+
+                          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-gray-500 ring-1 ring-[#DDE9E4]">
+                            {formatNumber(
+                              (item.items ?? []).reduce(
+                                (sum, row) =>
+                                  sum + Number(row.qty ?? 0),
+                                0
+                              )
+                            )}{" "}
+                            qty
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* TABLE */}
+
+                      <div className="overflow-x-auto">
+                        <table className="min-w-[900px] w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-[#E5ECE9] bg-white">
+                              <th className="w-14 px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                No
+                              </th>
+
+                              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                Kode Barang
+                              </th>
+
+                              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                Nama Barang
+                              </th>
+
+                              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                Satuan
+                              </th>
+
+                              <th className="px-4 py-3.5 text-right text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                Qty
+                              </th>
+
+                              <th className="px-4 py-3.5 text-right text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                Harga
+                              </th>
+
+                              <th className="px-4 py-3.5 text-right text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                Subtotal
+                              </th>
+                            </tr>
+                          </thead>
+
+                          <tbody>
+                            {!item.items ||
+                            item.items.length === 0 ? (
+                              <tr>
+                                <td
+                                  colSpan={7}
+                                  className="px-4 py-8 text-center text-sm text-gray-400"
+                                >
+                                  Tidak ada detail barang
+                                </td>
+                              </tr>
+                            ) : (
+                              item.items.map(
+                                (barang, barangIndex) => (
+                                  <tr
+                                    key={barang.id}
+                                    className="
+                                      border-b
+                                      border-[#EDF2EF]
+                                      last:border-b-0
+                                      transition
+                                      hover:bg-[#FAFCFB]
+                                    "
+                                  >
+                                    <td className="px-4 py-3.5 text-center text-xs font-medium text-gray-400">
+                                      {String(
+                                        barangIndex + 1
+                                      ).padStart(2, "0")}
+                                    </td>
+
+                                    <td className="px-4 py-3.5">
+                                      <span
+                                        className="
+                                          inline-flex
+                                          rounded-lg
+                                          border
+                                          border-[#DDE9E4]
+                                          bg-[#F3F8F5]
+                                          px-2.5
+                                          py-1.5
+                                          font-mono
+                                          text-[11px]
+                                          font-bold
+                                          text-[#497F70]
+                                        "
+                                      >
+                                        {barang.kode ?? "-"}
+                                      </span>
+                                    </td>
+
+                                    <td className="px-4 py-3.5">
+                                      <p className="font-semibold text-[#18352D]">
+                                        {barang.nama ?? "-"}
+                                      </p>
+                                    </td>
+
+                                    <td className="px-4 py-3.5 text-center">
+                                      <span className="text-xs font-medium text-gray-500">
+                                        {barang.satuan ?? "-"}
+                                      </span>
+                                    </td>
+
+                                    <td className="px-4 py-3.5 text-right">
+                                      <span className="font-bold text-[#35564C]">
+                                        {formatNumber(barang.qty)}
+                                      </span>
+                                    </td>
+
+                                    <td className="whitespace-nowrap px-4 py-3.5 text-right text-xs font-medium text-gray-600">
+                                      {formatCurrency(barang.harga)}
+                                    </td>
+
+                                    <td className="whitespace-nowrap px-4 py-3.5 text-right">
+                                      <span className="font-bold text-[#497F70]">
+                                        {formatCurrency(
+                                          barang.subtotal
+                                        )}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                )
+                              )
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* DETAIL FOOTER */}
+
+                      {item.items &&
+                        item.items.length > 0 && (
+                          <div
+                            className="
+                              flex
+                              flex-col
+                              gap-3
+                              border-t
+                              border-[#E5ECE9]
+                              bg-[#F8FAF9]
+                              px-4
+                              py-3.5
+                              sm:flex-row
+                              sm:items-center
+                              sm:justify-between
+                            "
+                          >
+                            <div className="text-xs text-gray-500">
+                              <span className="font-semibold text-[#35564C]">
+                                {item.items.length}
+                              </span>{" "}
+                              jenis barang dalam PO ini
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs text-gray-400">
+                                Total PO
+                              </span>
+
+                              <span className="text-sm font-bold text-[#497F70]">
+                                {formatCurrency(item.total)}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                </article>
+              )
+            )}
+          </div>
+        )}
+
+        {/* ================================================= */}
+        {/* FOOTER */}
+        {/* ================================================= */}
+
+        <div className="border-t border-[#E5ECE9] bg-[#F5F8F6] px-5 py-5 md:px-6">
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                Purchase
+              </p>
+
+              <p className="mt-1 text-sm font-bold text-[#35564C]">
+                {formatNumber(filteredData.length)} PO
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                Total Quantity
+              </p>
+
+              <p className="mt-1 text-sm font-bold text-[#35564C]">
+                {formatNumber(totalItems)} Qty
+              </p>
+            </div>
+
+            <div className="sm:text-right">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                Total Purchase
+              </p>
+
+              <p className="mt-1 text-lg font-bold tracking-tight text-[#497F70]">
+                {formatCurrency(totalPurchase)}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// =====================================================
+// SMALL ICON
+// =====================================================
+
+function RotateCcwIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <path d="M3 4v6h6" />
+    </svg>
+  );
+}

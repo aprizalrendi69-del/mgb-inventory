@@ -1,0 +1,40 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.next
+/out
+
+.env*
+
+npm-debug.log*
+
+# Database
+prisma/dev.db
+prisma/dev.db-journal
+
+# SQLite
+prisma/*.db
+prisma/*.db-journal
+
+# Environment
+.env
+.env.local
+.env.production
+private-key.pem
+digital-certificate.txt
+
+# Upload files
+public/uploads/
+.worktrees/
+
+# Local backups / binaries / build cache
+backups/
+cloudflared.exe
+*.tsbuildinfo
+prisma/*.backup
+prisma/*.sqlite
+prisma/*.sqlite3
+
+# Prisma database backups
+prisma/*.backup*
