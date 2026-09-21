@@ -7,6 +7,15 @@ import {
   Building2,
   Clock3,
   Save,
+  UserRound,
+  Phone,
+  Mail,
+  MapPin,
+  Hash,
+  CreditCard,
+  WalletCards,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 
 type SupplierForm = {
@@ -17,26 +26,70 @@ type SupplierForm = {
   phone: string;
   email: string;
   contactPerson: string;
+  noRekening: string;
+  namaRekening: string;
+  jenisRekening: string;
   tempoDays: number;
 };
+
+const DEFAULT_FORM: SupplierForm = {
+  code: "",
+  name: "",
+  address: "",
+  city: "",
+  phone: "",
+  email: "",
+  contactPerson: "",
+  noRekening: "",
+  namaRekening: "",
+  jenisRekening: "",
+  tempoDays: 30,
+};
+
+const INPUT_CLASS = `
+  w-full rounded-xl
+  border border-slate-200
+  bg-white
+  py-3 pl-10 pr-3
+  text-sm text-slate-900
+  outline-none
+  transition
+  placeholder:text-slate-400
+  hover:border-slate-300
+  focus:border-[#497F70]
+  focus:ring-4
+  focus:ring-[#497F70]/10
+  disabled:cursor-not-allowed
+  disabled:bg-slate-50
+`;
+
+const SELECT_CLASS = `
+  w-full rounded-xl
+  border border-slate-200
+  bg-white
+  py-3 pl-10 pr-10
+  text-sm text-slate-900
+  outline-none
+  transition
+  hover:border-slate-300
+  focus:border-[#497F70]
+  focus:ring-4
+  focus:ring-[#497F70]/10
+  disabled:cursor-not-allowed
+  disabled:bg-slate-50
+`;
 
 export default function NewSupplier() {
   const router = useRouter();
 
   const [form, setForm] =
-    useState<SupplierForm>({
-      code: "",
-      name: "",
-      address: "",
-      city: "",
-      phone: "",
-      email: "",
-      contactPerson: "",
-      tempoDays: 30,
-    });
+    useState<SupplierForm>(DEFAULT_FORM);
 
   const [saving, setSaving] =
     useState(false);
+
+  const [errorMessage, setErrorMessage] =
+    useState("");
 
   // =====================================================
   // CHANGE FORM
@@ -44,7 +97,9 @@ export default function NewSupplier() {
 
   function change(
     e: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement
+      HTMLInputElement |
+        HTMLTextAreaElement |
+        HTMLSelectElement
     >
   ) {
     const { name, value } = e.target;
@@ -59,6 +114,54 @@ export default function NewSupplier() {
             : Number(value)
           : value,
     }));
+
+    if (errorMessage) {
+      setErrorMessage("");
+    }
+  }
+
+  // =====================================================
+  // VALIDATION
+  // =====================================================
+
+  function validate(): boolean {
+    if (!form.code.trim()) {
+      setErrorMessage(
+        "Kode supplier wajib diisi."
+      );
+      return false;
+    }
+
+    if (!form.name.trim()) {
+      setErrorMessage(
+        "Nama supplier wajib diisi."
+      );
+      return false;
+    }
+
+    if (
+      !Number.isInteger(form.tempoDays) ||
+      form.tempoDays < 0
+    ) {
+      setErrorMessage(
+        "Tempo pembayaran harus berupa angka bulat 0 atau lebih."
+      );
+      return false;
+    }
+
+    if (
+      form.email.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        form.email.trim()
+      )
+    ) {
+      setErrorMessage(
+        "Format email supplier tidak valid."
+      );
+      return false;
+    }
+
+    return true;
   }
 
   // =====================================================
@@ -66,30 +169,53 @@ export default function NewSupplier() {
   // =====================================================
 
   async function simpan() {
-    if (!form.code.trim()) {
-      alert("Kode supplier wajib diisi");
-      return;
-    }
+    if (saving) return;
 
-    if (!form.name.trim()) {
-      alert("Nama supplier wajib diisi");
-      return;
-    }
-
-    if (
-      !Number.isInteger(
-        form.tempoDays
-      ) ||
-      form.tempoDays < 0
-    ) {
-      alert(
-        "Tempo pembayaran harus berupa angka bulat 0 atau lebih"
-      );
-      return;
-    }
+    if (!validate()) return;
 
     try {
       setSaving(true);
+      setErrorMessage("");
+
+      const payload = {
+        code: form.code.trim(),
+        name: form.name.trim(),
+
+        address:
+          form.address.trim() || null,
+
+        city:
+          form.city.trim() || null,
+
+        phone:
+          form.phone.trim() || null,
+
+        email:
+          form.email.trim() || null,
+
+        contactPerson:
+          form.contactPerson.trim() || null,
+
+        // =================================================
+        // BANK ACCOUNT
+        // =================================================
+
+        noRekening:
+          form.noRekening.trim() || null,
+
+        namaRekening:
+          form.namaRekening.trim() || null,
+
+        jenisRekening:
+          form.jenisRekening.trim() || null,
+
+        // =================================================
+        // PAYMENT TERM
+        // =================================================
+
+        tempoDays:
+          form.tempoDays,
+      };
 
       const res = await fetch(
         "/api/supplier",
@@ -101,33 +227,7 @@ export default function NewSupplier() {
               "application/json",
           },
 
-          body: JSON.stringify({
-            code: form.code.trim(),
-            name: form.name.trim(),
-
-            address:
-              form.address.trim() ||
-              null,
-
-            city:
-              form.city.trim() ||
-              null,
-
-            phone:
-              form.phone.trim() ||
-              null,
-
-            email:
-              form.email.trim() ||
-              null,
-
-            contactPerson:
-              form.contactPerson.trim() ||
-              null,
-
-            tempoDays:
-              form.tempoDays,
-          }),
+          body: JSON.stringify(payload),
         }
       );
 
@@ -135,15 +235,15 @@ export default function NewSupplier() {
         await res.json();
 
       if (!res.ok || !json.success) {
-        alert(
+        setErrorMessage(
           json.message ||
-            "Supplier gagal disimpan"
+            "Supplier gagal disimpan."
         );
         return;
       }
 
       alert(
-        "Supplier berhasil ditambahkan"
+        "Supplier berhasil ditambahkan."
       );
 
       router.push("/supplier");
@@ -154,8 +254,8 @@ export default function NewSupplier() {
         error
       );
 
-      alert(
-        "Gagal menambahkan supplier"
+      setErrorMessage(
+        "Gagal menambahkan supplier."
       );
     } finally {
       setSaving(false);
@@ -167,228 +267,16 @@ export default function NewSupplier() {
   // =====================================================
 
   return (
-    <div className="min-h-screen bg-[#F8FBF9] p-6 md:p-8">
-      <div className="max-w-3xl mx-auto">
+    <div className="min-h-screen bg-[#F7FAF9] px-4 py-6 md:px-8 md:py-8">
+      <div className="mx-auto max-w-4xl">
 
-        {/* HEADER */}
-        <div className="flex items-center gap-4 mb-6">
+        {/* =================================================
+            TOP HEADER
+        ================================================= */}
 
-          <button
-            type="button"
-            onClick={() =>
-              router.push("/supplier")
-            }
-            className="w-10 h-10 rounded-xl border border-gray-200 bg-white flex items-center justify-center hover:bg-gray-50"
-          >
-            <ArrowLeft
-              size={19}
-              className="text-gray-600"
-            />
-          </button>
+        <div className="mb-6 flex items-center justify-between gap-4">
 
-          <div>
-            <div className="flex items-center gap-2">
-
-              <Building2
-                size={22}
-                className="text-blue-600"
-              />
-
-              <h1 className="text-2xl font-bold text-gray-900">
-                Supplier Baru
-              </h1>
-
-            </div>
-
-            <p className="text-sm text-gray-500 mt-1">
-              Tambahkan supplier baru ke master
-              supplier.
-            </p>
-          </div>
-
-        </div>
-
-        {/* FORM */}
-        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
-
-          <div className="p-6 space-y-5">
-
-            {/* KODE + NAMA */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Kode Supplier
-                </label>
-
-                <input
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
-                  name="code"
-                  value={form.code}
-                  onChange={change}
-                  placeholder="Contoh: SUP-001"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nama Supplier
-                </label>
-
-                <input
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
-                  name="name"
-                  value={form.name}
-                  onChange={change}
-                  placeholder="Nama Supplier"
-                />
-              </div>
-
-            </div>
-
-            {/* PIC + TELEPON */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Contact Person / PIC
-                </label>
-
-                <input
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
-                  name="contactPerson"
-                  value={
-                    form.contactPerson
-                  }
-                  onChange={change}
-                  placeholder="Nama PIC"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Telepon
-                </label>
-
-                <input
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
-                  name="phone"
-                  value={form.phone}
-                  onChange={change}
-                  placeholder="Nomor Telepon"
-                />
-              </div>
-
-            </div>
-
-            {/* EMAIL + KOTA */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email
-                </label>
-
-                <input
-                  type="email"
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
-                  name="email"
-                  value={form.email}
-                  onChange={change}
-                  placeholder="Email Supplier"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Kota
-                </label>
-
-                <input
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
-                  name="city"
-                  value={form.city}
-                  onChange={change}
-                  placeholder="Kota"
-                />
-              </div>
-
-            </div>
-
-            {/* ALAMAT */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Alamat
-              </label>
-
-              <textarea
-                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px] resize-y"
-                name="address"
-                value={form.address}
-                onChange={change}
-                placeholder="Alamat Supplier"
-              />
-            </div>
-
-            {/* TEMPO */}
-            <div className="border border-blue-100 bg-blue-50 rounded-xl p-4">
-
-              <div className="flex items-start gap-3">
-
-                <Clock3
-                  size={20}
-                  className="text-blue-600 mt-0.5"
-                />
-
-                <div className="flex-1">
-
-                  <label className="block text-sm font-semibold text-gray-800 mb-1">
-                    Tempo Pembayaran
-                  </label>
-
-                  <p className="text-xs text-gray-500 mb-3">
-                    Jatuh tempo dihitung sejak
-                    tanggal barang diterima
-                    (receipt), bukan dari tanggal
-                    PO.
-                  </p>
-
-                  <div className="flex items-center gap-3">
-
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      name="tempoDays"
-                      value={form.tempoDays}
-                      onChange={change}
-                      className="w-32 border border-gray-300 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-
-                    <span className="text-sm text-gray-600">
-                      hari
-                    </span>
-
-                  </div>
-
-                  <div className="mt-3 text-xs text-gray-500">
-
-                    {form.tempoDays === 0
-                      ? "0 hari = COD / jatuh tempo pada hari penerimaan."
-                      : `Jatuh tempo ${form.tempoDays} hari setelah barang diterima.`}
-
-                  </div>
-
-                </div>
-
-              </div>
-
-            </div>
-
-          </div>
-
-          {/* FOOTER */}
-          <div className="border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
+          <div className="flex min-w-0 items-center gap-4">
 
             <button
               type="button"
@@ -396,23 +284,933 @@ export default function NewSupplier() {
                 router.push("/supplier")
               }
               disabled={saving}
-              className="px-4 py-2.5 rounded-xl border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="
+                flex h-11 w-11 shrink-0
+                items-center justify-center
+                rounded-2xl
+                border border-slate-200
+                bg-white
+                text-slate-600
+                shadow-sm
+                transition
+                hover:border-slate-300
+                hover:bg-slate-50
+                disabled:cursor-not-allowed
+                disabled:opacity-50
+              "
+              title="Kembali"
             >
-              Batal
+              <ArrowLeft size={19} />
             </button>
 
-            <button
-              type="button"
-              onClick={simpan}
-              disabled={saving}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              <Save size={18} />
+            <div className="min-w-0">
 
-              {saving
-                ? "Menyimpan..."
-                : "Simpan Supplier"}
-            </button>
+              <div className="flex items-center gap-2">
+
+                <div
+                  className="
+                    flex h-9 w-9 shrink-0
+                    items-center justify-center
+                    rounded-xl
+                    bg-[#E8F3EF]
+                  "
+                >
+                  <Building2
+                    size={19}
+                    className="text-[#497F70]"
+                  />
+                </div>
+
+                <h1 className="truncate text-xl font-semibold tracking-tight text-[#18352D] md:text-2xl">
+                  Supplier Baru
+                </h1>
+
+              </div>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Tambahkan supplier baru beserta
+                informasi kontak, rekening, dan
+                ketentuan pembayaran.
+              </p>
+
+            </div>
+
+          </div>
+
+          <div className="hidden shrink-0 md:block">
+
+            <div
+              className="
+                inline-flex items-center gap-2
+                rounded-full
+                border border-[#D7E9E2]
+                bg-[#F0F8F5]
+                px-3 py-1.5
+                text-xs font-medium
+                text-[#497F70]
+              "
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-[#497F70]" />
+              Data Supplier Baru
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* =================================================
+            ERROR
+        ================================================= */}
+
+        {errorMessage && (
+          <div
+            className="
+              mb-5 flex items-start gap-3
+              rounded-2xl
+              border border-red-200
+              bg-red-50
+              px-4 py-3.5
+              text-sm text-red-700
+            "
+          >
+            <AlertCircle
+              size={18}
+              className="mt-0.5 shrink-0"
+            />
+
+            <div className="flex-1">
+
+              <p className="font-medium">
+                Perhatian
+              </p>
+
+              <p className="mt-0.5 text-red-600">
+                {errorMessage}
+              </p>
+
+            </div>
+          </div>
+        )}
+
+        {/* =================================================
+            FORM CARD
+        ================================================= */}
+
+        <div
+          className="
+            overflow-hidden rounded-3xl
+            border border-slate-200
+            bg-white
+            shadow-[0_10px_35px_rgba(15,23,42,0.05)]
+          "
+        >
+
+          {/* =================================================
+              CARD HEADER
+          ================================================= */}
+
+          <div className="border-b border-slate-100 px-6 py-5 md:px-8">
+
+            <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex h-10 w-10
+                  items-center justify-center
+                  rounded-xl
+                  bg-[#EEF6F3]
+                "
+              >
+                <Building2
+                  size={20}
+                  className="text-[#497F70]"
+                />
+              </div>
+
+              <div>
+
+                <h2 className="text-sm font-semibold text-slate-900">
+                  Informasi Supplier
+                </h2>
+
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Isi data supplier dengan lengkap
+                  agar dapat digunakan pada transaksi
+                  pembelian.
+                </p>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* =================================================
+              FORM BODY
+          ================================================= */}
+
+          <div className="space-y-8 p-6 md:p-8">
+
+            {/* =================================================
+                IDENTITAS
+            ================================================= */}
+
+            <section>
+
+              <div className="mb-4">
+
+                <h3 className="text-sm font-semibold text-[#18352D]">
+                  Identitas Supplier
+                </h3>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Informasi utama untuk identifikasi
+                  supplier dalam sistem.
+                </p>
+
+              </div>
+
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+                {/* KODE */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Kode Supplier
+                    <span className="ml-1 text-red-500">
+                      *
+                    </span>
+                  </label>
+
+                  <div className="relative">
+
+                    <Hash
+                      size={17}
+                      className="
+                        pointer-events-none
+                        absolute left-3.5 top-1/2
+                        -translate-y-1/2
+                        text-slate-400
+                      "
+                    />
+
+                    <input
+                      name="code"
+                      value={form.code}
+                      onChange={change}
+                      placeholder="Contoh: SUP-001"
+                      autoComplete="off"
+                      disabled={saving}
+                      className={INPUT_CLASS}
+                    />
+
+                  </div>
+
+                </div>
+
+                {/* NAMA */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Nama Supplier
+                    <span className="ml-1 text-red-500">
+                      *
+                    </span>
+                  </label>
+
+                  <div className="relative">
+
+                    <Building2
+                      size={17}
+                      className="
+                        pointer-events-none
+                        absolute left-3.5 top-1/2
+                        -translate-y-1/2
+                        text-slate-400
+                      "
+                    />
+
+                    <input
+                      name="name"
+                      value={form.name}
+                      onChange={change}
+                      placeholder="Nama lengkap supplier"
+                      autoComplete="organization"
+                      disabled={saving}
+                      className={INPUT_CLASS}
+                    />
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            </section>
+
+            {/* =================================================
+                CONTACT
+            ================================================= */}
+
+            <section>
+
+              <div className="mb-4">
+
+                <h3 className="text-sm font-semibold text-[#18352D]">
+                  Kontak Supplier
+                </h3>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Informasi person in charge dan kontak
+                  supplier.
+                </p>
+
+              </div>
+
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+                {/* PIC */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Contact Person / PIC
+                  </label>
+
+                  <div className="relative">
+
+                    <UserRound
+                      size={17}
+                      className="
+                        pointer-events-none
+                        absolute left-3.5 top-1/2
+                        -translate-y-1/2
+                        text-slate-400
+                      "
+                    />
+
+                    <input
+                      name="contactPerson"
+                      value={form.contactPerson}
+                      onChange={change}
+                      placeholder="Nama PIC"
+                      autoComplete="name"
+                      disabled={saving}
+                      className={INPUT_CLASS}
+                    />
+
+                  </div>
+
+                </div>
+
+                {/* TELEPON */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Telepon
+                  </label>
+
+                  <div className="relative">
+
+                    <Phone
+                      size={17}
+                      className="
+                        pointer-events-none
+                        absolute left-3.5 top-1/2
+                        -translate-y-1/2
+                        text-slate-400
+                      "
+                    />
+
+                    <input
+                      name="phone"
+                      value={form.phone}
+                      onChange={change}
+                      placeholder="Nomor telepon supplier"
+                      autoComplete="tel"
+                      inputMode="tel"
+                      disabled={saving}
+                      className={INPUT_CLASS}
+                    />
+
+                  </div>
+
+                </div>
+
+                {/* EMAIL */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Email
+                  </label>
+
+                  <div className="relative">
+
+                    <Mail
+                      size={17}
+                      className="
+                        pointer-events-none
+                        absolute left-3.5 top-1/2
+                        -translate-y-1/2
+                        text-slate-400
+                      "
+                    />
+
+                    <input
+                      type="email"
+                      name="email"
+                      value={form.email}
+                      onChange={change}
+                      placeholder="email@supplier.com"
+                      autoComplete="email"
+                      disabled={saving}
+                      className={INPUT_CLASS}
+                    />
+
+                  </div>
+
+                </div>
+
+                {/* KOTA */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Kota
+                  </label>
+
+                  <div className="relative">
+
+                    <MapPin
+                      size={17}
+                      className="
+                        pointer-events-none
+                        absolute left-3.5 top-1/2
+                        -translate-y-1/2
+                        text-slate-400
+                      "
+                    />
+
+                    <input
+                      name="city"
+                      value={form.city}
+                      onChange={change}
+                      placeholder="Kota supplier"
+                      autoComplete="address-level2"
+                      disabled={saving}
+                      className={INPUT_CLASS}
+                    />
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            </section>
+
+            {/* =================================================
+                BANK ACCOUNT
+            ================================================= */}
+
+            <section>
+
+              <div className="mb-4">
+
+                <div className="flex items-center gap-3">
+
+                  <div
+                    className="
+                      flex h-10 w-10
+                      items-center justify-center
+                      rounded-xl
+                      bg-[#EEF6F3]
+                    "
+                  >
+                    <CreditCard
+                      size={19}
+                      className="text-[#497F70]"
+                    />
+                  </div>
+
+                  <div>
+
+                    <h3 className="text-sm font-semibold text-[#18352D]">
+                      Informasi Rekening
+                    </h3>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Data rekening supplier untuk
+                      kebutuhan pembayaran dan
+                      administrasi.
+                    </p>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              <div
+                className="
+                  rounded-2xl
+                  border border-[#D7E9E2]
+                  bg-[#F7FBF9]
+                  p-5
+                "
+              >
+
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+                  {/* NO REKENING */}
+
+                  <div>
+
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      No. Rekening
+                    </label>
+
+                    <div className="relative">
+
+                      <CreditCard
+                        size={17}
+                        className="
+                          pointer-events-none
+                          absolute left-3.5 top-1/2
+                          -translate-y-1/2
+                          text-slate-400
+                        "
+                      />
+
+                      <input
+                        name="noRekening"
+                        value={form.noRekening}
+                        onChange={change}
+                        placeholder="Contoh: 1234567890"
+                        autoComplete="off"
+                        inputMode="numeric"
+                        disabled={saving}
+                        className={INPUT_CLASS}
+                      />
+
+                    </div>
+
+                    <p className="mt-1.5 text-[11px] text-slate-400">
+                      Nomor rekening bank supplier.
+                    </p>
+
+                  </div>
+
+                  {/* NAMA REKENING */}
+
+                  <div>
+
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Nama Rekening
+                    </label>
+
+                    <div className="relative">
+
+                      <UserRound
+                        size={17}
+                        className="
+                          pointer-events-none
+                          absolute left-3.5 top-1/2
+                          -translate-y-1/2
+                          text-slate-400
+                        "
+                      />
+
+                      <input
+                        name="namaRekening"
+                        value={form.namaRekening}
+                        onChange={change}
+                        placeholder="Nama pemilik rekening"
+                        autoComplete="off"
+                        disabled={saving}
+                        className={INPUT_CLASS}
+                      />
+
+                    </div>
+
+                    <p className="mt-1.5 text-[11px] text-slate-400">
+                      Nama yang terdaftar pada rekening.
+                    </p>
+
+                  </div>
+
+                  {/* JENIS REKENING */}
+
+                  <div className="md:col-span-2">
+
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Jenis Rekening
+                    </label>
+
+                    <div className="relative">
+
+                      <WalletCards
+                        size={17}
+                        className="
+                          pointer-events-none
+                          absolute left-3.5 top-1/2
+                          -translate-y-1/2
+                          text-slate-400
+                        "
+                      />
+
+                      <select
+                        name="jenisRekening"
+                        value={form.jenisRekening}
+                        onChange={change}
+                        disabled={saving}
+                        className={SELECT_CLASS}
+                      >
+                        <option value="">
+                          Pilih jenis rekening
+                        </option>
+
+                        <option value="BANK">
+                          Bank
+                        </option>
+
+                        <option value="GIRO">
+                          Giro
+                        </option>
+
+                        <option value="REKENING_PRIBADI">
+                          Rekening Pribadi
+                        </option>
+
+                        <option value="REKENING_PERUSAHAAN">
+                          Rekening Perusahaan
+                        </option>
+
+                        <option value="LAINNYA">
+                          Lainnya
+                        </option>
+                      </select>
+
+                    </div>
+
+                    <p className="mt-1.5 text-[11px] text-slate-400">
+                      Jenis rekening yang digunakan
+                      supplier.
+                    </p>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            </section>
+
+            {/* =================================================
+                ADDRESS
+            ================================================= */}
+
+            <section>
+
+              <div className="mb-4">
+
+                <h3 className="text-sm font-semibold text-[#18352D]">
+                  Alamat
+                </h3>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Alamat lengkap lokasi supplier.
+                </p>
+
+              </div>
+
+              <div className="relative">
+
+                <MapPin
+                  size={17}
+                  className="
+                    pointer-events-none
+                    absolute left-3.5 top-3.5
+                    text-slate-400
+                  "
+                />
+
+                <textarea
+                  name="address"
+                  value={form.address}
+                  onChange={change}
+                  placeholder="Alamat lengkap supplier..."
+                  rows={4}
+                  disabled={saving}
+                  className="
+                    w-full resize-none rounded-xl
+                    border border-slate-200
+                    bg-white
+                    py-3 pl-10 pr-3
+                    text-sm text-slate-900
+                    outline-none
+                    transition
+                    placeholder:text-slate-400
+                    hover:border-slate-300
+                    focus:border-[#497F70]
+                    focus:ring-4
+                    focus:ring-[#497F70]/10
+                    disabled:cursor-not-allowed
+                    disabled:bg-slate-50
+                  "
+                />
+
+              </div>
+
+            </section>
+
+            {/* =================================================
+                PAYMENT TERMS
+            ================================================= */}
+
+            <section>
+
+              <div
+                className="
+                  overflow-hidden rounded-2xl
+                  border border-[#D7E9E2]
+                  bg-gradient-to-br
+                  from-[#F0F8F5]
+                  to-[#F8FBFA]
+                "
+              >
+
+                <div className="p-5 md:p-6">
+
+                  <div className="flex items-start gap-4">
+
+                    <div
+                      className="
+                        flex h-11 w-11 shrink-0
+                        items-center justify-center
+                        rounded-xl
+                        bg-white
+                        shadow-sm
+                      "
+                    >
+                      <Clock3
+                        size={20}
+                        className="text-[#497F70]"
+                      />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+
+                      <h3 className="text-sm font-semibold text-[#18352D]">
+                        Ketentuan Pembayaran
+                      </h3>
+
+                      <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
+                        Tentukan jumlah hari tempo pembayaran
+                        supplier. Perhitungan jatuh tempo
+                        dilakukan berdasarkan tanggal
+                        barang diterima (receipt).
+                      </p>
+
+                      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
+
+                        <div>
+
+                          <label className="mb-2 block text-xs font-medium text-slate-600">
+                            Tempo Pembayaran
+                          </label>
+
+                          <div className="flex items-center gap-2">
+
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              name="tempoDays"
+                              value={form.tempoDays}
+                              onChange={change}
+                              disabled={saving}
+                              className="
+                                w-32 rounded-xl
+                                border border-slate-200
+                                bg-white
+                                px-3 py-3
+                                text-sm font-semibold
+                                text-slate-900
+                                outline-none
+                                transition
+                                focus:border-[#497F70]
+                                focus:ring-4
+                                focus:ring-[#497F70]/10
+                                disabled:cursor-not-allowed
+                                disabled:bg-slate-50
+                              "
+                            />
+
+                            <span className="pb-3 text-sm text-slate-600">
+                              hari
+                            </span>
+
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                      <div
+                        className="
+                          mt-4 rounded-xl
+                          border border-white
+                          bg-white/80
+                          px-4 py-3
+                        "
+                      >
+
+                        <p className="text-xs leading-5 text-slate-600">
+
+                          {form.tempoDays === 0 ? (
+                            <>
+                              <span className="font-semibold text-[#18352D]">
+                                COD / Hari Ini
+                              </span>
+
+                              {" — "}
+
+                              Pembayaran jatuh tempo
+                              pada hari penerimaan barang.
+                            </>
+                          ) : (
+                            <>
+                              <span className="font-semibold text-[#18352D]">
+                                Tempo {form.tempoDays} hari
+                              </span>
+
+                              {" — "}
+
+                              Jatuh tempo dihitung{" "}
+                              {form.tempoDays} hari{" "}
+                              setelah barang diterima.
+                            </>
+                          )}
+
+                        </p>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            </section>
+
+          </div>
+
+          {/* =================================================
+              FOOTER
+          ================================================= */}
+
+          <div
+            className="
+              flex flex-col-reverse
+              gap-3
+              border-t border-slate-100
+              bg-slate-50/70
+              px-6 py-4
+              sm:flex-row
+              sm:items-center
+              sm:justify-between
+              md:px-8
+            "
+          >
+
+            <div className="text-xs text-slate-500">
+              <span className="font-medium text-[#18352D]">
+                Pastikan data supplier benar
+              </span>{" "}
+              sebelum menyimpan.
+            </div>
+
+            <div className="flex w-full gap-3 sm:w-auto">
+
+              {/* BATAL */}
+
+              <button
+                type="button"
+                onClick={() =>
+                  router.push("/supplier")
+                }
+                disabled={saving}
+                className="
+                  inline-flex flex-1
+                  items-center justify-center
+                  rounded-xl
+                  border border-slate-200
+                  bg-white
+                  px-4 py-2.5
+                  text-sm font-medium
+                  text-slate-600
+                  shadow-sm
+                  transition
+                  hover:bg-slate-50
+                  disabled:cursor-not-allowed
+                  disabled:opacity-50
+                  sm:flex-none
+                "
+              >
+                Batal
+              </button>
+
+              {/* SIMPAN */}
+
+              <button
+                type="button"
+                onClick={simpan}
+                disabled={saving}
+                className="
+                  inline-flex flex-1
+                  items-center justify-center
+                  gap-2
+                  rounded-xl
+                  bg-[#497F70]
+                  px-5 py-2.5
+                  text-sm font-semibold
+                  text-white
+                  shadow-sm
+                  transition
+                  hover:bg-[#3F6F62]
+                  hover:shadow-md
+                  disabled:cursor-not-allowed
+                  disabled:opacity-50
+                  sm:flex-none
+                "
+              >
+
+                {saving ? (
+                  <>
+                    <Loader2
+                      size={17}
+                      className="animate-spin"
+                    />
+                    Menyimpan...
+                  </>
+                ) : (
+                  <>
+                    <Save size={17} />
+                    Simpan Supplier
+                  </>
+                )}
+
+              </button>
+
+            </div>
 
           </div>
 

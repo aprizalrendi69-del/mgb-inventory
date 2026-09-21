@@ -23,12 +23,12 @@ import {
   TrendingUp,
   BarChart3,
   UserCheck,
-  Loader2,
   ArrowDownToLine,
   ArrowUpFromLine,
   Trash2,
   Sparkles,
   Layers3,
+  CircleDollarSign,
 } from "lucide-react";
 
 // ============================================================
@@ -57,9 +57,9 @@ type DashboardData = {
   totalReceived: number;
   totalReceipt: number;
   totalStock: number;
-  lowStock: number;
   totalStockValue?: number;
   totalStockItem?: number;
+  lowStock: number;
 
   percentages?: {
     approved?: number;
@@ -136,6 +136,13 @@ type OnlineUser = {
   updatedAt?: string;
   online?: boolean;
   photo?: string | null;
+  outlet?: {
+    id?: number;
+    code?: string;
+    name?: string;
+  } | null;
+  outletName?: string | null;
+  outletCode?: string | null;
 };
 
 // ============================================================
@@ -204,12 +211,45 @@ function getInitials(name: string): string {
     name
       .trim()
       .split(/\s+/)
-      .map((part) =>
-        part.charAt(0).toUpperCase()
-      )
+      .map((part) => part.charAt(0).toUpperCase())
       .slice(0, 2)
       .join("") || "U"
   );
+}
+
+function formatUserRole(role?: string): string {
+  const normalized = String(role || "")
+    .trim()
+    .toUpperCase();
+
+  const labels: Record<string, string> = {
+    ADMIN: "Admin",
+    MANAGER: "Manager",
+    OUTLET_ADMIN: "Outlet Admin",
+    OUTLET_MANUFACTURE: "Outlet Manufacture",
+    STAF_MANUFACTURE: "Staf Manufacture",
+    STAFF_MANUFACTURE: "Staff Manufacture",
+    STAFF: "Staff",
+    USER: "User",
+  };
+
+  if (labels[normalized]) {
+    return labels[normalized];
+  }
+
+  if (!normalized) {
+    return "Active User";
+  }
+
+  return normalized
+    .toLowerCase()
+    .split("_")
+    .map(
+      (part) =>
+        part.charAt(0).toUpperCase() +
+        part.slice(1)
+    )
+    .join(" ");
 }
 
 // ============================================================
@@ -236,35 +276,41 @@ function ProfileAvatar({
 
   const sizeClass =
     size === "sm"
-      ? "h-9 w-9 text-[9px]"
+      ? "h-10 w-10 text-[10px]"
       : size === "lg"
       ? "h-14 w-14 text-sm"
       : "h-11 w-11 text-xs";
 
   const onlineClass =
     size === "sm"
-      ? "h-2.5 w-2.5"
+      ? "h-3 w-3"
       : size === "lg"
       ? "h-3.5 w-3.5"
       : "h-3 w-3";
 
   const borderClass = dark
-    ? "border-[#102921]"
+    ? "border-[#071c17]"
     : "border-white";
 
   return (
     <div className="relative shrink-0">
       <div
-        className={`relative flex ${sizeClass} overflow-hidden items-center justify-center rounded-full border-2 ${borderClass} bg-white font-black text-slate-700 shadow-sm ring-1 ring-white/10`}
+        className={`
+          relative flex ${sizeClass}
+          items-center justify-center
+          overflow-hidden rounded-full
+          border-2 ${borderClass}
+          bg-gradient-to-br from-[#497F70] to-[#18352D]
+          font-black text-white
+          shadow-[0_4px_14px_rgba(7,28,23,0.18)]
+        `}
       >
         {photo && !imageError ? (
           <img
             src={photo}
             alt={name}
             className="h-full w-full object-cover"
-            onError={() =>
-              setImageError(true)
-            }
+            onError={() => setImageError(true)}
           />
         ) : (
           <span>{initials}</span>
@@ -273,9 +319,15 @@ function ProfileAvatar({
 
       {online && (
         <span
-          className={`absolute bottom-0 right-0 ${onlineClass} rounded-full border-2 ${
-            dark ? "border-[#102921]" : "border-white"
-          } bg-emerald-500 shadow-[0_0_0_2px_rgba(16,185,129,0.12)]`}
+          aria-label="Online"
+          className={`
+            absolute bottom-0 right-0
+            ${onlineClass}
+            rounded-full
+            border-2 ${borderClass}
+            bg-[#39d98a]
+            shadow-[0_0_0_2px_rgba(57,217,138,0.10),0_0_10px_rgba(57,217,138,0.45)]
+          `}
         />
       )}
     </div>
@@ -286,7 +338,11 @@ function ProfileAvatar({
 // STATUS BADGE
 // ============================================================
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({
+  status,
+}: {
+  status: string;
+}) {
   const normalized = String(status || "").toUpperCase();
 
   let className =
@@ -380,37 +436,43 @@ function KpiCard({
       icon:
         "bg-emerald-50 text-emerald-700 ring-emerald-100",
       accent: "bg-emerald-500",
-      glow: "group-hover:shadow-emerald-100/70",
+      glow:
+        "group-hover:shadow-emerald-100/70",
     },
     blue: {
       icon:
         "bg-blue-50 text-blue-700 ring-blue-100",
       accent: "bg-blue-500",
-      glow: "group-hover:shadow-blue-100/70",
+      glow:
+        "group-hover:shadow-blue-100/70",
     },
     amber: {
       icon:
         "bg-amber-50 text-amber-700 ring-amber-100",
       accent: "bg-amber-500",
-      glow: "group-hover:shadow-amber-100/70",
+      glow:
+        "group-hover:shadow-amber-100/70",
     },
     purple: {
       icon:
         "bg-purple-50 text-purple-700 ring-purple-100",
       accent: "bg-purple-500",
-      glow: "group-hover:shadow-purple-100/70",
+      glow:
+        "group-hover:shadow-purple-100/70",
     },
     red: {
       icon:
         "bg-red-50 text-red-700 ring-red-100",
       accent: "bg-red-500",
-      glow: "group-hover:shadow-red-100/70",
+      glow:
+        "group-hover:shadow-red-100/70",
     },
     slate: {
       icon:
         "bg-slate-100 text-slate-700 ring-slate-200",
       accent: "bg-slate-500",
-      glow: "group-hover:shadow-slate-100/70",
+      glow:
+        "group-hover:shadow-slate-100/70",
     },
   };
 
@@ -428,7 +490,10 @@ function KpiCard({
         <div
           className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ring-4 ${selectedTone.icon}`}
         >
-          <Icon size={22} strokeWidth={2.2} />
+          <Icon
+            size={22}
+            strokeWidth={2.2}
+          />
         </div>
 
         {href && (
@@ -461,7 +526,10 @@ function KpiCard({
   }
 
   return (
-    <Link href={href} className="block h-full">
+    <Link
+      href={href}
+      className="block h-full"
+    >
       {content}
     </Link>
   );
@@ -591,7 +659,6 @@ function MovementSummaryCard({
 
 // ============================================================
 // MOVEMENT CHART
-// PREMIUM INTERACTIVE SVG CHART
 // ============================================================
 
 function MovementChart({
@@ -651,18 +718,14 @@ function MovementChart({
           10,
           Math.max(
             0,
-            Math.floor(
-              Math.log10(maxValue)
-            ) - 1
+            Math.floor(Math.log10(maxValue)) - 1
           )
         ) * 2;
 
-  const roundedMax =
-    Math.max(
-      tickStep,
-      Math.ceil(maxValue / tickStep) *
-        tickStep
-    );
+  const roundedMax = Math.max(
+    tickStep,
+    Math.ceil(maxValue / tickStep) * tickStep
+  );
 
   const getX = (index: number) => {
     if (normalizedData.length === 1) {
@@ -671,8 +734,7 @@ function MovementChart({
 
     return (
       paddingLeft +
-      (index /
-        (normalizedData.length - 1)) *
+      (index / (normalizedData.length - 1)) *
         chartWidth
     );
   };
@@ -700,9 +762,7 @@ function MovementChart({
     const points = normalizedData.map(
       (item, index) => ({
         x: getX(index),
-        y: getY(
-          cleanNumber(item[key])
-        ),
+        y: getY(cleanNumber(item[key])),
       })
     );
 
@@ -714,7 +774,8 @@ function MovementChart({
       return `M ${points[0].x} ${points[0].y}`;
     }
 
-    let path = `M ${points[0].x} ${points[0].y}`;
+    let path =
+      `M ${points[0].x} ${points[0].y}`;
 
     for (
       let index = 0;
@@ -742,9 +803,7 @@ function MovementChart({
     const points = normalizedData.map(
       (item, index) => ({
         x: getX(index),
-        y: getY(
-          cleanNumber(item[key])
-        ),
+        y: getY(cleanNumber(item[key])),
       })
     );
 
@@ -778,16 +837,13 @@ function MovementChart({
     }).map((_, index) => {
       return (
         roundedMax -
-        (roundedMax / gridCount) *
-          index
+        (roundedMax / gridCount) * index
       );
     });
 
   const hovered =
     hoveredIndex !== null
-      ? normalizedData[
-          hoveredIndex
-        ]
+      ? normalizedData[hoveredIndex]
       : null;
 
   const hoveredX =
@@ -944,8 +1000,7 @@ function MovementChart({
               const y =
                 paddingTop +
                 chartHeight -
-                percent *
-                  chartHeight;
+                percent * chartHeight;
 
               return (
                 <g
@@ -961,32 +1016,26 @@ function MovementChart({
                     y2={y}
                     stroke="#e2e8f0"
                     strokeWidth={
-                      index ===
-                      gridCount
+                      index === gridCount
                         ? 1.3
                         : 1
                     }
                     strokeDasharray={
-                      index ===
-                      gridCount
+                      index === gridCount
                         ? undefined
                         : "3 6"
                     }
                   />
 
                   <text
-                    x={
-                      paddingLeft - 12
-                    }
+                    x={paddingLeft - 12}
                     y={y + 4}
                     textAnchor="end"
                     fontSize="10"
                     fontWeight="700"
                     fill="#94a3b8"
                   >
-                    {formatNumber(
-                      value
-                    )}
+                    {formatNumber(value)}
                   </text>
                 </g>
               );
@@ -1014,14 +1063,12 @@ function MovementChart({
             }
           )}
 
-          {normalizedData.length >
-            0 && (
+          {normalizedData.length > 0 && (
             <rect
               x={Math.max(
                 paddingLeft,
                 getX(
-                  normalizedData.length -
-                    1
+                  normalizedData.length - 1
                 ) - 42
               )}
               y={paddingTop}
@@ -1034,23 +1081,17 @@ function MovementChart({
           )}
 
           <path
-            d={buildAreaPath(
-              "stockIn"
-            )}
+            d={buildAreaPath("stockIn")}
             fill="url(#movementInGradientPremium)"
           />
 
           <path
-            d={buildAreaPath(
-              "stockOut"
-            )}
+            d={buildAreaPath("stockOut")}
             fill="url(#movementOutGradientPremium)"
           />
 
           <path
-            d={buildSmoothPath(
-              "stockIn"
-            )}
+            d={buildSmoothPath("stockIn")}
             fill="none"
             stroke="#10b981"
             strokeWidth="8"
@@ -1061,9 +1102,7 @@ function MovementChart({
           />
 
           <path
-            d={buildSmoothPath(
-              "stockOut"
-            )}
+            d={buildSmoothPath("stockOut")}
             fill="none"
             stroke="#3b82f6"
             strokeWidth="8"
@@ -1074,9 +1113,7 @@ function MovementChart({
           />
 
           <path
-            d={buildSmoothPath(
-              "waste"
-            )}
+            d={buildSmoothPath("waste")}
             fill="none"
             stroke="#ef4444"
             strokeWidth="2.5"
@@ -1086,9 +1123,7 @@ function MovementChart({
           />
 
           <path
-            d={buildSmoothPath(
-              "stockIn"
-            )}
+            d={buildSmoothPath("stockIn")}
             fill="none"
             stroke="#10b981"
             strokeWidth="3.5"
@@ -1097,9 +1132,7 @@ function MovementChart({
           />
 
           <path
-            d={buildSmoothPath(
-              "stockOut"
-            )}
+            d={buildSmoothPath("stockOut")}
             fill="none"
             stroke="#3b82f6"
             strokeWidth="3.5"
@@ -1112,39 +1145,30 @@ function MovementChart({
               const x = getX(index);
 
               const stockInY =
-                getY(
-                  item.stockIn
-                );
+                getY(item.stockIn);
 
               const stockOutY =
-                getY(
-                  item.stockOut
-                );
+                getY(item.stockOut);
 
               const wasteY =
                 getY(item.waste);
 
               const active =
-                hoveredIndex ===
-                index;
+                hoveredIndex === index;
 
               return (
                 <g
                   key={`points-${index}`}
                   className="cursor-crosshair"
                   onMouseEnter={() =>
-                    setHoveredIndex(
-                      index
-                    )
+                    setHoveredIndex(index)
                   }
                 >
                   <rect
                     x={x - 30}
                     y={paddingTop}
                     width="60"
-                    height={
-                      chartHeight
-                    }
+                    height={chartHeight}
                     fill="transparent"
                   />
 
@@ -1167,11 +1191,7 @@ function MovementChart({
                   <circle
                     cx={x}
                     cy={stockInY}
-                    r={
-                      active
-                        ? 7
-                        : 4.5
-                    }
+                    r={active ? 7 : 4.5}
                     fill="white"
                     stroke="#10b981"
                     strokeWidth={
@@ -1187,11 +1207,7 @@ function MovementChart({
                   <circle
                     cx={x}
                     cy={stockOutY}
-                    r={
-                      active
-                        ? 7
-                        : 4.5
-                    }
+                    r={active ? 7 : 4.5}
                     fill="white"
                     stroke="#3b82f6"
                     strokeWidth={
@@ -1207,11 +1223,7 @@ function MovementChart({
                   <circle
                     cx={x}
                     cy={wasteY}
-                    r={
-                      active
-                        ? 5
-                        : 3
-                    }
+                    r={active ? 5 : 3}
                     fill="white"
                     stroke="#ef4444"
                     strokeWidth={
@@ -1228,15 +1240,12 @@ function MovementChart({
               <text
                 key={`label-${item.month}-${index}`}
                 x={getX(index)}
-                y={
-                  height - 19
-                }
+                y={height - 19}
                 textAnchor="middle"
                 fontSize="10"
                 fontWeight="800"
                 fill={
-                  hoveredIndex ===
-                  index
+                  hoveredIndex === index
                     ? "#0f172a"
                     : "#94a3b8"
                 }
@@ -1251,13 +1260,10 @@ function MovementChart({
               <g
                 pointerEvents="none"
                 transform={`translate(${
-                  hoveredX >
-                  width - 230
+                  hoveredX > width - 230
                     ? hoveredX - 218
                     : hoveredX + 14
-                }, ${
-                  paddingTop + 8
-                })`}
+                }, ${paddingTop + 8})`}
               >
                 <rect
                   width="204"
@@ -1395,8 +1401,7 @@ function MovementChart({
             <div className="mt-1 text-sm font-black text-emerald-900">
               {formatNumber(
                 normalizedData[
-                  normalizedData.length -
-                    1
+                  normalizedData.length - 1
                 ].stockIn
               )}{" "}
               masuk
@@ -1415,8 +1420,7 @@ function MovementChart({
             <div className="mt-1 text-sm font-black text-blue-900">
               {formatNumber(
                 normalizedData[
-                  normalizedData.length -
-                    1
+                  normalizedData.length - 1
                 ].stockOut
               )}{" "}
               keluar
@@ -1435,8 +1439,7 @@ function MovementChart({
             <div className="mt-1 text-sm font-black text-red-900">
               {formatNumber(
                 normalizedData[
-                  normalizedData.length -
-                    1
+                  normalizedData.length - 1
                 ].waste
               )}{" "}
               waste
@@ -1454,14 +1457,10 @@ function MovementChart({
 
 export default function OutletDashboardPage() {
   const [data, setData] =
-    useState<DashboardData | null>(
-      null
-    );
+    useState<DashboardData | null>(null);
 
   const [user, setUser] =
-    useState<UserData | null>(
-      null
-    );
+    useState<UserData | null>(null);
 
   const [onlineUsers, setOnlineUsers] =
     useState<OnlineUser[]>([]);
@@ -1514,13 +1513,8 @@ export default function OutletDashboardPage() {
         );
       }
 
-      setData(
-        json.data || null
-      );
-
-      setUser(
-        json.user || null
-      );
+      setData(json.data || null);
+      setUser(json.user || null);
     } catch (err: any) {
       console.error(
         "OUTLET DASHBOARD ERROR:",
@@ -1569,9 +1563,7 @@ export default function OutletDashboardPage() {
         json.onlineUsers ??
         [];
 
-      if (
-        Array.isArray(users)
-      ) {
+      if (Array.isArray(users)) {
         setOnlineUsers(users);
       }
     } catch (err) {
@@ -1598,9 +1590,7 @@ export default function OutletDashboardPage() {
       }, 15000);
 
     return () => {
-      window.clearInterval(
-        interval
-      );
+      window.clearInterval(interval);
     };
   }, []);
 
@@ -1625,73 +1615,61 @@ export default function OutletDashboardPage() {
   // ==========================================================
 
   const recentPurchases =
-    Array.isArray(
-      data?.recentPurchase
-    )
-      ? data!.recentPurchase
+    Array.isArray(data?.recentPurchase)
+      ? data.recentPurchase
       : [];
 
   const totalPurchase =
-    cleanNumber(
-      data?.totalPurchase
-    );
+    cleanNumber(data?.totalPurchase);
 
   const totalDraft =
-    cleanNumber(
-      data?.totalDraft
-    );
+    cleanNumber(data?.totalDraft);
 
   const totalApproved =
-    cleanNumber(
-      data?.totalApproved
-    );
+    cleanNumber(data?.totalApproved);
 
   const totalReceived =
-    cleanNumber(
-      data?.totalReceived
-    );
+    cleanNumber(data?.totalReceived);
 
   const totalReceipt =
-    cleanNumber(
-      data?.totalReceipt
-    );
+    cleanNumber(data?.totalReceipt);
 
   const totalStock =
-    cleanNumber(
-      data?.totalStock
-    );
+    cleanNumber(data?.totalStock);
 
   const lowStock =
+    cleanNumber(data?.lowStock);
+
+  // ==========================================================
+  // NILAI PERSEDIAAN
+  // ==========================================================
+
+  const totalStockValue =
     cleanNumber(
-      data?.lowStock
+      data?.totalStockValue ??
+        data?.stockHealth?.totalStockValue
     );
 
   // ==========================================================
-  // MOVEMENT DATA
+  // MOVEMENT
   // ==========================================================
 
   const movementTrend =
     Array.isArray(
-      data?.charts
-        ?.stockMovementTrend
+      data?.charts?.stockMovementTrend
     )
-      ? data!.charts!
-          .stockMovementTrend!
+      ? data.charts.stockMovementTrend
       : [];
 
   const movementSummary =
-    data?.charts
-      ?.stockMovementSummary;
+    data?.charts?.stockMovementSummary;
 
   const stockIn =
     cleanNumber(
       movementSummary?.stockIn ??
         movementTrend.reduce(
           (sum, item) =>
-            sum +
-            cleanNumber(
-              item.stockIn
-            ),
+            sum + cleanNumber(item.stockIn),
           0
         )
     );
@@ -1701,10 +1679,7 @@ export default function OutletDashboardPage() {
       movementSummary?.stockOut ??
         movementTrend.reduce(
           (sum, item) =>
-            sum +
-            cleanNumber(
-              item.stockOut
-            ),
+            sum + cleanNumber(item.stockOut),
           0
         )
     );
@@ -1714,10 +1689,7 @@ export default function OutletDashboardPage() {
       movementSummary?.waste ??
         movementTrend.reduce(
           (sum, item) =>
-            sum +
-            cleanNumber(
-              item.waste
-            ),
+            sum + cleanNumber(item.waste),
           0
         )
     );
@@ -1731,44 +1703,8 @@ export default function OutletDashboardPage() {
     );
 
   // ==========================================================
-  // PERCENTAGE
+  // USER
   // ==========================================================
-
-  const approvedPercentage =
-    totalPurchase > 0
-      ? Math.min(
-          100,
-          Math.round(
-            (totalApproved /
-              totalPurchase) *
-              100
-          )
-        )
-      : 0;
-
-  const receivedPercentage =
-    totalPurchase > 0
-      ? Math.min(
-          100,
-          Math.round(
-            (totalReceived /
-              totalPurchase) *
-              100
-          )
-        )
-      : 0;
-
-  const draftPercentage =
-    totalPurchase > 0
-      ? Math.min(
-          100,
-          Math.round(
-            (totalDraft /
-              totalPurchase) *
-              100
-          )
-        )
-      : 0;
 
   const outletName =
     user?.outlet?.name ||
@@ -1783,25 +1719,12 @@ export default function OutletDashboardPage() {
     user?.username ||
     "User";
 
-  // ==========================================================
-  // CURRENT USER PHOTO
-  // ==========================================================
-  //
-  // /api/outlet/dashboard tetap boleh hanya mengirim:
-  // id, username, fullname, outlet.
-  //
-  // Foto dicari dari /api/me/online-users berdasarkan ID
-  // user yang sedang login.
-  //
-  // ==========================================================
-
   const currentOnlineUser =
     user?.id
       ? onlineUsers.find(
           (onlineUser) =>
-            String(
-              onlineUser.id
-            ) === String(user.id)
+            String(onlineUser.id) ===
+            String(user.id)
         )
       : undefined;
 
@@ -1814,29 +1737,25 @@ export default function OutletDashboardPage() {
   // LOADING
   // ==========================================================
 
-  if (
-    loading &&
-    !data
-  ) {
+  if (loading && !data) {
     return (
       <div className="min-h-screen bg-[#f5f7f6]">
         <div className="mx-auto max-w-[1700px] px-4 py-5 sm:px-6 lg:px-8">
-          <div className="h-[285px] animate-pulse rounded-[30px] bg-slate-200" />
+          <div className="h-[420px] animate-pulse rounded-[32px] bg-slate-200" />
 
           <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-            {Array.from({
-              length: 7,
-            }).map((_, index) => (
-              <div
-                key={index}
-                className="h-[165px] animate-pulse rounded-[24px] bg-slate-200"
-              />
-            ))}
+            {Array.from({ length: 7 }).map(
+              (_, index) => (
+                <div
+                  key={index}
+                  className="h-[165px] animate-pulse rounded-[24px] bg-slate-200"
+                />
+              )
+            )}
           </div>
 
           <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
             <div className="h-[530px] animate-pulse rounded-[26px] bg-slate-200 xl:col-span-2" />
-
             <div className="h-[530px] animate-pulse rounded-[26px] bg-slate-200" />
           </div>
         </div>
@@ -1848,10 +1767,7 @@ export default function OutletDashboardPage() {
   // ERROR
   // ==========================================================
 
-  if (
-    error &&
-    !data
-  ) {
+  if (error && !data) {
     return (
       <div className="min-h-screen bg-[#f5f7f6] px-4 py-8">
         <div className="mx-auto max-w-2xl">
@@ -1878,9 +1794,7 @@ export default function OutletDashboardPage() {
                 }
                 className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-700/20 transition hover:bg-emerald-800"
               >
-                <RefreshCw
-                  size={17}
-                />
+                <RefreshCw size={17} />
                 Coba Lagi
               </button>
             </div>
@@ -1904,7 +1818,9 @@ export default function OutletDashboardPage() {
 
         <section className="relative overflow-hidden rounded-[32px] bg-[#071c17] shadow-[0_25px_70px_rgba(7,28,23,0.18)]">
 
-          <div className="pointer-events-none absolute -right-24 -top-32 h-[420px] w-[420px] rounded-full bg-emerald-400/20 blur-3xl" />
+          {/* DECORATIVE GLOW */}
+
+          <div className="pointer-events-none absolute -right-24 -top-32 h-[430px] w-[430px] rounded-full bg-emerald-400/20 blur-3xl" />
 
           <div className="pointer-events-none absolute -bottom-48 left-[35%] h-[500px] w-[500px] rounded-full bg-teal-400/10 blur-3xl" />
 
@@ -1913,13 +1829,17 @@ export default function OutletDashboardPage() {
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.07),transparent_28%)]" />
 
           <div className="relative p-6 sm:p-8 lg:p-10">
-            <div className="flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
 
-              {/* HERO LEFT */}
+            <div className="flex flex-col gap-8 xl:flex-row xl:items-start xl:justify-between">
+
+              {/* ==================================================
+                  HERO LEFT
+              ================================================== */}
 
               <div className="max-w-3xl">
 
                 <div className="flex flex-wrap items-center gap-2">
+
                   <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200 backdrop-blur">
                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
                     Outlet Dashboard
@@ -1933,25 +1853,21 @@ export default function OutletDashboardPage() {
                     <Sparkles size={11} />
                     LIVE
                   </span>
-                </div>
 
-                {/* ==================================================
-                    GREETING + PROFILE PHOTO
-                ================================================== */}
+                </div>
 
                 <div className="mt-5 flex items-center gap-4">
 
                   <ProfileAvatar
                     name={displayName}
-                    photo={
-                      currentUserPhoto
-                    }
+                    photo={currentUserPhoto}
                     size="lg"
                     online
                     dark
                   />
 
                   <div className="min-w-0">
+
                     <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl lg:text-4xl">
                       PT. MITRA GARAM BOGATAMA
                     </h1>
@@ -1966,17 +1882,21 @@ export default function OutletDashboardPage() {
                         -
                       </span>
                     </div>
+
                   </div>
+
                 </div>
 
                 <p className="mt-4 max-w-2xl text-sm leading-6 text-white/55 sm:text-base">
                   Pantau pembelian, penerimaan,
                   pergerakan barang, persediaan,
-                  waste dan aktivitas outlet
-                  dari satu pusat kontrol.
+                  nilai persediaan, waste dan
+                  aktivitas outlet dari satu pusat
+                  kontrol.
                 </p>
 
                 <div className="mt-6 flex flex-wrap items-center gap-3">
+
                   <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-xs font-semibold text-white/70 backdrop-blur">
                     <CalendarDays
                       size={15}
@@ -1992,136 +1912,414 @@ export default function OutletDashboardPage() {
                     />
                     {outletName}
                   </div>
+
                 </div>
+
               </div>
 
-              {/* HERO RIGHT */}
+              {/* ==================================================
+                  HERO RIGHT — ACTIVE USERS
+              ================================================== */}
 
-              <div className="w-full xl:max-w-[390px]">
-                <div className="rounded-[26px] border border-white/10 bg-white/[0.07] p-4 shadow-2xl backdrop-blur-xl">
+              <div className="w-full xl:max-w-[640px]">
 
-                  <div className="flex items-center justify-between">
+                <div className="overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.07] shadow-2xl backdrop-blur-xl">
 
-                    <div className="flex items-center gap-3">
+                  {/* TOP BAR */}
 
-                      <div className="relative">
-                        <ProfileAvatar
-                          name={
-                            displayName
-                          }
-                          photo={
-                            currentUserPhoto
-                          }
-                          size="md"
-                          online
-                          dark
+                  <div className="flex items-center justify-between gap-4 border-b border-white/[0.07] px-4 py-3.5 sm:px-5">
+
+                    <div className="flex min-w-0 items-center gap-3">
+
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-300/10 bg-emerald-400/10 text-emerald-300">
+                        <CalendarDays
+                          size={17}
+                          strokeWidth={1.8}
                         />
                       </div>
 
-                      <div>
-                        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">
-                          User Online
+                      <div className="min-w-0">
+
+                        <div className="text-[8px] font-black uppercase tracking-[0.20em] text-white/35">
+                          Hari Ini
                         </div>
 
-                        <div className="mt-0.5 text-2xl font-black text-white">
-                          {onlineLoading ? (
-                            <Loader2
-                              size={20}
-                              className="animate-spin text-emerald-300"
-                            />
-                          ) : (
-                            onlineUsers.length
-                          )}
+                        <div className="mt-0.5 truncate text-[10px] font-bold text-white/90 sm:text-[11px]">
+                          {today}
                         </div>
+
                       </div>
+
                     </div>
 
-                    <div className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-2.5 py-1.5 text-[10px] font-bold text-emerald-300">
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                      LIVE
+                    <div className="flex shrink-0 items-center gap-2">
+
+                      <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/10 bg-emerald-400/10 px-2.5 py-1.5 text-[8px] font-black uppercase tracking-[0.12em] text-emerald-300">
+
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.75)]" />
+
+                        {onlineLoading
+                          ? "SYNC"
+                          : `${onlineUsers.length} ONLINE`}
+
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          loadOnlineUsers()
+                        }
+                        disabled={onlineLoading}
+                        aria-label="Refresh user online"
+                        title="Refresh user online"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/45 transition hover:border-emerald-300/20 hover:bg-emerald-400/10 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <RefreshCw
+                          size={14}
+                          className={
+                            onlineLoading
+                              ? "animate-spin"
+                              : ""
+                          }
+                        />
+                      </button>
+
                     </div>
+
                   </div>
 
-                  {onlineUsers.length > 0 ? (
-                    <div className="mt-4 flex items-center">
-                      <div className="flex -space-x-2">
-                        {onlineUsers
-                          .slice(0, 6)
-                          .map(
-                            (
-                              onlineUser,
-                              index
-                            ) => {
-                              const name =
-                                onlineUser.fullname ||
-                                onlineUser.name ||
-                                onlineUser.username ||
-                                "User";
+                  {/* ACTIVE USERS */}
 
-                              return (
-                                <ProfileAvatar
-                                  key={
-                                    onlineUser.id ??
-                                    `${name}-${index}`
-                                  }
-                                  name={
-                                    name
-                                  }
-                                  photo={
-                                    onlineUser.photo
-                                  }
-                                  size="sm"
-                                  online
-                                  dark
-                                />
-                              );
-                            }
-                          )}
+                  <div className="px-4 py-3.5 sm:px-5">
+
+                    <div className="mb-2.5 flex items-center justify-between">
+
+                      <div className="flex items-center gap-2">
+
+                        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-400/10 text-emerald-300">
+                          <Users size={12} />
+                        </div>
+
+                        <div className="text-[8px] font-black uppercase tracking-[0.16em] text-white/45">
+                          Active Users
+                        </div>
+
                       </div>
 
-                      <div className="ml-3 min-w-0">
-                        <div className="truncate text-xs font-bold text-white/80">
+                      <div className="text-[8px] font-black uppercase tracking-[0.14em] text-emerald-300/70">
+                        LIVE
+                      </div>
+
+                    </div>
+
+                    {onlineUsers.length > 0 ? (
+                      <>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+
                           {onlineUsers
-                            .slice(
-                              0,
-                              2
-                            )
+                            .slice(0, 2)
                             .map(
-                              (u) =>
-                                u.fullname ||
-                                u.name ||
-                                u.username ||
-                                "User"
-                            )
-                            .join(
-                              ", "
+                              (
+                                onlineUser,
+                                index
+                              ) => {
+
+                                const name =
+                                  onlineUser.fullname ||
+                                  onlineUser.name ||
+                                  onlineUser.username ||
+                                  "User";
+
+                                const roleLabel =
+                                  formatUserRole(
+                                    onlineUser.role
+                                  );
+
+                                const onlineOutlet =
+                                  onlineUser.outlet?.name ||
+                                  onlineUser.outletName ||
+                                  onlineUser.outlet?.code ||
+                                  onlineUser.outletCode ||
+                                  (onlineUser.id &&
+                                  user?.id &&
+                                  String(
+                                    onlineUser.id
+                                  ) ===
+                                    String(
+                                      user.id
+                                    )
+                                    ? outletName
+                                    : "");
+
+                                const detail =
+                                  onlineOutlet
+                                    ? `${roleLabel} • ${onlineOutlet}`
+                                    : roleLabel;
+
+                                return (
+                                  <div
+                                    key={
+                                      onlineUser.id ??
+                                      `${name}-${index}`
+                                    }
+                                    className="flex min-w-0 items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 transition hover:border-emerald-300/15 hover:bg-white/[0.055]"
+                                  >
+
+                                    <ProfileAvatar
+                                      name={name}
+                                      photo={
+                                        onlineUser.photo
+                                      }
+                                      size="sm"
+                                      online
+                                      dark
+                                    />
+
+                                    <div className="min-w-0 flex-1">
+
+                                      <div className="truncate text-[10px] font-black text-white/90">
+                                        {name}
+                                      </div>
+
+                                      <div className="mt-0.5 truncate text-[8px] font-medium text-white/35">
+                                        {detail}
+                                      </div>
+
+                                    </div>
+
+                                    <div className="flex shrink-0 items-center gap-1.5 text-[7px] font-bold uppercase tracking-[0.10em] text-emerald-300/70">
+
+                                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_7px_rgba(52,211,211,0.55)]" />
+
+                                      Active
+
+                                    </div>
+
+                                  </div>
+                                );
+                              }
                             )}
 
-                          {onlineUsers.length >
-                          2
-                            ? ` +${
-                                onlineUsers.length -
-                                2
-                              } lainnya`
-                            : ""}
                         </div>
 
-                        <div className="mt-0.5 text-[10px] text-white/35">
-                          Aktivitas pengguna aktif
+                        {onlineUsers.length > 2 && (
+                          <div className="mt-2 text-center text-[8px] font-semibold text-white/30">
+                            +{onlineUsers.length - 2} user
+                            lainnya sedang aktif
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="rounded-xl border border-white/[0.07] bg-black/10 px-3 py-3 text-center">
+
+                        <div className="text-[9px] font-bold text-white/40">
+                          Belum ada user online
                         </div>
+
+                        <div className="mt-0.5 text-[8px] text-white/20">
+                          Menunggu aktivitas pengguna...
+                        </div>
+
                       </div>
+                    )}
+
+                    {/* SYSTEM STATUS */}
+
+                    <div className="mt-2.5 grid grid-cols-2 gap-2">
+
+                      <div className="rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2">
+
+                        <div className="flex items-center justify-between">
+
+                          <span className="text-[7px] font-black uppercase tracking-[0.12em] text-white/30">
+                            ERP Core
+                          </span>
+
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,211,0.55)]" />
+
+                        </div>
+
+                        <div className="mt-1 text-[9px] font-black text-white/75">
+                          Operational
+                        </div>
+
+                      </div>
+
+                      <div className="rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2">
+
+                        <div className="flex items-center justify-between">
+
+                          <span className="text-[7px] font-black uppercase tracking-[0.12em] text-white/30">
+                            Monitoring
+                          </span>
+
+                          <Activity
+                            size={10}
+                            className="text-emerald-300"
+                          />
+
+                        </div>
+
+                        <div className="mt-1 text-[9px] font-black text-white/75">
+                          Active
+                        </div>
+
+                      </div>
+
                     </div>
-                  ) : (
-                    <div className="mt-4 rounded-xl border border-white/5 bg-black/10 px-3 py-2.5 text-[11px] text-white/35">
-                      Belum ada user
-                      online lain yang
-                      terdeteksi.
-                    </div>
-                  )}
+
+                  </div>
+
                 </div>
+
               </div>
+
             </div>
+
+            {/* ==================================================
+                HERO INVENTORY CONTROL
+                NILAI PERSEDIAAN — COMPACT
+            ================================================== */}
+
+            <div className="mt-7 border-t border-white/[0.07] pt-5">
+
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+
+                {/* LABEL */}
+
+                <div className="flex items-center gap-3">
+
+                  <span className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-300/55">
+                    Inventory Control
+                  </span>
+
+                  <span className="h-1 w-1 rounded-full bg-white/20" />
+
+                  <span className="text-[10px] font-medium text-white/30">
+                    {outletName}
+                  </span>
+
+                </div>
+
+                {/* HORIZONTAL METRICS */}
+
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+
+                  {/* NILAI PERSEDIAAN */}
+
+                  <Link
+                    href="/outlet/stock"
+                    className="group inline-flex items-center gap-2 transition"
+                  >
+                    <CircleDollarSign
+                      size={13}
+                      strokeWidth={2}
+                      className="text-emerald-300/65 transition group-hover:text-emerald-300"
+                    />
+
+                    <span className="text-[8px] font-black uppercase tracking-[0.12em] text-white/30">
+                      Nilai Persediaan
+                    </span>
+
+                    <span className="text-sm font-black tracking-tight text-emerald-300">
+                      {formatCurrency(
+                        totalStockValue
+                      )}
+                    </span>
+                  </Link>
+
+                  <span className="hidden h-4 w-px bg-white/10 sm:block" />
+
+                  {/* ACTIVITY */}
+
+                  <Link
+                    href="/outlet/stock"
+                    className="group inline-flex items-center gap-2 transition"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.55)]" />
+
+                    <span className="text-[8px] font-black uppercase tracking-[0.12em] text-white/30">
+                      Activity
+                    </span>
+
+                    <span className="text-xs font-black text-emerald-300">
+                      Active
+                    </span>
+                  </Link>
+
+                  <span className="hidden h-4 w-px bg-white/10 sm:block" />
+
+                  {/* STOCK ALERT */}
+
+                  <Link
+                    href="/outlet/stock"
+                    className="group inline-flex items-center gap-2 transition"
+                  >
+                    <AlertTriangle
+                      size={13}
+                      strokeWidth={2}
+                      className={
+                        lowStock > 0
+                          ? "text-amber-300"
+                          : "text-emerald-300/65"
+                      }
+                    />
+
+                    <span className="text-[8px] font-black uppercase tracking-[0.12em] text-white/30">
+                      Stock Alert
+                    </span>
+
+                    <span
+                      className={`text-sm font-black tracking-tight ${
+                        lowStock > 0
+                          ? "text-amber-300"
+                          : "text-emerald-300"
+                      }`}
+                    >
+                      {formatNumber(lowStock)}
+                    </span>
+
+                    <span className="text-[8px] font-medium text-white/25">
+                      item
+                    </span>
+                  </Link>
+
+                  <span className="hidden h-4 w-px bg-white/10 sm:block" />
+
+                  {/* ACTIVE USERS */}
+
+                  <div className="inline-flex items-center gap-2">
+
+                    <Users
+                      size={13}
+                      strokeWidth={2}
+                      className="text-emerald-300/60"
+                    />
+
+                    <span className="text-[8px] font-black uppercase tracking-[0.12em] text-white/30">
+                      Active Users
+                    </span>
+
+                    <span className="text-sm font-black tracking-tight text-white">
+                      {onlineLoading
+                        ? "..."
+                        : onlineUsers.length}
+                    </span>
+
+                    <span className="text-[8px] font-medium text-white/25">
+                      online
+                    </span>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
           </div>
+
         </section>
 
         {/* ====================================================
@@ -2131,7 +2329,9 @@ export default function OutletDashboardPage() {
         <section className="mt-5">
 
           <div className="mb-4 flex items-end justify-between">
+
             <div>
+
               <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
                 Executive Overview
               </div>
@@ -2139,6 +2339,7 @@ export default function OutletDashboardPage() {
               <h2 className="mt-1 text-xl font-black tracking-tight text-slate-900">
                 Ringkasan Outlet
               </h2>
+
             </div>
 
             <button
@@ -2160,15 +2361,14 @@ export default function OutletDashboardPage() {
 
               Refresh
             </button>
+
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
 
             <KpiCard
               title="Purchase Order"
-              value={formatNumber(
-                totalPurchase
-              )}
+              value={formatNumber(totalPurchase)}
               subtitle="Total purchase"
               icon={ShoppingCart}
               href="/outlet/purchase"
@@ -2177,9 +2377,7 @@ export default function OutletDashboardPage() {
 
             <KpiCard
               title="Draft"
-              value={formatNumber(
-                totalDraft
-              )}
+              value={formatNumber(totalDraft)}
               subtitle="Belum diproses"
               icon={FileText}
               href="/outlet/purchase"
@@ -2188,9 +2386,7 @@ export default function OutletDashboardPage() {
 
             <KpiCard
               title="Approved"
-              value={formatNumber(
-                totalApproved
-              )}
+              value={formatNumber(totalApproved)}
               subtitle="Purchase approved"
               icon={CheckCircle2}
               href="/outlet/purchase"
@@ -2199,9 +2395,7 @@ export default function OutletDashboardPage() {
 
             <KpiCard
               title="Received"
-              value={formatNumber(
-                totalReceived
-              )}
+              value={formatNumber(totalReceived)}
               subtitle="Sudah diterima"
               icon={PackageCheck}
               href="/outlet/barang-masuk"
@@ -2210,9 +2404,7 @@ export default function OutletDashboardPage() {
 
             <KpiCard
               title="Receipt"
-              value={formatNumber(
-                totalReceipt
-              )}
+              value={formatNumber(totalReceipt)}
               subtitle="Dokumen penerimaan"
               icon={ClipboardList}
               href="/outlet/barang-masuk"
@@ -2221,9 +2413,7 @@ export default function OutletDashboardPage() {
 
             <KpiCard
               title="Stock"
-              value={formatNumber(
-                totalStock
-              )}
+              value={formatNumber(totalStock)}
               subtitle="Total persediaan"
               icon={Boxes}
               href="/outlet/stock"
@@ -2232,9 +2422,7 @@ export default function OutletDashboardPage() {
 
             <KpiCard
               title="Low Stock"
-              value={formatNumber(
-                lowStock
-              )}
+              value={formatNumber(lowStock)}
               subtitle={
                 lowStock > 0
                   ? "Perlu perhatian"
@@ -2248,7 +2436,9 @@ export default function OutletDashboardPage() {
                   : "emerald"
               }
             />
+
           </div>
+
         </section>
 
         {/* ====================================================
@@ -2257,8 +2447,6 @@ export default function OutletDashboardPage() {
 
         <section className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
 
-          {/* CHART */}
-
           <div className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.05)] xl:col-span-2">
 
             <div className="border-b border-slate-100 px-6 py-5 sm:px-7">
@@ -2266,16 +2454,17 @@ export default function OutletDashboardPage() {
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
                 <div>
+
                   <div className="flex items-center gap-2">
+
                     <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-                      <Activity
-                        size={16}
-                      />
+                      <Activity size={16} />
                     </span>
 
                     <div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
                       Inventory Analytics
                     </div>
+
                   </div>
 
                   <h3 className="mt-2 text-xl font-black tracking-tight text-slate-900">
@@ -2287,6 +2476,7 @@ export default function OutletDashboardPage() {
                     barang keluar dan waste
                     selama 6 bulan terakhir.
                   </p>
+
                 </div>
 
                 <div className="flex items-center gap-4 text-[10px] font-bold text-slate-500">
@@ -2305,8 +2495,11 @@ export default function OutletDashboardPage() {
                     <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
                     Waste
                   </div>
+
                 </div>
+
               </div>
+
             </div>
 
             <div className="p-5 sm:p-7">
@@ -2317,9 +2510,7 @@ export default function OutletDashboardPage() {
                   title="Barang Masuk"
                   value={stockIn}
                   subtitle="Total 6 bulan"
-                  icon={
-                    ArrowDownToLine
-                  }
+                  icon={ArrowDownToLine}
                   variant="in"
                 />
 
@@ -2327,9 +2518,7 @@ export default function OutletDashboardPage() {
                   title="Barang Keluar"
                   value={stockOut}
                   subtitle="Total 6 bulan"
-                  icon={
-                    ArrowUpFromLine
-                  }
+                  icon={ArrowUpFromLine}
                   variant="out"
                 />
 
@@ -2343,24 +2532,21 @@ export default function OutletDashboardPage() {
 
                 <MovementSummaryCard
                   title="Net Movement"
-                  value={
-                    netMovement
-                  }
+                  value={netMovement}
                   subtitle="Masuk - keluar - waste"
                   icon={Layers3}
                   variant="net"
                 />
+
               </div>
 
               <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-100 bg-white">
 
-                {movementTrend.length ===
-                0 ? (
+                {movementTrend.length === 0 ? (
                   <div className="flex min-h-[350px] flex-col items-center justify-center text-center">
+
                     <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                      <BarChart3
-                        size={24}
-                      />
+                      <BarChart3 size={24} />
                     </div>
 
                     <div className="mt-4 text-sm font-black text-slate-600">
@@ -2369,30 +2555,28 @@ export default function OutletDashboardPage() {
                     </div>
 
                     <div className="mt-1 max-w-sm text-xs text-slate-400">
-                      Data akan muncul
-                      setelah terdapat
-                      transaksi barang masuk
-                      atau barang keluar.
+                      Data akan muncul setelah
+                      terdapat transaksi barang
+                      masuk atau barang keluar.
                     </div>
+
                   </div>
                 ) : (
                   <MovementChart
-                    data={
-                      movementTrend
-                    }
+                    data={movementTrend}
                   />
                 )}
+
               </div>
 
               <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-white p-4 sm:flex-row sm:items-center">
 
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm">
-                  <TrendingUp
-                    size={18}
-                  />
+                  <TrendingUp size={18} />
                 </div>
 
                 <div className="min-w-0 flex-1">
+
                   <div className="text-xs font-black text-emerald-900">
                     Inventory Flow
                   </div>
@@ -2406,6 +2590,7 @@ export default function OutletDashboardPage() {
                     tidak tercampur dengan
                     barang keluar bersih.
                   </p>
+
                 </div>
 
                 <div
@@ -2415,25 +2600,31 @@ export default function OutletDashboardPage() {
                       : "bg-red-100 text-red-800"
                   }`}
                 >
+
                   <div className="text-[9px] font-black uppercase tracking-wider">
                     Net
                   </div>
 
                   <div className="text-sm font-black">
-                    {netMovement >=
-                    0
+                    {netMovement >= 0
                       ? "+"
                       : ""}
                     {formatNumber(
                       netMovement
                     )}
                   </div>
+
                 </div>
+
               </div>
+
             </div>
+
           </div>
 
-          {/* OPERATIONAL STATUS */}
+          {/* ==================================================
+              OPERATIONAL STATUS
+          ================================================== */}
 
           <div className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.05)]">
 
@@ -2442,6 +2633,7 @@ export default function OutletDashboardPage() {
               <div className="flex items-center justify-between">
 
                 <div>
+
                   <div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
                     Operational Status
                   </div>
@@ -2449,14 +2641,15 @@ export default function OutletDashboardPage() {
                   <h3 className="mt-1 text-lg font-black text-slate-900">
                     Kondisi Outlet
                   </h3>
+
                 </div>
 
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-400">
-                  <BarChart3
-                    size={19}
-                  />
+                  <BarChart3 size={19} />
                 </div>
+
               </div>
+
             </div>
 
             <div className="space-y-3 p-5">
@@ -2470,12 +2663,12 @@ export default function OutletDashboardPage() {
                 <div className="min-w-0 flex-1">
 
                   <div className="flex items-center justify-between gap-2">
+
                     <span className="text-xs font-bold text-slate-700">
                       Persediaan
                     </span>
 
-                    {lowStock >
-                    0 ? (
+                    {lowStock > 0 ? (
                       <span className="text-[10px] font-black text-red-600">
                         Perlu cek
                       </span>
@@ -2484,15 +2677,49 @@ export default function OutletDashboardPage() {
                         Aman
                       </span>
                     )}
+
                   </div>
 
                   <div className="mt-1 text-[11px] text-slate-500">
-                    {formatNumber(
-                      totalStock
-                    )}{" "}
-                    unit stock
+                    {formatNumber(totalStock)} unit stock
                   </div>
+
                 </div>
+
+              </div>
+
+              <div className="group flex items-center gap-4 rounded-2xl border border-purple-100 bg-purple-50/40 p-4 transition hover:border-purple-200 hover:bg-purple-50/70">
+
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-purple-700 shadow-sm">
+                  <CircleDollarSign size={18} />
+                </div>
+
+                <div className="min-w-0 flex-1">
+
+                  <div className="flex items-center justify-between gap-2">
+
+                    <span className="text-xs font-bold text-slate-700">
+                      Nilai Persediaan
+                    </span>
+
+                    <span className="text-[10px] font-black text-purple-600">
+                      Valuasi
+                    </span>
+
+                  </div>
+
+                  <div className="mt-1 text-sm font-black tracking-tight text-slate-800">
+                    {formatCurrency(
+                      totalStockValue
+                    )}
+                  </div>
+
+                  <div className="mt-0.5 text-[10px] text-slate-400">
+                    Estimasi nilai seluruh stock outlet
+                  </div>
+
+                </div>
+
               </div>
 
               <div className="group flex items-center gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 transition hover:border-red-100 hover:bg-red-50/40">
@@ -2504,67 +2731,65 @@ export default function OutletDashboardPage() {
                       : "bg-emerald-50 text-emerald-700"
                   }`}
                 >
-                  <AlertTriangle
-                    size={18}
-                  />
+                  <AlertTriangle size={18} />
                 </div>
 
                 <div className="min-w-0 flex-1">
 
                   <div className="flex items-center justify-between gap-2">
+
                     <span className="text-xs font-bold text-slate-700">
                       Low Stock
                     </span>
 
                     <span
                       className={`text-[10px] font-black ${
-                        lowStock >
-                        0
+                        lowStock > 0
                           ? "text-red-600"
                           : "text-emerald-600"
                       }`}
                     >
-                      {formatNumber(
-                        lowStock
-                      )}
+                      {formatNumber(lowStock)}
                     </span>
+
                   </div>
 
                   <div className="mt-1 text-[11px] text-slate-500">
-                    {lowStock >
-                    0
+                    {lowStock > 0
                       ? "Ada item yang perlu diperhatikan"
                       : "Tidak ada item low stock"}
                   </div>
+
                 </div>
+
               </div>
 
               <div className="group flex items-center gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 transition hover:border-purple-100 hover:bg-purple-50/40">
 
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700">
-                  <ClipboardList
-                    size={18}
-                  />
+                  <ClipboardList size={18} />
                 </div>
 
                 <div className="min-w-0 flex-1">
 
                   <div className="flex items-center justify-between gap-2">
+
                     <span className="text-xs font-bold text-slate-700">
                       Receipt
                     </span>
 
                     <span className="text-[10px] font-black text-purple-600">
-                      {formatNumber(
-                        totalReceipt
-                      )}
+                      {formatNumber(totalReceipt)}
                     </span>
+
                   </div>
 
                   <div className="mt-1 text-[11px] text-slate-500">
                     Dokumen penerimaan barang
                   </div>
+
                 </div>
+
               </div>
 
               <div className="group flex items-center gap-4 rounded-2xl border border-red-100 bg-red-50/50 p-4 transition hover:border-red-200 hover:bg-red-50">
@@ -2576,29 +2801,29 @@ export default function OutletDashboardPage() {
                 <div className="min-w-0 flex-1">
 
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-red-900">
+
+                    <span className="text-xs font-black text-red-900">
                       Waste
                     </span>
 
                     <span className="text-[10px] font-black text-red-600">
-                      {formatNumber(
-                        waste
-                      )}
+                      {formatNumber(waste)}
                     </span>
+
                   </div>
 
                   <div className="mt-1 text-[11px] text-red-800/55">
                     Waste tercatat 6 bulan
                   </div>
+
                 </div>
+
               </div>
 
               <div className="flex items-center gap-4 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
 
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm">
-                  <UserCheck
-                    size={18}
-                  />
+                  <UserCheck size={18} />
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -2608,15 +2833,19 @@ export default function OutletDashboardPage() {
                   </div>
 
                   <div className="mt-1 truncate text-[11px] text-emerald-800/60">
-                    {outletName} •{" "}
-                    {outletCode}
+                    {outletName} • {outletCode}
                   </div>
+
                 </div>
 
                 <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-500" />
+
               </div>
+
             </div>
+
           </div>
+
         </section>
 
         {/* ====================================================
@@ -2626,6 +2855,7 @@ export default function OutletDashboardPage() {
         <section className="mt-5">
 
           <div className="mb-4">
+
             <div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
               Quick Access
             </div>
@@ -2633,6 +2863,7 @@ export default function OutletDashboardPage() {
             <h2 className="mt-1 text-xl font-black tracking-tight text-slate-900">
               Menu Cepat
             </h2>
+
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -2684,7 +2915,9 @@ export default function OutletDashboardPage() {
               description="Item yang perlu diperhatikan"
               icon={AlertTriangle}
             />
+
           </div>
+
         </section>
 
         {/* ====================================================
@@ -2693,8 +2926,6 @@ export default function OutletDashboardPage() {
 
         <section className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
 
-          {/* RECENT PURCHASE */}
-
           <div className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.05)] xl:col-span-2">
 
             <div className="border-b border-slate-100 px-6 py-5">
@@ -2702,6 +2933,7 @@ export default function OutletDashboardPage() {
               <div className="flex items-center justify-between">
 
                 <div>
+
                   <div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
                     Recent Activity
                   </div>
@@ -2709,6 +2941,7 @@ export default function OutletDashboardPage() {
                   <h3 className="mt-1 text-lg font-black text-slate-900">
                     Purchase Terbaru
                   </h3>
+
                 </div>
 
                 <Link
@@ -2716,20 +2949,18 @@ export default function OutletDashboardPage() {
                   className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50 hover:text-emerald-900"
                 >
                   Lihat semua
-                  <ArrowRight
-                    size={14}
-                  />
+                  <ArrowRight size={14} />
                 </Link>
+
               </div>
+
             </div>
 
-            {recentPurchases.length ===
-            0 ? (
+            {recentPurchases.length === 0 ? (
               <div className="flex min-h-[270px] flex-col items-center justify-center px-6 text-center">
+
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                  <ShoppingCart
-                    size={24}
-                  />
+                  <ShoppingCart size={24} />
                 </div>
 
                 <div className="mt-4 text-sm font-black text-slate-700">
@@ -2737,9 +2968,10 @@ export default function OutletDashboardPage() {
                 </div>
 
                 <p className="mt-1 max-w-sm text-xs text-slate-400">
-                  Data purchase terbaru
-                  akan muncul di sini.
+                  Data purchase terbaru akan
+                  muncul di sini.
                 </p>
+
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -2768,107 +3000,111 @@ export default function OutletDashboardPage() {
                       <th className="px-6 py-3 text-right text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
                         Total
                       </th>
+
                     </tr>
                   </thead>
 
                   <tbody>
+
                     {recentPurchases.map(
-                      (
-                        purchase,
-                        index
-                      ) => (
+                      (purchase, index) => (
                         <tr
-                          key={
-                            purchase.id
-                          }
+                          key={purchase.id}
                           className={`group transition hover:bg-emerald-50/40 ${
                             index !==
-                            recentPurchases.length -
-                              1
+                            recentPurchases.length - 1
                               ? "border-b border-slate-100"
                               : ""
                           }`}
                         >
 
                           <td className="px-6 py-4">
+
                             <Link
                               href={`/outlet/purchase/${purchase.id}`}
                               className="flex items-center gap-3"
                             >
+
                               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition group-hover:bg-emerald-100 group-hover:text-emerald-700">
-                                <FileText
-                                  size={16}
-                                />
+                                <FileText size={16} />
                               </div>
 
                               <div className="min-w-0">
+
                                 <div className="truncate text-xs font-black text-slate-800">
-                                  {
-                                    purchase.number
-                                  }
+                                  {purchase.number}
                                 </div>
 
                                 <div className="mt-0.5 text-[10px] font-medium text-slate-400">
-                                  ID #
-                                  {
-                                    purchase.id
-                                  }
+                                  ID #{purchase.id}
                                 </div>
+
                               </div>
+
                             </Link>
+
                           </td>
 
                           <td className="px-4 py-4">
+
                             <div className="max-w-[180px]">
+
                               <div className="truncate text-xs font-bold text-slate-700">
-                                {purchase
-                                  .supplier
-                                  ?.name ||
-                                  "-"}
+                                {purchase.supplier?.name || "-"}
                               </div>
 
                               <div className="mt-0.5 text-[10px] text-slate-400">
-                                {purchase
-                                  .supplier
-                                  ?.code ||
-                                  "-"}
+                                {purchase.supplier?.code || "-"}
                               </div>
+
                             </div>
+
                           </td>
 
                           <td className="px-4 py-4">
+
                             <div className="text-xs font-semibold text-slate-600">
                               {formatDate(
                                 purchase.purchaseDate
                               )}
                             </div>
+
                           </td>
 
                           <td className="px-4 py-4">
+
                             <StatusBadge
-                              status={
-                                purchase.status
-                              }
+                              status={purchase.status}
                             />
+
                           </td>
 
                           <td className="px-6 py-4 text-right">
+
                             <div className="text-xs font-black text-slate-800">
                               {formatCurrency(
                                 purchase.total
                               )}
                             </div>
+
                           </td>
+
                         </tr>
                       )
                     )}
+
                   </tbody>
+
                 </table>
+
               </div>
             )}
+
           </div>
 
-          {/* ATTENTION */}
+          {/* ==================================================
+              ATTENTION
+          ================================================== */}
 
           <div className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.05)]">
 
@@ -2881,6 +3117,7 @@ export default function OutletDashboardPage() {
               <h3 className="mt-1 text-lg font-black text-slate-900">
                 Perlu Perhatian
               </h3>
+
             </div>
 
             <div className="space-y-3 p-5">
@@ -2893,33 +3130,29 @@ export default function OutletDashboardPage() {
                     : "border-emerald-100 bg-emerald-50/60 hover:border-emerald-200"
                 }`}
               >
+
                 <div className="flex items-center gap-3">
 
                   <div
                     className={`flex h-10 w-10 items-center justify-center rounded-xl bg-white ${
-                      lowStock >
-                      0
+                      lowStock > 0
                         ? "text-red-600"
                         : "text-emerald-600"
                     }`}
                   >
-                    <AlertTriangle
-                      size={18}
-                    />
+                    <AlertTriangle size={18} />
                   </div>
 
                   <div className="min-w-0 flex-1">
 
                     <div
                       className={`text-xs font-black ${
-                        lowStock >
-                        0
+                        lowStock > 0
                           ? "text-red-900"
                           : "text-emerald-900"
                       }`}
                     >
-                      {lowStock >
-                      0
+                      {lowStock > 0
                         ? `${formatNumber(
                             lowStock
                           )} item low stock`
@@ -2928,259 +3161,396 @@ export default function OutletDashboardPage() {
 
                     <div
                       className={`mt-1 text-[10px] ${
-                        lowStock >
-                        0
+                        lowStock > 0
                           ? "text-red-800/60"
                           : "text-emerald-800/60"
                       }`}
                     >
-                      {lowStock >
-                      0
+                      {lowStock > 0
                         ? "Klik untuk melihat detail"
                         : "Tidak ada alert stock"}
                     </div>
+
                   </div>
 
                   <ChevronRight
                     size={16}
                     className="text-slate-400 transition group-hover:translate-x-1"
                   />
+
                 </div>
+
               </Link>
 
               <Link
                 href="/outlet/purchase"
                 className="group block rounded-2xl border border-amber-100 bg-amber-50/60 p-4 transition hover:border-amber-200"
               >
+
                 <div className="flex items-center gap-3">
 
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-amber-600">
-                    <Clock3
-                      size={18}
-                    />
+                    <Clock3 size={18} />
                   </div>
 
                   <div className="min-w-0 flex-1">
 
                     <div className="text-xs font-black text-amber-900">
-                      {formatNumber(
-                        totalDraft
-                      )}{" "}
-                      purchase draft
+                      {formatNumber(totalDraft)} purchase draft
                     </div>
 
                     <div className="mt-1 text-[10px] text-amber-800/60">
                       Masih menunggu proses
                     </div>
+
                   </div>
 
                   <ChevronRight
                     size={16}
                     className="text-amber-500 transition group-hover:translate-x-1"
                   />
+
                 </div>
+
               </Link>
 
               <Link
                 href="/outlet/barang-masuk"
                 className="group block rounded-2xl border border-blue-100 bg-blue-50/60 p-4 transition hover:border-blue-200"
               >
+
                 <div className="flex items-center gap-3">
 
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-blue-600">
-                    <Truck
-                      size={18}
-                    />
+                    <Truck size={18} />
                   </div>
 
                   <div className="min-w-0 flex-1">
 
                     <div className="text-xs font-black text-blue-900">
-                      {formatNumber(
-                        totalReceived
-                      )}{" "}
-                      received
+                      {formatNumber(totalReceived)} received
                     </div>
 
                     <div className="mt-1 text-[10px] text-blue-800/60">
-                      Total purchase yang
-                      sudah diterima
+                      Total purchase yang sudah diterima
                     </div>
+
                   </div>
 
                   <ChevronRight
                     size={16}
                     className="text-blue-500 transition group-hover:translate-x-1"
                   />
+
                 </div>
+
               </Link>
 
               <Link
                 href="/outlet/stock"
                 className="group block rounded-2xl border border-red-100 bg-red-50/60 p-4 transition hover:border-red-200"
               >
+
                 <div className="flex items-center gap-3">
 
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-red-600">
-                    <Trash2
-                      size={18}
-                    />
+                    <Trash2 size={18} />
                   </div>
 
                   <div className="min-w-0 flex-1">
 
                     <div className="text-xs font-black text-red-900">
-                      {formatNumber(
-                        waste
-                      )}{" "}
-                      waste
+                      {formatNumber(waste)} waste
                     </div>
 
                     <div className="mt-1 text-[10px] text-red-800/60">
                       Total waste 6 bulan
                     </div>
+
                   </div>
 
                   <ChevronRight
                     size={16}
                     className="text-red-500 transition group-hover:translate-x-1"
                   />
+
                 </div>
+
               </Link>
+
+              <Link
+                href="/outlet/stock"
+                className="group block rounded-2xl border border-purple-100 bg-purple-50/60 p-4 transition hover:border-purple-200"
+              >
+
+                <div className="flex items-center gap-3">
+
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-purple-600 shadow-sm">
+                    <CircleDollarSign size={18} />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+
+                    <div className="text-xs font-black text-purple-900">
+                      {formatCurrency(
+                        totalStockValue
+                      )}
+                    </div>
+
+                    <div className="mt-1 text-[10px] text-purple-800/60">
+                      Nilai persediaan outlet
+                    </div>
+
+                  </div>
+
+                  <ChevronRight
+                    size={16}
+                    className="text-purple-500 transition group-hover:translate-x-1"
+                  />
+
+                </div>
+
+              </Link>
+
             </div>
+
           </div>
+
         </section>
 
         {/* ====================================================
             ONLINE USERS
         ==================================================== */}
 
-        <section className="mt-5 overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.05)]">
+        <section className="relative mt-5 overflow-hidden rounded-[28px] border border-[#24483e] bg-[#071c17] shadow-[0_20px_60px_rgba(7,28,23,0.16)]">
 
-          <div className="border-b border-slate-100 px-6 py-5">
+          <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-emerald-400/[0.05] blur-3xl" />
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="pointer-events-none absolute -bottom-20 left-1/3 h-40 w-40 rounded-full bg-teal-400/[0.04] blur-3xl" />
 
-              <div>
-                <div className="flex items-center gap-2">
+          <div className="relative">
 
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+            {/* HEADER */}
 
-                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
-                    Live Monitoring
+            <div className="border-b border-white/[0.07] px-6 py-5 sm:px-7">
+
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+                <div>
+
+                  <div className="flex items-center gap-2">
+
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#39d98a] shadow-[0_0_10px_rgba(57,217,138,0.7)]" />
+
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#75b9a4]">
+                      Live Monitoring
+                    </span>
+
                   </div>
+
+                  <h3 className="mt-1.5 text-xl font-black tracking-tight text-white">
+                    Active Users
+                  </h3>
+
+                  <p className="mt-1 text-[11px] font-medium text-white/35">
+                    Pengguna yang sedang aktif di MGB ERP
+                  </p>
+
                 </div>
 
-                <h3 className="mt-1 text-lg font-black text-slate-900">
-                  User Online
-                </h3>
+                <div className="flex items-center gap-3">
+
+                  <div className="inline-flex items-center gap-2 rounded-full border border-[#39d98a]/20 bg-[#39d98a]/10 px-3.5 py-2">
+
+                    <span className="relative flex h-2.5 w-2.5">
+
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#39d98a] opacity-50" />
+
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#39d98a]" />
+
+                    </span>
+
+                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[#7ee2b5]">
+                      {onlineLoading
+                        ? "..."
+                        : `${onlineUsers.length} ONLINE`}
+                    </span>
+
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={loadOnlineUsers}
+                    disabled={onlineLoading}
+                    title="Refresh user online"
+                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white/40 transition hover:border-[#39d98a]/20 hover:bg-[#39d98a]/10 hover:text-[#72dcae] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <RefreshCw
+                      size={14}
+                      className={
+                        onlineLoading
+                          ? "animate-spin"
+                          : ""
+                      }
+                    />
+                  </button>
+
+                </div>
+
               </div>
 
-              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[10px] font-black text-emerald-700">
-                <Activity
-                  size={13}
-                />
-                Update otomatis setiap
-                15 detik
-              </div>
             </div>
+
+            {/* ACTIVE USER LIST */}
+
+            {onlineUsers.length === 0 ? (
+
+              <div className="p-6 sm:p-7">
+
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-5 py-8 text-center">
+
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.04] text-white/20">
+                    <Users size={21} />
+                  </div>
+
+                  <div className="mt-3 text-sm font-black text-white/55">
+                    Belum ada user online
+                  </div>
+
+                  <div className="mt-1 text-[11px] text-white/25">
+                    Sistem akan memperbarui status secara otomatis.
+                  </div>
+
+                </div>
+
+              </div>
+
+            ) : (
+
+              <div className="p-4 sm:p-5">
+
+                <div className="mb-3 flex items-center justify-between px-1">
+
+                  <div className="text-[9px] font-black uppercase tracking-[0.16em] text-white/25">
+                    Pengguna Aktif
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-[9px] font-bold text-[#5fc999]">
+
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#39d98a]" />
+
+                    LIVE
+
+                  </div>
+
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 lg:grid-cols-3">
+
+                  {onlineUsers.map(
+                    (onlineUser, index) => {
+
+                      const name =
+                        onlineUser.fullname ||
+                        onlineUser.name ||
+                        onlineUser.username ||
+                        "User";
+
+                      const role =
+                        formatUserRole(
+                          onlineUser.role
+                        );
+
+                      const lastSeen =
+                        onlineUser.lastSeen ||
+                        onlineUser.updatedAt;
+
+                      return (
+                        <div
+                          key={
+                            onlineUser.id ??
+                            `${name}-${index}`
+                          }
+                          className="
+                            group
+                            relative
+                            overflow-hidden
+                            rounded-[18px]
+                            border
+                            border-white/[0.06]
+                            bg-white/[0.035]
+                            px-4
+                            py-3.5
+                            transition-all
+                            duration-200
+                            hover:border-[#39d98a]/20
+                            hover:bg-white/[0.055]
+                          "
+                        >
+
+                          <div className="absolute bottom-0 left-0 h-[1px] w-0 bg-[#39d98a] transition-all duration-300 group-hover:w-full" />
+
+                          <div className="flex items-center gap-3">
+
+                            <ProfileAvatar
+                              name={name}
+                              photo={
+                                onlineUser.photo
+                              }
+                              size="md"
+                              online
+                              dark
+                            />
+
+                            <div className="min-w-0 flex-1">
+
+                              <div className="truncate text-xs font-black text-white/90">
+                                {name}
+                              </div>
+
+                              <div className="mt-0.5 truncate text-[10px] font-medium text-white/35">
+                                {role}
+                              </div>
+
+                            </div>
+
+                            <div className="shrink-0 text-right">
+
+                              <div className="flex items-center justify-end gap-1.5">
+
+                                <span className="h-1.5 w-1.5 rounded-full bg-[#39d98a] shadow-[0_0_7px_rgba(57,217,138,0.55)]" />
+
+                                <span className="text-[9px] font-black text-[#65d39f]">
+                                  Online
+                                </span>
+
+                              </div>
+
+                              <div className="mt-1 text-[9px] font-medium text-white/25">
+                                {lastSeen
+                                  ? formatDateTime(
+                                      lastSeen
+                                    )
+                                  : "Baru saja"}
+                              </div>
+
+                            </div>
+
+                          </div>
+
+                        </div>
+                      );
+                    }
+                  )}
+
+                </div>
+
+              </div>
+
+            )}
+
           </div>
 
-          {onlineUsers.length ===
-          0 ? (
-            <div className="p-6">
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
-                <Users
-                  size={24}
-                  className="mx-auto text-slate-300"
-                />
-
-                <div className="mt-3 text-sm font-black text-slate-600">
-                  Belum ada data user
-                  online
-                </div>
-
-                <div className="mt-1 text-xs text-slate-400">
-                  Sistem akan memperbarui
-                  status secara otomatis.
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {onlineUsers.map(
-                (
-                  onlineUser,
-                  index
-                ) => {
-                  const name =
-                    onlineUser.fullname ||
-                    onlineUser.name ||
-                    onlineUser.username ||
-                    "User";
-
-                  const role =
-                    onlineUser.role ||
-                    "User";
-
-                  const lastSeen =
-                    onlineUser.lastSeen ||
-                    onlineUser.updatedAt;
-
-                  return (
-                    <div
-                      key={
-                        onlineUser.id ??
-                        `${name}-${index}`
-                      }
-                      className="group rounded-2xl border border-slate-100 bg-slate-50/70 p-4 transition hover:border-emerald-100 hover:bg-emerald-50/40"
-                    >
-                      <div className="flex items-center gap-3">
-
-                        {/* ==================================================
-                            PROFILE PHOTO
-                        ================================================== */}
-
-                        <ProfileAvatar
-                          name={name}
-                          photo={
-                            onlineUser.photo
-                          }
-                          size="md"
-                          online
-                        />
-
-                        <div className="min-w-0 flex-1">
-
-                          <div className="truncate text-xs font-black text-slate-800">
-                            {name}
-                          </div>
-
-                          <div className="mt-0.5 truncate text-[10px] font-medium text-slate-400">
-                            {role}
-                          </div>
-                        </div>
-
-                        <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-                      </div>
-
-                      {lastSeen && (
-                        <div className="mt-3 flex items-center gap-1.5 text-[10px] text-slate-400">
-                          <Clock3
-                            size={11}
-                          />
-                          Aktif{" "}
-                          {formatDateTime(
-                            lastSeen
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-              )}
-            </div>
-          )}
         </section>
 
         {/* ====================================================
@@ -3194,24 +3564,25 @@ export default function OutletDashboardPage() {
             <div className="flex items-center gap-3">
 
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#071c17] text-emerald-300">
-                <Warehouse
-                  size={17}
-                />
+                <Warehouse size={17} />
               </div>
 
               <div>
+
                 <div className="text-xs font-black text-slate-800">
                   MGB ERP • Outlet
                 </div>
 
                 <div className="mt-0.5 text-[10px] font-medium text-slate-400">
-                  {outletName} (
-                  {outletCode})
+                  {outletName} ({outletCode})
                 </div>
+
               </div>
+
             </div>
 
             <div className="flex items-center gap-2 text-[10px] font-semibold text-slate-400">
+
               <span>
                 Operational Dashboard
               </span>
@@ -3227,9 +3598,13 @@ export default function OutletDashboardPage() {
               <span>
                 Inventory Analytics
               </span>
+
             </div>
+
           </div>
+
         </footer>
+
       </div>
     </div>
   );

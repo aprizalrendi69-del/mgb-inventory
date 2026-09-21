@@ -7,9 +7,20 @@ import { Prisma } from "@prisma/client";
  * HISTORY STOCK PUSAT
  * =========================================================
  *
- * SUMBER DATA:
+ * SUMBER DATA UTAMA:
  *
  *   StockCard
+ *
+ * USER:
+ *
+ *   StockCard
+ *      |
+ *      | trxNumber
+ *      v
+ *   History.referenceNumber
+ *      |
+ *      v
+ *   History.user
  *
  * SCOPE:
  *
@@ -40,54 +51,37 @@ import { Prisma } from "@prisma/client";
  * =========================================================
  */
 
-export async function GET(
-  req: NextRequest
-) {
+export async function GET(req: NextRequest) {
   try {
-    const { searchParams } =
-      new URL(req.url);
+    const { searchParams } = new URL(req.url);
 
     // ======================================================
     // PARAMETER
     // ======================================================
 
     const search =
-      searchParams
-        .get("search")
-        ?.trim() || "";
+      searchParams.get("search")?.trim() || "";
 
     const barangIdParam =
-      searchParams
-        .get("barangId")
-        ?.trim() || "";
+      searchParams.get("barangId")?.trim() || "";
 
     const trxType =
-      searchParams
-        .get("trxType")
-        ?.trim()
-        .toUpperCase() || "";
+      searchParams.get("trxType")?.trim().toUpperCase() || "";
 
     const dateFrom =
-      searchParams
-        .get("dateFrom")
-        ?.trim() || "";
+      searchParams.get("dateFrom")?.trim() || "";
 
     const dateTo =
-      searchParams
-        .get("dateTo")
-        ?.trim() || "";
+      searchParams.get("dateTo")?.trim() || "";
 
     // ======================================================
     // VALIDATE BARANG ID
     // ======================================================
 
-    let barangId:
-      | number
-      | undefined = undefined;
+    let barangId: number | undefined = undefined;
 
     if (barangIdParam) {
-      const parsed =
-        Number(barangIdParam);
+      const parsed = Number(barangIdParam);
 
       if (
         Number.isInteger(parsed) &&
@@ -101,40 +95,25 @@ export async function GET(
     // VALIDATE DATE
     // ======================================================
 
-    let parsedDateFrom:
-      | Date
-      | undefined;
-
-    let parsedDateTo:
-      | Date
-      | undefined;
+    let parsedDateFrom: Date | undefined;
+    let parsedDateTo: Date | undefined;
 
     if (dateFrom) {
-      const date =
-        new Date(
-          `${dateFrom}T00:00:00`
-        );
+      const date = new Date(
+        `${dateFrom}T00:00:00`
+      );
 
-      if (
-        !Number.isNaN(
-          date.getTime()
-        )
-      ) {
+      if (!Number.isNaN(date.getTime())) {
         parsedDateFrom = date;
       }
     }
 
     if (dateTo) {
-      const date =
-        new Date(
-          `${dateTo}T23:59:59.999`
-        );
+      const date = new Date(
+        `${dateTo}T23:59:59.999`
+      );
 
-      if (
-        !Number.isNaN(
-          date.getTime()
-        )
-      ) {
+      if (!Number.isNaN(date.getTime())) {
         parsedDateTo = date;
       }
     }
@@ -143,16 +122,15 @@ export async function GET(
     // WHERE
     // ======================================================
 
-    const where: Prisma.StockCardWhereInput =
-      {
-        /*
-         * ==================================================
-         * WAJIB STOCK PUSAT
-         * ==================================================
-         */
+    const where: Prisma.StockCardWhereInput = {
+      /*
+       * ==================================================
+       * WAJIB STOCK PUSAT
+       * ==================================================
+       */
 
-        warehouse: "MAIN",
-      };
+      warehouse: "MAIN",
+    };
 
     // ======================================================
     // FILTER BARANG
@@ -246,24 +224,113 @@ export async function GET(
     // ======================================================
 
     const stockCards =
-      await prisma.stockCard.findMany(
-        {
-          where,
+      await prisma.stockCard.findMany({
+        where,
 
-          include: {
-            barang: true,
+        include: {
+          barang: true,
+        },
+
+        orderBy: [
+          {
+            trxDate: "desc",
           },
+          {
+            id: "desc",
+          },
+        ],
+      });
 
-          orderBy: [
-            {
-              trxDate: "desc",
+    // ======================================================
+    // AMBIL NOMOR TRANSAKSI
+    // ======================================================
+    //
+    // User tidak disimpan langsung di StockCard.
+    //
+    // Karena History mempunyai:
+    //
+    //   referenceNumber
+    //   userId
+    //   user
+    //
+    // maka kita hubungkan:
+    //
+    //   StockCard.trxNumber
+    //          =
+    //   History.referenceNumber
+    //
+    // ======================================================
+
+    const trxNumbers = Array.from(
+      new Set(
+        stockCards
+          .map(
+            (item) =>
+              item.trxNumber?.trim()
+          )
+          .filter(
+            (
+              value
+            ): value is string =>
+              Boolean(value)
+          )
+      )
+    );
+
+    // ======================================================
+    // GET HISTORY + USER
+    // ======================================================
+
+    const histories =
+      trxNumbers.length > 0
+        ? await prisma.history.findMany({
+            where: {
+              referenceNumber: {
+                in: trxNumbers,
+              },
             },
-            {
-              id: "desc",
+
+            include: {
+              user: true,
             },
-          ],
-        }
-      );
+
+            orderBy: {
+              createdAt: "desc",
+            },
+          })
+        : [];
+
+    // ======================================================
+    // MAP HISTORY BERDASARKAN REFERENCE NUMBER
+    // ======================================================
+    //
+    // Karena satu referenceNumber bisa saja memiliki
+    // beberapa History, kita menggunakan History terbaru.
+    //
+    // findMany sudah diurutkan createdAt DESC.
+    //
+    // ======================================================
+
+    const historyByReference =
+      new Map<
+        string,
+        (typeof histories)[number]
+      >();
+
+    for (const history of histories) {
+      const reference =
+        history.referenceNumber?.trim();
+
+      if (
+        reference &&
+        !historyByReference.has(reference)
+      ) {
+        historyByReference.set(
+          reference,
+          history
+        );
+      }
+    }
 
     // ======================================================
     // FORMAT RESPONSE
@@ -297,11 +364,23 @@ export async function GET(
               item.totalValue ?? 0
             );
 
-          /*
-           * =================================================
-           * TENTUKAN ARAH TRANSAKSI
-           * =================================================
-           */
+          // =================================================
+          // CARI HISTORY BERDASARKAN NOMOR TRANSAKSI
+          // =================================================
+
+          const referenceNumber =
+            item.trxNumber?.trim() || "";
+
+          const history =
+            referenceNumber
+              ? historyByReference.get(
+                  referenceNumber
+                )
+              : undefined;
+
+          // =================================================
+          // TENTUKAN ARAH TRANSAKSI
+          // =================================================
 
           let direction:
             | "IN"
@@ -321,28 +400,48 @@ export async function GET(
             direction = "OUT";
           }
 
-          /*
-           * =================================================
-           * LABEL TRANSAKSI
-           * =================================================
-           */
+          // =================================================
+          // LABEL TRANSAKSI
+          // =================================================
 
           const transactionType =
             item.trxType ||
             "TRANSAKSI";
 
-          /*
-           * =================================================
-           * DESCRIPTION
-           * =================================================
-           */
+          // =================================================
+          // DESCRIPTION
+          // =================================================
 
           const description =
             item.note ||
+            history?.description ||
             `${transactionType} ${
               item.barang?.name ??
               "Barang"
             }`;
+
+          // =================================================
+          // USER
+          // =================================================
+
+          const userId =
+            history?.userId ??
+            null;
+
+          const userName =
+            history?.user?.fullname ??
+            history?.user?.fullName ??
+            history?.user?.name ??
+            history?.user?.username ??
+            null;
+
+          const username =
+            history?.user?.username ??
+            null;
+
+          // =================================================
+          // RETURN
+          // =================================================
 
           return {
             // -----------------------------------------------
@@ -470,15 +569,40 @@ export async function GET(
             // -----------------------------------------------
             // USER
             // -----------------------------------------------
-            //
-            // StockCard yang kamu kirim tidak memiliki
-            // relasi user.
-            //
-            // Jangan mengarang user.
-            //
+
+            userId,
+
+            username,
+
+            userName,
+
+            user: history?.user
+              ? {
+                  id:
+                    history.user.id,
+
+                  username:
+                    history.user.username,
+
+                  fullname:
+                    history.user.fullname ??
+                    history.user.fullName ??
+                    history.user.name ??
+                    history.user.username,
+                }
+              : null,
+
+            // -----------------------------------------------
+            // HISTORY REFERENCE
             // -----------------------------------------------
 
-            user: null,
+            historyId:
+              history?.id ??
+              null,
+
+            historyCreatedAt:
+              history?.createdAt ??
+              null,
           };
         }
       );
@@ -493,19 +617,22 @@ export async function GET(
     const totalIn =
       data.filter(
         (item) =>
-          item.direction === "IN"
+          item.direction ===
+          "IN"
       ).length;
 
     const totalOut =
       data.filter(
         (item) =>
-          item.direction === "OUT"
+          item.direction ===
+          "OUT"
       ).length;
 
     const totalOther =
       data.filter(
         (item) =>
-          item.direction === "OTHER"
+          item.direction ===
+          "OTHER"
       ).length;
 
     // ======================================================

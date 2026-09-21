@@ -32,6 +32,7 @@ import {
   CalendarDays,
   CircleDot,
   Loader2,
+  FileSpreadsheet,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -139,23 +140,54 @@ type CurrentUser = {
  * HELPERS
  * ========================================================= */
 
-function isCentralRole(role?: string | null) {
-  const normalized = String(role ?? "")
+function normalizeRole(role?: string | null) {
+  return String(role ?? "")
     .trim()
     .toUpperCase();
+}
 
-  return normalized === "ADMIN" || normalized === "MANAGER";
+function isAdminRole(role?: string | null) {
+  return normalizeRole(role) === "ADMIN";
+}
+
+function isCentralRole(role?: string | null) {
+  const normalized = normalizeRole(role);
+
+  return (
+    normalized === "ADMIN" ||
+    normalized === "ADMIN_PUSAT" ||
+    normalized === "MANAGER"
+  );
 }
 
 function isOutletRole(role?: string | null) {
-  const normalized = String(role ?? "")
-    .trim()
-    .toUpperCase();
+  const normalized = normalizeRole(role);
 
   return (
     normalized === "OUTLET_ADMIN" ||
-    normalized === "ADMIN_OUTLET"
+    normalized === "ADMIN_OUTLET" ||
+    normalized === "STAFF_MANUFACTURE"
   );
+}
+
+function canAccessOutlet(
+  user: CurrentUser | null,
+  outletId?: number | null
+) {
+  if (!user) return false;
+
+  if (isCentralRole(user.role)) {
+    return true;
+  }
+
+  if (isOutletRole(user.role)) {
+    return (
+      outletId != null &&
+      Number(outletId) === Number(user.outletId)
+    );
+  }
+
+  return false;
 }
 
 function normalizeStatus(status?: string | null) {
@@ -164,7 +196,9 @@ function normalizeStatus(status?: string | null) {
     .toUpperCase();
 }
 
-function formatNumber(value: number | string | null | undefined) {
+function formatNumber(
+  value: number | string | null | undefined
+) {
   const n = Number(value ?? 0);
 
   if (!Number.isFinite(n)) {
@@ -242,6 +276,9 @@ export default function ManufacturePage() {
   const [savingOrder, setSavingOrder] =
     useState(false);
 
+  const [importingBom, setImportingBom] =
+    useState(false);
+
   const [editingRecipeId, setEditingRecipeId] =
     useState<number | null>(null);
 
@@ -301,15 +338,21 @@ export default function ManufacturePage() {
       if (res.ok && currentUser?.id) {
         const normalizedUser: CurrentUser = {
           id: Number(currentUser.id),
-          role: currentUser.role ?? null,
+
+          role:
+            currentUser.role ??
+            null,
+
           outletId:
             currentUser.outletId != null
               ? Number(currentUser.outletId)
               : currentUser.outlet?.id != null
               ? Number(currentUser.outlet.id)
               : null,
+
           outlet:
-            currentUser.outlet ?? null,
+            currentUser.outlet ??
+            null,
         };
 
         setUser(normalizedUser);
@@ -383,14 +426,17 @@ export default function ManufacturePage() {
           ? raw
               .map((x: any) => ({
                 id: Number(x.id),
+
                 name:
                   x.name ??
                   x.nama ??
                   `Outlet ${x.id}`,
+
                 code:
                   x.code ??
                   x.kode ??
                   null,
+
                 active:
                   x.active !== false,
               }))
@@ -479,29 +525,35 @@ export default function ManufacturePage() {
           ? raw
               .map((x: any) => ({
                 id: x.id,
+
                 outletId: Number(
                   x.outletId ??
                     outletId
                 ),
+
                 barangId: Number(
                   x.barangId ??
                     x.barang?.id
                 ),
+
                 stock: Number(
                   x.stock ?? 0
                 ),
+
                 minimumStock:
                   x.minimumStock != null
                     ? Number(
                         x.minimumStock
                       )
                     : undefined,
+
                 averageCost:
                   x.averageCost != null
                     ? Number(
                         x.averageCost
                       )
                     : undefined,
+
                 barang:
                   x.barang ??
                   undefined,
@@ -714,22 +766,33 @@ export default function ManufacturePage() {
     [barangs]
   );
 
+  const scopedOrders = useMemo(
+    () =>
+      orders.filter((item) =>
+        canAccessOutlet(
+          user,
+          item.outletId
+        )
+      ),
+    [orders, user]
+  );
+
   const completedOrders =
     useMemo(
       () =>
-        orders.filter(
+        scopedOrders.filter(
           (x) =>
             normalizeStatus(
               x.status
             ) === "COMPLETED"
         ).length,
-      [orders]
+      [scopedOrders]
     );
 
   const pendingOrders =
     useMemo(
       () =>
-        orders.filter(
+        scopedOrders.filter(
           (x) =>
             ![
               "COMPLETED",
@@ -740,19 +803,19 @@ export default function ManufacturePage() {
               )
             )
         ).length,
-      [orders]
+      [scopedOrders]
     );
 
   const cancelledOrders =
     useMemo(
       () =>
-        orders.filter(
+        scopedOrders.filter(
           (x) =>
             normalizeStatus(
               x.status
             ) === "CANCELLED"
         ).length,
-      [orders]
+      [scopedOrders]
     );
 
   const selectedOutlet =
@@ -774,8 +837,15 @@ export default function ManufacturePage() {
   const isCentralAdmin =
     isCentralRole(user?.role);
 
+  const isAdmin =
+    isAdminRole(user?.role);
+
   const isOutletAdmin =
     isOutletRole(user?.role);
+
+  const isManufactureStaff =
+    normalizeRole(user?.role) ===
+    "STAFF_MANUFACTURE";
 
   const filteredOrders =
     useMemo(() => {
@@ -784,7 +854,7 @@ export default function ManufacturePage() {
           .trim()
           .toLowerCase();
 
-      return orders.filter(
+      return scopedOrders.filter(
         (item) => {
           const status =
             normalizeStatus(
@@ -819,7 +889,7 @@ export default function ManufacturePage() {
         }
       );
     }, [
-      orders,
+      scopedOrders,
       orderSearch,
       orderStatusFilter,
     ]);
@@ -935,6 +1005,13 @@ export default function ManufacturePage() {
   }
 
   function openNewRecipe() {
+    if (!selectedOutletId) {
+      toast.error(
+        "Pilih outlet terlebih dahulu sebelum membuat BOM"
+      );
+      return;
+    }
+
     resetRecipe();
     setShowRecipe(true);
   }
@@ -950,9 +1027,11 @@ export default function ManufacturePage() {
       code:
         selectedRecipe.code ??
         "",
+
       name:
         selectedRecipe.name ??
         "",
+
       outputBarangId:
         selectedRecipe
           .outputBarang?.id
@@ -961,10 +1040,12 @@ export default function ManufacturePage() {
                 .outputBarang.id
             )
           : "",
+
       outputQty: String(
         selectedRecipe.outputQty ??
           1
       ),
+
       notes: "",
     });
 
@@ -1032,6 +1113,12 @@ export default function ManufacturePage() {
    * ========================================================= */
 
   async function saveRecipe() {
+    if (!selectedOutletId) {
+      return toast.error(
+        "Outlet wajib dipilih sebelum menyimpan BOM"
+      );
+    }
+
     if (!recipe.code.trim()) {
       return toast.error(
         "Kode BOM wajib diisi"
@@ -1051,7 +1138,9 @@ export default function ManufacturePage() {
     }
 
     const outputQty =
-      Number(recipe.outputQty);
+      Number(
+        recipe.outputQty
+      );
 
     if (
       !Number.isFinite(
@@ -1064,11 +1153,41 @@ export default function ManufacturePage() {
       );
     }
 
-    const validItems =
-      recipeItems
-        .filter((item) => {
+    const stockItems =
+      recipeItems.map(
+        (item, index) => {
+          if (
+            item.itemType !==
+            "STOCK"
+          ) {
+            throw new Error(
+              `Item ke-${index + 1} masih bertipe UTILITY. Ubah menjadi STOCK.`
+            );
+          }
+
+          const barangId =
+            Number(
+              item.barangId
+            );
+
           const qty =
-            Number(item.qty);
+            Number(
+              item.qty
+            );
+
+          const unit =
+            item.unit.trim();
+
+          if (
+            !Number.isInteger(
+              barangId
+            ) ||
+            barangId <= 0
+          ) {
+            throw new Error(
+              `Barang pada item ke-${index + 1} wajib dipilih.`
+            );
+          }
 
           if (
             !Number.isFinite(
@@ -1076,83 +1195,28 @@ export default function ManufacturePage() {
             ) ||
             qty <= 0
           ) {
-            return false;
-          }
-
-          if (
-            item.itemType ===
-            "UTILITY"
-          ) {
-            return (
-              item.name.trim()
-                .length > 0 &&
-              item.unit.trim()
-                .length > 0
+            throw new Error(
+              `Qty bahan pada item ke-${index + 1} harus lebih dari 0.`
             );
           }
 
-          return Boolean(
-            item.barangId
-          );
-        })
-        .map((item) => ({
-          itemType:
-            item.itemType,
+          if (!unit) {
+            throw new Error(
+              `Unit bahan pada item ke-${index + 1} wajib diisi.`
+            );
+          }
 
-          barangId:
-            item.itemType ===
-            "STOCK"
-              ? Number(
-                  item.barangId
-                )
-              : null,
+          return {
+            barangId,
+            qty,
+            unit,
+          };
+        }
+      );
 
-          name:
-            item.itemType ===
-            "UTILITY"
-              ? item.name.trim()
-              : null,
-
-          qty: Number(
-            item.qty
-          ),
-
-          unit:
-            item.unit.trim(),
-        }));
-
-    if (!validItems.length) {
+    if (!stockItems.length) {
       return toast.error(
-        "Minimal satu bahan baku harus diisi"
-      );
-    }
-
-    const invalidStock =
-      validItems.some(
-        (item) =>
-          item.itemType ===
-            "STOCK" &&
-          !item.barangId
-      );
-
-    if (invalidStock) {
-      return toast.error(
-        "Semua bahan STOCK wajib memilih barang"
-      );
-    }
-
-    const invalidUtility =
-      validItems.some(
-        (item) =>
-          item.itemType ===
-            "UTILITY" &&
-          (!item.name ||
-            !item.unit)
-      );
-
-    if (invalidUtility) {
-      return toast.error(
-        "UTILITY wajib memiliki nama dan unit"
+        "Minimal satu bahan STOCK harus diisi"
       );
     }
 
@@ -1160,6 +1224,11 @@ export default function ManufacturePage() {
 
     try {
       const payload = {
+        outletId:
+          Number(
+            selectedOutletId
+          ),
+
         code:
           recipe.code.trim(),
 
@@ -1176,12 +1245,12 @@ export default function ManufacturePage() {
         notes:
           recipe.notes.trim(),
 
-        items:
-          validItems,
+        items: stockItems,
       };
 
       const isEdit =
-        editingRecipeId !== null;
+        editingRecipeId !==
+        null;
 
       const url = isEdit
         ? `/api/manufacture/recipes/${editingRecipeId}`
@@ -1232,19 +1301,142 @@ export default function ManufacturePage() {
       resetRecipe();
 
       await load();
-    } catch (error) {
+    } catch (error: any) {
       console.error(
         "SAVE RECIPE ERROR:",
         error
       );
 
       toast.error(
-        editingRecipeId !== null
-          ? "Gagal mengubah BOM"
-          : "Gagal menyimpan BOM"
+        error?.message ||
+          (editingRecipeId !==
+          null
+            ? "Gagal mengubah BOM"
+            : "Gagal menyimpan BOM")
       );
     } finally {
       setSavingRecipe(false);
+    }
+  }
+
+  /* =========================================================
+   * IMPORT BOM EXCEL
+   *
+   * HANYA ADMIN
+   * ========================================================= */
+
+  async function importBomExcel(
+    file: File | undefined
+  ) {
+    if (!file) {
+      return;
+    }
+
+    /*
+     * SECURITY UI GUARD:
+     * Hanya role ADMIN yang boleh
+     * menjalankan import BOM.
+     */
+    if (!isAdmin) {
+      toast.error(
+        "Hanya ADMIN yang dapat mengimpor BOM"
+      );
+      return;
+    }
+
+    if (!selectedOutletId) {
+      toast.error(
+        "Pilih outlet terlebih dahulu sebelum import BOM"
+      );
+      return;
+    }
+
+    const allowedExtensions = [
+      ".xlsx",
+      ".xls",
+      ".csv",
+    ];
+
+    const lowerName =
+      file.name.toLowerCase();
+
+    const validFile =
+      allowedExtensions.some(
+        (extension) =>
+          lowerName.endsWith(
+            extension
+          )
+      );
+
+    if (!validFile) {
+      toast.error(
+        "File harus berformat Excel (.xlsx/.xls) atau CSV"
+      );
+      return;
+    }
+
+    const formData =
+      new FormData();
+
+    formData.append(
+      "file",
+      file
+    );
+
+    formData.append(
+      "outletId",
+      String(
+        selectedOutletId
+      )
+    );
+
+    setImportingBom(true);
+
+    try {
+      const res =
+        await fetch(
+          "/api/manufacture/recipes/import",
+          {
+            method: "POST",
+            body: formData,
+          }
+        );
+
+      const data =
+        await res
+          .json()
+          .catch(
+            () => ({})
+          );
+
+      if (
+        !res.ok ||
+        !data.success
+      ) {
+        throw new Error(
+          data.message ||
+            "Gagal mengimpor BOM dari Excel"
+        );
+      }
+
+      toast.success(
+        data.message ||
+          "BOM berhasil diimpor dari Excel"
+      );
+
+      await load();
+    } catch (error: any) {
+      console.error(
+        "IMPORT BOM EXCEL ERROR:",
+        error
+      );
+
+      toast.error(
+        error?.message ||
+          "Gagal mengimpor BOM dari Excel"
+      );
+    } finally {
+      setImportingBom(false);
     }
   }
 
@@ -1308,7 +1500,9 @@ export default function ManufacturePage() {
 
                 outletId:
                   Number(
-                    selectedOutletId
+                    isOutletAdmin
+                      ? user?.outletId
+                      : selectedOutletId
                   ),
               }),
           }
@@ -1380,6 +1574,20 @@ export default function ManufacturePage() {
           )
         : selectedOutletId;
 
+    if (
+      isOutletAdmin &&
+      Number(
+        targetOutletId
+      ) !==
+        Number(
+          user?.outletId
+        )
+    ) {
+      return toast.error(
+        "Anda hanya dapat mengakses outlet milik sendiri"
+      );
+    }
+
     if (!targetOutletId) {
       return toast.error(
         "Outlet produksi belum ditentukan"
@@ -1398,7 +1606,8 @@ export default function ManufacturePage() {
       return;
     }
 
-    const n = Number(qty);
+    const n =
+      Number(qty);
 
     if (
       !Number.isFinite(n) ||
@@ -1442,7 +1651,8 @@ export default function ManufacturePage() {
 
             body:
               JSON.stringify({
-                producedQty: n,
+                producedQty:
+                  n,
 
                 outletId:
                   Number(
@@ -1532,10 +1742,7 @@ export default function ManufacturePage() {
 
   return (
     <div className="min-h-screen bg-[#F5F7F6] text-[#23382F]">
-      {/* =====================================================
-          TOP ACCENT
-         ===================================================== */}
-
+      {/* TOP ACCENT */}
       <div className="h-1 w-full bg-gradient-to-r from-[#2F6657] via-[#5F927E] to-[#C89A52]" />
 
       <main className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
@@ -1559,6 +1766,15 @@ export default function ManufacturePage() {
                     <Sparkles size={12} />
                     Production Center
                   </span>
+
+                  {isManufactureStaff && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E1E9E5] bg-white px-3 py-1 text-[11px] font-semibold text-[#64766D]">
+                      <ClipboardCheck
+                        size={12}
+                      />
+                      Staff Manufacture
+                    </span>
+                  )}
 
                   {selectedOutlet && (
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E1E9E5] bg-white px-3 py-1 text-[11px] font-semibold text-[#64766D]">
@@ -1587,7 +1803,9 @@ export default function ManufacturePage() {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={refreshAll}
+                onClick={
+                  refreshAll
+                }
                 disabled={
                   loading ||
                   loadingOutletStock
@@ -1608,7 +1826,9 @@ export default function ManufacturePage() {
 
               <button
                 type="button"
-                onClick={openNewRecipe}
+                onClick={
+                  openNewRecipe
+                }
                 className="inline-flex items-center gap-2 rounded-xl border border-[#CFE0D7] bg-white px-4 py-2.5 text-sm font-bold text-[#315C4E] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#F5F9F7]"
               >
                 <Plus size={17} />
@@ -1617,7 +1837,9 @@ export default function ManufacturePage() {
 
               <button
                 type="button"
-                onClick={openNewOrder}
+                onClick={
+                  openNewOrder
+                }
                 className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#315F51] to-[#4E806C] px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#315F51]/20 transition hover:-translate-y-0.5 hover:shadow-xl"
               >
                 <Plus size={17} />
@@ -1721,8 +1943,11 @@ export default function ManufacturePage() {
                   </span>
                 ) : (
                   <span className="text-xs text-[#7D8B85]">
-                    {outletStocks.length} item
-                    stock terdaftar
+                    {
+                      outletStocks.length
+                    }{" "}
+                    item stock
+                    terdaftar
                   </span>
                 )}
               </div>
@@ -1740,7 +1965,9 @@ export default function ManufacturePage() {
               <ClipboardList size={20} />
             }
             label="Total Order"
-            value={orders.length}
+            value={
+              scopedOrders.length
+            }
             description="Semua order produksi"
           />
 
@@ -1749,7 +1976,9 @@ export default function ManufacturePage() {
               <Clock3 size={20} />
             }
             label="Berjalan"
-            value={pendingOrders}
+            value={
+              pendingOrders
+            }
             description="Menunggu penyelesaian"
             accent="amber"
           />
@@ -1759,7 +1988,9 @@ export default function ManufacturePage() {
               <PackageCheck size={20} />
             }
             label="Selesai"
-            value={completedOrders}
+            value={
+              completedOrders
+            }
             description="Produksi completed"
             accent="green"
           />
@@ -1769,7 +2000,9 @@ export default function ManufacturePage() {
               <AlertCircle size={20} />
             }
             label="Dibatalkan"
-            value={cancelledOrders}
+            value={
+              cancelledOrders
+            }
             description="Order cancelled"
             accent="red"
           />
@@ -1793,6 +2026,7 @@ export default function ManufacturePage() {
           >
             <ClipboardList size={17} />
             Order Produksi
+
             <span
               className={`rounded-full px-2 py-0.5 text-[10px] ${
                 tab === "orders"
@@ -1800,7 +2034,9 @@ export default function ManufacturePage() {
                   : "bg-[#F1F4F2] text-[#84918B]"
               }`}
             >
-              {orders.length}
+              {
+                scopedOrders.length
+              }
             </span>
           </button>
 
@@ -1817,6 +2053,7 @@ export default function ManufacturePage() {
           >
             <Layers3 size={17} />
             BOM / Resep
+
             <span
               className={`rounded-full px-2 py-0.5 text-[10px] ${
                 tab === "recipes"
@@ -1824,13 +2061,17 @@ export default function ManufacturePage() {
                   : "bg-[#F1F4F2] text-[#84918B]"
               }`}
             >
-              {recipes.length}
+              {
+                recipes.length
+              }
             </span>
           </button>
 
           <button
             type="button"
-            onClick={refreshAll}
+            onClick={
+              refreshAll
+            }
             disabled={
               loading ||
               loadingOutletStock
@@ -1888,7 +2129,8 @@ export default function ManufacturePage() {
                       }
                       onChange={(e) =>
                         setOrderSearch(
-                          e.target.value
+                          e.target
+                            .value
                         )
                       }
                       placeholder="Cari order, produk, outlet..."
@@ -1908,7 +2150,8 @@ export default function ManufacturePage() {
                       }
                       onChange={(e) =>
                         setOrderStatusFilter(
-                          e.target.value
+                          e.target
+                            .value
                         )
                       }
                       className="w-full appearance-none rounded-xl border border-[#DCE7E2] bg-[#FBFCFB] py-2.5 pl-9 pr-8 text-sm font-semibold text-[#4D6258] outline-none focus:border-[#5B8D78] sm:w-[150px]"
@@ -1916,15 +2159,19 @@ export default function ManufacturePage() {
                       <option value="ALL">
                         Semua Status
                       </option>
+
                       <option value="PLANNED">
                         Planned
                       </option>
+
                       <option value="PROCESSING">
                         Processing
                       </option>
+
                       <option value="COMPLETED">
                         Completed
                       </option>
+
                       <option value="CANCELLED">
                         Cancelled
                       </option>
@@ -1968,7 +2215,10 @@ export default function ManufacturePage() {
                     <OrderLoadingRows />
                   ) : filteredOrders.length ? (
                     filteredOrders.map(
-                      (item, index) => {
+                      (
+                        item,
+                        index
+                      ) => {
                         const status =
                           normalizeStatus(
                             item.status
@@ -2044,6 +2294,7 @@ export default function ManufacturePage() {
                                   }
                                   className="text-[#90A099]"
                                 />
+
                                 {formatDate(
                                   item.productionDate
                                 )}
@@ -2159,7 +2410,9 @@ export default function ManufacturePage() {
                   ) : (
                     <tr>
                       <td
-                        colSpan={9}
+                        colSpan={
+                          9
+                        }
                         className="px-6 py-20 text-center"
                       >
                         <EmptyState
@@ -2205,7 +2458,8 @@ export default function ManufacturePage() {
             </div>
 
             {!loading &&
-              filteredOrders.length > 0 && (
+              filteredOrders.length >
+                0 && (
                 <div className="flex items-center justify-between border-t border-[#EAF0ED] bg-[#FBFCFB] px-5 py-3">
                   <span className="text-[11px] font-semibold text-[#89968F]">
                     Menampilkan{" "}
@@ -2217,14 +2471,15 @@ export default function ManufacturePage() {
                     dari{" "}
                     <b className="text-[#52675D]">
                       {
-                        orders.length
+                        scopedOrders.length
                       }
                     </b>{" "}
                     order
                   </span>
 
                   <span className="hidden text-[11px] font-semibold text-[#A0ABA6] sm:block">
-                    Stock source: OutletStock
+                    Stock source:
+                    OutletStock
                   </span>
                 </div>
               )}
@@ -2257,24 +2512,81 @@ export default function ManufacturePage() {
                 </div>
               </div>
 
-              <div className="relative w-full sm:w-[300px]">
-                <Search
-                  size={16}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#97A59F]"
-                />
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                {/* =================================================
+                    IMPORT EXCEL
+                    HANYA TAMPIL UNTUK ADMIN
+                   ================================================= */}
 
-                <input
-                  value={
-                    recipeSearch
-                  }
-                  onChange={(e) =>
-                    setRecipeSearch(
-                      e.target.value
-                    )
-                  }
-                  placeholder="Cari kode atau nama BOM..."
-                  className="w-full rounded-xl border border-[#DCE7E2] bg-white py-2.5 pl-10 pr-3 text-sm outline-none shadow-sm transition focus:border-[#5B8D78] focus:ring-4 focus:ring-[#5B8D78]/10"
-                />
+                {isAdmin && (
+                  <label
+                    className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#CFE0D7] bg-white px-4 py-2.5 text-sm font-bold text-[#315C4E] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#F5F9F7] ${
+                      importingBom
+                        ? "pointer-events-none opacity-60"
+                        : ""
+                    }`}
+                  >
+                    {importingBom ? (
+                      <Loader2
+                        size={17}
+                        className="animate-spin"
+                      />
+                    ) : (
+                      <FileSpreadsheet
+                        size={17}
+                      />
+                    )}
+
+                    {importingBom
+                      ? "Mengimpor..."
+                      : "Import Excel BOM"}
+
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      disabled={
+                        importingBom
+                      }
+                      onChange={(
+                        event
+                      ) => {
+                        const file =
+                          event
+                            .currentTarget
+                            .files?.[0];
+
+                        event.currentTarget.value =
+                          "";
+
+                        void importBomExcel(
+                          file
+                        );
+                      }}
+                    />
+                  </label>
+                )}
+
+                <div className="relative w-full sm:w-[300px]">
+                  <Search
+                    size={16}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#97A59F]"
+                  />
+
+                  <input
+                    value={
+                      recipeSearch
+                    }
+                    onChange={(e) =>
+                      setRecipeSearch(
+                        e.target
+                          .value
+                      )
+                    }
+                    placeholder="Cari kode atau nama BOM..."
+                    className="w-full rounded-xl border border-[#DCE7E2] bg-white py-2.5 pl-10 pr-3 text-sm outline-none shadow-sm transition focus:border-[#5B8D78] focus:ring-4 focus:ring-[#5B8D78]/10"
+                  />
+                </div>
               </div>
             </div>
 
@@ -2308,7 +2620,9 @@ export default function ManufacturePage() {
               <div className="rounded-[24px] border border-dashed border-[#CBDCD4] bg-white px-6 py-20 text-center shadow-sm">
                 <EmptyState
                   icon={
-                    <Package size={25} />
+                    <Package
+                      size={25}
+                    />
                   }
                   title={
                     recipeSearch
@@ -2543,9 +2857,14 @@ export default function ManufacturePage() {
 
               <div className="mt-4 space-y-3">
                 {recipeItems.map(
-                  (item, index) => (
+                  (
+                    item,
+                    index
+                  ) => (
                     <div
-                      key={index}
+                      key={
+                        index
+                      }
                       className="rounded-2xl border border-[#E0EAE5] bg-[#FBFCFB] p-4 transition hover:border-[#C9DBD2]"
                     >
                       <div className="mb-3 flex items-center justify-between gap-3">
@@ -2852,6 +3171,7 @@ export default function ManufacturePage() {
                           15
                         }
                       />
+
                       {editingRecipeId !==
                       null
                         ? "Simpan Perubahan"
@@ -3165,11 +3485,15 @@ function RecipeCard({
 
             <div className="min-w-0">
               <div className="mb-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#4D806D]">
-                {recipe.code}
+                {
+                  recipe.code
+                }
               </div>
 
               <h3 className="truncate text-base font-black text-[#29473B]">
-                {recipe.name}
+                {
+                  recipe.name
+                }
               </h3>
             </div>
           </div>
@@ -3201,15 +3525,22 @@ function RecipeCard({
           </div>
 
           <div className="font-black text-[#29473B]">
-            {recipe.outputBarang?.name}
+            {
+              recipe.outputBarang
+                ?.name
+            }
           </div>
 
           <div className="mt-1 text-xs font-semibold text-[#788881]">
             {formatNumber(
               recipe.outputQty
             )}{" "}
-            {recipe.outputBarang?.baseUnit ||
-              recipe.outputBarang?.unit}
+            {recipe
+              .outputBarang
+              ?.baseUnit ||
+              recipe
+                .outputBarang
+                ?.unit}
             {" / batch"}
           </div>
 
@@ -3235,7 +3566,8 @@ function RecipeCard({
                         .id
                     )
                   )}{" "}
-                  {recipe.outputBarang
+                  {recipe
+                    .outputBarang
                     .baseUnit ||
                     recipe
                       .outputBarang
@@ -3257,8 +3589,11 @@ function RecipeCard({
           </div>
 
           <span className="rounded-full bg-[#F3F6F4] px-2 py-1 text-[10px] font-black text-[#76847E]">
-            {recipe.items?.length ??
-              0}
+            {
+              recipe.items
+                ?.length ??
+              0
+            }
           </span>
         </div>
 
@@ -3272,7 +3607,8 @@ function RecipeCard({
               const stock =
                 item.barang
                   ? getOutletStock(
-                      item.barang.id
+                      item.barang
+                        .id
                     )
                   : 0;
 
@@ -3283,7 +3619,8 @@ function RecipeCard({
 
               const insufficient =
                 !utility &&
-                stock < required;
+                stock <
+                  required;
 
               return (
                 <div
@@ -3314,15 +3651,13 @@ function RecipeCard({
                             </span>
                           </>
                         ) : (
-                          <>
-                            <span>
-                              {
-                                item
-                                  .barang
-                                  ?.code
-                              }
-                            </span>
-                          </>
+                          <span>
+                            {
+                              item
+                                .barang
+                                ?.code
+                            }
+                          </span>
                         )}
                       </div>
                     </div>
@@ -3372,7 +3707,8 @@ function RecipeCard({
 
                   {utility && (
                     <div className="mt-2 border-t border-[#EEF3F0] pt-2 text-right text-[9px] font-bold uppercase tracking-wider text-[#B1884B]">
-                      Tidak mengurangi stock
+                      Tidak mengurangi
+                      stock
                     </div>
                   )}
                 </div>
@@ -3448,10 +3784,14 @@ function SearchableBarangSelect({
         (barang) =>
           barang.code
             .toLowerCase()
-            .includes(keyword) ||
+            .includes(
+              keyword
+            ) ||
           barang.name
             .toLowerCase()
-            .includes(keyword)
+            .includes(
+              keyword
+            )
       );
     }, [
       barangs,
@@ -3479,16 +3819,22 @@ function SearchableBarangSelect({
         {selected ? (
           <div className="min-w-0">
             <div className="truncate text-xs font-black text-[#34594C]">
-              {selected.code}
+              {
+                selected.code
+              }
             </div>
 
             <div className="mt-0.5 truncate text-xs text-[#7C8B84]">
-              {selected.name}
+              {
+                selected.name
+              }
             </div>
           </div>
         ) : (
           <span className="text-xs text-[#A0AAA5]">
-            {placeholder}
+            {
+              placeholder
+            }
           </span>
         )}
 
@@ -3542,7 +3888,9 @@ function SearchableBarangSelect({
             <div className="max-h-72 overflow-y-auto">
               {filtered.length ? (
                 filtered.map(
-                  (barang) => {
+                  (
+                    barang
+                  ) => {
                     const isSelected =
                       String(
                         barang.id
@@ -3626,7 +3974,8 @@ function SearchableBarangSelect({
                   />
 
                   <div className="mt-2 text-xs font-bold text-[#687A71]">
-                    Barang tidak ditemukan
+                    Barang tidak
+                    ditemukan
                   </div>
                 </div>
               )}
@@ -3634,9 +3983,13 @@ function SearchableBarangSelect({
 
             <div className="border-t border-[#E8EFEB] bg-[#FAFCFB] px-3.5 py-2 text-[10px] font-semibold text-[#98A49F]">
               Menampilkan{" "}
-              {filtered.length}{" "}
+              {
+                filtered.length
+              }{" "}
               dari{" "}
-              {barangs.length}{" "}
+              {
+                barangs.length
+              }{" "}
               barang
             </div>
           </div>
@@ -3703,10 +4056,12 @@ function SummaryCard({
       icon: "bg-[#EAF3EE] text-[#3E7462]",
       dot: "bg-[#4E806C]",
     },
+
     amber: {
       icon: "bg-[#FBF3E7] text-[#A87932]",
       dot: "bg-[#C28D42]",
     },
+
     red: {
       icon: "bg-[#FFF0F0] text-[#B55B5B]",
       dot: "bg-[#C76B6B]",
@@ -3733,7 +4088,9 @@ function SummaryCard({
         </div>
 
         <div className="mt-1 text-2xl font-black tracking-tight text-[#29473B]">
-          {formatNumber(value)}
+          {formatNumber(
+            value
+          )}
         </div>
 
         <div className="mt-1 text-[11px] font-medium text-[#98A49F]">
@@ -3800,8 +4157,10 @@ function StatusBadge({
       label:
         status ||
         "UNKNOWN",
+
       className:
         "bg-[#F2F4F3] text-[#6E7B75] border-[#E0E5E2]",
+
       dot: "bg-[#8B9992]",
     };
 
@@ -3859,7 +4218,9 @@ function EmptyState({
           className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#3E7462] px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#315F51]"
         >
           <Plus size={14} />
-          {action.label}
+          {
+            action.label
+          }
         </button>
       )}
     </div>

@@ -1,73 +1,332 @@
 "use client";
 
 import {
+  ArrowLeft,
   Bell,
+  Check,
   ChevronRight,
+  ExternalLink,
   LogOut,
   Menu,
+  MessageCircle,
+  ShieldCheck,
+  X,
 } from "lucide-react";
-import {
-  useEffect,
-  useState,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 interface HeaderProps {
   onMenuClick?: () => void;
 }
 
+interface NotificationItem {
+  id: number | string;
+  mentionId?: number | string | null;
+  type?: string | null;
+  title?: string | null;
+  message?: string | null;
+  description?: string | null;
+  createdAt: string;
+  read?: boolean | null;
+  readAt?: string | null;
+  link?: string | null;
+  href?: string | null;
+  purchaseId?: number | string | null;
+  outletPurchaseId?: number | string | null;
+  commentId?: number | string | null;
+
+  user?: {
+    id?: number | string | null;
+    name?: string | null;
+    fullname?: string | null;
+    username?: string | null;
+  } | null;
+
+  actor?: {
+    id?: number | string | null;
+    name?: string | null;
+    fullname?: string | null;
+    username?: string | null;
+  } | null;
+
+  purchase?: {
+    id?: number | string | null;
+    poNumber?: string | null;
+    number?: string | null;
+    code?: string | null;
+  } | null;
+
+  outletPurchase?: {
+    id?: number | string | null;
+    poNumber?: string | null;
+    number?: string | null;
+    code?: string | null;
+  } | null;
+}
+
+interface NotificationsResponse {
+  notifications?: NotificationItem[];
+  data?: NotificationItem[];
+  unreadCount?: number;
+  count?: number;
+}
+
+function normalizeNotifications(
+  payload:
+    | NotificationsResponse
+    | NotificationItem[]
+    | null
+    | undefined
+): NotificationItem[] {
+  if (Array.isArray(payload)) {
+    return payload
+      .filter(Boolean)
+      .map((item, index) => ({
+        ...item,
+        id:
+          item.id ??
+          `notification-${index}`,
+      }));
+  }
+
+  const items =
+    payload?.notifications ??
+    payload?.data ??
+    [];
+
+  return Array.isArray(items)
+    ? items
+        .filter(Boolean)
+        .map((item, index) => ({
+          ...item,
+          id:
+            item.id ??
+            `notification-${index}`,
+        }))
+    : [];
+}
+
+function getNotificationActor(
+  item: NotificationItem
+): string {
+  const actor = item.actor;
+  const user = item.user;
+
+  return (
+    actor?.fullname ||
+    actor?.name ||
+    actor?.username ||
+    user?.fullname ||
+    user?.name ||
+    user?.username ||
+    "User"
+  );
+}
+
+function getPurchaseLabel(
+  item: NotificationItem
+): string | null {
+  const purchase =
+    item.purchase ??
+    item.outletPurchase ??
+    null;
+
+  const purchaseNumber =
+    purchase?.poNumber ||
+    purchase?.number ||
+    purchase?.code ||
+    null;
+
+  if (!purchaseNumber) {
+    return null;
+  }
+
+  if (
+    item.outletPurchaseId ||
+    item.outletPurchase
+  ) {
+    return `PO Outlet ${purchaseNumber}`;
+  }
+
+  if (
+    item.purchaseId ||
+    item.purchase
+  ) {
+    return `PO Pusat ${purchaseNumber}`;
+  }
+
+  return purchaseNumber;
+}
+
+function getNotificationLink(
+  item: NotificationItem
+): string | null {
+  if (item.link) {
+    return item.link;
+  }
+
+  if (item.href) {
+    return item.href;
+  }
+
+  if (item.outletPurchaseId) {
+    return `/outlet/purchase/${item.outletPurchaseId}`;
+  }
+
+  if (item.purchaseId) {
+    return `/purchase/${item.purchaseId}`;
+  }
+
+  return null;
+}
+
+function formatRelativeTime(
+  value: string
+): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const now = Date.now();
+  const diff =
+    now - date.getTime();
+
+  if (diff < 60_000) {
+    return "Baru saja";
+  }
+
+  const minutes = Math.floor(
+    diff / 60_000
+  );
+
+  if (minutes < 60) {
+    return `${minutes} menit lalu`;
+  }
+
+  const hours = Math.floor(
+    minutes / 60
+  );
+
+  if (hours < 24) {
+    return `${hours} jam lalu`;
+  }
+
+  const days = Math.floor(
+    hours / 24
+  );
+
+  if (days < 7) {
+    return `${days} hari lalu`;
+  }
+
+  return date.toLocaleDateString(
+    "id-ID",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }
+  );
+}
+
 export default function Header({
   onMenuClick,
 }: HeaderProps) {
-  // =========================================================
-  // GLOBAL MODAL STATE
-  //
-  // Komponen Header akan otomatis menghilang ketika ada
-  // premium modal yang membuka:
-  //
-  // document.body.dataset.modalOpen = "true";
-  //
-  // Saat ditutup:
-  //
-  // delete document.body.dataset.modalOpen;
-  // =========================================================
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const notificationRef =
+    useRef<HTMLDivElement | null>(
+      null
+    );
+
+  const notificationButtonRef =
+    useRef<HTMLButtonElement | null>(
+      null
+    );
 
   const [modalOpen, setModalOpen] =
     useState(false);
 
+  const [canGoBack, setCanGoBack] =
+    useState(false);
+
+  const [
+    notificationOpen,
+    setNotificationOpen,
+  ] = useState(false);
+
+  const [
+    notifications,
+    setNotifications,
+  ] = useState<NotificationItem[]>([]);
+
+  const [
+    notificationLoading,
+    setNotificationLoading,
+  ] = useState(false);
+
+  const [
+    notificationError,
+    setNotificationError,
+  ] = useState("");
+
+  const [
+    markingRead,
+    setMarkingRead,
+  ] = useState(false);
+
   // =========================================================
-  // DETECT GLOBAL MODAL
+  // GLOBAL MODAL DETECTION
   // =========================================================
 
   useEffect(() => {
     if (
-      typeof document === "undefined"
+      typeof document ===
+      "undefined"
     ) {
       return;
     }
 
     const syncModalState = () => {
-      const isOpen =
-        document.body.dataset.modalOpen ===
-        "true";
+      const body =
+        document.body;
 
-      setModalOpen(isOpen);
+      const isModalOpen =
+        body.dataset.modalOpen ===
+          "true" ||
+        Boolean(
+          document.querySelector(
+            '[data-modal="true"], [role="dialog"][aria-modal="true"]'
+          )
+        );
+
+      setModalOpen(
+        isModalOpen
+      );
     };
 
-    // Check kondisi awal
     syncModalState();
 
-    // Pantau perubahan attribute body
     const observer =
-      new MutationObserver(() => {
-        syncModalState();
-      });
+      new MutationObserver(
+        syncModalState
+      );
 
-    observer.observe(document.body, {
-      attributes: true,
-      attributeFilter: [
-        "data-modal-open",
-      ],
-    });
+    observer.observe(
+      document.body,
+      {
+        attributes: true,
+        attributeFilter: [
+          "data-modal-open",
+          "class",
+        ],
+        childList: true,
+        subtree: true,
+      }
+    );
 
     return () => {
       observer.disconnect();
@@ -75,360 +334,1084 @@ export default function Header({
   }, []);
 
   // =========================================================
+  // BROWSER HISTORY
+  // =========================================================
+
+  useEffect(() => {
+    if (
+      typeof window ===
+      "undefined"
+    ) {
+      return;
+    }
+
+    const syncHistoryState =
+      () => {
+        setCanGoBack(
+          window.history.length >
+            1
+        );
+      };
+
+    syncHistoryState();
+
+    window.addEventListener(
+      "popstate",
+      syncHistoryState
+    );
+
+    window.addEventListener(
+      "pushstate",
+      syncHistoryState as EventListener
+    );
+
+    window.addEventListener(
+      "replacestate",
+      syncHistoryState as EventListener
+    );
+
+    return () => {
+      window.removeEventListener(
+        "popstate",
+        syncHistoryState
+      );
+
+      window.removeEventListener(
+        "pushstate",
+        syncHistoryState as EventListener
+      );
+
+      window.removeEventListener(
+        "replacestate",
+        syncHistoryState as EventListener
+      );
+    };
+  }, [pathname]);
+
+  // =========================================================
+  // BACK BUTTON
+  // =========================================================
+
+  const goBack = () => {
+    if (canGoBack) {
+      router.back();
+      return;
+    }
+
+    router.push(
+      "/outlet/dashboard"
+    );
+  };
+
+  // =========================================================
   // HEARTBEAT
   // =========================================================
 
   useEffect(() => {
-    const sendHeartbeat = async () => {
-      try {
-        await fetch("/api/me/heartbeat", {
-          method: "POST",
-          credentials: "include",
-          cache: "no-store",
-        });
-      } catch {
-        // Abaikan error heartbeat
-      }
-    };
+    let cancelled = false;
+
+    const sendHeartbeat =
+      async () => {
+        try {
+          await fetch(
+            "/api/me/heartbeat",
+            {
+              method: "POST",
+              credentials: "include",
+              cache: "no-store",
+            }
+          );
+        } catch {
+          if (!cancelled) {
+            // Silent failure.
+          }
+        }
+      };
 
     sendHeartbeat();
 
-    const interval = setInterval(
-      sendHeartbeat,
-      15000
+    const interval =
+      window.setInterval(
+        sendHeartbeat,
+        15_000
+      );
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(
+        interval
+      );
+    };
+  }, []);
+
+  // =========================================================
+  // LOAD NOTIFICATIONS
+  // =========================================================
+
+  const loadNotifications =
+    async (
+      silent = false
+    ) => {
+      if (!silent) {
+        setNotificationLoading(
+          true
+        );
+      }
+
+      setNotificationError("");
+
+      try {
+        const response =
+          await fetch(
+            "/api/notifications",
+            {
+              method: "GET",
+              credentials: "include",
+              cache: "no-store",
+              headers: {
+                Accept:
+                  "application/json",
+              },
+            }
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            `HTTP ${response.status}`
+          );
+        }
+
+        const payload =
+          (await response.json()) as
+            | NotificationsResponse
+            | NotificationItem[];
+
+        const normalized =
+          normalizeNotifications(
+            payload
+          );
+
+        setNotifications(
+          normalized
+        );
+      } catch {
+        if (!silent) {
+          setNotificationError(
+            "Pemberitahuan gagal dimuat. Silakan coba lagi."
+          );
+        }
+      } finally {
+        if (!silent) {
+          setNotificationLoading(
+            false
+          );
+        }
+      }
+    };
+
+  useEffect(() => {
+    let mounted = true;
+
+    const initialLoad =
+      async () => {
+        if (!mounted) {
+          return;
+        }
+
+        await loadNotifications(
+          true
+        );
+      };
+
+    initialLoad();
+
+    const interval =
+      window.setInterval(
+        () => {
+          if (mounted) {
+            loadNotifications(
+              true
+            );
+          }
+        },
+        15_000
+      );
+
+    return () => {
+      mounted = false;
+      window.clearInterval(
+        interval
+      );
+    };
+  }, []);
+
+  // =========================================================
+  // CLOSE NOTIFICATION WHEN CLICK OUTSIDE
+  // =========================================================
+
+  useEffect(() => {
+    if (!notificationOpen) {
+      return;
+    }
+
+    const handleMouseDown = (
+      event: MouseEvent
+    ) => {
+      const target =
+        event.target as
+          | Node
+          | null;
+
+      if (
+        notificationRef.current &&
+        target &&
+        !notificationRef.current.contains(
+          target
+        )
+      ) {
+        setNotificationOpen(
+          false
+        );
+      }
+    };
+
+    const handleEscape = (
+      event: KeyboardEvent
+    ) => {
+      if (
+        event.key ===
+        "Escape"
+      ) {
+        setNotificationOpen(
+          false
+        );
+
+        notificationButtonRef.current?.focus();
+      }
+    };
+
+    document.addEventListener(
+      "mousedown",
+      handleMouseDown
     );
 
-    return () => clearInterval(interval);
-  }, []);
+    document.addEventListener(
+      "keydown",
+      handleEscape
+    );
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleMouseDown
+      );
+
+      document.removeEventListener(
+        "keydown",
+        handleEscape
+      );
+    };
+  }, [notificationOpen]);
+
+  // =========================================================
+  // UNREAD COUNT
+  // =========================================================
+
+  const unreadCount =
+    useMemo(() => {
+      return notifications.filter(
+        (notification) =>
+          notification.read !==
+            true &&
+          !notification.readAt
+      ).length;
+    }, [notifications]);
+
+  // =========================================================
+  // MARK ALL AS READ
+  // =========================================================
+
+  const markAllAsRead =
+    async () => {
+      if (
+        markingRead ||
+        unreadCount === 0
+      ) {
+        return;
+      }
+
+      setMarkingRead(true);
+
+      try {
+        const response =
+          await fetch(
+            "/api/notifications/read-all",
+            {
+              method: "POST",
+              credentials: "include",
+              cache: "no-store",
+              headers: {
+                "Content-Type":
+                  "application/json",
+                Accept:
+                  "application/json",
+              },
+            }
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            `HTTP ${response.status}`
+          );
+        }
+
+        const now =
+          new Date().toISOString();
+
+        setNotifications(
+          (current) =>
+            current.map(
+              (
+                notification
+              ) => ({
+                ...notification,
+                read: true,
+                readAt:
+                  notification.readAt ??
+                  now,
+              })
+            )
+        );
+      } catch {
+        setNotificationError(
+          "Gagal menandai semua pemberitahuan sebagai dibaca."
+        );
+      } finally {
+        setMarkingRead(
+          false
+        );
+      }
+    };
+
+  // =========================================================
+  // OPEN NOTIFICATION
+  // =========================================================
+  //
+  // FLOW:
+  //
+  // 1. User klik notification
+  // 2. UI langsung berubah menjadi read
+  // 3. POST /api/notifications
+  // 4. Backend menyimpan readAt
+  // 5. Notification panel ditutup
+  // 6. Navigasi ke purchase
+  //
+  // =========================================================
+
+  const openNotification =
+    async (
+      item: NotificationItem
+    ) => {
+      const link =
+        getNotificationLink(
+          item
+        );
+
+      const optimisticReadAt =
+        item.readAt ??
+        new Date().toISOString();
+
+      // -------------------------------------------------------
+      // INSTANT UI UPDATE
+      // -------------------------------------------------------
+
+      setNotifications(
+        (current) =>
+          current.map(
+            (notification) =>
+              notification.id ===
+              item.id
+                ? {
+                    ...notification,
+                    read: true,
+                    readAt:
+                      optimisticReadAt,
+                  }
+                : notification
+          )
+      );
+
+      // Tutup panel langsung.
+      setNotificationOpen(
+        false
+      );
+
+      // -------------------------------------------------------
+      // SAVE READ STATUS TO DATABASE
+      // -------------------------------------------------------
+
+      try {
+        const response =
+          await fetch(
+            "/api/notifications",
+            {
+              method: "POST",
+              credentials: "include",
+              cache: "no-store",
+              headers: {
+                "Content-Type":
+                  "application/json",
+                Accept:
+                  "application/json",
+              },
+              body: JSON.stringify(
+                {
+                  notificationId:
+                    item.id,
+                }
+              ),
+            }
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            `HTTP ${response.status}`
+          );
+        }
+
+        const payload =
+          (await response.json()) as {
+            ok?: boolean;
+            unreadCount?: number;
+            readAt?: string | null;
+          };
+
+        // Pastikan notification yang diklik
+        // tetap read setelah response server.
+        setNotifications(
+          (current) =>
+            current.map(
+              (
+                notification
+              ) =>
+                notification.id ===
+                item.id
+                  ? {
+                      ...notification,
+                      read: true,
+                      readAt:
+                        payload.readAt ??
+                        optimisticReadAt,
+                    }
+                  : notification
+            )
+        );
+      } catch (error) {
+        console.error(
+          "[Header] Failed to mark notification as read:",
+          error
+        );
+
+        // UI tetap read.
+        // Jika POST gagal, server akan tetap
+        // menentukan status sebenarnya pada polling
+        // berikutnya.
+      }
+
+      // -------------------------------------------------------
+      // NAVIGATE
+      // -------------------------------------------------------
+
+      if (link) {
+        router.push(link);
+      }
+    };
 
   // =========================================================
   // LOGOUT
   // =========================================================
 
-  async function logout() {
-    try {
-      await fetch("/api/logout", {
-        method: "POST",
-      });
-    } finally {
-      window.location.href = "/login";
-    }
+  const handleLogout =
+    async () => {
+      try {
+        await fetch(
+          "/api/logout",
+          {
+            method: "POST",
+            credentials: "include",
+            cache: "no-store",
+          }
+        );
+      } catch {
+        // Continue redirect.
+      } finally {
+        window.location.href =
+          "/login";
+      }
+    };
+
+  // =========================================================
+  // HIDDEN WHEN MODAL OPEN
+  // =========================================================
+
+  if (modalOpen) {
+    return null;
   }
 
-  // =========================================================
-  // HEADER
-  //
-  // IMPORTANT:
-  // Ketika modal terbuka, kita menggunakan:
-  //
-  // hidden
-  //
-  // bukan hanya opacity-0.
-  //
-  // Dengan begitu Header benar-benar keluar dari layout/render
-  // visual dan tidak mungkin menutupi modal.
-  // =========================================================
-
   return (
-    <header
-      className={`
-        mb-6
-        flex
-        h-[68px]
-        w-full
-        items-center
-        justify-between
-        rounded-2xl
-        border
-        border-[#DCE8E1]
-        bg-white
-        px-5
-        shadow-[0_3px_14px_rgba(25,65,45,0.05)]
-        ${
-          modalOpen
-            ? "hidden"
-            : "flex"
-        }
-      `}
-    >
-      {/* =====================================================
-          LEFT
-      ===================================================== */}
+    <header className="sticky top-0 z-40 h-[74px] w-full bg-transparent">
+      <div className="flex h-full items-center justify-between px-4 md:px-6">
 
-      <div className="flex min-w-0 items-center gap-3">
+        {/* =====================================================
+            LEFT SIDE
+        ===================================================== */}
 
-        {/* =================================================
-            MENU BUTTON
-        ================================================= */}
+        <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
 
-        <button
-          type="button"
-          onClick={onMenuClick}
-          aria-label="Buka menu"
-          className="
-            flex
-            h-10
-            w-10
-            shrink-0
-            items-center
-            justify-center
-            rounded-xl
-            border
-            border-[#E0EAE4]
-            bg-white
-            text-[#71877D]
-            transition-all
-            duration-150
-            hover:border-[#C8DDD0]
-            hover:bg-[#F5FAF7]
-            hover:text-[#238B59]
-            active:scale-95
-          "
-        >
-          <Menu
-            size={19}
-            strokeWidth={1.9}
-          />
-        </button>
+          {/* BACK */}
 
-        {/* =================================================
-            BRAND ICON
-        ================================================= */}
+          <button
+            type="button"
+            onClick={goBack}
+            disabled={!canGoBack}
+            aria-label="Kembali"
+            title={
+              canGoBack
+                ? "Kembali"
+                : "Tidak ada halaman sebelumnya"
+            }
+            className={[
+              "group flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border backdrop-blur-2xl backdrop-saturate-150 transition-all duration-200",
+              canGoBack
+                ? "border-white/30 bg-white/15 text-emerald-700 shadow-[0_8px_25px_rgba(15,118,110,0.10)] hover:-translate-x-0.5 hover:border-emerald-300/60 hover:bg-white/30 hover:shadow-[0_12px_30px_rgba(15,118,110,0.16)]"
+                : "cursor-not-allowed border-white/20 bg-white/10 text-slate-300",
+            ].join(" ")}
+          >
+            <ArrowLeft
+              size={18}
+              strokeWidth={2.4}
+              className="transition-transform duration-200 group-hover:-translate-x-0.5"
+            />
+          </button>
 
-        <div
-          className="
-            hidden
-            h-10
-            w-10
-            shrink-0
-            items-center
-            justify-center
-            rounded-xl
-            bg-[#E8F5ED]
-            text-[#238B59]
-            sm:flex
-          "
-        >
-          <div className="flex items-center justify-center">
-            <span className="text-[13px] font-black tracking-[-0.04em]">
+          {/* MENU */}
+
+          <button
+            type="button"
+            onClick={
+              onMenuClick
+            }
+            aria-label="Buka menu"
+            title="Menu"
+            className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/30 bg-white/15 text-emerald-700 shadow-[0_8px_25px_rgba(15,118,110,0.10)] backdrop-blur-2xl backdrop-saturate-150 transition-all duration-200 hover:border-emerald-300/60 hover:bg-white/30 hover:shadow-[0_12px_30px_rgba(15,118,110,0.16)]"
+          >
+            <Menu
+              size={19}
+              strokeWidth={2.5}
+              className="transition-transform duration-200 group-hover:scale-105"
+            />
+          </button>
+
+          {/* BRAND */}
+
+          <div className="hidden items-center gap-3 sm:flex">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/25 bg-white/15 text-xs font-black tracking-tight text-emerald-800 shadow-[0_8px_25px_rgba(15,118,110,0.08)] backdrop-blur-2xl backdrop-saturate-150">
               MGB
-            </span>
+            </div>
+
+            <div className="hidden min-w-0 md:block">
+              <div className="truncate text-[14px] font-extrabold tracking-tight text-slate-800 drop-shadow-[0_1px_2px_rgba(255,255,255,0.7)]">
+                PT. Mitra Garam Bogatama
+              </div>
+
+              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.10)]" />
+                ERP Dashboard
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* =================================================
-            TITLE
-        ================================================= */}
+        {/* =====================================================
+            RIGHT SIDE
+        ===================================================== */}
 
-        <div className="min-w-0">
+        <div className="flex shrink-0 items-center gap-2">
 
-          <div className="flex min-w-0 items-center gap-2">
+          {/* ONLINE */}
 
-            <h1
-              className="
-                truncate
-                text-[14px]
-                font-semibold
-                tracking-[-0.01em]
-                text-[#20352C]
-              "
-            >
-              PT. MITRA GARAM BOGATAMA
-            </h1>
+          <div className="hidden items-center gap-2 rounded-full border border-white/30 bg-white/15 px-3 py-2 shadow-[0_8px_25px_rgba(15,118,110,0.08)] backdrop-blur-2xl backdrop-saturate-150 lg:flex">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            </span>
 
-            <ChevronRight
-              size={13}
-              className="
-                hidden
-                shrink-0
-                text-[#A5B7AE]
-                sm:block
-              "
+            <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-700">
+              System Online
+            </span>
+          </div>
+
+          {/* SECURITY */}
+
+          <div className="hidden items-center gap-1.5 rounded-xl border border-white/30 bg-white/15 px-3 py-2 shadow-[0_8px_25px_rgba(15,118,110,0.08)] backdrop-blur-2xl backdrop-saturate-150 xl:flex">
+            <ShieldCheck
+              size={15}
+              strokeWidth={2.3}
+              className="text-emerald-600"
             />
 
-            <span
-              className="
-                hidden
-                shrink-0
-                text-[11px]
-                font-medium
-                text-[#789087]
-                sm:block
-              "
-            >
-              ERP Dashboard
+            <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-600">
+              Secure
             </span>
-
           </div>
 
-          <p
-            className="
-              mt-1
-              hidden
-              text-[9px]
-              font-medium
-              uppercase
-              tracking-[0.12em]
-              text-[#A0B1A9]
-              sm:block
-            "
-          >
-            Enterprise Resource Planning
-          </p>
+          {/* ===================================================
+              NOTIFICATION
+          =================================================== */}
 
+          <div
+            ref={
+              notificationRef
+            }
+            className="relative"
+          >
+            <button
+              ref={
+                notificationButtonRef
+              }
+              type="button"
+              onClick={() => {
+                setNotificationOpen(
+                  (current) =>
+                    !current
+                );
+
+                if (
+                  !notificationOpen
+                ) {
+                  loadNotifications(
+                    true
+                  );
+                }
+              }}
+              aria-label="Pemberitahuan"
+              aria-expanded={
+                notificationOpen
+              }
+              aria-haspopup="dialog"
+              title="Pemberitahuan"
+              className={[
+                "group relative flex h-11 w-11 items-center justify-center rounded-xl border backdrop-blur-2xl backdrop-saturate-150 transition-all duration-200",
+                notificationOpen
+                  ? "border-emerald-300/60 bg-emerald-100/30 text-emerald-700 shadow-[0_12px_35px_rgba(15,118,110,0.20)]"
+                  : "border-white/30 bg-white/15 text-slate-600 shadow-[0_8px_25px_rgba(15,118,110,0.10)] hover:border-emerald-300/60 hover:bg-white/30 hover:text-emerald-700 hover:shadow-[0_12px_35px_rgba(15,118,110,0.18)]",
+              ].join(" ")}
+            >
+              <Bell
+                size={20}
+                strokeWidth={2.2}
+                className="transition-transform duration-200 group-hover:rotate-[-8deg]"
+              />
+
+              {unreadCount >
+                0 && (
+                <>
+                  <span className="absolute right-2 top-2 h-2.5 w-2.5 animate-ping rounded-full bg-emerald-500 opacity-70" />
+
+                  <span className="absolute -right-1 -top-1 flex min-w-[19px] items-center justify-center rounded-full border-2 border-white bg-gradient-to-r from-emerald-600 to-green-700 px-1 py-0.5 text-[9px] font-black leading-none text-white shadow-lg">
+                    {unreadCount >
+                    99
+                      ? "99+"
+                      : unreadCount}
+                  </span>
+                </>
+              )}
+            </button>
+
+            {/* =================================================
+                NOTIFICATION PANEL
+            ================================================= */}
+
+            {notificationOpen && (
+              <div
+                role="dialog"
+                aria-label="Pemberitahuan"
+                className="absolute right-0 top-[calc(100%+12px)] w-[min(455px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_24px_70px_rgba(6,78,59,0.20)]"
+              >
+
+                {/* HEADER */}
+
+                <div className="relative overflow-hidden bg-gradient-to-br from-emerald-700 via-emerald-800 to-green-950 px-5 py-4 text-white">
+                  <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+
+                  <div className="absolute -bottom-14 left-1/3 h-28 w-28 rounded-full bg-emerald-300/10 blur-2xl" />
+
+                  <div className="relative flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/10 shadow-inner backdrop-blur-sm">
+                        <Bell
+                          size={20}
+                          strokeWidth={2.2}
+                        />
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="text-[15px] font-black tracking-tight">
+                          Pemberitahuan
+                        </div>
+
+                        <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-100">
+                          MGB ERP Notification Center
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNotificationOpen(
+                          false
+                        )
+                      }
+                      aria-label="Tutup pemberitahuan"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/70 transition hover:bg-white/10 hover:text-white"
+                    >
+                      <X size={17} />
+                    </button>
+                  </div>
+
+                  <div className="relative mt-4 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_0_4px_rgba(110,231,183,0.10)]" />
+
+                      <span className="text-[10px] font-bold text-emerald-50">
+                        {unreadCount >
+                        0
+                          ? `${unreadCount} belum dibaca`
+                          : "Semua sudah dibaca"}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={
+                        markAllAsRead
+                      }
+                      disabled={
+                        markingRead ||
+                        unreadCount ===
+                          0
+                      }
+                      className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 px-2.5 py-1.5 text-[10px] font-extrabold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Check
+                        size={13}
+                      />
+
+                      {markingRead
+                        ? "Memproses..."
+                        : "Tandai dibaca"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* BODY */}
+
+                <div className="max-h-[470px] overflow-y-auto">
+
+                  {notificationLoading &&
+                  notifications.length ===
+                    0 ? (
+                    <div className="flex min-h-[230px] flex-col items-center justify-center px-6 text-center">
+                      <div className="mb-4 flex h-12 w-12 animate-pulse items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                        <Bell
+                          size={22}
+                        />
+                      </div>
+
+                      <div className="text-sm font-extrabold text-slate-700">
+                        Memuat pemberitahuan
+                      </div>
+
+                      <div className="mt-1 text-xs text-slate-400">
+                        Mengambil informasi terbaru...
+                      </div>
+                    </div>
+                  ) : notificationError &&
+                    notifications.length ===
+                      0 ? (
+                    <div className="flex min-h-[230px] flex-col items-center justify-center px-6 text-center">
+                      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-500">
+                        <X
+                          size={21}
+                        />
+                      </div>
+
+                      <div className="text-sm font-extrabold text-slate-700">
+                        Terjadi masalah
+                      </div>
+
+                      <div className="mt-1 max-w-[290px] text-xs leading-relaxed text-slate-400">
+                        {
+                          notificationError
+                        }
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          loadNotifications(
+                            false
+                          )
+                        }
+                        className="mt-4 rounded-lg bg-emerald-600 px-4 py-2 text-[11px] font-extrabold text-white shadow-sm transition hover:bg-emerald-700"
+                      >
+                        Coba Lagi
+                      </button>
+                    </div>
+                  ) : notifications.length ===
+                    0 ? (
+                    <div className="flex min-h-[250px] flex-col items-center justify-center px-6 text-center">
+                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-600">
+                        <Bell
+                          size={24}
+                        />
+                      </div>
+
+                      <div className="text-sm font-black text-slate-700">
+                        Tidak ada pemberitahuan
+                      </div>
+
+                      <div className="mt-1 max-w-[280px] text-xs leading-relaxed text-slate-400">
+                        Semua aktivitas terbaru akan muncul di sini.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {notifications.map(
+                        (
+                          notification
+                        ) => {
+                          const actor =
+                            getNotificationActor(
+                              notification
+                            );
+
+                          const purchaseLabel =
+                            getPurchaseLabel(
+                              notification
+                            );
+
+                          const link =
+                            getNotificationLink(
+                              notification
+                            );
+
+                          const title =
+                            notification.title ||
+                            notification.type ||
+                            "Pemberitahuan baru";
+
+                          const message =
+                            notification.message ||
+                            notification.description ||
+                            "Ada aktivitas baru di MGB ERP.";
+
+                          const isUnread =
+                            notification.read !==
+                              true &&
+                            !notification.readAt;
+
+                          return (
+                            <button
+                              key={
+                                notification.id
+                              }
+                              type="button"
+                              onClick={() =>
+                                openNotification(
+                                  notification
+                                )
+                              }
+                              className={[
+                                "group flex w-full gap-3 px-5 py-4 text-left transition-all duration-200",
+                                isUnread
+                                  ? "bg-emerald-50/50 hover:bg-emerald-50"
+                                  : "bg-white hover:bg-slate-50",
+                              ].join(
+                                " "
+                              )}
+                            >
+
+                              {/* ICON */}
+
+                              <div
+                                className={[
+                                  "relative mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all",
+                                  isUnread
+                                    ? "border-emerald-200 bg-white text-emerald-600 shadow-sm"
+                                    : "border-slate-100 bg-slate-50 text-slate-400",
+                                ].join(
+                                  " "
+                                )}
+                              >
+                                <MessageCircle
+                                  size={
+                                    18
+                                  }
+                                  strokeWidth={
+                                    2.1
+                                  }
+                                />
+
+                                {isUnread && (
+                                  <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
+                                )}
+                              </div>
+
+                              {/* CONTENT */}
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div
+                                    className={[
+                                      "line-clamp-2 text-[12px] leading-snug",
+                                      isUnread
+                                        ? "font-black text-slate-800"
+                                        : "font-bold text-slate-600",
+                                    ].join(
+                                      " "
+                                    )}
+                                  >
+                                    {
+                                      title
+                                    }
+                                  </div>
+
+                                  {link && (
+                                    <ExternalLink
+                                      size={
+                                        13
+                                      }
+                                      className="mt-0.5 shrink-0 text-slate-300 transition group-hover:text-emerald-500"
+                                    />
+                                  )}
+                                </div>
+
+                                <div className="mt-1.5 text-[12px] font-semibold leading-relaxed text-slate-600">
+                                  {
+                                    message
+                                  }
+                                </div>
+
+                                <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                                  <span className="font-extrabold text-sky-600">
+                                    {
+                                      actor
+                                    }
+                                  </span>
+
+                                  {purchaseLabel && (
+                                    <>
+                                      <span className="text-slate-300">
+                                        •
+                                      </span>
+
+                                      <span className="font-bold text-emerald-700">
+                                        {
+                                          purchaseLabel
+                                        }
+                                      </span>
+                                    </>
+                                  )}
+
+                                  <span className="text-slate-300">
+                                    •
+                                  </span>
+
+                                  <span className="text-[10px] font-semibold text-slate-400">
+                                    {formatRelativeTime(
+                                      notification.createdAt
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* CHEVRON */}
+
+                              <div className="flex shrink-0 items-center">
+                                <ChevronRight
+                                  size={
+                                    16
+                                  }
+                                  className="text-slate-300 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-emerald-500"
+                                />
+                              </div>
+                            </button>
+                          );
+                        }
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* FOOTER */}
+
+                <div className="border-t border-emerald-100 bg-slate-50/80 px-5 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+
+                      <span className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-500">
+                        Notification Center LIVE
+                      </span>
+                    </div>
+
+                    <span className="text-[9px] font-bold text-slate-400">
+                      15S
+                    </span>
+                  </div>
+
+                  {notificationError &&
+                    notifications.length >
+                      0 && (
+                      <div className="mt-2 text-[10px] font-semibold text-red-500">
+                        {
+                          notificationError
+                        }
+                      </div>
+                    )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* DIVIDER */}
+
+          <div className="hidden h-9 w-px bg-white/30 sm:block" />
+
+          {/* LOGOUT */}
+
+          <button
+            type="button"
+            onClick={
+              handleLogout
+            }
+            aria-label="Keluar"
+            title="Keluar"
+            className="group flex h-11 items-center gap-2 rounded-xl border border-red-200/30 bg-white/15 px-3 text-red-500 shadow-[0_8px_25px_rgba(15,118,110,0.08)] backdrop-blur-2xl backdrop-saturate-150 transition-all duration-200 hover:border-red-300/50 hover:bg-red-50/30 hover:shadow-[0_12px_30px_rgba(239,68,68,0.12)]"
+          >
+            <LogOut
+              size={18}
+              strokeWidth={2.3}
+              className="transition-transform duration-200 group-hover:translate-x-0.5"
+            />
+
+            <span className="hidden text-[10px] font-extrabold uppercase tracking-[0.08em] sm:inline">
+              Keluar
+            </span>
+          </button>
         </div>
-      </div>
-
-      {/* =====================================================
-          RIGHT
-      ===================================================== */}
-
-      <div className="flex shrink-0 items-center gap-3">
-
-        {/* =================================================
-            SYSTEM ONLINE
-        ================================================= */}
-
-        <div
-          className="
-            hidden
-            items-center
-            gap-2
-            rounded-full
-            border
-            border-[#DDEBE2]
-            bg-[#F5FAF7]
-            px-3
-            py-2
-            md:flex
-          "
-        >
-          <span
-            className="
-              h-1.5
-              w-1.5
-              rounded-full
-              bg-[#43B979]
-              shadow-[0_0_6px_rgba(67,185,121,0.45)]
-            "
-          />
-
-          <span
-            className="
-              text-[9px]
-              font-semibold
-              tracking-wide
-              text-[#658076]
-            "
-          >
-            SYSTEM ONLINE
-          </span>
-        </div>
-
-        {/* =================================================
-            NOTIFICATION
-        ================================================= */}
-
-        <button
-          type="button"
-          className="
-            relative
-            flex
-            h-10
-            w-10
-            items-center
-            justify-center
-            rounded-xl
-            border
-            border-[#E0EAE4]
-            bg-white
-            text-[#71877D]
-            transition
-            hover:border-[#C8DDD0]
-            hover:bg-[#F5FAF7]
-            hover:text-[#238B59]
-          "
-          aria-label="Notifikasi"
-        >
-          <Bell
-            size={17}
-            strokeWidth={1.8}
-          />
-
-          <span
-            className="
-              absolute
-              right-[9px]
-              top-[8px]
-              h-1.5
-              w-1.5
-              rounded-full
-              bg-[#43B979]
-            "
-          />
-        </button>
-
-        {/* =================================================
-            DIVIDER
-        ================================================= */}
-
-        <div
-          className="
-            hidden
-            h-8
-            w-px
-            bg-[#E4ECE7]
-            sm:block
-          "
-        />
-
-        {/* =================================================
-            LOGOUT
-        ================================================= */}
-
-        <button
-          type="button"
-          onClick={logout}
-          className="
-            group
-            flex
-            h-10
-            items-center
-            gap-2
-            rounded-xl
-            border
-            border-[#E0E8E4]
-            bg-white
-            px-3.5
-            text-[#6D7F76]
-            transition-all
-            duration-150
-            hover:border-[#F0CFCF]
-            hover:bg-[#FFF7F7]
-            hover:text-[#C45353]
-          "
-        >
-          <LogOut
-            size={16}
-            strokeWidth={1.8}
-            className="
-              transition
-              group-hover:translate-x-0.5
-            "
-          />
-
-          <span
-            className="
-              hidden
-              text-[10px]
-              font-semibold
-              sm:block
-            "
-          >
-            Logout
-          </span>
-        </button>
-
       </div>
     </header>
   );

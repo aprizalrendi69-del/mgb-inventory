@@ -5,46 +5,182 @@ import { prisma } from "@/lib/prisma";
 // =====================================================
 // CURRENT USER
 // =====================================================
+//
+// Mendukung:
+//
+// 1. erp-session sebagai token Prisma Session
+//
+// 2. erp-session sebagai JSON session
+//    {"id": 1}
+//    {"user": {"id": 1}}
+//
+// Ini dibuat konsisten dengan sistem login ERP.
+// =====================================================
 
 async function getCurrentUser() {
   const cookieStore = await cookies();
-  const session = cookieStore.get("erp-session");
+
+  const session =
+    cookieStore.get("erp-session") ||
+    cookieStore.get("session");
 
   if (!session?.value) {
     return null;
   }
 
-  const user = await prisma.user.findFirst({
-    where: {
-      sessions: {
-        some: {
+  // ===================================================
+  // 1. SESSION TOKEN
+  // ===================================================
+
+  try {
+    const dbSession =
+      await prisma.session.findUnique({
+        where: {
           token: session.value,
-          expiresAt: {
-            gt: new Date(),
+        },
+
+        select: {
+          expiresAt: true,
+
+          user: {
+            select: {
+              id: true,
+              username: true,
+              fullname: true,
+              role: true,
+              active: true,
+              outletId: true,
+
+              outlet: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  active: true,
+                },
+              },
+            },
           },
         },
-      },
-    },
-    include: {
-      outlet: true,
-    },
-  });
+      });
 
-  if (!user || !user.active) {
-    return null;
+    if (
+      dbSession &&
+      dbSession.expiresAt > new Date() &&
+      dbSession.user.active
+    ) {
+      return dbSession.user;
+    }
+  } catch (error) {
+    console.warn(
+      "GET CURRENT USER SESSION TOKEN ERROR:",
+      error
+    );
   }
 
-  return user;
+  // ===================================================
+  // 2. JSON SESSION
+  // ===================================================
+
+  try {
+    const sessionData =
+      JSON.parse(session.value);
+
+    const userId = Number(
+      sessionData?.id ??
+        sessionData?.user?.id ??
+        0
+    );
+
+    if (
+      !Number.isInteger(userId) ||
+      userId <= 0
+    ) {
+      return null;
+    }
+
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+
+        select: {
+          id: true,
+          username: true,
+          fullname: true,
+          role: true,
+          active: true,
+          outletId: true,
+
+          outlet: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              active: true,
+            },
+          },
+        },
+      });
+
+    if (
+      !user ||
+      !user.active
+    ) {
+      return null;
+    }
+
+    return user;
+  } catch {
+    return null;
+  }
+}
+
+// =====================================================
+// RESPONSE HELPERS
+// =====================================================
+
+function fail(
+  message: string,
+  status = 400
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      message,
+    },
+    {
+      status,
+    }
+  );
 }
 
 // =====================================================
 // POST
-// RECEIVE TRANSFER OUTLET
+// RECEIVE TRANSFER ANTAR OUTLET
+// =====================================================
 //
-// Transfer:
+// HANYA:
+//
 // OUTLET A
 //    ↓
 // OUTLET B
+//
+// BUKAN:
+//
+// GUDANG PUSAT
+//    ↓
+// OUTLET
+//
+// RULE:
+//
+// sourceOutletId != NULL
+//     = transfer antar outlet
+//
+// sourceOutletId == NULL
+//     = delivery pusat
+//     = DITOLAK endpoint ini
 //
 // Saat SEND:
 // - stock OUTLET A sudah berkurang
@@ -52,7 +188,11 @@ async function getCurrentUser() {
 // Saat RECEIVE:
 // - stock OUTLET B bertambah
 // - receivedQty bertambah
-// - status transfer berubah
+// - status SENT / PARTIAL / RECEIVED
+// - StockCard OUTLET_TRANSFER_IN dibuat
+// - History dibuat
+//
+// Barang.stock pusat TIDAK disentuh.
 // =====================================================
 
 export async function POST(
@@ -68,65 +208,83 @@ export async function POST(
     // 1. CURRENT USER
     // ===================================================
 
-    const user = await getCurrentUser();
+    const user =
+      await getCurrentUser();
 
     if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Tidak login",
-        },
-        {
-          status: 401,
-        }
+      return fail(
+        "Tidak login",
+        401
       );
     }
 
     // ===================================================
-    // 2. ROLE
+    // 2. USER ACTIVE
     // ===================================================
 
+    if (!user.active) {
+      return fail(
+        "User tidak aktif",
+        403
+      );
+    }
+
+    // ===================================================
+    // 3. ROLE
+    // ===================================================
+
+    const role =
+      String(
+        user.role || ""
+      )
+        .trim()
+        .toUpperCase();
+
     if (
-      user.role !== "OUTLET_ADMIN" &&
-      user.role !== "ADMIN" &&
-      user.role !== "MANAGER"
+      role !== "OUTLET_ADMIN" &&
+      role !== "ADMIN" &&
+      role !== "MANAGER"
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Akses ditolak",
-        },
-        {
-          status: 403,
-        }
+      return fail(
+        "Akses ditolak",
+        403
       );
     }
 
     // ===================================================
-    // 3. PARAM ID
+    // 4. PARAM ID
     // ===================================================
 
-    const { id } = await context.params;
+    const { id } =
+      await context.params;
 
-    const transferId = Number(id);
+    const rawId =
+      String(id || "")
+        .trim();
+
+    const transferId =
+      Number(
+        rawId.replace(
+          /^TRANSFER-/i,
+          ""
+        )
+      );
 
     if (
-      !Number.isInteger(transferId) ||
+      !Number.isInteger(
+        transferId
+      ) ||
       transferId <= 0
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "ID transfer tidak valid",
-        },
-        {
-          status: 400,
-        }
+      return fail(
+        "ID transfer tidak valid",
+        400
       );
     }
 
     // ===================================================
-    // 4. BODY
+    // 5. BODY
+    // ===================================================
     //
     // Bisa:
     //
@@ -151,20 +309,31 @@ export async function POST(
       body = {};
     }
 
-    const requestedItems = Array.isArray(
-      body?.items
-    )
-      ? body.items
-      : null;
+    const requestedItems =
+      Array.isArray(body?.items)
+        ? body.items
+        : null;
 
     // ===================================================
-    // 5. GET TRANSFER
+    // 6. GET TRANSFER
+    // ===================================================
+    //
+    // PENTING:
+    //
+    // sourceOutletId WAJIB TIDAK NULL.
+    //
+    // Jadi delivery pusat tidak akan pernah diproses
+    // oleh endpoint ini.
     // ===================================================
 
     const transfer =
-      await prisma.outletTransfer.findUnique({
+      await prisma.outletTransfer.findFirst({
         where: {
           id: transferId,
+
+          sourceOutletId: {
+            not: null,
+          },
         },
 
         include: {
@@ -196,6 +365,8 @@ export async function POST(
                   unit: true,
                   purchasePrice: true,
                   active: true,
+                  source: true,
+                  minimumStock: true,
                 },
               },
             },
@@ -203,122 +374,138 @@ export async function POST(
         },
       });
 
+    // ===================================================
+    // 7. TRANSFER TIDAK DITEMUKAN
+    // ===================================================
+
     if (!transfer) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Transfer tidak ditemukan",
-        },
-        {
-          status: 404,
-        }
+      return fail(
+        "Transfer antar outlet tidak ditemukan",
+        404
       );
     }
 
     // ===================================================
-    // 6. VALIDASI OUTLET TUJUAN
+    // 8. SOURCE OUTLET WAJIB ADA
+    // ===================================================
+
+    if (
+      !transfer.sourceOutletId ||
+      !transfer.sourceOutlet
+    ) {
+      return fail(
+        "Transfer ini bukan transfer antar outlet",
+        400
+      );
+    }
+
+    // ===================================================
+    // 9. SOURCE DAN TUJUAN TIDAK BOLEH SAMA
+    // ===================================================
+
+    if (
+      transfer.sourceOutletId ===
+      transfer.outletId
+    ) {
+      return fail(
+        "Outlet asal dan tujuan tidak boleh sama",
+        400
+      );
+    }
+
+    // ===================================================
+    // 10. SOURCE OUTLET HARUS AKTIF
+    // ===================================================
+
+    if (
+      !transfer.sourceOutlet.active
+    ) {
+      return fail(
+        "Outlet asal tidak aktif",
+        400
+      );
+    }
+
+    // ===================================================
+    // 11. OUTLET TUJUAN HARUS AKTIF
     // ===================================================
 
     if (
       !transfer.outlet ||
       !transfer.outlet.active
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Outlet tujuan tidak aktif",
-        },
-        {
-          status: 400,
-        }
+      return fail(
+        "Outlet tujuan tidak aktif",
+        400
       );
     }
 
     // ===================================================
-    // 7. SECURITY OUTLET ADMIN
+    // 12. SECURITY OUTLET ADMIN
+    // ===================================================
     //
-    // OUTLET_ADMIN hanya boleh menerima
-    // transfer yang ditujukan ke outlet sendiri.
+    // OUTLET_ADMIN hanya boleh menerima transfer
+    // yang ditujukan ke outlet miliknya.
     // ===================================================
 
     if (
-      user.role === "OUTLET_ADMIN"
+      role === "OUTLET_ADMIN"
     ) {
-      if (!user.outletId) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "User belum terhubung ke outlet",
-          },
-          {
-            status: 400,
-          }
+      if (
+        !user.outletId ||
+        !Number.isInteger(
+          user.outletId
+        )
+      ) {
+        return fail(
+          "User belum terhubung ke outlet",
+          400
         );
       }
 
       if (
-        transfer.outlet.id !==
+        transfer.outletId !==
         user.outletId
       ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Transfer bukan untuk outlet Anda",
-          },
-          {
-            status: 403,
-          }
+        return fail(
+          "Transfer bukan untuk outlet Anda",
+          403
         );
       }
     }
 
     // ===================================================
-    // 8. VALIDASI STATUS
+    // 13. STATUS
     // ===================================================
 
     if (
-      transfer.status === "RECEIVED"
+      String(
+        transfer.status
+      ).toUpperCase() ===
+      "RECEIVED"
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Transfer sudah diterima seluruhnya",
-        },
-        {
-          status: 400,
-        }
+      return fail(
+        "Transfer sudah diterima seluruhnya",
+        400
       );
     }
 
     // ===================================================
-    // 9. VALIDASI SOURCE
+    // 14. TRANSFER HARUS MEMILIKI ITEM
     // ===================================================
 
-    // sourceOutletId is NULL for transfers coming from the central warehouse.
-    // Only compare outlet IDs when an actual source outlet exists.
     if (
-      transfer.sourceOutlet &&
-      transfer.sourceOutlet.id ===
-        transfer.outlet.id
+      !transfer.items.length
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Outlet asal dan tujuan tidak boleh sama",
-        },
-        {
-          status: 400,
-        }
+      return fail(
+        "Transfer tidak memiliki barang",
+        400
       );
     }
 
     // ===================================================
-    // 10. VALIDASI ITEM + HITUNG QTY RECEIVE
-    // ===================================================
+    // 15. VALIDASI ITEM + HITUNG QTY RECEIVE
+    // =====================================================
 
     const receiveItems: {
       itemId: number;
@@ -328,12 +515,54 @@ export async function POST(
       remaining: number;
     }[] = [];
 
-    for (const item of transfer.items) {
+    for (
+      const item of transfer.items
+    ) {
+      if (!item.barang) {
+        return fail(
+          `Barang transfer ID ${item.barangId} tidak ditemukan`,
+          400
+        );
+      }
+
       const qty =
         Number(item.qty);
 
       const receivedQty =
-        Number(item.receivedQty || 0);
+        Number(
+          item.receivedQty || 0
+        );
+
+      if (
+        !Number.isFinite(qty) ||
+        qty <= 0
+      ) {
+        return fail(
+          `Qty transfer ${item.barang.name} tidak valid`,
+          400
+        );
+      }
+
+      if (
+        !Number.isFinite(
+          receivedQty
+        ) ||
+        receivedQty < 0
+      ) {
+        return fail(
+          `Qty received ${item.barang.name} tidak valid`,
+          400
+        );
+      }
+
+      if (
+        receivedQty > qty
+      ) {
+        return fail(
+          `Qty received ${item.barang.name} melebihi qty transfer`,
+          400
+        );
+      }
 
       const remaining =
         qty - receivedQty;
@@ -343,17 +572,26 @@ export async function POST(
       }
 
       // -------------------------------------------------
-      // Jika frontend mengirim items
+      // DEFAULT:
+      // Jika frontend tidak mengirim items,
+      // terima seluruh sisa.
       // -------------------------------------------------
 
-      let receiveQty = remaining;
+      let receiveQty =
+        remaining;
+
+      // -------------------------------------------------
+      // Jika frontend mengirim items,
+      // hanya item yang dikirim yang diproses.
+      // -------------------------------------------------
 
       if (requestedItems) {
         const requested =
           requestedItems.find(
             (x: any) =>
-              Number(x?.itemId) ===
-              item.id
+              Number(
+                x?.itemId
+              ) === item.id
           );
 
         if (!requested) {
@@ -371,69 +609,64 @@ export async function POST(
           ) ||
           receiveQty <= 0
         ) {
-          return NextResponse.json(
-            {
-              success: false,
-              message:
-                `Qty receive ${item.barang.name} tidak valid`,
-            },
-            {
-              status: 400,
-            }
+          return fail(
+            `Qty receive ${item.barang.name} tidak valid`,
+            400
           );
         }
 
         if (
-          receiveQty > remaining
+          receiveQty >
+          remaining
         ) {
-          return NextResponse.json(
-            {
-              success: false,
-              message:
-                `Qty receive ${item.barang.name} melebihi sisa transfer. Sisa: ${remaining} ${item.barang.unit}`,
-            },
-            {
-              status: 400,
-            }
+          return fail(
+            `Qty receive ${item.barang.name} melebihi sisa transfer. Sisa: ${remaining} ${item.barang.unit}`,
+            400
           );
         }
       }
 
       receiveItems.push({
         itemId: item.id,
-        barangId: item.barangId,
-        qty: receiveQty,
-        previousReceived: receivedQty,
+
+        barangId:
+          item.barangId,
+
+        qty:
+          receiveQty,
+
+        previousReceived:
+          receivedQty,
+
         remaining,
       });
     }
 
+    // ===================================================
+    // 16. HARUS ADA ITEM YANG DITERIMA
+    // ===================================================
+
     if (
       receiveItems.length === 0
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Tidak ada barang yang dapat diterima",
-        },
-        {
-          status: 400,
-        }
+      return fail(
+        "Tidak ada barang yang dapat diterima",
+        400
       );
     }
 
     // ===================================================
-    // 11. TRANSACTION
+    // 17. TRANSACTION
     // ===================================================
 
     const result =
       await prisma.$transaction(
         async (tx) => {
-          const now = new Date();
+          const now =
+            new Date();
 
           // ---------------------------------------------
-          // RELOAD TRANSFER DALAM TRANSACTION
+          // RELOAD TRANSFER
           // ---------------------------------------------
 
           const current =
@@ -444,8 +677,29 @@ export async function POST(
                 },
 
                 include: {
-                  items: true,
+                  items: {
+                    include: {
+                      barang: {
+                        select: {
+                          id: true,
+                          code: true,
+                          name: true,
+                          unit: true,
+                          purchasePrice:
+                            true,
+                          minimumStock:
+                            true,
+                          active:
+                            true,
+                          source:
+                            true,
+                        },
+                      },
+                    },
+                  },
+
                   sourceOutlet: true,
+
                   outlet: true,
                 },
               }
@@ -457,8 +711,60 @@ export async function POST(
             );
           }
 
+          // ---------------------------------------------
+          // WAJIB TRANSFER ANTAR OUTLET
+          // ---------------------------------------------
+
           if (
-            current.status ===
+            !current.sourceOutletId ||
+            !current.sourceOutlet
+          ) {
+            throw new Error(
+              "Transfer ini bukan transfer antar outlet"
+            );
+          }
+
+          // ---------------------------------------------
+          // SOURCE DAN TUJUAN
+          // ---------------------------------------------
+
+          if (
+            current.sourceOutletId ===
+            current.outletId
+          ) {
+            throw new Error(
+              "Outlet asal dan tujuan tidak boleh sama"
+            );
+          }
+
+          // ---------------------------------------------
+          // OUTLET AKTIF
+          // ---------------------------------------------
+
+          if (
+            !current.sourceOutlet.active
+          ) {
+            throw new Error(
+              "Outlet asal tidak aktif"
+            );
+          }
+
+          if (
+            !current.outlet.active
+          ) {
+            throw new Error(
+              "Outlet tujuan tidak aktif"
+            );
+          }
+
+          // ---------------------------------------------
+          // STATUS
+          // ---------------------------------------------
+
+          if (
+            String(
+              current.status
+            ).toUpperCase() ===
             "RECEIVED"
           ) {
             throw new Error(
@@ -467,7 +773,7 @@ export async function POST(
           }
 
           // ---------------------------------------------
-          // PROSES ITEM
+          // PROCESSED ITEMS
           // ---------------------------------------------
 
           const processedItems: {
@@ -479,6 +785,10 @@ export async function POST(
             unitCost: number;
             totalCost: number;
           }[] = [];
+
+          // ---------------------------------------------
+          // PROSES ITEM
+          // ---------------------------------------------
 
           for (
             const requested of receiveItems
@@ -493,6 +803,38 @@ export async function POST(
             if (!item) {
               throw new Error(
                 `Item transfer ${requested.itemId} tidak ditemukan`
+              );
+            }
+
+            if (!item.barang) {
+              throw new Error(
+                `Barang transfer ID ${item.barangId} tidak ditemukan`
+              );
+            }
+
+            // -------------------------------------------
+            // BARANG HARUS CENTRAL
+            // -------------------------------------------
+
+            if (
+              item.barang.source !==
+              "CENTRAL"
+            ) {
+              throw new Error(
+                `Barang ${item.barang.name} bukan barang Master Pusat`
+              );
+            }
+
+            // -------------------------------------------
+            // BARANG HARUS AKTIF
+            // -------------------------------------------
+
+            if (
+              item.barang.active ===
+              false
+            ) {
+              throw new Error(
+                `Barang ${item.barang.name} sedang tidak aktif`
               );
             }
 
@@ -516,9 +858,23 @@ export async function POST(
               continue;
             }
 
+            const requestedQty =
+              Number(
+                requested.qty
+              );
+
+            if (
+              !Number.isFinite(
+                requestedQty
+              ) ||
+              requestedQty <= 0
+            ) {
+              continue;
+            }
+
             const receiveQty =
               Math.min(
-                requested.qty,
+                requestedQty,
                 remaining
               );
 
@@ -529,7 +885,7 @@ export async function POST(
             }
 
             // -------------------------------------------
-            // GET / CREATE OUTLET STOCK
+            // GET STOCK OUTLET TUJUAN
             // -------------------------------------------
 
             const stock =
@@ -539,6 +895,7 @@ export async function POST(
                     outletId_barangId: {
                       outletId:
                         current.outletId,
+
                       barangId:
                         item.barangId,
                     },
@@ -552,7 +909,7 @@ export async function POST(
               );
 
             // -------------------------------------------
-            // COST
+            // UNIT COST
             // -------------------------------------------
 
             const barang =
@@ -577,6 +934,10 @@ export async function POST(
                   0
               );
 
+            // -------------------------------------------
+            // STOCK AFTER
+            // -------------------------------------------
+
             const stockAfter =
               stockBefore +
               receiveQty;
@@ -586,38 +947,33 @@ export async function POST(
               receiveQty;
 
             // -------------------------------------------
-            // UPDATE / CREATE STOCK OUTLET
+            // UPDATE / CREATE OUTLET STOCK
             // -------------------------------------------
 
             if (stock) {
               const oldStock =
                 Number(
-                  stock.stock
+                  stock.stock || 0
                 );
 
               const oldAverage =
                 Number(
-                  stock.averageCost ||
-                    0
+                  stock.averageCost || 0
                 );
 
-              const oldQty =
-                oldStock;
+              const totalQtyAfter =
+                oldStock +
+                receiveQty;
 
               const newAverage =
-                oldQty +
-                  receiveQty >
-                0
+                totalQtyAfter > 0
                   ? (
-                      oldQty *
+                      oldStock *
                         oldAverage +
                       receiveQty *
                         unitCost
                     ) /
-                    (
-                      oldQty +
-                      receiveQty
-                    )
+                    totalQtyAfter
                   : unitCost;
 
               await tx.outletStock.update(
@@ -650,7 +1006,11 @@ export async function POST(
                       receiveQty,
 
                     minimumStock:
-                      0,
+                      Number(
+                        item.barang
+                          .minimumStock ??
+                          0
+                      ),
 
                     averageCost:
                       unitCost,
@@ -681,6 +1041,10 @@ export async function POST(
               }
             );
 
+            // -------------------------------------------
+            // TRACK PROCESSED ITEM
+            // -------------------------------------------
+
             processedItems.push({
               barangId:
                 item.barangId,
@@ -699,6 +1063,19 @@ export async function POST(
 
               totalCost,
             });
+          }
+
+          // ---------------------------------------------
+          // HARUS ADA YANG BERHASIL DIPROSES
+          // ---------------------------------------------
+
+          if (
+            processedItems.length ===
+            0
+          ) {
+            throw new Error(
+              "Tidak ada barang yang dapat diterima"
+            );
           }
 
           // ---------------------------------------------
@@ -723,7 +1100,7 @@ export async function POST(
           ) {
             totalQty +=
               Number(
-                item.qty
+                item.qty || 0
               );
 
             totalReceived +=
@@ -811,7 +1188,7 @@ export async function POST(
           // ---------------------------------------------
           // STOCK CARD
           //
-          // PER ITEM
+          // SATU STOCK CARD PER ITEM YANG DITERIMA
           // ---------------------------------------------
 
           for (
@@ -854,7 +1231,7 @@ export async function POST(
                     item.totalCost,
 
                   note:
-                    `Transfer masuk dari ${current.sourceOutlet?.name || "Gudang Pusat"}`,
+                    `Transfer masuk antar outlet dari ${current.sourceOutlet.name}`,
                 },
               }
             );
@@ -883,7 +1260,7 @@ export async function POST(
                   user.id,
 
                 description:
-                  `Transfer ${current.number} diterima di outlet ${current.outlet.name} dari ${current.sourceOutlet?.name || "Gudang Pusat"}. ` +
+                  `Transfer ${current.number} diterima di outlet ${current.outlet.name} dari ${current.sourceOutlet.name}. ` +
                   `Item: ${descriptionItems.join(
                     ", "
                   )}. ` +
@@ -891,6 +1268,10 @@ export async function POST(
               },
             }
           );
+
+          // ---------------------------------------------
+          // RETURN TRANSACTION RESULT
+          // ---------------------------------------------
 
           return {
             transfer:
@@ -908,14 +1289,15 @@ export async function POST(
       );
 
     // ===================================================
-    // 12. RESPONSE
+    // 18. RESPONSE
     // ===================================================
 
     return NextResponse.json({
       success: true,
 
       message:
-        result.status === "RECEIVED"
+        result.status ===
+        "RECEIVED"
           ? "Transfer berhasil diterima seluruhnya"
           : "Sebagian transfer berhasil diterima",
 
@@ -927,12 +1309,10 @@ export async function POST(
           result.transfer.number,
 
         sourceOutlet:
-          result.transfer
-            .sourceOutlet,
+          result.transfer.sourceOutlet,
 
         destinationOutlet:
-          result.transfer
-            .outlet,
+          result.transfer.outlet,
 
         status:
           result.status,

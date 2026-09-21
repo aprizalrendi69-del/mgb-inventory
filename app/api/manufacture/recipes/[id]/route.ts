@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
+  GET as GET_RECIPES,
   PUT as PUT_RECIPES,
   PATCH as PATCH_RECIPES,
   DELETE as DELETE_RECIPES,
@@ -205,6 +206,23 @@ akan diteruskan menjadi:
 PUT /api/manufacture/recipes?id=1
 ===========================================================
 */
+
+
+export async function GET(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await context.params;
+    return await forwardRequest(req, id, GET_RECIPES);
+  } catch (error: any) {
+    console.error("GET /api/manufacture/recipes/[id]:", error);
+    return NextResponse.json(
+      { success: false, message: error?.message || "Gagal mengambil Recipe/BOM." },
+      { status: 500 },
+    );
+  }
+}
 
 export async function PUT(
   req: NextRequest,

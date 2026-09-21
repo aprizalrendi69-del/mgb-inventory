@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   CheckCircle2,
   ChevronDown,
@@ -203,7 +203,7 @@ function SummaryCard({
 }: {
   label: string;
   value: number;
-  icon: React.ReactNode;
+  icon: ReactNode;
   tone?: "slate" | "blue" | "amber" | "emerald" | "violet";
   description?: string;
 }) {
@@ -1588,8 +1588,9 @@ export default function OutletTransferPage() {
                       const canReceive =
                         transfer.status !==
                           "RECEIVED" &&
-                        transfer.remainingQty >
-                          0;
+                        Number(
+                          transfer.remainingQty
+                        ) > 0;
 
                       return (
                         <TransferRow
@@ -2202,10 +2203,17 @@ export default function OutletTransferPage() {
       {showReceive &&
         receiveTransfer && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-5">
-            <div className="w-full max-w-4xl overflow-hidden rounded-3xl border border-white/40 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.3)]">
+            {/* 
+              IMPORTANT:
+              Modal dibuat flex column + max height.
+              Header dan footer tidak ikut scroll.
+              Hanya area detail item yang melakukan scroll.
+            */}
+            <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-white/40 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.3)]">
+              
               {/* HEADER */}
 
-              <div className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-r from-emerald-700 to-emerald-900 px-5 py-5 text-white sm:px-7">
+              <div className="relative shrink-0 overflow-hidden border-b border-slate-200 bg-gradient-to-r from-emerald-700 to-emerald-900 px-5 py-5 text-white sm:px-7">
                 <div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
 
                 <div className="relative flex items-center justify-between">
@@ -2244,7 +2252,10 @@ export default function OutletTransferPage() {
                     onClick={() =>
                       setShowReceive(false)
                     }
-                    className="rounded-xl p-2 text-emerald-100 transition hover:bg-white/10 hover:text-white"
+                    disabled={
+                      receivingId !== null
+                    }
+                    className="rounded-xl p-2 text-emerald-100 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <X size={20} />
                   </button>
@@ -2252,8 +2263,7 @@ export default function OutletTransferPage() {
               </div>
 
               {/* BODY */}
-
-              <div className="bg-slate-50/70 p-4 sm:p-6">
+              <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-4 sm:p-6">
                 <div className="mb-5 grid gap-3 sm:grid-cols-2">
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
@@ -2302,8 +2312,15 @@ export default function OutletTransferPage() {
                   </div>
                 </div>
 
+                {/* =================================================
+                    DETAIL PENERIMAAN
+                    HANYA BAGIAN ITEM YANG SCROLL
+                ================================================= */}
+
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                  {/* DETAIL HEADER - TIDAK SCROLL */}
+
+                  <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
                     <div>
                       <div className="text-sm font-bold text-slate-800">
                         Detail Penerimaan
@@ -2322,10 +2339,16 @@ export default function OutletTransferPage() {
                     </span>
                   </div>
 
-                  <div className="overflow-x-auto">
+                  {/* 
+                    SCROLL CONTAINER:
+                    - max-h menjaga modal tetap pendek
+                    - overflow-y-auto membuat daftar item scroll
+                    - overflow-x-auto tetap menjaga tabel responsive
+                  */}
+                  <div className="max-h-[46vh] overflow-auto">
                     <table className="w-full min-w-[700px] text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-100 bg-slate-50/80 text-left">
+                      <thead className="sticky top-0 z-10">
+                        <tr className="border-b border-slate-100 bg-slate-50 text-left shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
                           <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                             Barang
                           </th>
@@ -2388,7 +2411,7 @@ export default function OutletTransferPage() {
                                   key={
                                     item.id
                                   }
-                                  className="border-b border-slate-100 last:border-0"
+                                  className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60"
                                 >
                                   <td className="px-5 py-4">
                                     <div className="flex items-center gap-3">
@@ -2400,8 +2423,8 @@ export default function OutletTransferPage() {
                                         />
                                       </div>
 
-                                      <div>
-                                        <div className="font-bold text-slate-700">
+                                      <div className="min-w-0">
+                                        <div className="max-w-[300px] truncate font-bold text-slate-700">
                                           {
                                             item
                                               .barang
@@ -2477,9 +2500,9 @@ export default function OutletTransferPage() {
                 </div>
               </div>
 
-              {/* FOOTER */}
+              {/* FOOTER - TIDAK SCROLL */}
 
-              <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:px-7">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:px-7">
                 <div className="hidden text-xs text-slate-400 sm:block">
                   Pastikan qty penerimaan sesuai dengan barang fisik.
                 </div>
@@ -2531,6 +2554,7 @@ export default function OutletTransferPage() {
             </div>
           </div>
         )}
+
     </div>
   );
 }
@@ -2650,16 +2674,31 @@ function TransferRow({
           />
         </td>
 
+        {/* =================================================
+            ACTIONS
+        ================================================= */}
+
         <td className="px-5 py-4">
-          <div className="flex items-center justify-center gap-1">
+          <div className="flex items-center justify-center gap-2">
+            {/* DETAIL */}
+
             <button
               type="button"
               onClick={onToggle}
-              title="Detail"
-              className={`rounded-xl p-2 transition ${
+              title={
                 expanded
-                  ? "bg-slate-200 text-slate-800"
-                  : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  ? "Tutup detail"
+                  : "Lihat detail"
+              }
+              aria-label={
+                expanded
+                  ? "Tutup detail transfer"
+                  : "Lihat detail transfer"
+              }
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border transition ${
+                expanded
+                  ? "border-slate-300 bg-slate-200 text-slate-800 shadow-sm"
+                  : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
               }`}
             >
               {expanded ? (
@@ -2673,29 +2712,47 @@ function TransferRow({
               )}
             </button>
 
+            {/* TERIMA */}
+
             {canReceive && (
               <button
                 type="button"
                 onClick={onReceive}
                 disabled={receiving}
-                title="Terima"
-                className="rounded-xl p-2 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-50"
+                title="Terima transfer"
+                aria-label={`Terima transfer ${transfer.number}`}
+                className={`inline-flex h-10 min-w-[92px] items-center justify-center gap-2 rounded-xl border px-3 text-xs font-extrabold transition-all ${
+                  receiving
+                    ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm hover:border-emerald-300 hover:bg-emerald-100 hover:text-emerald-800 hover:shadow-md active:scale-[0.98]"
+                }`}
               >
                 {receiving ? (
-                  <RefreshCw
-                    size={17}
-                    className="animate-spin"
-                  />
+                  <>
+                    <RefreshCw
+                      size={15}
+                      className="animate-spin"
+                    />
+                    Menerima...
+                  </>
                 ) : (
-                  <CheckCircle2
-                    size={17}
-                  />
+                  <>
+                    <CheckCircle2
+                      size={16}
+                      strokeWidth={2.5}
+                    />
+                    Terima
+                  </>
                 )}
               </button>
             )}
           </div>
         </td>
       </tr>
+
+      {/* =================================================
+          EXPANDED DETAIL
+      ================================================= */}
 
       {expanded && (
         <tr className="border-b border-slate-200 bg-slate-50">

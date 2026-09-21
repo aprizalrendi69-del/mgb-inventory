@@ -81,13 +81,32 @@ async function getCurrentUser() {
 
 // =====================================================
 // GET
-// HISTORY TRANSFER OUTLET
+// HISTORY TRANSFER ANTAR OUTLET
+//
+// PENTING:
+// Endpoint ini HANYA untuk transfer:
+//
+//    OUTLET A -> OUTLET B
+//
+// BUKAN:
+//
+//    GUDANG PUSAT -> OUTLET
+//
+// Delivery pusat biasanya mempunyai:
+//    sourceOutletId = null
+//
+// Karena itu GET selalu menggunakan:
+//
+//    sourceOutletId: { not: null }
+//
+// =====================================================
 //
 // ADMIN / MANAGER
-// -> semua transfer
+// -> semua transfer ANTAR OUTLET
 //
 // OUTLET_ADMIN
-// -> transfer yang masuk ke outlet sendiri
+// -> transfer ANTAR OUTLET yang masuk
+//    ke outlet sendiri
 //
 // =====================================================
 
@@ -129,7 +148,8 @@ export async function GET() {
       return NextResponse.json(
         {
           success: false,
-          message: "Akses transfer ditolak",
+          message:
+            "Akses transfer ditolak",
         },
         {
           status: 403,
@@ -160,18 +180,32 @@ export async function GET() {
     // ===================================================
     // FILTER
     //
-    // OUTLET_ADMIN:
-    // hanya transfer yang masuk ke outlet sendiri
+    // WAJIB:
+    // sourceOutletId != null
     //
-    // ADMIN / MANAGER:
-    // semua transfer
+    // Artinya:
+    // hanya transfer Outlet -> Outlet.
+    //
+    // Delivery Pusat:
+    // sourceOutletId = null
+    //
+    // otomatis TIDAK diambil.
     // ===================================================
 
     const where = isOutletAdmin
       ? {
-          outletId: user.outletId!,
+          sourceOutletId: {
+            not: null,
+          },
+
+          outletId:
+            user.outletId!,
         }
-      : {};
+      : {
+          sourceOutletId: {
+            not: null,
+          },
+        };
 
     // ===================================================
     // GET TRANSFERS
@@ -232,7 +266,8 @@ export async function GET() {
         const totalQty =
           transfer.items.reduce(
             (total, item) =>
-              total + Number(item.qty || 0),
+              total +
+              Number(item.qty || 0),
             0
           );
 
@@ -240,7 +275,9 @@ export async function GET() {
           transfer.items.reduce(
             (total, item) =>
               total +
-              Number(item.receivedQty || 0),
+              Number(
+                item.receivedQty || 0
+              ),
             0
           );
 
@@ -315,7 +352,10 @@ export async function GET() {
                 }
               : null,
 
-          // Alias FE lama
+          // =================================================
+          // ALIAS FE LAMA
+          // =================================================
+
           outlet:
             transfer.outlet
               ? {
@@ -406,13 +446,21 @@ export async function GET() {
 
 // =====================================================
 // POST
-// BUAT TRANSFER OUTLET -> OUTLET
+// BUAT TRANSFER ANTAR OUTLET
 //
-// SOURCE:
-// user.outletId
+// HANYA:
 //
-// DESTINATION:
-// body.destinationOutletId
+//    OUTLET A -> OUTLET B
+//
+// TIDAK BOLEH:
+//
+//    GUDANG PUSAT -> OUTLET
+//
+// Source outlet selalu berasal dari:
+//    user.outletId
+//
+// Destination:
+//    body.destinationOutletId
 //
 // SAAT TRANSFER DIBUAT:
 // - stok outlet asal berkurang
@@ -424,7 +472,7 @@ export async function GET() {
 // - receivedQty bertambah
 // - status PARTIAL / RECEIVED
 //
-// RECEIVE DILAKUKAN DI:
+// RECEIVE:
 // /api/outlet/transfer/[id]/receive
 // =====================================================
 
@@ -475,9 +523,10 @@ export async function POST(
     // ===================================================
     // 3. OUTLET ASAL
     //
-    // Untuk transfer outlet -> outlet,
-    // source wajib berasal dari session user.
-    // Tidak menerima sourceOutletId dari frontend.
+    // Transfer antar outlet WAJIB memiliki outlet asal.
+    //
+    // Source tidak boleh dikirim dari frontend.
+    // Selalu mengambil dari session user.
     // ===================================================
 
     if (!user.outletId) {
@@ -495,6 +544,24 @@ export async function POST(
 
     const sourceOutletId =
       Number(user.outletId);
+
+    if (
+      !Number.isInteger(
+        sourceOutletId
+      ) ||
+      sourceOutletId <= 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Outlet asal tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
     // ===================================================
     // 4. BODY
@@ -794,7 +861,7 @@ export async function POST(
             }
 
             // ===========================================
-            // HANYA BARANG CENTRAL
+            // TRANSFER ANTAR OUTLET HANYA BARANG CENTRAL
             // ===========================================
 
             if (
@@ -900,8 +967,10 @@ export async function POST(
           // =============================================
           // 14. CREATE TRANSFER
           //
-          // sourceOutletId = ASAL
-          // outletId       = TUJUAN
+          // sourceOutletId = outlet asal
+          // outletId       = outlet tujuan
+          //
+          // Keduanya WAJIB ada.
           // =============================================
 
           const transfer =
@@ -989,7 +1058,8 @@ export async function POST(
                 barangId:
                   item.barangId,
 
-                trxDate: now,
+                trxDate:
+                  now,
 
                 trxType:
                   "OUTLET_TRANSFER_OUT",
@@ -1047,7 +1117,7 @@ export async function POST(
                 user.id,
 
               description:
-                `Transfer barang ${number}: ` +
+                `Transfer antar outlet ${number}: ` +
                 `${sourceOutlet.name} → ` +
                 `${destinationOutlet.name}. ` +
                 `Total ${totalQty} item.`,
@@ -1071,7 +1141,7 @@ export async function POST(
         success: true,
 
         message:
-          "Transfer berhasil dibuat",
+          "Transfer antar outlet berhasil dibuat",
 
         data: {
           id:
@@ -1181,7 +1251,7 @@ export async function POST(
         message:
           error instanceof Error
             ? error.message
-            : "Gagal membuat transfer",
+            : "Gagal membuat transfer antar outlet",
       },
       {
         status: 500,

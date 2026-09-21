@@ -26,6 +26,11 @@ import {
   Boxes,
   TrendingUp,
   ShieldCheck,
+  FileText,
+  ReceiptText,
+  CircleDot,
+  DollarSign,
+  Calculator,
 } from "lucide-react";
 
 type LastOpname = {
@@ -42,9 +47,7 @@ type LastOpname = {
 type Stock = {
   id: number;
   barangId: number;
-
   stock: number;
-
   minimumStock: number;
   averageCost: number;
 
@@ -64,6 +67,40 @@ type Stock = {
 type ApiResponse = {
   success: boolean;
   data: Stock[];
+  message?: string;
+};
+
+type MasterHarga = {
+  id?: number;
+  barangId: number;
+  supplierId?: number | null;
+  hargaLama?: number | null;
+  hargaBaru?: number | null;
+  selisihHarga?: number | null;
+  persenNaik?: number | null;
+  persen?: number | null;
+  qty?: number | null;
+  total?: number | null;
+  akumulasi?: number | null;
+  status?: string | null;
+  receiveDate?: string | null;
+  createdAt?: string | null;
+
+  barang?: {
+    id?: number;
+    code?: string;
+    name?: string;
+  } | null;
+
+  supplier?: {
+    id?: number;
+    name?: string;
+  } | null;
+};
+
+type MasterHargaResponse = {
+  success: boolean;
+  data: MasterHarga[];
   message?: string;
 };
 
@@ -114,11 +151,14 @@ type FilterStatus =
 
 export default function StockPusatPage() {
   const [data, setData] = useState<Stock[]>([]);
+  const [priceData, setPriceData] = useState<MasterHarga[]>([]);
+
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] =
     useState<FilterStatus>("ALL");
 
   const [loading, setLoading] = useState(true);
+  const [priceLoading, setPriceLoading] = useState(true);
   const [error, setError] = useState("");
 
   // =====================================================
@@ -142,8 +182,7 @@ export default function StockPusatPage() {
   const [historyLoading, setHistoryLoading] =
     useState(false);
 
-  const [historyError, setHistoryError] =
-    useState("");
+  const [historyError, setHistoryError] = useState("");
 
   // =====================================================
   // LOAD STOCK
@@ -158,13 +197,11 @@ export default function StockPusatPage() {
         cache: "no-store",
       });
 
-      const result: ApiResponse =
-        await res.json();
+      const result: ApiResponse = await res.json();
 
       if (!res.ok || !result.success) {
         throw new Error(
-          result.message ||
-            "Gagal mengambil stock pusat"
+          result.message || "Gagal mengambil stock pusat"
         );
       }
 
@@ -191,12 +228,130 @@ export default function StockPusatPage() {
   }
 
   // =====================================================
-  // INITIAL
+  // LOAD MASTER HARGA
   // =====================================================
 
+  async function loadPrices() {
+    try {
+      setPriceLoading(true);
+
+      const res = await fetch(
+        "/api/master-harga",
+        {
+          cache: "no-store",
+        }
+      );
+
+      const result: MasterHargaResponse =
+        await res.json();
+
+      if (!res.ok || !result.success) {
+        throw new Error(
+          result.message ||
+            "Gagal mengambil master harga"
+        );
+      }
+
+      setPriceData(
+        Array.isArray(result.data)
+          ? result.data
+          : []
+      );
+    } catch (error) {
+      console.error(
+        "LOAD MASTER HARGA ERROR:",
+        error
+      );
+
+      setPriceData([]);
+    } finally {
+      setPriceLoading(false);
+    }
+  }
+
+  // =====================================================
+  // LOAD ALL
+  // =====================================================
+
+  async function loadAll() {
+    await Promise.all([
+      loadStock(),
+      loadPrices(),
+    ]);
+  }
+
   useEffect(() => {
-    loadStock();
+    loadAll();
   }, []);
+
+  // =====================================================
+  // LATEST PRICE MAP
+  // =====================================================
+
+  const latestPriceMap = useMemo(() => {
+    const map = new Map<number, MasterHarga>();
+
+    const sorted = [...priceData].sort(
+      (a, b) => {
+        const dateA = new Date(
+          a.receiveDate ||
+            a.createdAt ||
+            0
+        ).getTime();
+
+        const dateB = new Date(
+          b.receiveDate ||
+            b.createdAt ||
+            0
+        ).getTime();
+
+        return dateB - dateA;
+      }
+    );
+
+    for (const item of sorted) {
+      if (!item.barangId) continue;
+
+      if (!map.has(item.barangId)) {
+        map.set(item.barangId, item);
+      }
+    }
+
+    return map;
+  }, [priceData]);
+
+  // =====================================================
+  // PRICE HELPERS
+  // =====================================================
+
+  function getLatestPrice(item: Stock): number | null {
+    const price = latestPriceMap.get(item.barangId);
+
+    if (!price) {
+      return null;
+    }
+
+    const value = Number(price.hargaBaru);
+
+    if (
+      !Number.isFinite(value) ||
+      value < 0
+    ) {
+      return null;
+    }
+
+    return value;
+  }
+
+  function getStockValue(item: Stock): number {
+    const price = getLatestPrice(item);
+
+    if (price === null) {
+      return 0;
+    }
+
+    return getTransactionStock(item) * price;
+  }
 
   // =====================================================
   // STOCK STATUS
@@ -256,19 +411,14 @@ export default function StockPusatPage() {
   }
 
   function getBaseStock(item: Stock) {
-    const stock =
-      getTransactionStock(item);
-
-    const conversion =
-      getConversion(item);
-
-    return stock * conversion;
+    return (
+      getTransactionStock(item) *
+      getConversion(item)
+    );
   }
 
   function getMinimumStock(item: Stock) {
-    return Number(
-      item.minimumStock || 0
-    );
+    return Number(item.minimumStock || 0);
   }
 
   // =====================================================
@@ -281,24 +431,19 @@ export default function StockPusatPage() {
 
     return data.filter((item) => {
       const code =
-        item.barang?.code
-          ?.toLowerCase() || "";
+        item.barang?.code?.toLowerCase() || "";
 
       const name =
-        item.barang?.name
-          ?.toLowerCase() || "";
+        item.barang?.name?.toLowerCase() || "";
 
       const barcode =
-        item.barang?.barcode
-          ?.toLowerCase() || "";
+        item.barang?.barcode?.toLowerCase() || "";
 
       const unit =
-        item.barang?.unit
-          ?.toLowerCase() || "";
+        item.barang?.unit?.toLowerCase() || "";
 
       const baseUnit =
-        item.barang?.baseUnit
-          ?.toLowerCase() || "";
+        item.barang?.baseUnit?.toLowerCase() || "";
 
       const matchesSearch =
         !keyword ||
@@ -339,6 +484,7 @@ export default function StockPusatPage() {
           text: "Barang Masuk Supplier",
           className:
             "border-emerald-200 bg-emerald-50 text-emerald-700",
+          dot: "bg-emerald-500",
         };
 
       case "TRANSFER":
@@ -346,7 +492,8 @@ export default function StockPusatPage() {
         return {
           text: "Transfer Masuk",
           className:
-            "border-blue-200 bg-blue-50 text-blue-700",
+            "border-[#BFD9CE] bg-[#EEF7F3] text-[#497F70]",
+          dot: "bg-[#497F70]",
         };
 
       case "DELIVERY":
@@ -356,6 +503,7 @@ export default function StockPusatPage() {
           text: "Barang Keluar",
           className:
             "border-red-200 bg-red-50 text-red-700",
+          dot: "bg-red-500",
         };
 
       case "ADJUSTMENT":
@@ -363,6 +511,7 @@ export default function StockPusatPage() {
           text: "Adjustment Stock",
           className:
             "border-amber-200 bg-amber-50 text-amber-700",
+          dot: "bg-amber-500",
         };
 
       case "OPNAME":
@@ -371,6 +520,7 @@ export default function StockPusatPage() {
           text: "Stock Opname",
           className:
             "border-purple-200 bg-purple-50 text-purple-700",
+          dot: "bg-purple-500",
         };
 
       case "PURCHASE":
@@ -378,6 +528,7 @@ export default function StockPusatPage() {
           text: "Purchase Order",
           className:
             "border-gray-200 bg-gray-50 text-gray-700",
+          dot: "bg-gray-400",
         };
 
       default:
@@ -385,8 +536,68 @@ export default function StockPusatPage() {
           text: type || "-",
           className:
             "border-gray-200 bg-gray-50 text-gray-600",
+          dot: "bg-gray-400",
         };
     }
+  }
+
+  // =====================================================
+  // HISTORY STATUS
+  // =====================================================
+
+  function getHistoryStatus(
+    status?: string | null
+  ) {
+    const value = String(status || "").trim();
+    const upper = value.toUpperCase();
+
+    if (
+      upper === "APPROVED" ||
+      upper === "COMPLETED" ||
+      upper === "RECEIVED" ||
+      upper === "DONE" ||
+      upper === "SUCCESS"
+    ) {
+      return {
+        text: value || "APPROVED",
+        className:
+          "border-emerald-200 bg-emerald-50 text-emerald-700",
+        dot: "bg-emerald-500",
+      };
+    }
+
+    if (
+      upper === "PENDING" ||
+      upper === "WAITING" ||
+      upper === "COUNTING"
+    ) {
+      return {
+        text: value,
+        className:
+          "border-amber-200 bg-amber-50 text-amber-700",
+        dot: "bg-amber-500",
+      };
+    }
+
+    if (
+      upper === "REJECTED" ||
+      upper === "CANCELLED" ||
+      upper === "CANCELED"
+    ) {
+      return {
+        text: value,
+        className:
+          "border-red-200 bg-red-50 text-red-700",
+        dot: "bg-red-500",
+      };
+    }
+
+    return {
+      text: value || "-",
+      className:
+        "border-gray-200 bg-gray-50 text-gray-600",
+      dot: "bg-gray-400",
+    };
   }
 
   // =====================================================
@@ -442,6 +653,28 @@ export default function StockPusatPage() {
     );
   }
 
+  function formatCurrency(
+    value: number | null | undefined
+  ) {
+    if (
+      value === null ||
+      value === undefined ||
+      !Number.isFinite(Number(value))
+    ) {
+      return "-";
+    }
+
+    return Number(value).toLocaleString(
+      "id-ID",
+      {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }
+    );
+  }
+
   function formatDate(
     value?: string | null
   ) {
@@ -493,8 +726,7 @@ export default function StockPusatPage() {
   const totalStock = useMemo(() => {
     return filteredData.reduce(
       (total, item) =>
-        total +
-        getTransactionStock(item),
+        total + getTransactionStock(item),
       0
     );
   }, [filteredData]);
@@ -502,29 +734,31 @@ export default function StockPusatPage() {
   const totalBaseStock = useMemo(() => {
     return filteredData.reduce(
       (total, item) =>
-        total +
-        getBaseStock(item),
+        total + getBaseStock(item),
       0
     );
   }, [filteredData]);
+
+  const totalStockValue = useMemo(() => {
+    return filteredData.reduce(
+      (total, item) =>
+        total + getStockValue(item),
+      0
+    );
+  }, [filteredData, latestPriceMap]);
+
+  const totalPricedItems = useMemo(() => {
+    return filteredData.filter(
+      (item) =>
+        getLatestPrice(item) !== null
+    ).length;
+  }, [filteredData, latestPriceMap]);
 
   const totalWithOpname = useMemo(() => {
     return filteredData.filter(
       (item) =>
         item.lastOpname !== null
     ).length;
-  }, [filteredData]);
-
-  const totalDifference = useMemo(() => {
-    return filteredData.reduce(
-      (total, item) =>
-        total +
-        Number(
-          item.lastOpname
-            ?.difference || 0
-        ),
-      0
-    );
   }, [filteredData]);
 
   const totalAman = useMemo(() => {
@@ -561,17 +795,14 @@ export default function StockPusatPage() {
   // OPEN HISTORY
   // =====================================================
 
-  async function openHistory(
-    stock: Stock
-  ) {
+  async function openHistory(stock: Stock) {
     try {
       setSelectedHistory(stock);
       setHistoryData([]);
       setHistoryError("");
       setHistoryLoading(true);
 
-      const params =
-        new URLSearchParams();
+      const params = new URLSearchParams();
 
       params.set(
         "barangId",
@@ -619,8 +850,7 @@ export default function StockPusatPage() {
           ),
         informational:
           Number(
-            result.summary
-              ?.informational || 0
+            result.summary?.informational || 0
           ),
       });
     } catch (error: any) {
@@ -640,10 +870,6 @@ export default function StockPusatPage() {
     }
   }
 
-  // =====================================================
-  // CLOSE HISTORY
-  // =====================================================
-
   function closeHistory() {
     setSelectedHistory(null);
     setHistoryData([]);
@@ -656,38 +882,34 @@ export default function StockPusatPage() {
   // =====================================================
 
   return (
-    <div className="min-h-full bg-[#F3F7F5]">
+    <div className="min-h-full bg-[#F3F7F5] text-[#18352D]">
 
       {/* =================================================
-          PREMIUM PAGE HEADER
+          PREMIUM HEADER
       ================================================= */}
 
-      <section className="relative overflow-hidden border-b border-[#D9E7E1] bg-[#08231C]">
+      <section className="relative overflow-hidden border-b border-[#183F33] bg-[#071F18]">
 
-        {/* Ambient glow */}
+        <div className="pointer-events-none absolute -left-28 -top-32 h-80 w-80 rounded-full bg-emerald-400/[0.09] blur-[100px]" />
 
-        <div className="pointer-events-none absolute -left-24 -top-28 h-72 w-72 rounded-full bg-emerald-400/[0.10] blur-[90px]" />
+        <div className="pointer-events-none absolute -right-20 -top-20 h-96 w-96 rounded-full bg-teal-300/[0.07] blur-[110px]" />
 
-        <div className="pointer-events-none absolute -right-24 top-0 h-80 w-80 rounded-full bg-teal-300/[0.08] blur-[100px]" />
-
-        <div className="pointer-events-none absolute bottom-0 left-1/3 h-32 w-96 rounded-full bg-emerald-300/[0.04] blur-[80px]" />
+        <div className="pointer-events-none absolute bottom-[-100px] left-1/2 h-56 w-[600px] -translate-x-1/2 rounded-full bg-emerald-300/[0.035] blur-[100px]" />
 
         <div className="relative px-6 py-7 md:px-8 md:py-8">
 
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-col gap-7 xl:flex-row xl:items-center xl:justify-between">
 
-            <div className="flex items-start gap-4">
+            <div className="flex min-w-0 items-start gap-4">
 
-              <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[20px] border border-emerald-300/[0.15] bg-emerald-400/[0.08] text-emerald-300 shadow-[0_12px_40px_rgba(16,185,129,0.10)]">
+              <div className="relative flex h-[62px] w-[62px] shrink-0 items-center justify-center rounded-[20px] border border-emerald-300/[0.14] bg-emerald-300/[0.07] text-emerald-300 shadow-[0_15px_50px_rgba(16,185,129,0.10)]">
 
                 <Warehouse
-                  size={28}
+                  size={27}
                   strokeWidth={1.7}
                 />
 
-                <div className="absolute -right-5 -top-5 h-14 w-14 rounded-full bg-emerald-300/[0.07]" />
-
-                <div className="absolute bottom-1 left-1 h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.8)]" />
+                <span className="absolute bottom-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.9)]" />
 
               </div>
 
@@ -695,18 +917,15 @@ export default function StockPusatPage() {
 
                 <div className="flex flex-wrap items-center gap-2.5">
 
-                  <h1 className="text-[27px] font-bold tracking-[-0.035em] text-white md:text-[32px]">
+                  <h1 className="text-[28px] font-bold tracking-[-0.04em] text-white md:text-[33px]">
                     Stock Pusat
                   </h1>
 
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/[0.14] bg-emerald-300/[0.07] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-300">
 
                     <span className="relative flex h-1.5 w-1.5">
-
                       <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400 opacity-40" />
-
                       <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-400" />
-
                     </span>
 
                     Live System
@@ -717,34 +936,31 @@ export default function StockPusatPage() {
 
                 <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-400">
                   Monitoring persediaan gudang pusat,
-                  stock opname, dan seluruh riwayat
+                  stock opname, nilai persediaan,
+                  harga terbaru, dan seluruh riwayat
                   pergerakan barang.
                 </p>
 
                 <div className="mt-4 flex flex-wrap items-center gap-2">
 
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-semibold text-slate-300">
-
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.035] px-2.5 py-1.5 text-[10px] font-semibold text-slate-300">
                     <Warehouse size={12} />
-
                     Gudang Pusat
-
                   </span>
 
                   <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300/[0.10] bg-emerald-300/[0.05] px-2.5 py-1.5 text-[10px] font-semibold text-emerald-300">
-
                     <LockKeyhole size={12} />
-
                     Read Only
-
                   </span>
 
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-semibold text-slate-400">
-
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.035] px-2.5 py-1.5 text-[10px] font-semibold text-slate-400">
                     <Activity size={12} />
-
                     Monitoring Aktif
+                  </span>
 
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300/[0.10] bg-emerald-300/[0.05] px-2.5 py-1.5 text-[10px] font-semibold text-emerald-300">
+                    <DollarSign size={12} />
+                    Master Harga Aktif
                   </span>
 
                 </div>
@@ -755,21 +971,26 @@ export default function StockPusatPage() {
 
             <button
               type="button"
-              onClick={loadStock}
-              disabled={loading}
-              className="group inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-300/[0.14] bg-emerald-300/[0.09] px-5 text-sm font-bold text-emerald-200 shadow-[0_8px_30px_rgba(16,185,129,0.08)] transition-all hover:-translate-y-0.5 hover:border-emerald-300/[0.22] hover:bg-emerald-300/[0.14] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+              onClick={loadAll}
+              disabled={
+                loading ||
+                priceLoading
+              }
+              className="group inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-300/[0.14] bg-emerald-300/[0.08] px-5 text-sm font-bold text-emerald-200 shadow-[0_10px_35px_rgba(16,185,129,0.07)] transition-all hover:-translate-y-0.5 hover:border-emerald-300/[0.22] hover:bg-emerald-300/[0.13] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
             >
 
               <RefreshCw
                 size={16}
                 className={`transition-transform ${
-                  loading
+                  loading ||
+                  priceLoading
                     ? "animate-spin"
                     : "group-hover:rotate-180"
                 }`}
               />
 
-              {loading
+              {loading ||
+              priceLoading
                 ? "Memuat..."
                 : "Refresh Data"}
 
@@ -778,8 +999,6 @@ export default function StockPusatPage() {
           </div>
 
         </div>
-
-        {/* Bottom line */}
 
         <div className="relative h-px bg-gradient-to-r from-transparent via-emerald-300/[0.16] to-transparent" />
 
@@ -791,24 +1010,18 @@ export default function StockPusatPage() {
 
       <div className="px-6 py-6 md:px-8 md:py-7">
 
-        {/* =================================================
-            CONTROL / SECURITY BANNER
-        ================================================= */}
+        {/* SECURITY */}
 
-        <div className="mb-6 overflow-hidden rounded-2xl border border-[#CFE1D9] bg-white shadow-[0_5px_25px_rgba(30,70,58,0.04)]">
+        <div className="mb-6 overflow-hidden rounded-[20px] border border-[#CFE1D9] bg-white shadow-[0_7px_30px_rgba(30,70,58,0.045)]">
 
           <div className="relative flex flex-col gap-5 p-5 md:flex-row md:items-center md:justify-between md:px-6">
 
-            <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-emerald-400 to-teal-500" />
+            <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-emerald-400 to-[#497F70]" />
 
             <div className="flex items-start gap-3">
 
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-[#497F70]">
-
-                <ShieldCheck
-                  size={20}
-                />
-
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+                <ShieldCheck size={20} />
               </div>
 
               <div>
@@ -819,19 +1032,18 @@ export default function StockPusatPage() {
                     Stock pusat terkunci
                   </p>
 
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-emerald-600">
+                  <span className="rounded-full bg-[#EAF3EF] px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[#497F70]">
                     Protected
                   </span>
 
                 </div>
 
                 <p className="mt-1 max-w-4xl text-xs leading-5 text-[#56766B]">
-                  Nilai stock pada halaman ini
-                  merupakan stock sistem dan tidak
-                  dapat diubah secara manual.
-                  Stock opname hanya digunakan sebagai
-                  kontrol dan pembanding kondisi fisik
-                  gudang.
+                  Nilai stock merupakan stock sistem
+                  dan tidak dapat diubah secara manual.
+                  Harga satuan menggunakan Master Harga
+                  terbaru yang tercatat dari proses
+                  penerimaan barang.
                 </p>
 
               </div>
@@ -841,11 +1053,8 @@ export default function StockPusatPage() {
             <div className="flex shrink-0 items-center gap-2 rounded-xl border border-[#DCE7E2] bg-[#FAFCFB] px-3.5 py-2.5">
 
               <span className="relative flex h-2 w-2">
-
                 <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400 opacity-40" />
-
                 <span className="relative h-2 w-2 rounded-full bg-emerald-500" />
-
               </span>
 
               <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
@@ -858,69 +1067,78 @@ export default function StockPusatPage() {
 
         </div>
 
-        {/* =================================================
-            CONVERSION INFORMATION
-        ================================================= */}
+        {/* CONVERSION */}
 
-        <div className="mb-6 overflow-hidden rounded-2xl border border-blue-200/80 bg-gradient-to-br from-blue-50 via-white to-[#F8FBFF] shadow-[0_5px_25px_rgba(30,80,130,0.03)]">
+        <div className="mb-6 overflow-hidden rounded-[20px] border border-[#CFE1D9] bg-gradient-to-br from-[#EEF7F3] via-white to-[#F8FBF9] shadow-[0_7px_30px_rgba(30,70,58,0.035)]">
 
           <div className="relative p-5 md:p-6">
 
-            <div className="absolute right-0 top-0 h-32 w-32 rounded-full bg-blue-100/50 blur-3xl" />
+            <div className="absolute right-0 top-0 h-32 w-32 rounded-full bg-emerald-100/50 blur-3xl" />
 
             <div className="relative flex items-start gap-3">
 
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
-
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#DDEEE7] text-[#497F70]">
                 <Boxes size={20} />
-
               </div>
 
               <div className="min-w-0">
 
                 <div className="flex flex-wrap items-center gap-2">
 
-                  <p className="text-sm font-bold text-blue-800">
-                    Tampilan Stock Dasar
+                  <p className="text-sm font-bold text-[#285346]">
+                    Tampilan Stock Dasar & Nilai
+                    Persediaan
                   </p>
 
-                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-blue-600">
+                  <span className="rounded-full bg-[#DDEEE7] px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[#497F70]">
                     Monitoring
                   </span>
 
                 </div>
 
-                <p className="mt-1 max-w-4xl text-xs leading-5 text-blue-700/75">
+                <p className="mt-1 max-w-4xl text-xs leading-5 text-[#56766B]">
                   Stock transaksi tetap menggunakan
-                  satuan utama barang. Stock dasar
-                  hanya merupakan hasil perhitungan
-                  monitoring berdasarkan konversi
-                  satuan. Transaksi PO, Receive,
-                  Barang Keluar, Transfer, dan Stock
-                  Opname tidak dikonversi.
+                  satuan utama barang. Stock dasar hanya
+                  merupakan hasil perhitungan monitoring.
+                  Total nilai stock menggunakan harga
+                  Master Harga terbaru × stock transaksi.
                 </p>
 
-                <div className="mt-3 inline-flex flex-wrap items-center gap-2 rounded-xl border border-blue-100 bg-white/80 px-3 py-2 text-[10px] font-semibold text-blue-700 shadow-sm">
+                <div className="mt-3 flex flex-wrap items-center gap-2">
 
-                  <span>
-                    Stock Dasar
-                  </span>
+                  <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-[#DCEBE4] bg-white/80 px-3 py-2 text-[10px] font-semibold text-[#497F70] shadow-sm">
 
-                  <span className="text-blue-300">
-                    =
-                  </span>
+                    <span>Stock Dasar</span>
+                    <span className="text-[#A8C6BA]">=</span>
 
-                  <span className="rounded-lg bg-blue-50 px-2 py-1">
-                    Stock Transaksi
-                  </span>
+                    <span className="rounded-lg bg-[#EAF3EF] px-2 py-1">
+                      Stock Transaksi
+                    </span>
 
-                  <span className="text-blue-300">
-                    ×
-                  </span>
+                    <span className="text-[#A8C6BA]">×</span>
 
-                  <span className="rounded-lg bg-blue-50 px-2 py-1">
-                    Konversi
-                  </span>
+                    <span className="rounded-lg bg-[#EAF3EF] px-2 py-1">
+                      Konversi
+                    </span>
+
+                  </div>
+
+                  <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-[#DCEBE4] bg-white/80 px-3 py-2 text-[10px] font-semibold text-[#497F70] shadow-sm">
+
+                    <span>Total Nilai</span>
+                    <span className="text-[#A8C6BA]">=</span>
+
+                    <span className="rounded-lg bg-[#EAF3EF] px-2 py-1">
+                      Stock
+                    </span>
+
+                    <span className="text-[#A8C6BA]">×</span>
+
+                    <span className="rounded-lg bg-[#EAF3EF] px-2 py-1">
+                      Harga Terbaru
+                    </span>
+
+                  </div>
 
                 </div>
 
@@ -932,9 +1150,7 @@ export default function StockPusatPage() {
 
         </div>
 
-        {/* =================================================
-            ERROR
-        ================================================= */}
+        {/* ERROR */}
 
         {error && (
           <div className="mb-6 overflow-hidden rounded-2xl border border-red-200 bg-red-50 shadow-sm">
@@ -942,9 +1158,7 @@ export default function StockPusatPage() {
             <div className="flex items-start gap-3 px-5 py-4">
 
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-red-500 shadow-sm">
-
                 <Info size={17} />
-
               </div>
 
               <div>
@@ -964,336 +1178,244 @@ export default function StockPusatPage() {
           </div>
         )}
 
-        {/* =================================================
-            KPI
-        ================================================= */}
+        {/* KPI */}
 
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
 
-          {/* TOTAL ITEM */}
+          {[
+            {
+              label: "Jenis Barang",
+              value: filteredData.length,
+              description:
+                "Barang terdaftar di pusat",
+              icon: Package,
+              iconClass:
+                "bg-[#EAF3EF] text-[#497F70]",
+              lineClass:
+                "bg-[#497F70]",
+              glow:
+                "bg-emerald-50/80",
+              isCurrency: false,
+            },
+            {
+              label: "Total Stock Transaksi",
+              value: totalStock,
+              description:
+                "Akumulasi satuan transaksi",
+              icon: Boxes,
+              iconClass:
+                "bg-[#EEF6F3] text-[#497F70]",
+              lineClass:
+                "bg-[#497F70]",
+              glow:
+                "bg-teal-50/80",
+              isCurrency: false,
+            },
+            {
+              label: "Total Stock Dasar",
+              value: totalBaseStock,
+              description:
+                "Hasil konversi monitoring",
+              icon: TrendingUp,
+              iconClass:
+                "bg-[#EEF6F3] text-[#497F70]",
+              lineClass:
+                "bg-[#497F70]",
+              glow:
+                "bg-emerald-50/70",
+              isCurrency: false,
+            },
+            {
+              label: "Total Nilai Stock",
+              value: totalStockValue,
+              description:
+                `${formatNumber(
+                  totalPricedItems
+                )} barang memiliki harga`,
+              icon: DollarSign,
+              iconClass:
+                "bg-[#F0F6F3] text-[#497F70]",
+              lineClass:
+                "bg-[#497F70]",
+              glow:
+                "bg-emerald-50/80",
+              isCurrency: true,
+            },
+            {
+              label: "Sudah Stock Opname",
+              value: totalWithOpname,
+              description:
+                `Dari ${formatNumber(
+                  data.length
+                )} jenis`,
+              icon: ClipboardCheck,
+              iconClass:
+                "bg-[#F2F0FA] text-purple-600",
+              lineClass:
+                "bg-purple-500",
+              glow:
+                "bg-purple-50/80",
+              isCurrency: false,
+            },
+          ].map((card) => {
+            const Icon = card.icon;
 
-          <div className="group relative overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-[0_5px_22px_rgba(30,70,58,0.045)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_14px_35px_rgba(30,70,58,0.09)]">
+            return (
+              <div
+                key={card.label}
+                className="group relative overflow-hidden rounded-[20px] border border-[#DDE9E4] bg-white p-5 shadow-[0_6px_25px_rgba(30,70,58,0.045)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_15px_40px_rgba(30,70,58,0.085)]"
+              >
 
-            <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-emerald-50/80 blur-2xl transition-transform duration-500 group-hover:scale-125" />
+                <div
+                  className={`absolute right-0 top-0 h-24 w-24 rounded-full ${card.glow} blur-2xl transition-transform duration-500 group-hover:scale-125`}
+                />
 
-            <div className="absolute left-0 top-0 h-1 w-12 rounded-br-full bg-[#497F70]" />
+                <div
+                  className={`absolute left-0 top-0 h-1 w-12 rounded-br-full ${card.lineClass}`}
+                />
 
-            <div className="relative flex items-start justify-between">
+                <div className="relative flex items-start justify-between gap-3">
 
-              <div>
+                  <div className="min-w-0">
 
-                <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-gray-400">
-                  Jenis Barang
-                </p>
+                    <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-gray-400">
+                      {card.label}
+                    </p>
 
-                <p className="mt-2 text-[29px] font-bold tracking-[-0.03em] text-[#18352D]">
-                  {formatNumber(
-                    filteredData.length
-                  )}
-                </p>
+                    <p className="mt-2 truncate text-[24px] font-bold tracking-[-0.03em] text-[#18352D]">
+                      {card.isCurrency
+                        ? formatCurrency(card.value)
+                        : formatNumber(card.value)}
+                    </p>
 
-                <p className="mt-1 text-[10px] text-gray-400">
-                  Barang terdaftar di pusat
-                </p>
+                    <p className="mt-1 text-[10px] text-gray-400">
+                      {card.description}
+                    </p>
 
-              </div>
+                  </div>
 
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70] transition-transform duration-300 group-hover:scale-105">
+                  <div
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${card.iconClass} transition-transform duration-300 group-hover:scale-105`}
+                  >
+                    <Icon size={20} />
+                  </div>
 
-                <Package size={20} />
-
-              </div>
-
-            </div>
-
-          </div>
-
-          {/* TOTAL STOCK */}
-
-          <div className="group relative overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-[0_5px_22px_rgba(30,70,58,0.045)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_14px_35px_rgba(30,70,58,0.09)]">
-
-            <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-teal-50/80 blur-2xl transition-transform duration-500 group-hover:scale-125" />
-
-            <div className="absolute left-0 top-0 h-1 w-12 rounded-br-full bg-teal-500" />
-
-            <div className="relative flex items-start justify-between">
-
-              <div>
-
-                <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-gray-400">
-                  Total Stock Transaksi
-                </p>
-
-                <p className="mt-2 text-[29px] font-bold tracking-[-0.03em] text-[#18352D]">
-                  {formatNumber(totalStock)}
-                </p>
-
-                <p className="mt-1 text-[10px] text-gray-400">
-                  Akumulasi satuan transaksi
-                </p>
-
-              </div>
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EEF6F3] text-[#497F70] transition-transform duration-300 group-hover:scale-105">
-
-                <Boxes size={20} />
-
-              </div>
-
-            </div>
-
-          </div>
-
-          {/* BASE STOCK */}
-
-          <div className="group relative overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-[0_5px_22px_rgba(30,70,58,0.045)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_14px_35px_rgba(30,70,58,0.09)]">
-
-            <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-blue-50/80 blur-2xl transition-transform duration-500 group-hover:scale-125" />
-
-            <div className="absolute left-0 top-0 h-1 w-12 rounded-br-full bg-blue-500" />
-
-            <div className="relative flex items-start justify-between">
-
-              <div>
-
-                <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-gray-400">
-                  Total Stock Dasar
-                </p>
-
-                <p className="mt-2 text-[29px] font-bold tracking-[-0.03em] text-[#18352D]">
-                  {formatNumber(
-                    totalBaseStock
-                  )}
-                </p>
-
-                <p className="mt-1 text-[10px] text-gray-400">
-                  Hasil konversi monitoring
-                </p>
-
-              </div>
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EEF5FB] text-blue-600 transition-transform duration-300 group-hover:scale-105">
-
-                <TrendingUp size={20} />
-
-              </div>
-
-            </div>
-
-          </div>
-
-          {/* OPNAME */}
-
-          <div className="group relative overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-[0_5px_22px_rgba(30,70,58,0.045)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_14px_35px_rgba(30,70,58,0.09)]">
-
-            <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-purple-50/80 blur-2xl transition-transform duration-500 group-hover:scale-125" />
-
-            <div className="absolute left-0 top-0 h-1 w-12 rounded-br-full bg-purple-500" />
-
-            <div className="relative flex items-start justify-between">
-
-              <div>
-
-                <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-gray-400">
-                  Sudah Stock Opname
-                </p>
-
-                <p className="mt-2 text-[29px] font-bold tracking-[-0.03em] text-[#18352D]">
-                  {formatNumber(
-                    totalWithOpname
-                  )}
-                </p>
-
-                <p className="mt-1 text-[10px] text-gray-400">
-                  Dari {formatNumber(data.length)} jenis
-                </p>
+                </div>
 
               </div>
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#F2F0FA] text-purple-600 transition-transform duration-300 group-hover:scale-105">
-
-                <ClipboardCheck size={20} />
-
-              </div>
-
-            </div>
-
-          </div>
+            );
+          })}
 
         </div>
 
-        {/* =================================================
-            STATUS OVERVIEW
-        ================================================= */}
+        {/* STATUS */}
 
         <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
 
-          {/* AMAN */}
+          {[
+            {
+              value: "AMAN" as FilterStatus,
+              label: "Stock Aman",
+              count: totalAman,
+              icon: CheckCircle2,
+              iconClass:
+                "bg-emerald-50 text-emerald-600",
+              active:
+                "border-emerald-300 ring-2 ring-emerald-100",
+              hover:
+                "group-hover:text-emerald-600",
+            },
+            {
+              value: "MINIMUM" as FilterStatus,
+              label: "Stock Minimum",
+              count: totalMinimum,
+              icon: AlertTriangle,
+              iconClass:
+                "bg-amber-50 text-amber-600",
+              active:
+                "border-amber-300 ring-2 ring-amber-100",
+              hover:
+                "group-hover:text-amber-600",
+            },
+            {
+              value: "HABIS" as FilterStatus,
+              label: "Stock Habis",
+              count: totalHabis,
+              icon: PackageX,
+              iconClass:
+                "bg-red-50 text-red-600",
+              active:
+                "border-red-300 ring-2 ring-red-100",
+              hover:
+                "group-hover:text-red-600",
+            },
+          ].map((status) => {
+            const Icon = status.icon;
 
-          <button
-            type="button"
-            onClick={() =>
-              setFilterStatus(
-                filterStatus === "AMAN"
-                  ? "ALL"
-                  : "AMAN"
-              )
-            }
-            className={`group relative overflow-hidden rounded-2xl border bg-white p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${
-              filterStatus === "AMAN"
-                ? "border-emerald-300 ring-2 ring-emerald-100"
-                : "border-[#DDE9E4]"
-            }`}
-          >
+            return (
+              <button
+                key={status.value}
+                type="button"
+                onClick={() =>
+                  setFilterStatus(
+                    filterStatus ===
+                    status.value
+                      ? "ALL"
+                      : status.value
+                  )
+                }
+                className={`group relative overflow-hidden rounded-[20px] border bg-white p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${
+                  filterStatus ===
+                  status.value
+                    ? status.active
+                    : "border-[#DDE9E4]"
+                }`}
+              >
 
-            <div className="absolute right-0 top-0 h-20 w-20 rounded-full bg-emerald-50 blur-2xl transition-transform group-hover:scale-125" />
+                <div className="absolute right-0 top-0 h-20 w-20 rounded-full bg-gray-50 blur-2xl transition-transform group-hover:scale-125" />
 
-            <div className="relative flex items-center justify-between">
+                <div className="relative flex items-center justify-between">
 
-              <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3">
 
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-xl ${status.iconClass}`}
+                    >
+                      <Icon size={19} />
+                    </div>
 
-                  <CheckCircle2 size={19} />
+                    <div>
 
-                </div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                        {status.label}
+                      </p>
 
-                <div>
+                      <p className="mt-0.5 text-xl font-bold text-[#18352D]">
+                        {formatNumber(
+                          status.count
+                        )}
+                      </p>
 
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                    Stock Aman
-                  </p>
+                    </div>
 
-                  <p className="mt-0.5 text-xl font-bold text-[#18352D]">
-                    {formatNumber(totalAman)}
-                  </p>
+                  </div>
 
-                </div>
-
-              </div>
-
-              <ChevronRight
-                size={16}
-                className="text-gray-300 transition-transform group-hover:translate-x-1 group-hover:text-emerald-500"
-              />
-
-            </div>
-
-          </button>
-
-          {/* MINIMUM */}
-
-          <button
-            type="button"
-            onClick={() =>
-              setFilterStatus(
-                filterStatus === "MINIMUM"
-                  ? "ALL"
-                  : "MINIMUM"
-              )
-            }
-            className={`group relative overflow-hidden rounded-2xl border bg-white p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${
-              filterStatus === "MINIMUM"
-                ? "border-amber-300 ring-2 ring-amber-100"
-                : "border-[#DDE9E4]"
-            }`}
-          >
-
-            <div className="absolute right-0 top-0 h-20 w-20 rounded-full bg-amber-50 blur-2xl transition-transform group-hover:scale-125" />
-
-            <div className="relative flex items-center justify-between">
-
-              <div className="flex items-center gap-3">
-
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-
-                  <AlertTriangle size={19} />
-
-                </div>
-
-                <div>
-
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                    Stock Minimum
-                  </p>
-
-                  <p className="mt-0.5 text-xl font-bold text-[#18352D]">
-                    {formatNumber(totalMinimum)}
-                  </p>
-
-                </div>
-
-              </div>
-
-              <ChevronRight
-                size={16}
-                className="text-gray-300 transition-transform group-hover:translate-x-1 group-hover:text-amber-500"
-              />
-
-            </div>
-
-          </button>
-
-          {/* HABIS */}
-
-          <button
-            type="button"
-            onClick={() =>
-              setFilterStatus(
-                filterStatus === "HABIS"
-                  ? "ALL"
-                  : "HABIS"
-              )
-            }
-            className={`group relative overflow-hidden rounded-2xl border bg-white p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${
-              filterStatus === "HABIS"
-                ? "border-red-300 ring-2 ring-red-100"
-                : "border-[#DDE9E4]"
-            }`}
-          >
-
-            <div className="absolute right-0 top-0 h-20 w-20 rounded-full bg-red-50 blur-2xl transition-transform group-hover:scale-125" />
-
-            <div className="relative flex items-center justify-between">
-
-              <div className="flex items-center gap-3">
-
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600">
-
-                  <PackageX size={19} />
+                  <ChevronRight
+                    size={16}
+                    className={`text-gray-300 transition-transform group-hover:translate-x-1 ${status.hover}`}
+                  />
 
                 </div>
 
-                <div>
-
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                    Stock Habis
-                  </p>
-
-                  <p className="mt-0.5 text-xl font-bold text-[#18352D]">
-                    {formatNumber(totalHabis)}
-                  </p>
-
-                </div>
-
-              </div>
-
-              <ChevronRight
-                size={16}
-                className="text-gray-300 transition-transform group-hover:translate-x-1 group-hover:text-red-500"
-              />
-
-            </div>
-
-          </button>
+              </button>
+            );
+          })}
 
         </div>
 
-        {/* =================================================
-            FILTER PANEL
-        ================================================= */}
+        {/* FILTER */}
 
-        <div className="mb-6 overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-[0_5px_22px_rgba(30,70,58,0.045)]">
+        <div className="mb-6 overflow-hidden rounded-[20px] border border-[#DDE9E4] bg-white shadow-[0_6px_25px_rgba(30,70,58,0.045)]">
 
           <div className="p-5 md:p-6">
 
@@ -1317,9 +1439,7 @@ export default function StockPusatPage() {
                     placeholder="Cari kode, barcode, atau nama barang..."
                     value={search}
                     onChange={(e) =>
-                      setSearch(
-                        e.target.value
-                      )
+                      setSearch(e.target.value)
                     }
                     className="h-11 w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] pl-10 pr-10 text-sm text-[#18352D] outline-none transition-all placeholder:text-gray-400 focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
                   />
@@ -1364,13 +1484,10 @@ export default function StockPusatPage() {
                         key={value}
                         type="button"
                         onClick={() =>
-                          setFilterStatus(
-                            value
-                          )
+                          setFilterStatus(value)
                         }
                         className={`flex-1 rounded-lg px-2 py-2 text-[10px] font-bold transition-all ${
-                          filterStatus ===
-                          value
+                          filterStatus === value
                             ? "bg-[#497F70] text-white shadow-sm"
                             : "text-gray-500 hover:bg-white hover:text-[#497F70]"
                         }`}
@@ -1403,6 +1520,13 @@ export default function StockPusatPage() {
                 Gudang Pusat
               </span>
 
+              <span className="rounded-full border border-[#DCEBE4] bg-[#F4F9F6] px-3 py-1 text-[10px] font-semibold text-[#497F70]">
+                Harga tersedia:{" "}
+                {formatNumber(
+                  totalPricedItems
+                )}
+              </span>
+
               {filterStatus !== "ALL" && (
                 <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-600">
                   Status: {filterStatus}
@@ -1421,9 +1545,7 @@ export default function StockPusatPage() {
                   type="button"
                   onClick={() => {
                     setSearch("");
-                    setFilterStatus(
-                      "ALL"
-                    );
+                    setFilterStatus("ALL");
                   }}
                   className="ml-auto rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-[#497F70] transition hover:bg-[#EAF3EF]"
                 >
@@ -1441,29 +1563,27 @@ export default function StockPusatPage() {
             TABLE
         ================================================= */}
 
-        <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-[0_6px_25px_rgba(30,70,58,0.05)]">
+        <div className="overflow-hidden rounded-[22px] border border-[#DDE9E4] bg-white shadow-[0_8px_30px_rgba(30,70,58,0.055)]">
 
-          <div className="flex flex-col gap-3 border-b border-[#E5ECE9] px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
+          <div className="flex flex-col gap-3 border-b border-[#E5ECE9] px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
 
             <div>
 
               <div className="flex items-center gap-2.5">
 
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
-
-                  <Warehouse size={17} />
-
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
+                  <Warehouse size={16} />
                 </div>
 
                 <div>
 
-                  <h2 className="font-bold tracking-[-0.01em] text-[#18352D]">
+                  <h2 className="text-sm font-bold tracking-[-0.01em] text-[#18352D]">
                     Persediaan Gudang Pusat
                   </h2>
 
-                  <p className="mt-0.5 text-[10px] text-gray-400">
-                    Monitoring stock sistem secara
-                    real-time.
+                  <p className="mt-0.5 text-[9px] text-gray-400">
+                    Monitoring stock sistem, harga
+                    terbaru, dan total nilai persediaan.
                   </p>
 
                 </div>
@@ -1472,16 +1592,33 @@ export default function StockPusatPage() {
 
             </div>
 
-            <div className="flex items-center gap-2 self-start rounded-xl border border-[#DDE9E4] bg-[#FAFCFB] px-3 py-2 md:self-auto">
+            <div className="flex flex-wrap items-center gap-1.5 self-start md:self-auto">
 
-              <LockKeyhole
-                size={13}
-                className="text-[#497F70]"
-              />
+              <div className="flex items-center gap-1.5 rounded-lg border border-[#DDE9E4] bg-[#FAFCFB] px-2.5 py-1.5">
 
-              <span className="text-[10px] font-bold text-gray-500">
-                Stock Terkunci
-              </span>
+                <LockKeyhole
+                  size={11}
+                  className="text-[#497F70]"
+                />
+
+                <span className="text-[9px] font-bold text-gray-500">
+                  Stock Terkunci
+                </span>
+
+              </div>
+
+              <div className="flex items-center gap-1.5 rounded-lg border border-[#DDE9E4] bg-[#FAFCFB] px-2.5 py-1.5">
+
+                <DollarSign
+                  size={11}
+                  className="text-[#497F70]"
+                />
+
+                <span className="text-[9px] font-bold text-gray-500">
+                  Harga Master
+                </span>
+
+              </div>
 
             </div>
 
@@ -1489,9 +1626,28 @@ export default function StockPusatPage() {
 
           <div className="overflow-x-auto">
 
-            <table className="min-w-[1600px] w-full text-sm">
+            {/* DIPERKECIL DARI 2100px -> 1750px */}
 
-              <thead className="sticky top-0 z-10 bg-[#F7F9F8]/95 backdrop-blur">
+            <table className="min-w-[1750px] w-full table-fixed text-sm">
+
+              <colgroup>
+                <col className="w-[48px]" />
+                <col className="w-[245px]" />
+                <col className="w-[125px]" />
+                <col className="w-[105px]" />
+                <col className="w-[125px]" />
+                <col className="w-[145px]" />
+                <col className="w-[165px]" />
+                <col className="w-[125px]" />
+                <col className="w-[80px]" />
+                <col className="w-[120px]" />
+                <col className="w-[100px]" />
+                <col className="w-[95px]" />
+                <col className="w-[105px]" />
+                <col className="w-[190px]" />
+              </colgroup>
+
+              <thead className="bg-[#F7F9F8]">
 
                 <tr className="border-b border-[#E5ECE9]">
 
@@ -1501,18 +1657,20 @@ export default function StockPusatPage() {
                     ["Stock Transaksi", "text-right"],
                     ["Konversi", "text-right"],
                     ["Stock Dasar", "text-right"],
+                    ["Harga Satuan", "text-right"],
+                    ["Total Nilai Stock", "text-right"],
                     ["SO Terakhir", "text-left"],
                     ["Fisik", "text-right"],
                     ["Selisih", "text-right"],
                     ["Status SO", "text-center"],
                     ["Minimum", "text-right"],
                     ["Status Stock", "text-center"],
-                    ["History", "text-center"],
+                    ["History / Invoice / Status", "text-left"],
                   ].map(
                     ([label, align]) => (
                       <th
                         key={label}
-                        className={`px-5 py-4 ${align} text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400`}
+                        className={`whitespace-nowrap px-2.5 py-3 ${align} text-[8px] font-bold uppercase tracking-[0.11em] text-gray-400`}
                       >
                         {label}
                       </th>
@@ -1526,11 +1684,9 @@ export default function StockPusatPage() {
               <tbody>
 
                 {loading ? (
-
                   <tr>
-
                     <td
-                      colSpan={12}
+                      colSpan={14}
                       className="px-5 py-20 text-center"
                     >
 
@@ -1559,22 +1715,16 @@ export default function StockPusatPage() {
                       </p>
 
                     </td>
-
                   </tr>
-
                 ) : filteredData.length === 0 ? (
-
                   <tr>
-
                     <td
-                      colSpan={12}
+                      colSpan={14}
                       className="px-5 py-20 text-center"
                     >
 
                       <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-50 text-gray-300">
-
                         <Package size={28} />
-
                       </div>
 
                       <p className="font-semibold text-gray-500">
@@ -1593,9 +1743,7 @@ export default function StockPusatPage() {
                           type="button"
                           onClick={() => {
                             setSearch("");
-                            setFilterStatus(
-                              "ALL"
-                            );
+                            setFilterStatus("ALL");
                           }}
                           className="mt-5 rounded-xl border border-[#CFE1D9] bg-white px-4 py-2.5 text-[11px] font-bold text-[#497F70] shadow-sm transition hover:bg-[#EAF3EF]"
                         >
@@ -1604,25 +1752,15 @@ export default function StockPusatPage() {
                       )}
 
                     </td>
-
                   </tr>
-
                 ) : (
-
                   filteredData.map(
-                    (
-                      item,
-                      index
-                    ) => {
+                    (item, index) => {
 
                       const stockStatus =
                         getStatus(
-                          Number(
-                            item.stock
-                          ),
-                          Number(
-                            item.minimumStock
-                          )
+                          Number(item.stock),
+                          Number(item.minimumStock)
                         );
 
                       const StatusIcon =
@@ -1633,8 +1771,7 @@ export default function StockPusatPage() {
 
                       const difference =
                         Number(
-                          lastOpname
-                            ?.difference || 0
+                          lastOpname?.difference || 0
                         );
 
                       const opnameStatus =
@@ -1643,33 +1780,28 @@ export default function StockPusatPage() {
                         );
 
                       const transactionStock =
-                        getTransactionStock(
-                          item
-                        );
+                        getTransactionStock(item);
 
                       const conversion =
-                        getConversion(
-                          item
-                        );
+                        getConversion(item);
 
                       const baseStock =
-                        getBaseStock(
-                          item
-                        );
+                        getBaseStock(item);
 
                       const minimumStock =
-                        getMinimumStock(
-                          item
-                        );
+                        getMinimumStock(item);
+
+                      const latestPrice =
+                        getLatestPrice(item);
+
+                      const stockValue =
+                        getStockValue(item);
 
                       const transactionUnit =
-                        item.barang
-                          ?.unit ||
-                        "-";
+                        item.barang?.unit || "-";
 
                       const baseUnit =
-                        item.barang
-                          ?.baseUnit ||
+                        item.barang?.baseUnit ||
                         transactionUnit;
 
                       return (
@@ -1680,71 +1812,59 @@ export default function StockPusatPage() {
 
                           {/* NO */}
 
-                          <td className="px-5 py-4 text-xs font-medium text-gray-400">
+                          <td className="whitespace-nowrap px-2.5 py-2.5 text-[10px] font-medium text-gray-400">
                             {String(
                               index + 1
-                            ).padStart(
-                              2,
-                              "0"
-                            )}
+                            ).padStart(2, "0")}
                           </td>
 
                           {/* BARANG */}
 
-                          <td className="px-5 py-4">
+                          <td className="px-2.5 py-2.5">
 
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
 
-                              <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F0F6F3] text-[#497F70] transition-all group-hover:bg-[#E4F0EB] group-hover:shadow-sm">
+                              <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F0F6F3] text-[#497F70] transition-all group-hover:bg-[#E4F0EB]">
 
-                                <Package
-                                  size={18}
-                                />
+                                <Package size={15} />
 
-                                <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border-2 border-white bg-emerald-400" />
+                                <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-white bg-emerald-400" />
 
                               </div>
 
                               <div className="min-w-0">
 
-                                <div className="font-bold text-[#18352D]">
-                                  {item.barang
-                                    ?.name ||
-                                    "-"}
+                                <div className="truncate text-[11px] font-bold text-[#18352D]">
+                                  {item.barang?.name || "-"}
                                 </div>
 
-                                <div className="mt-1 flex flex-wrap items-center gap-2">
+                                <div className="mt-0.5 flex min-w-0 items-center gap-1">
 
-                                  <span className="rounded-md bg-[#F0F6F3] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#497F70]">
-                                    {item.barang
-                                      ?.code ||
-                                      "-"}
+                                  <span className="max-w-[80px] truncate rounded bg-[#F0F6F3] px-1.5 py-0.5 font-mono text-[8px] font-bold text-[#497F70]">
+                                    {item.barang?.code || "-"}
                                   </span>
 
-                                  <span className="h-1 w-1 rounded-full bg-gray-300" />
+                                  <span className="text-[8px] text-gray-300">
+                                    •
+                                  </span>
 
-                                  <span className="text-[10px] text-gray-400">
+                                  <span className="text-[8px] text-gray-400">
                                     {transactionUnit}
                                   </span>
 
-                                  <span className="h-1 w-1 rounded-full bg-gray-300" />
+                                  <span className="text-[8px] text-gray-300">
+                                    •
+                                  </span>
 
-                                  <span className="text-[10px] font-semibold text-blue-500">
-                                    Dasar:{" "}
-                                    {baseUnit}
+                                  <span className="truncate text-[8px] font-semibold text-[#497F70]">
+                                    Dasar: {baseUnit}
                                   </span>
 
                                 </div>
 
-                                {item.barang
-                                  ?.barcode && (
-                                  <div className="mt-1 font-mono text-[9px] text-gray-400">
-                                    BC:{" "}
-                                    {
-                                      item
-                                        .barang
-                                        .barcode
-                                    }
+                                {item.barang?.barcode && (
+                                  <div className="mt-0.5 truncate font-mono text-[7px] text-gray-400">
+                                    BC: {item.barang.barcode}
                                   </div>
                                 )}
 
@@ -1754,26 +1874,26 @@ export default function StockPusatPage() {
 
                           </td>
 
-                          {/* TRANSACTION STOCK */}
+                          {/* STOCK TRANSAKSI */}
 
-                          <td className="px-5 py-4 text-right">
+                          <td className="px-2.5 py-2.5 text-right">
 
-                            <div className="inline-flex min-w-[105px] flex-col items-end rounded-xl border border-[#E8EFEC] bg-[#F8FAF9] px-3 py-2">
+                            <div className="inline-flex min-w-[92px] flex-col items-end rounded-lg border border-[#E8EFEC] bg-[#F8FAF9] px-2 py-1.5">
 
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1">
 
                                 <LockKeyhole
-                                  size={11}
+                                  size={9}
                                   className="text-gray-400"
                                 />
 
-                                <span className="text-base font-bold text-[#18352D]">
+                                <span className="text-[12px] font-bold text-[#18352D]">
                                   {formatNumber(
                                     transactionStock
                                   )}
                                 </span>
 
-                                <span className="text-[10px] font-bold text-[#497F70]">
+                                <span className="text-[8px] font-bold text-[#497F70]">
                                   {transactionUnit}
                                 </span>
 
@@ -1783,22 +1903,18 @@ export default function StockPusatPage() {
 
                           </td>
 
-                          {/* CONVERSION */}
+                          {/* KONVERSI */}
 
-                          <td className="px-5 py-4 text-right">
+                          <td className="px-2.5 py-2.5 text-right">
 
                             <div className="inline-flex flex-col items-end">
 
-                              <span className="rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[10px] font-bold text-blue-700">
-                                1{" "}
-                                {transactionUnit}
+                              <span className="rounded-md border border-[#DCEBE4] bg-[#EAF3EF] px-2 py-1 text-[8px] font-bold text-[#497F70]">
+                                1 {transactionUnit}
                               </span>
 
-                              <span className="mt-1 text-[9px] font-semibold text-gray-400">
-                                ={" "}
-                                {formatNumber(
-                                  conversion
-                                )}{" "}
+                              <span className="mt-0.5 whitespace-nowrap text-[8px] font-semibold text-gray-400">
+                                = {formatNumber(conversion)}{" "}
                                 {baseUnit}
                               </span>
 
@@ -1806,19 +1922,17 @@ export default function StockPusatPage() {
 
                           </td>
 
-                          {/* BASE STOCK */}
+                          {/* STOCK DASAR */}
 
-                          <td className="px-5 py-4 text-right">
+                          <td className="px-2.5 py-2.5 text-right">
 
-                            <div className="inline-flex min-w-[105px] flex-col items-end rounded-xl border border-blue-100 bg-[#F4F8FC] px-3 py-2">
+                            <div className="inline-flex min-w-[92px] flex-col items-end rounded-lg border border-[#DCEBE4] bg-[#F4F9F6] px-2 py-1.5">
 
-                              <span className="text-base font-bold text-blue-800">
-                                {formatNumber(
-                                  baseStock
-                                )}
+                              <span className="text-[12px] font-bold text-[#285346]">
+                                {formatNumber(baseStock)}
                               </span>
 
-                              <span className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-blue-500">
+                              <span className="text-[8px] font-bold uppercase tracking-wide text-[#497F70]">
                                 {baseUnit}
                               </span>
 
@@ -1826,26 +1940,112 @@ export default function StockPusatPage() {
 
                           </td>
 
-                          {/* SO */}
+                          {/* HARGA SATUAN */}
 
-                          <td className="px-5 py-4">
+                          <td className="px-2.5 py-2.5 text-right">
+
+                            {latestPrice !== null ? (
+                              <div className="inline-flex min-w-[118px] flex-col items-end rounded-lg border border-[#DCEBE4] bg-[#F8FBF9] px-2 py-1.5">
+
+                                <div className="flex items-center gap-1">
+
+                                  <DollarSign
+                                    size={9}
+                                    className="text-[#497F70]"
+                                  />
+
+                                  <span className="text-[10px] font-bold text-[#285346]">
+                                    {formatCurrency(
+                                      latestPrice
+                                    )}
+                                  </span>
+
+                                </div>
+
+                                <span className="mt-0.5 text-[7px] font-medium text-gray-400">
+                                  per {transactionUnit}
+                                </span>
+
+                              </div>
+                            ) : (
+                              <div className="inline-flex min-w-[118px] flex-col items-end rounded-lg border border-dashed border-[#DDE9E4] bg-[#FAFCFB] px-2 py-1.5">
+
+                                <span className="text-[10px] font-bold text-gray-400">
+                                  -
+                                </span>
+
+                                <span className="mt-0.5 text-[7px] text-gray-400">
+                                  Harga belum tersedia
+                                </span>
+
+                              </div>
+                            )}
+
+                          </td>
+
+                          {/* TOTAL NILAI STOCK */}
+
+                          <td className="px-2.5 py-2.5 text-right">
+
+                            {latestPrice !== null ? (
+                              <div className="inline-flex min-w-[135px] flex-col items-end rounded-lg border border-[#BFD9CE] bg-gradient-to-br from-[#EEF7F3] to-[#F8FBF9] px-2 py-1.5">
+
+                                <div className="flex items-center gap-1">
+
+                                  <Calculator
+                                    size={9}
+                                    className="text-[#497F70]"
+                                  />
+
+                                  <span className="text-[8px] font-bold uppercase tracking-[0.08em] text-[#497F70]">
+                                    Nilai Stock
+                                  </span>
+
+                                </div>
+
+                                <span className="mt-0.5 text-[11px] font-bold tracking-[-0.02em] text-[#18352D]">
+                                  {formatCurrency(stockValue)}
+                                </span>
+
+                                <span className="mt-0.5 whitespace-nowrap text-[7px] text-gray-400">
+                                  {formatNumber(transactionStock)} ×{" "}
+                                  {formatCurrency(latestPrice)}
+                                </span>
+
+                              </div>
+                            ) : (
+                              <div className="inline-flex min-w-[135px] flex-col items-end rounded-lg border border-dashed border-[#DDE9E4] bg-[#FAFCFB] px-2 py-1.5">
+
+                                <span className="text-[10px] font-bold text-gray-400">
+                                  -
+                                </span>
+
+                                <span className="mt-0.5 text-[7px] text-gray-400">
+                                  Tidak dapat dihitung
+                                </span>
+
+                              </div>
+                            )}
+
+                          </td>
+
+                          {/* SO TERAKHIR */}
+
+                          <td className="px-2.5 py-2.5">
 
                             {lastOpname ? (
-
                               <div>
 
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5">
 
-                                  <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-purple-50">
-
+                                  <div className="flex h-5 w-5 items-center justify-center rounded-md bg-purple-50">
                                     <CalendarDays
-                                      size={12}
+                                      size={10}
                                       className="text-purple-500"
                                     />
-
                                   </div>
 
-                                  <span className="text-xs font-bold text-[#35564C]">
+                                  <span className="whitespace-nowrap text-[9px] font-bold text-[#35564C]">
                                     {formatDate(
                                       lastOpname.date
                                     )}
@@ -1853,33 +2053,27 @@ export default function StockPusatPage() {
 
                                 </div>
 
-                                <div className="mt-1 font-mono text-[9px] text-gray-400">
-                                  {
-                                    lastOpname.code
-                                  }
+                                <div className="mt-0.5 truncate font-mono text-[7px] text-gray-400">
+                                  {lastOpname.code}
                                 </div>
 
                               </div>
-
                             ) : (
-
-                              <span className="inline-flex rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[10px] font-medium text-gray-400">
+                              <span className="inline-flex whitespace-nowrap rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[8px] font-medium text-gray-400">
                                 Belum ada SO
                               </span>
-
                             )}
 
                           </td>
 
                           {/* FISIK */}
 
-                          <td className="px-5 py-4 text-right">
+                          <td className="px-2.5 py-2.5 text-right">
 
                             {lastOpname ? (
-
                               <div className="inline-flex flex-col items-end">
 
-                                <span className="font-bold text-[#18352D]">
+                                <span className="text-[10px] font-bold text-[#18352D]">
                                   {formatNumber(
                                     Number(
                                       lastOpname.physicalQty
@@ -1887,117 +2081,88 @@ export default function StockPusatPage() {
                                   )}
                                 </span>
 
-                                <span className="text-[9px] text-gray-400">
+                                <span className="text-[7px] text-gray-400">
                                   {transactionUnit}
                                 </span>
 
                               </div>
-
                             ) : (
-
                               <span className="text-gray-300">
                                 -
                               </span>
-
                             )}
 
                           </td>
 
-                          {/* DIFFERENCE */}
+                          {/* SELISIH */}
 
-                          <td className="px-5 py-4 text-right">
+                          <td className="px-2.5 py-2.5 text-right">
 
                             {!lastOpname ? (
-
                               <span className="text-gray-300">
                                 -
                               </span>
-
                             ) : difference > 0 ? (
+                              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-emerald-100 bg-emerald-50 px-2 py-1 font-bold text-[8px] text-emerald-700">
 
-                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1.5 font-bold text-emerald-700">
+                                <ArrowUp size={9} />
 
-                                <ArrowUp
-                                  size={12}
-                                />
-
-                                +
-                                {formatNumber(
-                                  difference
-                                )}{" "}
+                                +{formatNumber(difference)}{" "}
                                 {transactionUnit}
 
                               </span>
-
                             ) : difference < 0 ? (
+                              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-red-100 bg-red-50 px-2 py-1 font-bold text-[8px] text-red-700">
 
-                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 font-bold text-red-700">
+                                <ArrowDown size={9} />
 
-                                <ArrowDown
-                                  size={12}
-                                />
-
-                                {formatNumber(
-                                  difference
-                                )}{" "}
+                                {formatNumber(difference)}{" "}
                                 {transactionUnit}
 
                               </span>
-
                             ) : (
+                              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-gray-200 bg-gray-50 px-2 py-1 font-semibold text-[8px] text-gray-500">
 
-                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 font-semibold text-gray-500">
+                                <Minus size={9} />
 
-                                <Minus
-                                  size={12}
-                                />
-
-                                0{" "}
-                                {transactionUnit}
+                                0 {transactionUnit}
 
                               </span>
-
                             )}
 
                           </td>
 
-                          {/* OPNAME STATUS */}
+                          {/* STATUS SO */}
 
-                          <td className="px-5 py-4 text-center">
+                          <td className="px-2.5 py-2.5 text-center">
 
                             {lastOpname ? (
-
                               <span
-                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-bold ${opnameStatus.className}`}
+                                className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[8px] font-bold ${opnameStatus.className}`}
                               >
-                                {
-                                  opnameStatus.text
-                                }
+                                {opnameStatus.text}
                               </span>
-
                             ) : (
-
-                              <span className="text-xs text-gray-300">
+                              <span className="text-[9px] text-gray-300">
                                 -
                               </span>
-
                             )}
 
                           </td>
 
                           {/* MINIMUM */}
 
-                          <td className="px-5 py-4 text-right">
+                          <td className="px-2.5 py-2.5 text-right">
 
                             <div className="inline-flex flex-col items-end">
 
-                              <span className="font-semibold text-gray-600">
+                              <span className="text-[10px] font-semibold text-gray-600">
                                 {formatNumber(
                                   minimumStock
                                 )}
                               </span>
 
-                              <span className="text-[9px] text-gray-400">
+                              <span className="text-[7px] text-gray-400">
                                 {transactionUnit}
                               </span>
 
@@ -2005,21 +2170,17 @@ export default function StockPusatPage() {
 
                           </td>
 
-                          {/* STATUS */}
+                          {/* STATUS STOCK */}
 
-                          <td className="px-5 py-4 text-center">
+                          <td className="px-2.5 py-2.5 text-center">
 
                             <span
-                              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[9px] font-bold ${stockStatus.className}`}
+                              className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[8px] font-bold ${stockStatus.className}`}
                             >
 
-                              <StatusIcon
-                                size={11}
-                              />
+                              <StatusIcon size={9} />
 
-                              {
-                                stockStatus.text
-                              }
+                              {stockStatus.text}
 
                             </span>
 
@@ -2027,23 +2188,65 @@ export default function StockPusatPage() {
 
                           {/* HISTORY */}
 
-                          <td className="px-5 py-4 text-center">
+                          <td className="px-2.5 py-2.5">
 
                             <button
                               type="button"
                               onClick={() =>
-                                openHistory(
-                                  item
-                                )
+                                openHistory(item)
                               }
-                              className="inline-flex items-center gap-1.5 rounded-xl border border-[#CFE1D9] bg-white px-3 py-2 text-[10px] font-bold text-[#497F70] shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[#EAF3EF] hover:shadow-md"
+                              className="group/history flex min-w-[170px] items-center gap-2 rounded-lg border border-[#CFE1D9] bg-white px-2.5 py-2 text-left shadow-[0_2px_8px_rgba(30,70,58,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#AFCDBF] hover:bg-[#F8FCFA] hover:shadow-[0_6px_15px_rgba(30,70,58,0.07)]"
                             >
 
-                              <History
-                                size={12}
-                              />
+                              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#EAF3EF] text-[#497F70] transition-colors group-hover/history:bg-[#DDEEE7]">
 
-                              History
+                                <History size={13} />
+
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+
+                                <div className="flex items-center gap-1">
+
+                                  <span className="text-[8px] font-bold uppercase tracking-[0.08em] text-gray-400">
+                                    History
+                                  </span>
+
+                                  <ChevronRight
+                                    size={8}
+                                    className="text-gray-300 transition-transform group-hover/history:translate-x-0.5"
+                                  />
+
+                                </div>
+
+                                <div className="mt-0.5 flex items-center gap-1">
+
+                                  <FileText
+                                    size={9}
+                                    className="shrink-0 text-[#497F70]"
+                                  />
+
+                                  <span className="truncate font-mono text-[8px] font-bold text-[#35564C]">
+                                    Klik untuk lihat
+                                  </span>
+
+                                </div>
+
+                                <div className="mt-1">
+
+                                  <span
+                                    className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[7px] font-bold ${stockStatus.className}`}
+                                  >
+
+                                    <span className="h-0.5 w-0.5 rounded-full bg-current" />
+
+                                    {stockStatus.text}
+
+                                  </span>
+
+                                </div>
+
+                              </div>
 
                             </button>
 
@@ -2053,7 +2256,6 @@ export default function StockPusatPage() {
                       );
                     }
                   )
-
                 )}
 
               </tbody>
@@ -2064,31 +2266,55 @@ export default function StockPusatPage() {
 
           {!loading &&
             filteredData.length > 0 && (
-              <div className="flex flex-col gap-2 border-t border-[#E5ECE9] bg-[#FAFCFB] px-5 py-3.5 text-[10px] text-gray-400 sm:flex-row sm:items-center sm:justify-between md:px-6">
+              <div className="flex flex-col gap-3 border-t border-[#E5ECE9] bg-[#FAFCFB] px-4 py-3 text-[9px] text-gray-400 md:px-5">
 
-                <span>
-                  Menampilkan{" "}
-                  <strong className="text-gray-600">
-                    {formatNumber(
-                      filteredData.length
-                    )}
-                  </strong>{" "}
-                  dari{" "}
-                  <strong className="text-gray-600">
-                    {formatNumber(
-                      data.length
-                    )}
-                  </strong>{" "}
-                  barang
-                </span>
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
 
-                <span className="flex items-center gap-1.5">
+                  <span>
+                    Menampilkan{" "}
+                    <strong className="text-gray-600">
+                      {formatNumber(
+                        filteredData.length
+                      )}
+                    </strong>{" "}
+                    dari{" "}
+                    <strong className="text-gray-600">
+                      {formatNumber(
+                        data.length
+                      )}
+                    </strong>{" "}
+                    barang
+                  </span>
 
-                  <LockKeyhole size={11} />
+                  <div className="flex flex-wrap items-center gap-1.5">
 
-                  Stock transaksi tidak dikonversi
+                    <span className="inline-flex items-center gap-1 border border-[#DDE9E4] bg-white px-2 py-1 rounded-md">
+                      <LockKeyhole size={9} />
+                      Stock terkunci
+                    </span>
 
-                </span>
+                    <span className="inline-flex items-center gap-1 border border-[#DDE9E4] bg-[#F4F9F6] px-2 py-1 rounded-md text-[#497F70]">
+                      <DollarSign size={9} />
+                      Nilai:{" "}
+                      <strong>
+                        {formatCurrency(
+                          totalStockValue
+                        )}
+                      </strong>
+                    </span>
+
+                    <span className="inline-flex items-center gap-1 border border-[#DDE9E4] bg-white px-2 py-1 rounded-md">
+                      Harga tersedia:{" "}
+                      <strong className="text-gray-600">
+                        {formatNumber(
+                          totalPricedItems
+                        )}
+                      </strong>
+                    </span>
+
+                  </div>
+
+                </div>
 
               </div>
             )}
@@ -2097,13 +2323,13 @@ export default function StockPusatPage() {
 
       </div>
 
-      {/* =================================================
+      {/* =====================================================
           HISTORY MODAL
-      ================================================= */}
+      ===================================================== */}
 
       {selectedHistory && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-[#081C16]/65 p-3 backdrop-blur-md md:p-5"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-[#061B15]/70 p-3 backdrop-blur-md md:p-5"
           onMouseDown={(event) => {
             if (
               event.target ===
@@ -2114,21 +2340,23 @@ export default function StockPusatPage() {
           }}
         >
 
-          <div className="flex max-h-[95vh] w-full max-w-7xl flex-col overflow-hidden rounded-[26px] border border-white/60 bg-white shadow-[0_35px_100px_rgba(8,28,22,0.30)]">
+          <div className="flex max-h-[95vh] w-full max-w-[1450px] flex-col overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_40px_120px_rgba(6,27,21,0.35)]">
 
             {/* MODAL HEADER */}
 
-            <div className="relative overflow-hidden border-b border-[#E5ECE9] bg-gradient-to-br from-[#F9FCFA] via-white to-[#F3F8F5] px-5 py-5 md:px-7 md:py-6">
+            <div className="relative overflow-hidden border-b border-[#E4ECE8] bg-gradient-to-br from-[#F7FBF9] via-white to-[#EFF7F3] px-5 py-5 md:px-7 md:py-6">
 
-              <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-100/70 blur-3xl" />
+              <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-emerald-100/70 blur-3xl" />
+
+              <div className="pointer-events-none absolute -bottom-20 left-1/3 h-40 w-80 rounded-full bg-[#DDEEE7]/50 blur-3xl" />
 
               <div className="relative flex items-start justify-between gap-4">
 
                 <div className="flex min-w-0 items-start gap-4">
 
-                  <div className="relative flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-[#EAF3EF] text-[#497F70] shadow-sm">
+                  <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[#CFE1D9] bg-[#EAF3EF] text-[#497F70] shadow-sm">
 
-                    <History size={22} />
+                    <History size={23} />
 
                     <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-emerald-500">
 
@@ -2145,15 +2373,13 @@ export default function StockPusatPage() {
 
                     <div className="flex flex-wrap items-center gap-2">
 
-                      <h2 className="text-lg font-bold tracking-[-0.02em] text-[#18352D]">
+                      <h2 className="text-xl font-bold tracking-[-0.025em] text-[#18352D]">
                         History Stock
                       </h2>
 
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-[#CFE1D9] bg-white px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-[#497F70] shadow-sm">
 
-                        <LockKeyhole
-                          size={10}
-                        />
+                        <LockKeyhole size={10} />
 
                         Read Only
 
@@ -2162,94 +2388,102 @@ export default function StockPusatPage() {
                     </div>
 
                     <p className="mt-1 truncate text-sm font-semibold text-gray-500">
-                      {
-                        selectedHistory
-                          .barang
-                          .name
-                      }
+                      {selectedHistory.barang?.name || "-"}
                     </p>
 
                     <div className="mt-3 flex flex-wrap gap-1.5">
 
-                      <span className="rounded-lg bg-[#EAF3EF] px-2.5 py-1 text-[9px] font-bold text-[#497F70]">
-                        {
-                          selectedHistory
-                            .barang.code
-                        }
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-[#EAF3EF] px-2.5 py-1 text-[9px] font-bold text-[#497F70]">
+
+                        <Package size={10} />
+
+                        {selectedHistory.barang?.code || "-"}
+
                       </span>
 
-                      <span className="rounded-lg bg-gray-100 px-2.5 py-1 text-[9px] font-medium text-gray-500">
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1 text-[9px] font-medium text-gray-500">
+
                         Satuan:{" "}
-                        {
-                          selectedHistory
-                            .barang.unit
-                        }
+                        {selectedHistory.barang?.unit || "-"}
+
                       </span>
 
-                      {selectedHistory
-                        .barang
-                        ?.baseUnit && (
-                        <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-[9px] font-bold text-blue-700">
+                      {selectedHistory.barang?.baseUnit && (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-[#EEF7F3] px-2.5 py-1 text-[9px] font-bold text-[#497F70]">
+
                           Dasar:{" "}
-                          {
-                            selectedHistory
-                              .barang
-                              .baseUnit
-                          }
+                          {selectedHistory.barang.baseUnit}
+
                         </span>
                       )}
 
-                      {selectedHistory
-                        .barang
-                        ?.conversion &&
+                      {selectedHistory.barang?.conversion &&
                         Number(
-                          selectedHistory
-                            .barang
-                            .conversion
+                          selectedHistory.barang.conversion
                         ) > 0 && (
-                          <span className="rounded-lg bg-indigo-50 px-2.5 py-1 text-[9px] font-bold text-indigo-700">
+                          <span className="rounded-lg bg-[#F2F7F4] px-2.5 py-1 text-[9px] font-bold text-[#497F70]">
+
                             1{" "}
-                            {
-                              selectedHistory
-                                .barang
-                                .unit
-                            }{" "}
+                            {selectedHistory.barang.unit}{" "}
                             ={" "}
                             {formatNumber(
                               Number(
-                                selectedHistory
-                                  .barang
-                                  .conversion
+                                selectedHistory.barang.conversion
                               )
                             )}{" "}
-                            {
-                              selectedHistory
-                                .barang
-                                .baseUnit ||
-                              selectedHistory
-                                .barang
-                                .unit
-                            }
+                            {selectedHistory.barang.baseUnit ||
+                              selectedHistory.barang.unit}
+
                           </span>
                         )}
 
                       <span className="rounded-lg bg-[#FFF8E7] px-2.5 py-1 text-[9px] font-bold text-[#8A6A1E]">
+
                         Stock:{" "}
                         {formatNumber(
                           Number(
                             selectedHistory.stock
                           )
                         )}{" "}
-                        {
-                          selectedHistory
-                            .barang
-                            .unit
-                        }
+                        {selectedHistory.barang?.unit || "-"}
+
                       </span>
 
                       <span className="rounded-lg bg-[#EAF3EF] px-2.5 py-1 text-[9px] font-bold text-[#497F70]">
                         Gudang Pusat
                       </span>
+
+                      {getLatestPrice(
+                        selectedHistory
+                      ) !== null && (
+                        <>
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-[#EEF7F3] px-2.5 py-1 text-[9px] font-bold text-[#497F70]">
+
+                            <DollarSign size={10} />
+
+                            Harga:{" "}
+                            {formatCurrency(
+                              getLatestPrice(
+                                selectedHistory
+                              )
+                            )}
+
+                          </span>
+
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-[#EAF3EF] px-2.5 py-1 text-[9px] font-bold text-[#285346]">
+
+                            <Calculator size={10} />
+
+                            Nilai Stock:{" "}
+                            {formatCurrency(
+                              getStockValue(
+                                selectedHistory
+                              )
+                            )}
+
+                          </span>
+                        </>
+                      )}
 
                     </div>
 
@@ -2269,139 +2503,193 @@ export default function StockPusatPage() {
 
             </div>
 
-            {/* MODAL SUMMARY */}
+            {/* SUMMARY */}
 
             <div className="grid grid-cols-2 gap-3 border-b border-[#E5ECE9] bg-[#FAFCFB] p-4 md:grid-cols-4 md:p-5">
 
-              {/* TRANSAKSI */}
+              {[
+                {
+                  label: "Transaksi",
+                  value:
+                    historySummary.total,
+                  description:
+                    "Total aktivitas",
+                  icon: History,
+                  className:
+                    "bg-[#EAF3EF] text-[#497F70]",
+                  valueClass:
+                    "text-[#18352D]",
+                },
+                {
+                  label: "Masuk",
+                  value:
+                    historySummary.stockIn,
+                  prefix: "+",
+                  description:
+                    "Stock masuk",
+                  icon: ArrowDownCircle,
+                  className:
+                    "bg-emerald-50 text-emerald-600",
+                  valueClass:
+                    "text-emerald-700",
+                },
+                {
+                  label: "Keluar",
+                  value:
+                    historySummary.stockOut,
+                  prefix: "-",
+                  description:
+                    "Stock keluar",
+                  icon: ArrowUpCircle,
+                  className:
+                    "bg-red-50 text-red-600",
+                  valueClass:
+                    "text-red-700",
+                },
+                {
+                  label: "Informasi",
+                  value:
+                    historySummary.informational,
+                  description:
+                    "Aktivitas informasi",
+                  icon: Info,
+                  className:
+                    "bg-[#F0F6F3] text-[#497F70]",
+                  valueClass:
+                    "text-[#497F70]",
+                },
+              ].map((card) => {
+                const Icon = card.icon;
 
-              <div className="group rounded-2xl border border-[#DDE9E4] bg-white p-4 shadow-[0_3px_15px_rgba(30,70,58,0.03)] transition hover:shadow-md">
+                return (
+                  <div
+                    key={card.label}
+                    className="group rounded-2xl border border-[#DDE9E4] bg-white p-4 shadow-[0_3px_15px_rgba(30,70,58,0.03)] transition hover:shadow-md"
+                  >
 
-                <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between">
+
+                      <div
+                        className={`flex h-8 w-8 items-center justify-center rounded-lg ${card.className}`}
+                      >
+                        <Icon size={14} />
+                      </div>
+
+                      <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                        {card.label}
+                      </span>
+
+                    </div>
+
+                    <p
+                      className={`mt-3 text-xl font-bold ${card.valueClass}`}
+                    >
+                      {card.prefix || ""}
+                      {formatNumber(card.value)}
+                    </p>
+
+                    <p className="mt-0.5 text-[9px] text-gray-400">
+                      {card.description}
+                    </p>
+
+                  </div>
+                );
+              })}
+
+            </div>
+
+            {/* PRICE SUMMARY */}
+
+            <div className="grid grid-cols-1 gap-3 border-b border-[#E5ECE9] bg-[#F8FBF9] p-4 md:grid-cols-3 md:p-5">
+
+              <div className="rounded-2xl border border-[#DDE9E4] bg-white p-4 shadow-sm">
+
+                <div className="flex items-center gap-2">
 
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
-
-                    <History size={14} />
-
+                    <DollarSign size={14} />
                   </div>
 
-                  <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-gray-400">
-                    Transaksi
+                  <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                    Harga Terbaru
                   </span>
 
                 </div>
 
-                <p className="mt-3 text-xl font-bold text-[#18352D]">
-                  {formatNumber(
-                    historySummary.total
+                <p className="mt-3 text-lg font-bold text-[#18352D]">
+                  {formatCurrency(
+                    getLatestPrice(
+                      selectedHistory
+                    )
                   )}
                 </p>
 
                 <p className="mt-0.5 text-[9px] text-gray-400">
-                  Total aktivitas
+                  Per{" "}
+                  {selectedHistory.barang?.unit || "-"}
                 </p>
 
               </div>
 
-              {/* MASUK */}
+              <div className="rounded-2xl border border-[#DDE9E4] bg-white p-4 shadow-sm">
 
-              <div className="group rounded-2xl border border-[#DDE9E4] bg-white p-4 shadow-[0_3px_15px_rgba(30,70,58,0.03)] transition hover:shadow-md">
+                <div className="flex items-center gap-2">
 
-                <div className="flex items-center justify-between">
-
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-
-                    <ArrowDownCircle
-                      size={14}
-                    />
-
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EEF7F3] text-[#497F70]">
+                    <Boxes size={14} />
                   </div>
 
-                  <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-gray-400">
-                    Masuk
+                  <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                    Stock Saat Ini
                   </span>
 
                 </div>
 
-                <p className="mt-3 text-xl font-bold text-emerald-700">
-                  +
+                <p className="mt-3 text-lg font-bold text-[#18352D]">
                   {formatNumber(
-                    historySummary.stockIn
+                    getTransactionStock(
+                      selectedHistory
+                    )
                   )}
                 </p>
 
                 <p className="mt-0.5 text-[9px] text-gray-400">
-                  Stock masuk
+                  {selectedHistory.barang?.unit || "-"}
                 </p>
 
               </div>
 
-              {/* KELUAR */}
+              <div className="rounded-2xl border border-[#BFD9CE] bg-gradient-to-br from-[#EEF7F3] to-white p-4 shadow-sm">
 
-              <div className="group rounded-2xl border border-[#DDE9E4] bg-white p-4 shadow-[0_3px_15px_rgba(30,70,58,0.03)] transition hover:shadow-md">
+                <div className="flex items-center gap-2">
 
-                <div className="flex items-center justify-between">
-
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50 text-red-600">
-
-                    <ArrowUpCircle
-                      size={14}
-                    />
-
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#DDEEE7] text-[#497F70]">
+                    <Calculator size={14} />
                   </div>
 
-                  <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-gray-400">
-                    Keluar
+                  <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#497F70]">
+                    Total Nilai Stock
                   </span>
 
                 </div>
 
-                <p className="mt-3 text-xl font-bold text-red-700">
-                  -
-                  {formatNumber(
-                    historySummary.stockOut
+                <p className="mt-3 text-lg font-bold text-[#18352D]">
+                  {formatCurrency(
+                    getStockValue(
+                      selectedHistory
+                    )
                   )}
                 </p>
 
                 <p className="mt-0.5 text-[9px] text-gray-400">
-                  Stock keluar
-                </p>
-
-              </div>
-
-              {/* INFO */}
-
-              <div className="group rounded-2xl border border-[#DDE9E4] bg-white p-4 shadow-[0_3px_15px_rgba(30,70,58,0.03)] transition hover:shadow-md">
-
-                <div className="flex items-center justify-between">
-
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-
-                    <Info size={14} />
-
-                  </div>
-
-                  <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-gray-400">
-                    Informasi
-                  </span>
-
-                </div>
-
-                <p className="mt-3 text-xl font-bold text-blue-700">
-                  {formatNumber(
-                    historySummary.informational
-                  )}
-                </p>
-
-                <p className="mt-0.5 text-[9px] text-gray-400">
-                  Aktivitas informasi
+                  Stock × harga terbaru
                 </p>
 
               </div>
 
             </div>
 
-            {/* MODAL BODY */}
+            {/* BODY */}
 
             <div className="min-h-0 flex-1 overflow-y-auto bg-white p-4 md:p-6">
 
@@ -2439,9 +2727,7 @@ export default function StockPusatPage() {
                 <div className="flex min-h-[380px] flex-col items-center justify-center rounded-2xl border border-red-200 bg-red-50">
 
                   <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-red-400 shadow-sm">
-
                     <Info size={25} />
-
                   </div>
 
                   <p className="mt-4 font-bold text-red-700">
@@ -2471,9 +2757,7 @@ export default function StockPusatPage() {
                 <div className="flex min-h-[380px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#DDE9E4] bg-[#FAFCFB]">
 
                   <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-300">
-
                     <History size={27} />
-
                   </div>
 
                   <p className="mt-4 font-semibold text-gray-500">
@@ -2489,13 +2773,13 @@ export default function StockPusatPage() {
 
               ) : (
 
-                <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] shadow-sm">
+                <div className="overflow-hidden rounded-[20px] border border-[#DDE9E4] shadow-sm">
 
                   <div className="overflow-x-auto">
 
-                    <table className="min-w-[1250px] w-full text-sm">
+                    <table className="min-w-[1450px] w-full text-sm">
 
-                      <thead className="sticky top-0 z-10 bg-[#F7F9F8]/95 backdrop-blur">
+                      <thead className="bg-[#F7F9F8]">
 
                         <tr className="border-b border-[#E5ECE9]">
 
@@ -2512,7 +2796,7 @@ export default function StockPusatPage() {
                           </th>
 
                           <th className="px-4 py-3.5 text-left text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
-                            No. Transaksi
+                            No. Invoice / Transaksi
                           </th>
 
                           <th className="px-4 py-3.5 text-right text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
@@ -2548,6 +2832,11 @@ export default function StockPusatPage() {
                                 history.type
                               );
 
+                            const status =
+                              getHistoryStatus(
+                                history.status
+                              );
+
                             const isIn =
                               history.direction ===
                               "IN";
@@ -2558,9 +2847,7 @@ export default function StockPusatPage() {
 
                             return (
                               <tr
-                                key={
-                                  history.id
-                                }
+                                key={history.id}
                                 className="border-b border-[#EDF2EF] transition last:border-b-0 hover:bg-[#FBFDFC]"
                               >
 
@@ -2577,11 +2864,11 @@ export default function StockPusatPage() {
 
                                   <div className="flex items-start gap-2">
 
-                                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gray-50">
+                                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#F3F7F5]">
 
                                       <CalendarDays
                                         size={12}
-                                        className="text-gray-400"
+                                        className="text-[#497F70]"
                                       />
 
                                     </div>
@@ -2613,47 +2900,69 @@ export default function StockPusatPage() {
                                 <td className="px-4 py-4">
 
                                   <span
-                                    className={`inline-flex rounded-full border px-2.5 py-1 text-[9px] font-bold ${type.className}`}
+                                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-bold ${type.className}`}
                                   >
+
+                                    <span
+                                      className={`h-1.5 w-1.5 rounded-full ${type.dot}`}
+                                    />
+
                                     {type.text}
+
                                   </span>
 
                                 </td>
 
                                 <td className="px-4 py-4">
 
-                                  <span className="rounded-md bg-gray-50 px-2 py-1 font-mono text-[10px] font-bold text-[#35564C]">
-                                    {history.number ||
-                                      "-"}
-                                  </span>
+                                  <div className="min-w-[190px]">
+
+                                    <div className="flex items-center gap-2">
+
+                                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
+
+                                        <ReceiptText
+                                          size={13}
+                                        />
+
+                                      </div>
+
+                                      <div className="min-w-0">
+
+                                        <p className="text-[8px] font-bold uppercase tracking-[0.13em] text-gray-400">
+                                          No. Invoice / Transaksi
+                                        </p>
+
+                                        <p className="mt-0.5 truncate font-mono text-[10px] font-bold text-[#35564C]">
+                                          {history.number || "-"}
+                                        </p>
+
+                                      </div>
+
+                                    </div>
+
+                                  </div>
 
                                 </td>
 
                                 <td className="px-4 py-4 text-right">
 
                                   {isIn ? (
-
                                     <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-100 bg-emerald-50 px-2 py-1.5 text-[10px] font-bold text-emerald-700">
 
-                                      <ArrowDownCircle
-                                        size={12}
-                                      />
+                                      <ArrowDownCircle size={12} />
 
-                                      +
-                                      {formatNumber(
+                                      +{formatNumber(
                                         Number(
                                           history.qty
                                         )
                                       )}
 
                                     </span>
-
                                   ) : (
-
                                     <span className="text-gray-200">
                                       -
                                     </span>
-
                                   )}
 
                                 </td>
@@ -2661,76 +2970,59 @@ export default function StockPusatPage() {
                                 <td className="px-4 py-4 text-right">
 
                                   {isOut ? (
-
                                     <span className="inline-flex items-center gap-1 rounded-lg border border-red-100 bg-red-50 px-2 py-1.5 text-[10px] font-bold text-red-700">
 
-                                      <ArrowUpCircle
-                                        size={12}
-                                      />
+                                      <ArrowUpCircle size={12} />
 
-                                      -
-                                      {formatNumber(
+                                      -{formatNumber(
                                         Number(
                                           history.qty
                                         )
                                       )}
 
                                     </span>
-
                                   ) : (
-
                                     <span className="text-gray-200">
                                       -
                                     </span>
-
                                   )}
 
                                 </td>
 
                                 <td className="px-4 py-4 text-center">
 
-                                  {history.status ? (
+                                  <span
+                                    className={`inline-flex min-w-[82px] items-center justify-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[9px] font-bold ${status.className}`}
+                                  >
 
-                                    <span className="inline-flex rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[9px] font-bold text-gray-600">
-                                      {
-                                        history.status
-                                      }
-                                    </span>
+                                    <span
+                                      className={`h-1.5 w-1.5 rounded-full ${status.dot}`}
+                                    />
 
-                                  ) : (
+                                    {status.text}
 
-                                    <span className="text-gray-200">
-                                      -
-                                    </span>
-
-                                  )}
+                                  </span>
 
                                 </td>
 
                                 <td className="px-4 py-4">
 
-                                  <div className="max-w-[390px]">
+                                  <div className="max-w-[410px]">
 
                                     <p className="text-[10px] leading-5 text-gray-600">
-                                      {
-                                        history.description ||
-                                        "-"
-                                      }
+                                      {history.description || "-"}
                                     </p>
 
-                                    {(history.stockBefore !==
-                                      null ||
-                                      history.stockAfter !==
-                                        null) && (
+                                    {(history.stockBefore !== null ||
+                                      history.stockAfter !== null) && (
                                       <div className="mt-2 flex items-center gap-2 text-[9px] text-gray-400">
 
-                                        <span>
+                                        <span className="font-medium">
                                           Stock
                                         </span>
 
                                         <span className="rounded-md border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-semibold text-gray-500">
-                                          {history.stockBefore !==
-                                          null
+                                          {history.stockBefore !== null
                                             ? formatNumber(
                                                 Number(
                                                   history.stockBefore
@@ -2739,13 +3031,10 @@ export default function StockPusatPage() {
                                             : "-"}
                                         </span>
 
-                                        <ChevronRight
-                                          size={10}
-                                        />
+                                        <ChevronRight size={10} />
 
                                         <span className="rounded-md border border-[#DCEBE4] bg-[#EAF3EF] px-1.5 py-0.5 font-semibold text-[#497F70]">
-                                          {history.stockAfter !==
-                                          null
+                                          {history.stockAfter !== null
                                             ? formatNumber(
                                                 Number(
                                                   history.stockAfter
@@ -2778,16 +3067,22 @@ export default function StockPusatPage() {
 
             </div>
 
-            {/* MODAL FOOTER */}
+            {/* FOOTER */}
 
             <div className="flex flex-col gap-3 border-t border-[#E5ECE9] bg-[#FAFCFB] px-5 py-4 sm:flex-row sm:items-center sm:justify-between md:px-6">
 
-              <div className="flex items-center gap-2 text-[10px] text-gray-400">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] text-gray-400">
 
-                <LockKeyhole size={12} />
-
-                <span>
+                <span className="flex items-center gap-2">
+                  <LockKeyhole size={12} />
                   History hanya untuk monitoring.
+                </span>
+
+                <span className="h-1 w-1 rounded-full bg-gray-300" />
+
+                <span className="flex items-center gap-1.5">
+                  <CircleDot size={10} />
+                  Harga berasal dari Master Harga terbaru.
                 </span>
 
               </div>

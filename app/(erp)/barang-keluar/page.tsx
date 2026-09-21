@@ -426,28 +426,34 @@ export default function BarangKeluarPage() {
   );
 
   return (
-    <div className="min-h-full bg-[#F4F7F5]">
+    <div
+      className="min-h-full bg-[#F3F7F4]"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle at 8% 0%, rgba(111,128,108,0.07), transparent 26%), radial-gradient(circle at 92% 18%, rgba(183,154,99,0.055), transparent 22%)",
+      }}
+    >
       {/* =====================================================
           PAGE HEADER
       ===================================================== */}
 
-      <div className="border-b border-[#DCE7E2] bg-white">
+      <div className="border-b border-[#DDE8E1] bg-[#F8FBF9]">
         <div className="mx-auto max-w-[1600px] px-5 py-6 md:px-8 md:py-7">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex items-start gap-4">
               <div className="relative">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#18352D] text-white shadow-lg shadow-[#18352D]/10">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-[#173A2F] text-white shadow-[0_12px_28px_rgba(28,40,34,0.12)]">
                   <PackageMinus size={25} strokeWidth={2} />
                 </div>
 
-                <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[#497F70]">
+                <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[#5F8A72]">
                   <ArrowRight size={10} className="text-white" />
                 </div>
               </div>
 
               <div>
                 <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-[#EAF3EF] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[#497F70]">
+                  <span className="rounded-full bg-[#EEF1EA] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[#5F8A72]">
                     Inventory
                   </span>
 
@@ -460,7 +466,7 @@ export default function BarangKeluarPage() {
                   </span>
                 </div>
 
-                <h1 className="text-2xl font-bold tracking-tight text-[#18352D] md:text-3xl">
+                <h1 className="text-2xl font-semibold tracking-[-0.025em] text-[#173A2F] md:text-3xl">
                   Barang Keluar
                 </h1>
 
@@ -472,8 +478,8 @@ export default function BarangKeluarPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="hidden items-center gap-3 rounded-2xl border border-[#DCE7E2] bg-[#FAFCFB] px-4 py-3 sm:flex">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+              <div className="hidden items-center gap-3 rounded-[22px] border border-[#DDE8E1] bg-[#FAF9F6] px-4 py-3 sm:flex">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72]">
                   <ShoppingCart size={17} />
                 </div>
 
@@ -482,16 +488,16 @@ export default function BarangKeluarPage() {
                     Keranjang
                   </p>
 
-                  <p className="text-sm font-bold text-[#18352D]">
+                  <p className="text-sm font-bold text-[#173A2F]">
                     {cart.length} jenis barang
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 rounded-2xl border border-[#DCE7E2] bg-white px-4 py-3 shadow-sm">
-                <div className="h-2 w-2 rounded-full bg-[#497F70]" />
+              <div className="flex items-center gap-2 rounded-[22px] border border-[#DDE8E1] bg-white px-4 py-3 shadow-[0_8px_30px_rgba(23,58,47,0.055)]">
+                <div className="h-2 w-2 rounded-full bg-[#5F8A72]" />
 
-                <span className="text-xs font-semibold text-[#35564C]">
+                <span className="text-xs font-semibold text-[#44564A]">
                   Draft Transaksi
                 </span>
               </div>
@@ -505,50 +511,50 @@ export default function BarangKeluarPage() {
             TRANSACTION FLOW
         ===================================================== */}
 
-        <div className="grid grid-cols-1 overflow-hidden rounded-2xl border border-[#DCE7E2] bg-white shadow-sm md:grid-cols-3">
-          <div className="relative flex items-center gap-4 border-b border-[#E8EFEC] p-4 md:border-b-0 md:border-r md:p-5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#18352D] text-sm font-bold text-white">
+        <div className="grid grid-cols-1 overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white/95 shadow-[0_8px_30px_rgba(23,58,47,0.055)] backdrop-blur-[2px] md:grid-cols-3">
+          <div className="relative flex items-center gap-4 border-b border-[#ECE8E0] p-4 md:border-b-0 md:border-r md:p-5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#173A2F] text-sm font-bold text-white">
               01
             </div>
 
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#497F70]">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#5F8A72]">
                 Informasi
               </p>
 
-              <p className="mt-0.5 text-sm font-semibold text-[#18352D]">
+              <p className="mt-0.5 text-sm font-semibold text-[#173A2F]">
                 Tentukan tujuan transaksi
               </p>
             </div>
           </div>
 
-          <div className="relative flex items-center gap-4 border-b border-[#E8EFEC] p-4 md:border-b-0 md:border-r md:p-5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EAF3EF] text-sm font-bold text-[#497F70]">
+          <div className="relative flex items-center gap-4 border-b border-[#ECE8E0] p-4 md:border-b-0 md:border-r md:p-5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EEF1EA] text-sm font-bold text-[#5F8A72]">
               02
             </div>
 
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#497F70]">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#5F8A72]">
                 Barang
               </p>
 
-              <p className="mt-0.5 text-sm font-semibold text-[#18352D]">
+              <p className="mt-0.5 text-sm font-semibold text-[#173A2F]">
                 Tambahkan item keluar
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-4 p-4 md:p-5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EAF3EF] text-sm font-bold text-[#497F70]">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EEF1EA] text-sm font-bold text-[#5F8A72]">
               03
             </div>
 
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#497F70]">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#5F8A72]">
                 Finalisasi
               </p>
 
-              <p className="mt-0.5 text-sm font-semibold text-[#18352D]">
+              <p className="mt-0.5 text-sm font-semibold text-[#173A2F]">
                 Simpan sebagai draft
               </p>
             </div>
@@ -559,15 +565,15 @@ export default function BarangKeluarPage() {
             INFORMASI TRANSAKSI
         ===================================================== */}
 
-        <section className="overflow-hidden rounded-2xl border border-[#DCE7E2] bg-white shadow-sm">
-          <div className="border-b border-[#E5ECE9] px-5 py-5 md:px-6">
+        <section className="overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white/95 shadow-[0_8px_30px_rgba(23,58,47,0.055)] backdrop-blur-[2px]">
+          <div className="border-b border-[#E7E3DB] px-5 py-5 md:px-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72]">
                 <User size={19} />
               </div>
 
               <div>
-                <h2 className="text-sm font-bold text-[#18352D]">
+                <h2 className="text-sm font-bold text-[#173A2F]">
                   Informasi Pengeluaran
                 </h2>
 
@@ -584,7 +590,7 @@ export default function BarangKeluarPage() {
               {/* TANGGAL */}
 
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#35564C]">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A]">
                   Tanggal Barang Keluar
                   <span className="ml-1 text-red-500">*</span>
                 </label>
@@ -599,7 +605,7 @@ export default function BarangKeluarPage() {
                     type="date"
                     value={deliveryDate}
                     onChange={(e) => setDeliveryDate(e.target.value)}
-                    className="h-12 w-full rounded-xl border border-[#D5E2DD] bg-[#FAFCFB] py-3 pl-11 pr-4 text-sm font-medium text-gray-700 outline-none transition placeholder:text-gray-400 hover:border-[#BFD2C9] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                    className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] py-3 pl-11 pr-4 text-sm font-medium text-gray-700 outline-none transition placeholder:text-gray-400 hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
                   />
                 </div>
 
@@ -611,7 +617,7 @@ export default function BarangKeluarPage() {
               {/* CUSTOMER */}
 
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#35564C]">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A]">
                   Customer
                   <span className="ml-1 text-red-500">*</span>
                 </label>
@@ -623,7 +629,7 @@ export default function BarangKeluarPage() {
                   />
 
                   <select
-                    className="h-12 w-full appearance-none rounded-xl border border-[#D5E2DD] bg-[#FAFCFB] px-4 pl-11 pr-10 text-sm font-medium text-gray-700 outline-none transition hover:border-[#BFD2C9] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                    className="h-12 w-full appearance-none rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] px-4 pl-11 pr-10 text-sm font-medium text-gray-700 outline-none transition hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
                     value={customer}
                     onChange={(e) => setCustomer(e.target.value)}
                   >
@@ -643,7 +649,7 @@ export default function BarangKeluarPage() {
                 </div>
 
                 {selectedCustomer && (
-                  <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-[#497F70]">
+                  <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-[#5F8A72]">
                     <CircleCheck size={12} />
                     Customer terpilih
                   </div>
@@ -653,7 +659,7 @@ export default function BarangKeluarPage() {
               {/* OUTLET */}
 
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#35564C]">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A]">
                   Outlet Tujuan
                   <span className="ml-1 text-red-500">*</span>
                 </label>
@@ -665,7 +671,7 @@ export default function BarangKeluarPage() {
                   />
 
                   <select
-                    className="h-12 w-full appearance-none rounded-xl border border-[#D5E2DD] bg-[#FAFCFB] px-4 pl-11 pr-10 text-sm font-medium text-gray-700 outline-none transition hover:border-[#BFD2C9] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                    className="h-12 w-full appearance-none rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] px-4 pl-11 pr-10 text-sm font-medium text-gray-700 outline-none transition hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
                     value={outlet}
                     onChange={(e) => setOutlet(e.target.value)}
                   >
@@ -687,7 +693,7 @@ export default function BarangKeluarPage() {
                 </div>
 
                 {selectedOutlet && (
-                  <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-[#497F70]">
+                  <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-[#5F8A72]">
                     <CircleCheck size={12} />
                     Outlet tujuan terpilih
                   </div>
@@ -697,7 +703,7 @@ export default function BarangKeluarPage() {
               {/* KETERANGAN */}
 
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#35564C]">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A]">
                   Keterangan
                 </label>
 
@@ -708,7 +714,7 @@ export default function BarangKeluarPage() {
                   />
 
                   <input
-                    className="h-12 w-full rounded-xl border border-[#D5E2DD] bg-[#FAFCFB] py-3 pl-11 pr-4 text-sm font-medium text-gray-700 outline-none transition placeholder:text-gray-400 hover:border-[#BFD2C9] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                    className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] py-3 pl-11 pr-4 text-sm font-medium text-gray-700 outline-none transition placeholder:text-gray-400 hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
                     placeholder="Contoh: Pengiriman ke outlet..."
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
@@ -727,16 +733,16 @@ export default function BarangKeluarPage() {
             SCANNER
         ===================================================== */}
 
-        <section className="overflow-hidden rounded-2xl border border-[#DCE7E2] bg-white shadow-sm">
-          <div className="border-b border-[#E5ECE9] px-5 py-5 md:px-6">
+        <section className="overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white/95 shadow-[0_8px_30px_rgba(23,58,47,0.055)] backdrop-blur-[2px]">
+          <div className="border-b border-[#E7E3DB] px-5 py-5 md:px-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72]">
                   <ScanLine size={19} />
                 </div>
 
                 <div>
-                  <h2 className="text-sm font-bold text-[#18352D]">
+                  <h2 className="text-sm font-bold text-[#173A2F]">
                     Scan Barcode
                   </h2>
 
@@ -747,7 +753,7 @@ export default function BarangKeluarPage() {
                 </div>
               </div>
 
-              <div className="rounded-full border border-[#DCE7E2] bg-[#FAFCFB] px-3 py-1.5 text-[11px] font-semibold text-gray-500">
+              <div className="rounded-full border border-[#DED5C3] bg-[#F8F3E8] px-3 py-1.5 text-[11px] font-semibold text-[#756A55]">
                 Fast Entry
               </div>
             </div>
@@ -755,22 +761,22 @@ export default function BarangKeluarPage() {
 
           <div className="p-5 md:p-6">
             <div className="flex flex-col gap-3 lg:flex-row">
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 [&_button]:!border-[#9DB9A8] [&_button]:!bg-[#173A2F] [&_button]:!text-white [&_button:hover]:!bg-[#285744] [&_button]:!shadow-none [&_button]:!ring-0">
                 <BarcodeInputScanner onScan={scanBarcode} />
               </div>
 
               <button
                 type="button"
                 onClick={() => setOpenCamera(true)}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#18352D] px-6 text-sm font-bold text-white shadow-sm transition hover:bg-[#24483E] hover:shadow-md active:scale-[0.99]"
+                className="group inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-[#86A995] bg-[#E8F1EB] px-6 text-sm font-bold text-[#254D3D] shadow-[0_6px_18px_rgba(82,70,45,0.08)] transition duration-200 hover:border-[#9E8C69] hover:bg-[#DCEAE1] hover:shadow-[0_10px_24px_rgba(82,70,45,0.12)] active:scale-[0.99]"
               >
                 <Camera size={18} />
                 Scan dengan Kamera
               </button>
             </div>
 
-            <div className="mt-4 flex items-start gap-3 rounded-xl border border-[#E2ECE7] bg-[#F7FAF8] p-3.5">
-              <ScanLine size={16} className="mt-0.5 shrink-0 text-[#497F70]" />
+            <div className="mt-4 flex items-start gap-3 rounded-xl border border-[#E5E1D8] bg-[#F5F4F0] p-3.5">
+              <ScanLine size={16} className="mt-0.5 shrink-0 text-[#5F8A72]" />
 
               <p className="text-xs leading-5 text-gray-500">
                 Barcode akan dicari langsung ke master barang. Setelah
@@ -780,7 +786,7 @@ export default function BarangKeluarPage() {
             </div>
 
             {openCamera && (
-              <div className="mt-5 overflow-hidden rounded-2xl border border-[#29483F] bg-[#102A23] shadow-xl">
+              <div className="mt-5 overflow-hidden rounded-[22px] border border-[#4A584E] bg-[#202A24] shadow-xl">
                 <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
                   <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white">
@@ -832,15 +838,15 @@ export default function BarangKeluarPage() {
             TAMBAH BARANG
         ===================================================== */}
 
-        <section className="overflow-visible rounded-2xl border border-[#DCE7E2] bg-white shadow-sm">
-          <div className="border-b border-[#E5ECE9] px-5 py-5 md:px-6">
+        <section className="overflow-visible rounded-[22px] border border-[#DDE8E1] bg-white shadow-[0_8px_30px_rgba(23,58,47,0.055)]">
+          <div className="border-b border-[#E7E3DB] px-5 py-5 md:px-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72]">
                 <Boxes size={19} />
               </div>
 
               <div>
-                <h2 className="text-sm font-bold text-[#18352D]">
+                <h2 className="text-sm font-bold text-[#173A2F]">
                   Tambah Barang
                 </h2>
 
@@ -854,7 +860,7 @@ export default function BarangKeluarPage() {
           <div className="p-5 md:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
               <div className="relative min-w-0 flex-1">
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#35564C]">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A]">
                   Cari Barang
                 </label>
 
@@ -865,7 +871,7 @@ export default function BarangKeluarPage() {
                   />
 
                   <input
-                    className="h-12 w-full rounded-xl border border-[#D5E2DD] bg-[#FAFCFB] py-3 pl-11 pr-10 text-sm font-medium outline-none transition placeholder:text-gray-400 hover:border-[#BFD2C9] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                    className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] py-3 pl-11 pr-10 text-sm font-medium outline-none transition placeholder:text-gray-400 hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
                     placeholder="Ketik kode, nama, atau barcode..."
                     value={searchBarang}
                     onFocus={() => setShowBarang(true)}
@@ -892,14 +898,14 @@ export default function BarangKeluarPage() {
                 </div>
 
                 {showBarang && searchBarang && (
-                  <div className="absolute left-0 right-0 z-40 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-[#DCE7E2] bg-white shadow-2xl shadow-[#18352D]/10">
-                    <div className="sticky top-0 border-b border-[#E8EFEC] bg-white px-4 py-3">
+                  <div className="absolute left-0 right-0 z-40 mt-2 max-h-80 overflow-y-auto rounded-[22px] border border-[#DDE8E1] bg-white shadow-2xl shadow-black/5">
+                    <div className="sticky top-0 border-b border-[#ECE8E0] bg-white px-4 py-3">
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
                           Hasil Pencarian
                         </span>
 
-                        <span className="rounded-full bg-[#EAF3EF] px-2 py-1 text-[10px] font-bold text-[#497F70]">
+                        <span className="rounded-full bg-[#EEF1EA] px-2 py-1 text-[10px] font-bold text-[#5F8A72]">
                           {filteredBarang.length} hasil
                         </span>
                       </div>
@@ -909,13 +915,13 @@ export default function BarangKeluarPage() {
                       <div className="flex items-center justify-center gap-2 p-7 text-sm text-gray-500">
                         <RefreshCw
                           size={16}
-                          className="animate-spin text-[#497F70]"
+                          className="animate-spin text-[#5F8A72]"
                         />
                         Memuat barang...
                       </div>
                     ) : filteredBarang.length === 0 ? (
                       <div className="p-8 text-center">
-                        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F5F8F6] text-gray-300">
+                        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F1EB] text-gray-300">
                           <PackageMinus size={23} />
                         </div>
 
@@ -937,17 +943,17 @@ export default function BarangKeluarPage() {
                             type="button"
                             key={b.id}
                             onClick={() => pilihBarang(b)}
-                            className="group w-full border-b border-[#EDF2EF] p-4 text-left transition last:border-0 hover:bg-[#F7FAF8]"
+                            className="group w-full border-b border-[#EEEAE2] p-4 text-left transition last:border-0 hover:bg-[#F5F4F0]"
                           >
                             <div className="flex items-start gap-3">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F0F5F2] text-[#497F70] transition group-hover:bg-[#EAF3EF]">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F0EEE7] text-[#5F8A72] transition group-hover:bg-[#EEF1EA]">
                                 <PackageMinus size={17} />
                               </div>
 
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0">
-                                    <p className="truncate text-sm font-bold text-[#18352D]">
+                                    <p className="truncate text-sm font-bold text-[#173A2F]">
                                       {b.code} - {b.name}
                                     </p>
 
@@ -962,7 +968,7 @@ export default function BarangKeluarPage() {
                                     className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
                                       stockEmpty
                                         ? "bg-red-50 text-red-500"
-                                        : "bg-[#EAF3EF] text-[#497F70]"
+                                        : "bg-[#EEF1EA] text-[#5F8A72]"
                                     }`}
                                   >
                                     {stockEmpty
@@ -974,14 +980,14 @@ export default function BarangKeluarPage() {
                                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500">
                                   <span>
                                     Satuan:{" "}
-                                    <b className="text-[#35564C]">
+                                    <b className="text-[#44564A]">
                                       {b.unit || "-"}
                                     </b>
                                   </span>
 
                                   <span>
                                     Harga:{" "}
-                                    <b className="text-[#35564C]">
+                                    <b className="text-[#44564A]">
                                       Rp {formatNumber(b.purchasePrice)}
                                     </b>
                                   </span>
@@ -997,14 +1003,14 @@ export default function BarangKeluarPage() {
               </div>
 
               <div className="w-full lg:w-36">
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#35564C]">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A]">
                   Qty
                 </label>
 
                 <input
                   type="number"
                   min="1"
-                  className="h-12 w-full rounded-xl border border-[#D5E2DD] bg-[#FAFCFB] px-4 text-sm font-semibold outline-none transition placeholder:text-gray-400 hover:border-[#BFD2C9] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                  className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] px-4 text-sm font-semibold outline-none transition placeholder:text-gray-400 hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
                   placeholder="0"
                   value={qty}
                   onChange={(e) => setQty(e.target.value)}
@@ -1014,7 +1020,7 @@ export default function BarangKeluarPage() {
               <button
                 type="button"
                 onClick={tambahManual}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#497F70] px-7 text-sm font-bold text-white shadow-sm transition hover:bg-[#3D6D60] hover:shadow-md active:scale-[0.99]"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#173A2F] px-7 text-sm font-bold text-white shadow-[0_8px_30px_rgba(23,58,47,0.055)] transition hover:bg-[#285744] hover:shadow-md active:scale-[0.99]"
               >
                 <Plus size={18} />
                 Tambah Barang
@@ -1027,16 +1033,16 @@ export default function BarangKeluarPage() {
             CART
         ===================================================== */}
 
-        <section className="overflow-hidden rounded-2xl border border-[#DCE7E2] bg-white shadow-sm">
-          <div className="border-b border-[#E5ECE9] px-5 py-5 md:px-6">
+        <section className="overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white/95 shadow-[0_8px_30px_rgba(23,58,47,0.055)] backdrop-blur-[2px]">
+          <div className="border-b border-[#E7E3DB] px-5 py-5 md:px-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#18352D] text-white">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#173A2F] text-white">
                   <ShoppingCart size={18} />
                 </div>
 
                 <div>
-                  <h2 className="text-sm font-bold text-[#18352D]">
+                  <h2 className="text-sm font-bold text-[#173A2F]">
                     Daftar Barang Keluar
                   </h2>
 
@@ -1047,11 +1053,11 @@ export default function BarangKeluarPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="rounded-full border border-[#DCE7E2] bg-[#FAFCFB] px-3 py-1.5 text-[11px] font-semibold text-gray-500">
+                <div className="rounded-full border border-[#DED5C3] bg-[#F8F3E8] px-3 py-1.5 text-[11px] font-semibold text-[#756A55]">
                   {formatNumber(totalQty)} Qty
                 </div>
 
-                <div className="rounded-full bg-[#EAF3EF] px-3 py-1.5 text-[11px] font-bold text-[#497F70]">
+                <div className="rounded-full bg-[#EEF1EA] px-3 py-1.5 text-[11px] font-bold text-[#5F8A72]">
                   {cart.length} Item
                 </div>
               </div>
@@ -1060,29 +1066,29 @@ export default function BarangKeluarPage() {
 
           <div className="overflow-x-auto">
             <table className="min-w-[900px] w-full text-sm">
-              <thead className="bg-[#F7F9F8]">
-                <tr className="border-b border-[#E5ECE9]">
-                  <th className="px-6 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-[#5C746B]">
+              <thead className="bg-[#F6F4EF]">
+                <tr className="border-b border-[#E7E3DB]">
+                  <th className="px-6 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-[#657167]">
                     Barang
                   </th>
 
-                  <th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-[#5C746B]">
+                  <th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-[#657167]">
                     Stock
                   </th>
 
-                  <th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-[#5C746B]">
+                  <th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-[#657167]">
                     Qty
                   </th>
 
-                  <th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-[#5C746B]">
+                  <th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-[#657167]">
                     Harga
                   </th>
 
-                  <th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-[#5C746B]">
+                  <th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-[#657167]">
                     Total
                   </th>
 
-                  <th className="px-6 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-[#5C746B]">
+                  <th className="px-6 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-[#657167]">
                     Aksi
                   </th>
                 </tr>
@@ -1093,11 +1099,11 @@ export default function BarangKeluarPage() {
                   <tr>
                     <td colSpan={6} className="px-6 py-16 text-center">
                       <div className="mx-auto flex max-w-sm flex-col items-center">
-                        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EAF3EF] text-[#497F70]">
+                        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EEF1EA] text-[#5F8A72]">
                           <ShoppingCart size={27} />
                         </div>
 
-                        <p className="text-sm font-bold text-[#18352D]">
+                        <p className="text-sm font-bold text-[#173A2F]">
                           Keranjang masih kosong
                         </p>
 
@@ -1112,16 +1118,16 @@ export default function BarangKeluarPage() {
                   cart.map((item, index) => (
                     <tr
                       key={`${item.barangId}-${index}`}
-                      className="group border-b border-[#EDF2EF] transition hover:bg-[#FBFDFC]"
+                      className="group border-b border-[#EEEAE2] transition hover:bg-[#FCFAF6]"
                     >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F2F6F4] text-[#497F70]">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F1EFE9] text-[#5F8A72]">
                             <PackageMinus size={17} />
                           </div>
 
                           <div className="min-w-0">
-                            <p className="truncate font-bold text-[#18352D]">
+                            <p className="truncate font-bold text-[#173A2F]">
                               {item.name}
                             </p>
 
@@ -1144,13 +1150,13 @@ export default function BarangKeluarPage() {
                       </td>
 
                       <td className="px-5 py-4 text-center">
-                        <span className="inline-flex min-w-[64px] justify-center rounded-lg bg-[#EAF3EF] px-3 py-1.5 text-xs font-bold text-[#497F70]">
+                        <span className="inline-flex min-w-[64px] justify-center rounded-lg bg-[#EEF1EA] px-3 py-1.5 text-xs font-bold text-[#5F8A72]">
                           {formatNumber(item.stock)}
                         </span>
                       </td>
 
                       <td className="px-5 py-4 text-center">
-                        <span className="inline-flex min-w-[50px] justify-center rounded-lg bg-[#F4F7F5] px-3 py-1.5 text-xs font-bold text-[#18352D]">
+                        <span className="inline-flex min-w-[50px] justify-center rounded-lg bg-[#F3F7F4] px-3 py-1.5 text-xs font-bold text-[#173A2F]">
                           {formatNumber(item.qty)}
                         </span>
                       </td>
@@ -1160,7 +1166,7 @@ export default function BarangKeluarPage() {
                       </td>
 
                       <td className="whitespace-nowrap px-5 py-4 text-right">
-                        <p className="text-sm font-bold text-[#18352D]">
+                        <p className="text-sm font-bold text-[#173A2F]">
                           Rp {formatNumber(item.subtotal)}
                         </p>
                       </td>
@@ -1188,14 +1194,14 @@ export default function BarangKeluarPage() {
         ===================================================== */}
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
-          <div className="rounded-2xl border border-[#DCE7E2] bg-white p-5 shadow-sm md:p-6">
+          <div className="rounded-[22px] border border-[#DDE8E1] bg-white p-5 shadow-[0_8px_30px_rgba(23,58,47,0.055)] md:p-6">
             <div className="mb-5 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72]">
                 <ReceiptText size={19} />
               </div>
 
               <div>
-                <h2 className="text-sm font-bold text-[#18352D]">
+                <h2 className="text-sm font-bold text-[#173A2F]">
                   Ringkasan Transaksi
                 </h2>
 
@@ -1206,16 +1212,16 @@ export default function BarangKeluarPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border border-[#E5ECE9] bg-[#F8FAF9] p-5">
+              <div className="rounded-[22px] border border-[#E7E3DB] bg-[#F7F5F0] p-5">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                     Total Jenis Barang
                   </p>
 
-                  <Boxes size={17} className="text-[#497F70]" />
+                  <Boxes size={17} className="text-[#5F8A72]" />
                 </div>
 
-                <p className="mt-3 text-3xl font-bold tracking-tight text-[#18352D]">
+                <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-[#173A2F]">
                   {formatNumber(cart.length)}
                 </p>
 
@@ -1224,16 +1230,16 @@ export default function BarangKeluarPage() {
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-[#E5ECE9] bg-[#F8FAF9] p-5">
+              <div className="rounded-[22px] border border-[#E7E3DB] bg-[#F7F5F0] p-5">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                     Total Quantity
                   </p>
 
-                  <PackageMinus size={17} className="text-[#497F70]" />
+                  <PackageMinus size={17} className="text-[#5F8A72]" />
                 </div>
 
-                <p className="mt-3 text-3xl font-bold tracking-tight text-[#18352D]">
+                <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-[#173A2F]">
                   {formatNumber(totalQty)}
                 </p>
 
@@ -1244,9 +1250,9 @@ export default function BarangKeluarPage() {
             </div>
           </div>
 
-          <div className="relative overflow-hidden rounded-2xl bg-[#18352D] p-6 text-white shadow-xl shadow-[#18352D]/10">
+          <div className="relative overflow-hidden rounded-[22px] bg-[#173A2F] p-6 text-white shadow-[0_18px_45px_rgba(28,40,34,0.16)]">
             <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-white/5" />
-            <div className="absolute -bottom-20 -left-16 h-44 w-44 rounded-full bg-[#497F70]/20" />
+            <div className="absolute -bottom-20 -left-16 h-44 w-44 rounded-full bg-[#5F8A72]/20" />
 
             <div className="relative">
               <div className="mb-6 flex items-center justify-between">
@@ -1255,13 +1261,13 @@ export default function BarangKeluarPage() {
                     Grand Total
                   </p>
 
-                  <p className="mt-2 text-3xl font-bold tracking-tight">
+                  <p className="mt-2 text-3xl font-semibold tracking-[-0.03em]">
                     Rp {formatNumber(totalNominal)}
                   </p>
                 </div>
 
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10">
-                  <Warehouse size={20} className="text-[#B9D8CD]" />
+                <div className="flex h-11 w-11 items-center justify-center rounded-[22px] bg-white/10">
+                  <Warehouse size={20} className="text-[#C9D2C5]" />
                 </div>
               </div>
 
@@ -1284,7 +1290,7 @@ export default function BarangKeluarPage() {
 
                 <div className="flex items-center justify-between">
                   <span className="text-white/50">Status</span>
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 font-semibold text-[#CFE5DD]">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 font-semibold text-[#D8DFD3]">
                     <span className="h-1.5 w-1.5 rounded-full bg-[#8BC4B2]" />
                     Draft
                   </span>
@@ -1295,7 +1301,7 @@ export default function BarangKeluarPage() {
                 type="button"
                 onClick={simpan}
                 disabled={saving || cart.length === 0}
-                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3.5 text-sm font-bold text-[#18352D] shadow-sm transition hover:bg-[#F1F6F3] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40"
+                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#D8C9A8] bg-[#E8F1EB] px-5 py-3.5 text-sm font-bold text-[#254D3D] shadow-[0_8px_24px_rgba(82,70,45,0.10)] transition hover:border-[#BBAA86] hover:bg-[#DCEAE1] hover:shadow-[0_12px_28px_rgba(82,70,45,0.14)] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {saving ? (
                   <>
@@ -1323,17 +1329,17 @@ export default function BarangKeluarPage() {
       ===================================================== */}
 
       {scanBarang && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#071A15]/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[#DCE7E2] bg-white shadow-2xl">
-            <div className="border-b border-[#E5ECE9] px-5 py-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#141B17]/65 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white shadow-2xl">
+            <div className="border-b border-[#E7E3DB] px-5 py-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72]">
                     <ScanLine size={19} />
                   </div>
 
                   <div>
-                    <p className="text-sm font-bold text-[#18352D]">
+                    <p className="text-sm font-bold text-[#173A2F]">
                       Barang Ditemukan
                     </p>
 
@@ -1354,12 +1360,12 @@ export default function BarangKeluarPage() {
             </div>
 
             <div className="p-5">
-              <div className="overflow-hidden rounded-2xl border border-[#E2ECE7]">
-                <div className="border-b border-[#E8EFEC] bg-[#F7FAF8] px-4 py-3">
+              <div className="overflow-hidden rounded-[22px] border border-[#E5E1D8]">
+                <div className="border-b border-[#ECE8E0] bg-[#F5F4F0] px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <PackageMinus size={15} className="text-[#497F70]" />
+                    <PackageMinus size={15} className="text-[#5F8A72]" />
 
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#497F70]">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#5F8A72]">
                       Detail Barang
                     </span>
                   </div>
@@ -1369,7 +1375,7 @@ export default function BarangKeluarPage() {
                   <div className="flex justify-between gap-4 px-4 py-3.5">
                     <span className="text-xs text-gray-400">Kode</span>
 
-                    <span className="text-right text-xs font-bold text-[#18352D]">
+                    <span className="text-right text-xs font-bold text-[#173A2F]">
                       {scanBarang.code || "-"}
                     </span>
                   </div>
@@ -1385,7 +1391,7 @@ export default function BarangKeluarPage() {
                   <div className="flex justify-between gap-4 px-4 py-3.5">
                     <span className="text-xs text-gray-400">Nama</span>
 
-                    <span className="max-w-[230px] text-right text-xs font-bold text-[#18352D]">
+                    <span className="max-w-[230px] text-right text-xs font-bold text-[#173A2F]">
                       {scanBarang.name || "-"}
                     </span>
                   </div>
@@ -1393,7 +1399,7 @@ export default function BarangKeluarPage() {
                   <div className="flex justify-between gap-4 px-4 py-3.5">
                     <span className="text-xs text-gray-400">Stock Tersedia</span>
 
-                    <span className="text-right text-xs font-bold text-[#497F70]">
+                    <span className="text-right text-xs font-bold text-[#5F8A72]">
                       {formatNumber(scanBarang.stock)}{" "}
                       {scanBarang.unit}
                     </span>
@@ -1402,14 +1408,14 @@ export default function BarangKeluarPage() {
               </div>
 
               <div className="mt-5">
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#35564C]">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A]">
                   Qty Keluar
                 </label>
 
                 <input
                   type="number"
                   min="1"
-                  className="h-12 w-full rounded-xl border border-[#D5E2DD] bg-[#FAFCFB] px-4 text-sm font-semibold outline-none transition focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                  className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] px-4 text-sm font-semibold outline-none transition focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
                   value={scanQty}
                   onChange={(e) => setScanQty(e.target.value)}
                 />
@@ -1419,7 +1425,7 @@ export default function BarangKeluarPage() {
                 <button
                   type="button"
                   onClick={() => setScanBarang(null)}
-                  className="rounded-xl border border-[#D5E2DD] bg-white px-4 py-3 text-sm font-bold text-gray-600 transition hover:bg-[#F5F8F6]"
+                  className="rounded-xl border border-[#DDD8CE] bg-white px-4 py-3 text-sm font-bold text-gray-600 transition hover:bg-[#F3F1EB]"
                 >
                   Batal
                 </button>
@@ -1427,7 +1433,7 @@ export default function BarangKeluarPage() {
                 <button
                   type="button"
                   onClick={tambahDariScan}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#497F70] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#3D6D60]"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#5F8A72] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#285744]"
                 >
                   <Plus size={17} />
                   Tambahkan

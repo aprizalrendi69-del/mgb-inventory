@@ -13,6 +13,26 @@ const fail = (message: string, status = 400) =>
     { status }
   );
 
+const POS_ROLES = [
+  "ADMIN",
+  "MANAGER",
+  "OUTLET_ADMIN",
+  "KASIR",
+] as const;
+
+const PAYMENT_METHODS = [
+  "CASH",
+  "TRANSFER",
+  "TRANSFER_FINANCE",
+  "TRANSFER_CREDIT_CARD",
+  "TRANSFER_PETTY_CASH_CENTER",
+  "COD",
+  "CBD",
+  "TEMPO",
+] as const;
+
+type PosPaymentMethod = (typeof PAYMENT_METHODS)[number];
+
 async function getUser() {
   const cookieStore = await cookies();
 
@@ -39,7 +59,10 @@ async function getUser() {
       },
     });
 
-    if (dbSession && dbSession.expiresAt > new Date()) {
+    if (
+      dbSession &&
+      dbSession.expiresAt > new Date()
+    ) {
       userId = dbSession.user.id;
     }
   } catch {
@@ -85,6 +108,12 @@ function roleOf(user: { role: unknown }) {
   return String(user.role).toUpperCase();
 }
 
+function isPosRole(role: string) {
+  return POS_ROLES.includes(
+    role as (typeof POS_ROLES)[number]
+  );
+}
+
 function resolveOutletId(
   user: {
     role: unknown;
@@ -95,17 +124,8 @@ function resolveOutletId(
   const role = roleOf(user);
 
   /*
-   * ==========================================================
-   * USER YANG TERIKAT KE OUTLET
-   * ==========================================================
-   *
-   * OUTLET_ADMIN:
-   * selalu memakai outlet dari session.
-   *
-   * KASIR:
-   * selalu memakai outlet dari session.
-   *
-   * Requested outlet dari browser TIDAK dipercaya.
+   * OUTLET_ADMIN dan KASIR selalu terkunci
+   * ke outlet dari session.
    */
   if (
     role === "OUTLET_ADMIN" ||
@@ -115,13 +135,15 @@ function resolveOutletId(
   }
 
   /*
-   * ==========================================================
-   * ADMIN / MANAGER
-   * ==========================================================
-   *
-   * Boleh memilih outlet melalui request.
+   * ADMIN / MANAGER boleh memilih outlet.
    */
-  return Number(requestedOutletId || 0);
+  const parsed = Number(
+    requestedOutletId || 0
+  );
+
+  return Number.isInteger(parsed) && parsed > 0
+    ? parsed
+    : 0;
 }
 
 function normalizeText(value: unknown) {
@@ -130,25 +152,29 @@ function normalizeText(value: unknown) {
     .toUpperCase();
 }
 
-function isAyceAddOn(menu: {
-  category?: string | null;
-  name?: string | null;
-}, explicitAddOnIds: Set<number>) {
-  if (explicitAddOnIds.has(Number((menu as any).id))) {
+function isAyceAddOn(
+  menu: {
+    id?: number;
+    category?: string | null;
+    name?: string | null;
+  },
+  explicitAddOnIds: Set<number>
+) {
+  if (
+    menu.id &&
+    explicitAddOnIds.has(Number(menu.id))
+  ) {
     return true;
   }
 
-  const category = normalizeText(menu.category);
-  const name = normalizeText(menu.name);
+  const category = normalizeText(
+    menu.category
+  );
 
-  /*
-   * AYCE default:
-   * - FOOD / SIDE / SOUP = termasuk paket
-   * - DRINK / DESSERT = add-on berbayar
-   *
-   * Jika frontend mengirim addOnMenuIds, daftar tersebut
-   * menjadi sumber tambahan untuk item berbayar.
-   */
+  const name = normalizeText(
+    menu.name
+  );
+
   if (
     category === "DRINK" ||
     category === "DESSERT"
@@ -210,7 +236,10 @@ type AyceInput = {
 function parseAyce(body: any) {
   const raw = body?.ayce;
 
-  if (!raw || typeof raw !== "object") {
+  if (
+    !raw ||
+    typeof raw !== "object"
+  ) {
     return {
       enabled: false,
       sessionId: null as string | null,
@@ -229,19 +258,29 @@ function parseAyce(body: any) {
   const enabled =
     raw.enabled === true ||
     raw.enabled === 1 ||
-    String(raw.enabled).toLowerCase() === "true";
+    String(raw.enabled).toLowerCase() ===
+      "true";
 
-  const pax = Number(raw.pax || 0);
+  const pax = Number(
+    raw.pax || 0
+  );
+
   const packagePrice = Number(
     raw.packagePrice || 0
   );
+
   const durationMinutes = Number(
     raw.durationMinutes || 0
   );
 
-  const addOnMenuIds = new Set<number>();
+  const addOnMenuIds =
+    new Set<number>();
 
-  if (Array.isArray(raw.addOnMenuIds)) {
+  if (
+    Array.isArray(
+      raw.addOnMenuIds
+    )
+  ) {
     for (const id of raw.addOnMenuIds) {
       const parsed = Number(id);
 
@@ -256,23 +295,41 @@ function parseAyce(body: any) {
 
   return {
     enabled,
+
     sessionId:
-      String(raw.sessionId || "").trim() ||
-      null,
+      String(
+        raw.sessionId || ""
+      ).trim() || null,
+
     tableName:
-      String(raw.tableName || "").trim() ||
-      null,
+      String(
+        raw.tableName || ""
+      ).trim() || null,
+
     pax,
+
     packageKey:
-      String(raw.packageKey || "").trim() ||
-      null,
+      String(
+        raw.packageKey || ""
+      ).trim() || null,
+
     packageName:
-      String(raw.packageName || "").trim() ||
-      null,
+      String(
+        raw.packageName || ""
+      ).trim() || null,
+
     packagePrice,
+
     durationMinutes,
-    startedAt: parseIsoDate(raw.startedAt),
-    expiresAt: parseIsoDate(raw.expiresAt),
+
+    startedAt: parseIsoDate(
+      raw.startedAt
+    ),
+
+    expiresAt: parseIsoDate(
+      raw.expiresAt
+    ),
+
     addOnMenuIds,
   };
 }
@@ -282,39 +339,42 @@ function parseAyce(body: any) {
  * GET POS
  * ============================================================
  *
- * Initial request:
+ * Optimasi utama:
  *
- *   GET /api/outlet/pos
+ * SEBELUM:
  *
- * OUTLET_ADMIN:
- * -> otomatis menggunakan outlet dari session.
+ *   menu
+ *      -> BOM item
+ *          -> outletStock.findUnique()
+ *          -> outletStock.findUnique()
+ *          -> outletStock.findUnique()
  *
- * KASIR:
- * -> otomatis menggunakan outlet dari session.
- * -> TIDAK BOLEH memilih outlet lain.
+ * SEKARANG:
  *
- * ADMIN / MANAGER:
- * -> menggunakan outlet dari request.
- * -> jika belum ada, gunakan outlet aktif pertama.
+ *   1. Ambil semua menu + BOM
+ *   2. Kumpulkan semua barangId BOM
+ *   3. Ambil seluruh OutletStock dengan 1 query
+ *   4. Buat Map barangId -> stock
+ *   5. Hitung stock menu dari memory
+ *
+ * Selain itu menu dan sales dijalankan paralel.
  */
-export async function GET(req: NextRequest) {
+export async function GET(
+  req: NextRequest
+) {
   try {
     const user = await getUser();
 
     if (!user) {
-      return fail("Tidak login.", 401);
+      return fail(
+        "Tidak login.",
+        401
+      );
     }
 
     const role = roleOf(user);
 
-    if (
-      ![
-        "ADMIN",
-        "MANAGER",
-        "OUTLET_ADMIN",
-        "KASIR",
-      ].includes(role)
-    ) {
+    if (!isPosRole(role)) {
       return fail(
         "Tidak memiliki akses POS Outlet.",
         403
@@ -329,6 +389,9 @@ export async function GET(req: NextRequest) {
     const requestedOutletId =
       Number(requestedRaw || 0);
 
+    /*
+     * Ambil outlet aktif satu kali.
+     */
     const outletRows =
       await prisma.outlet.findMany({
         where: {
@@ -344,6 +407,10 @@ export async function GET(req: NextRequest) {
         },
       });
 
+    /*
+     * OUTLET_ADMIN / KASIR hanya boleh melihat
+     * outlet miliknya.
+     */
     const outlets =
       role === "OUTLET_ADMIN" ||
       role === "KASIR"
@@ -354,11 +421,17 @@ export async function GET(req: NextRequest) {
           )
         : outletRows;
 
-    let outletId = resolveOutletId(
-      user,
-      requestedOutletId
-    );
+    let outletId =
+      resolveOutletId(
+        user,
+        requestedOutletId
+      );
 
+    /*
+     * ADMIN / MANAGER:
+     * jika belum memilih outlet,
+     * gunakan outlet aktif pertama.
+     */
     if (
       role !== "OUTLET_ADMIN" &&
       role !== "KASIR" &&
@@ -368,6 +441,9 @@ export async function GET(req: NextRequest) {
         outlets[0]?.id || 0;
     }
 
+    /*
+     * User yang terikat outlet harus mempunyai outlet.
+     */
     if (
       (
         role === "OUTLET_ADMIN" ||
@@ -383,6 +459,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    /*
+     * Tidak ada outlet aktif.
+     */
     if (!outletId) {
       return NextResponse.json({
         success: true,
@@ -403,6 +482,10 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    /*
+     * OUTLET_ADMIN / KASIR tidak boleh memanipulasi
+     * outletId melalui browser.
+     */
     if (
       (
         role === "OUTLET_ADMIN" ||
@@ -417,6 +500,10 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    /*
+     * Untuk ADMIN / MANAGER, outletId wajib
+     * berasal dari outlet aktif yang benar-benar ada.
+     */
     const selectedOutlet =
       outlets.find(
         (outlet) =>
@@ -426,52 +513,66 @@ export async function GET(req: NextRequest) {
 
     if (!selectedOutlet) {
       return fail(
-        "Outlet tidak ditemukan.",
+        "Outlet tidak ditemukan atau tidak aktif.",
         404
       );
     }
 
-    const outlet =
-      await prisma.outlet.findUnique({
+    /*
+     * Tidak perlu findUnique outlet kedua.
+     * selectedOutlet sudah berasal dari query outlet aktif.
+     */
+    const outlet = {
+      ...selectedOutlet,
+      active: true,
+    };
+
+    /*
+     * ========================================================
+     * MENU + SALES PARALEL
+     * ========================================================
+     */
+    const [
+      menuRows,
+      sales,
+    ] = await Promise.all([
+      prisma.menu.findMany({
         where: {
-          id: outletId,
+          active: true,
         },
         select: {
           id: true,
           code: true,
           name: true,
-          active: true,
-        },
-      });
+          description: true,
+          category: true,
+          price: true,
+          image: true,
 
-    if (!outlet) {
-      return fail(
-        "Outlet tidak ditemukan.",
-        404
-      );
-    }
-
-    if (!outlet.active) {
-      return fail(
-        "Outlet sedang tidak aktif.",
-        400
-      );
-    }
-
-    const menuRows =
-      await prisma.menu.findMany({
-        where: {
-          active: true,
-        },
-        include: {
           recipes: {
             where: {
               active: true,
             },
-            include: {
+            select: {
+              id: true,
+
               items: {
-                include: {
-                  barang: true,
+                select: {
+                  barangId: true,
+                  qty: true,
+                  unit: true,
+
+                  barang: {
+                    select: {
+                      id: true,
+                      name: true,
+                      unit: true,
+                      baseUnit: true,
+                      conversionRate: true,
+                      purchasePrice: true,
+                      active: true,
+                    },
+                  },
                 },
               },
             },
@@ -483,140 +584,9 @@ export async function GET(req: NextRequest) {
         orderBy: {
           id: "asc",
         },
-      });
+      }),
 
-    const menuItems = [];
-
-    for (const menu of menuRows) {
-      const recipe =
-        menu.recipes[0];
-
-      const bomReady =
-        Boolean(
-          recipe &&
-            recipe.items &&
-            recipe.items.length > 0
-        );
-
-      let menuStock = 0;
-
-      if (bomReady) {
-        let possibleQty =
-          Number.POSITIVE_INFINITY;
-
-        for (
-          const recipeItem of
-            recipe.items
-        ) {
-          const recipeQty =
-            Number(
-              recipeItem.qty || 0
-            );
-
-          if (
-            !Number.isFinite(
-              recipeQty
-            ) ||
-            recipeQty <= 0
-          ) {
-            possibleQty = 0;
-            break;
-          }
-
-          const stock =
-            await prisma.outletStock.findUnique(
-              {
-                where: {
-                  outletId_barangId: {
-                    outletId,
-                    barangId:
-                      recipeItem.barangId,
-                  },
-                },
-                select: {
-                  stock: true,
-                },
-              }
-            );
-
-          if (!stock) {
-            possibleQty = 0;
-            break;
-          }
-
-          const requiredBase =
-            toBaseQty(
-              recipeQty,
-              recipeItem.unit,
-              recipeItem.barang
-            );
-
-          if (
-            !Number.isFinite(
-              requiredBase
-            ) ||
-            requiredBase <= 0
-          ) {
-            possibleQty = 0;
-            break;
-          }
-
-          const availableBase =
-            toBaseQty(
-              Number(
-                stock.stock || 0
-              ),
-              recipeItem.barang.unit,
-              recipeItem.barang
-            );
-
-          const possible =
-            availableBase /
-            requiredBase;
-
-          possibleQty =
-            Math.min(
-              possibleQty,
-              possible
-            );
-        }
-
-        menuStock =
-          Number.isFinite(
-            possibleQty
-          )
-            ? Math.max(
-                0,
-                Math.floor(
-                  possibleQty
-                )
-              )
-            : 0;
-      }
-
-      menuItems.push({
-        id: menu.id,
-        menuId: menu.id,
-        code: menu.code,
-        name: menu.name,
-        description:
-          menu.description ?? null,
-        category:
-          menu.category || "",
-        price: Number(
-          menu.price || 0
-        ),
-        image:
-          menu.image ?? null,
-        stock: menuStock,
-        bomReady,
-        recipeId:
-          recipe?.id ?? null,
-      });
-    }
-
-    const sales =
-      await prisma.outletSale.findMany({
+      prisma.outletSale.findMany({
         where: {
           outletId,
         },
@@ -640,11 +610,248 @@ export async function GET(req: NextRequest) {
           saleDate: "desc",
         },
         take: 100,
+      }),
+    ]);
+
+    /*
+     * ========================================================
+     * KUMPULKAN SEMUA BARANG BOM
+     * ========================================================
+     */
+    const bomBarangIds =
+      new Set<number>();
+
+    for (const menu of menuRows) {
+      const recipe =
+        menu.recipes[0];
+
+      if (!recipe) continue;
+
+      for (
+        const recipeItem of
+          recipe.items
+      ) {
+        bomBarangIds.add(
+          Number(
+            recipeItem.barangId
+          )
+        );
+      }
+    }
+
+    /*
+     * ========================================================
+     * AMBIL SEMUA OUTLET STOCK SEKALI
+     * ========================================================
+     *
+     * SEBELUM:
+     *
+     * outletStock.findUnique()
+     * outletStock.findUnique()
+     * outletStock.findUnique()
+     * ...
+     *
+     * SEKARANG:
+     *
+     * SATU QUERY.
+     */
+    const outletStocks =
+      bomBarangIds.size
+        ? await prisma.outletStock.findMany({
+            where: {
+              outletId,
+              barangId: {
+                in: [
+                  ...bomBarangIds,
+                ],
+              },
+            },
+            select: {
+              barangId: true,
+              stock: true,
+            },
+          })
+        : [];
+
+    /*
+     * Map supaya lookup O(1) di memory.
+     */
+    const stockMap =
+      new Map<
+        number,
+        number
+      >();
+
+    for (
+      const stock of outletStocks
+    ) {
+      stockMap.set(
+        Number(stock.barangId),
+        Number(
+          stock.stock || 0
+        )
+      );
+    }
+
+    /*
+     * ========================================================
+     * HITUNG STOCK MENU
+     * ========================================================
+     */
+    const menuItems =
+      menuRows.map((menu) => {
+        const recipe =
+          menu.recipes[0];
+
+        const bomReady =
+          Boolean(
+            recipe &&
+              recipe.items &&
+              recipe.items.length > 0
+          );
+
+        let menuStock = 0;
+
+        if (bomReady) {
+          let possibleQty =
+            Number.POSITIVE_INFINITY;
+
+          for (
+            const recipeItem of
+              recipe.items
+          ) {
+            const recipeQty =
+              Number(
+                recipeItem.qty || 0
+              );
+
+            if (
+              !Number.isFinite(
+                recipeQty
+              ) ||
+              recipeQty <= 0
+            ) {
+              possibleQty = 0;
+              break;
+            }
+
+            /*
+             * Stock sudah berada di Map.
+             * Tidak ada query DB di dalam loop.
+             */
+            const stockValue =
+              stockMap.get(
+                Number(
+                  recipeItem.barangId
+                )
+              );
+
+            if (
+              stockValue === undefined
+            ) {
+              possibleQty = 0;
+              break;
+            }
+
+            const barang =
+              recipeItem.barang;
+
+            if (
+              !barang ||
+              !barang.active
+            ) {
+              possibleQty = 0;
+              break;
+            }
+
+            const requiredBase =
+              toBaseQty(
+                recipeQty,
+                recipeItem.unit,
+                barang
+              );
+
+            if (
+              !Number.isFinite(
+                requiredBase
+              ) ||
+              requiredBase <= 0
+            ) {
+              possibleQty = 0;
+              break;
+            }
+
+            /*
+             * OutletStock.stock adalah stock unit.
+             * Konversi ke base unit sebelum dibandingkan
+             * dengan kebutuhan BOM.
+             */
+            const availableBase =
+              toBaseQty(
+                stockValue,
+                barang.unit,
+                barang
+              );
+
+            if (
+              !Number.isFinite(
+                availableBase
+              )
+            ) {
+              possibleQty = 0;
+              break;
+            }
+
+            const possible =
+              availableBase /
+              requiredBase;
+
+            possibleQty =
+              Math.min(
+                possibleQty,
+                possible
+              );
+          }
+
+          menuStock =
+            Number.isFinite(
+              possibleQty
+            )
+              ? Math.max(
+                  0,
+                  Math.floor(
+                    possibleQty
+                  )
+                )
+              : 0;
+        }
+
+        return {
+          id: menu.id,
+          menuId: menu.id,
+          code: menu.code,
+          name: menu.name,
+          description:
+            menu.description ??
+            null,
+          category:
+            menu.category || "",
+          price: Number(
+            menu.price || 0
+          ),
+          image:
+            menu.image ?? null,
+          stock: menuStock,
+          bomReady,
+          recipeId:
+            recipe?.id ?? null,
+        };
       });
 
     return NextResponse.json({
       success: true,
       role,
+
       cashier: {
         id: user.id,
         fullname:
@@ -652,11 +859,17 @@ export async function GET(req: NextRequest) {
         username:
           user.username || null,
       },
+
       outlets,
+
       currentOutlet: outlet,
+
       menus: menuItems,
+
       sales,
+
       data: sales,
+
       outlet,
     });
   } catch (error: any) {
@@ -677,28 +890,10 @@ export async function GET(req: NextRequest) {
  * ============================================================
  * CREATE POS
  * ============================================================
- *
- * Normal POS:
- *   Menu -> BOM -> OutletStock -> StockCard
- *
- * AYCE:
- *   Meja -> Session -> Pax -> Paket -> Timer
- *   -> Order -> Consumption -> Payment
- *
- * Catatan penting:
- * - AYCE TIDAK membuat stock menjadi 0-price/free.
- * - Harga paket menjadi nilai transaksi.
- * - Semua menu AYCE tetap menjalankan BOM consumption.
- * - Drink / Dessert dianggap add-on berbayar secara default.
- * - addOnMenuIds dapat dikirim frontend jika ada item lain
- *   yang harus dianggap add-on.
- *
- * Schema saat ini belum memiliki tabel AyceSession/
- * AyceConsumption. Karena itu metadata session disimpan
- * di History, sementara konsumsi stock tetap menggunakan
- * OutletStock + StockCard dalam transaksi database yang sama.
  */
-export async function POST(req: NextRequest) {
+export async function POST(
+  req: NextRequest
+) {
   try {
     const user = await getUser();
 
@@ -711,14 +906,7 @@ export async function POST(req: NextRequest) {
 
     const role = roleOf(user);
 
-    if (
-      ![
-        "ADMIN",
-        "MANAGER",
-        "OUTLET_ADMIN",
-        "KASIR",
-      ].includes(role)
-    ) {
+    if (!isPosRole(role)) {
       return fail(
         "Tidak memiliki akses POS Outlet.",
         403
@@ -744,6 +932,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    /*
+     * OUTLET_ADMIN / KASIR terkunci ke session outlet.
+     */
     if (
       (
         role === "OUTLET_ADMIN" ||
@@ -763,7 +954,17 @@ export async function POST(req: NextRequest) {
         body?.customerName || ""
       ).trim() || null;
 
-    const paymentMethod =
+    /*
+     * ========================================================
+     * PAYMENT METHOD
+     * ========================================================
+     *
+     * Mengikuti enum terbaru.
+     *
+     * QRIS / CARD / DEBIT / CREDIT
+     * tidak lagi diterima.
+     */
+    const paymentMethodRaw =
       String(
         body?.paymentMethod ||
           "CASH"
@@ -771,24 +972,18 @@ export async function POST(req: NextRequest) {
         .trim()
         .toUpperCase();
 
-    const allowedPaymentMethods = [
-      "CASH",
-      "TRANSFER",
-      "QRIS",
-      "CARD",
-      "DEBIT",
-      "CREDIT",
-    ];
-
     if (
-      !allowedPaymentMethods.includes(
-        paymentMethod
+      !PAYMENT_METHODS.includes(
+        paymentMethodRaw as PosPaymentMethod
       )
     ) {
       return fail(
-        `Metode pembayaran tidak valid: ${paymentMethod}`
+        `Metode pembayaran tidak valid: ${paymentMethodRaw}`
       );
     }
+
+    const paymentMethod =
+      paymentMethodRaw as PosPaymentMethod;
 
     const discount =
       Math.max(
@@ -819,11 +1014,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const ayce = parseAyce(body);
+    const ayce =
+      parseAyce(body);
 
     /*
      * ========================================================
-     * VALIDASI SESSION AYCE
+     * VALIDASI AYCE
      * ========================================================
      */
     if (ayce.enabled) {
@@ -861,17 +1057,13 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      if (
-        !ayce.packageName
-      ) {
+      if (!ayce.packageName) {
         return fail(
           "Paket AYCE belum dipilih."
         );
       }
 
-      if (
-        !ayce.expiresAt
-      ) {
+      if (!ayce.expiresAt) {
         return fail(
           "Waktu berakhir session AYCE tidak valid."
         );
@@ -914,23 +1106,34 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    /*
+     * ========================================================
+     * DATABASE TRANSACTION
+     * ========================================================
+     */
     const result =
       await prisma.$transaction(
         async (tx) => {
+          /*
+           * ==================================================
+           * VALIDASI OUTLET DI DALAM TRANSACTION
+           * ==================================================
+           *
+           * Ini mencegah ADMIN/MANAGER mengirim outletId
+           * sembarang yang tidak ada / inactive.
+           */
           const outlet =
-            await tx.outlet.findUnique(
-              {
-                where: {
-                  id: outletId,
-                },
-                select: {
-                  id: true,
-                  code: true,
-                  name: true,
-                  active: true,
-                },
-              }
-            );
+            await tx.outlet.findUnique({
+              where: {
+                id: outletId,
+              },
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                active: true,
+              },
+            });
 
           if (!outlet) {
             throw new Error(
@@ -956,13 +1159,11 @@ export async function POST(req: NextRequest) {
             >();
 
           for (
-            const rawItem of
-              rawItems
+            const rawItem of rawItems
           ) {
             const menuId =
               Number(
-                rawItem?.menuId ||
-                  0
+                rawItem?.menuId || 0
               );
 
             const qty =
@@ -970,7 +1171,12 @@ export async function POST(req: NextRequest) {
                 rawItem?.qty || 0
               );
 
-            if (!menuId) {
+            if (
+              !Number.isInteger(
+                menuId
+              ) ||
+              menuId <= 0
+            ) {
               throw new Error(
                 "Menu tidak valid."
               );
@@ -989,43 +1195,72 @@ export async function POST(req: NextRequest) {
 
             menuQty.set(
               menuId,
-              (menuQty.get(
-                menuId
-              ) || 0) + qty
+              (
+                menuQty.get(
+                  menuId
+                ) || 0
+              ) + qty
             );
           }
 
           const menuIds =
             [...menuQty.keys()];
 
+          /*
+           * ==================================================
+           * AMBIL SEMUA MENU + BOM
+           * SATU QUERY
+           * ==================================================
+           */
           const menus =
-            await tx.menu.findMany(
-              {
-                where: {
-                  id: {
-                    in: menuIds,
-                  },
-                  active: true,
+            await tx.menu.findMany({
+              where: {
+                id: {
+                  in: menuIds,
                 },
-                include: {
-                  recipes: {
-                    where: {
-                      active: true,
-                    },
-                    include: {
-                      items: {
-                        include: {
-                          barang: true,
+                active: true,
+              },
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                price: true,
+
+                recipes: {
+                  where: {
+                    active: true,
+                  },
+                  select: {
+                    id: true,
+
+                    items: {
+                      select: {
+                        barangId: true,
+                        qty: true,
+                        unit: true,
+
+                        barang: {
+                          select: {
+                            id: true,
+                            name: true,
+                            unit: true,
+                            baseUnit: true,
+                            conversionRate:
+                              true,
+                            purchasePrice:
+                              true,
+                            active: true,
+                          },
                         },
                       },
                     },
-                    orderBy: {
-                      id: "asc",
-                    },
+                  },
+                  orderBy: {
+                    id: "asc",
                   },
                 },
-              }
-            );
+              },
+            });
 
           if (
             menus.length !==
@@ -1062,24 +1297,17 @@ export async function POST(req: NextRequest) {
               )
             );
 
+          /*
+           * ==================================================
+           * REQUIRED BOM
+           * ==================================================
+           */
           const required =
             new Map<
               number,
               RequiredBom
             >();
 
-          /*
-           * Untuk normal POS:
-           * subtotal = harga menu x qty.
-           *
-           * Untuk AYCE:
-           * subtotal = harga paket x pax + add-on.
-           *
-           * Paket dibuat sebagai sale item virtual
-           * (menuId/barangId null) agar OutletSaleItem tetap
-           * dapat merepresentasikan nilai paket tanpa
-           * mengubah tabel Prisma.
-           */
           let subtotal = 0;
 
           const saleItems: Array<{
@@ -1098,8 +1326,7 @@ export async function POST(req: NextRequest) {
            * ==================================================
            */
           for (
-            const menuId of
-              menuIds
+            const menuId of menuIds
           ) {
             const menu =
               menuMap.get(
@@ -1147,7 +1374,10 @@ export async function POST(req: NextRequest) {
                   : 0
                 : unitPrice * qty;
 
-            if (ayce.enabled && addon) {
+            if (
+              ayce.enabled &&
+              addon
+            ) {
               ayceAddOnSubtotal +=
                 itemSubtotal;
             }
@@ -1181,10 +1411,21 @@ export async function POST(req: NextRequest) {
               const recipeItem of
                 recipe.items
             ) {
+              const barang =
+                recipeItem.barang;
+
+              if (
+                !barang ||
+                !barang.active
+              ) {
+                throw new Error(
+                  `Barang BOM untuk menu "${menu.name}" tidak ditemukan atau tidak aktif.`
+                );
+              }
+
               const recipeQty =
                 Number(
-                  recipeItem.qty ||
-                    0
+                  recipeItem.qty || 0
                 );
 
               if (
@@ -1194,15 +1435,19 @@ export async function POST(req: NextRequest) {
                 recipeQty <= 0
               ) {
                 throw new Error(
-                  `Qty BOM ${recipeItem.barang.name} pada menu "${menu.name}" tidak valid.`
+                  `Qty BOM ${barang.name} pada menu "${menu.name}" tidak valid.`
                 );
               }
 
+              /*
+               * Selalu konversi kebutuhan BOM
+               * menjadi BASE UNIT.
+               */
               const qtyBasePerMenu =
                 toBaseQty(
                   recipeQty,
                   recipeItem.unit,
-                  recipeItem.barang
+                  barang
                 );
 
               if (
@@ -1212,7 +1457,7 @@ export async function POST(req: NextRequest) {
                 qtyBasePerMenu <= 0
               ) {
                 throw new Error(
-                  `Konversi BOM ${recipeItem.barang.name} pada menu "${menu.name}" tidak valid.`
+                  `Konversi BOM ${barang.name} pada menu "${menu.name}" tidak valid.`
                 );
               }
 
@@ -1227,14 +1472,12 @@ export async function POST(req: NextRequest) {
 
               const rate =
                 getConversionRate(
-                  recipeItem.barang
+                  barang
                 );
 
               const mainCost =
                 Number(
-                  recipeItem
-                    .barang
-                    .purchasePrice ||
+                  barang.purchasePrice ||
                     0
                 );
 
@@ -1247,22 +1490,17 @@ export async function POST(req: NextRequest) {
                 recipeItem.barangId,
                 {
                   qtyBase:
-                    (existing?.qtyBase ||
-                      0) +
-                    qtyBase,
+                    (
+                      existing?.qtyBase ||
+                      0
+                    ) + qtyBase,
 
                   barangName:
-                    recipeItem
-                      .barang
-                      .name,
+                    barang.name,
 
                   baseUnit:
-                    recipeItem
-                      .barang
-                      .baseUnit ||
-                    recipeItem
-                      .barang
-                      .unit ||
+                    barang.baseUnit ||
+                    barang.unit ||
                     "base",
 
                   unitCostBase:
@@ -1299,16 +1537,7 @@ export async function POST(req: NextRequest) {
               ayceAddOnSubtotal;
 
             /*
-             * Package charge disimpan sebagai
-             * OutletSaleItem virtual:
-             *
-             * menuId = null
-             * barangId = null
-             * qty = pax
-             * unitPrice = packagePrice
-             *
-             * Dengan demikian:
-             * subtotal sale == subtotal item.
+             * Virtual package item.
              */
             saleItems.unshift({
               menuId: null,
@@ -1399,8 +1628,14 @@ export async function POST(req: NextRequest) {
           }
 
           const cashLikeMethods =
-            new Set(["CASH"]);
+            new Set<
+              PosPaymentMethod
+            >(["CASH"]);
 
+          /*
+           * Semua metode selain CASH
+           * harus exact payment.
+           */
           if (
             !cashLikeMethods.has(
               paymentMethod
@@ -1427,13 +1662,79 @@ export async function POST(req: NextRequest) {
 
           /*
            * ==================================================
-           * VALIDASI STOCK SEBELUM PERUBAHAN
+           * AMBIL SEMUA OUTLET STOCK SEKALI
            * ==================================================
            *
-           * Ini berlaku baik POS normal maupun AYCE.
+           * Ini menggantikan:
            *
-           * AYCE Rp0 pada item bukan berarti BOM gratis.
-           * Semua BOM tetap mengurangi OutletStock.
+           * for (...) {
+           *   await outletStock.findUnique(...)
+           * }
+           */
+          const requiredBarangIds =
+            [
+              ...required.keys(),
+            ];
+
+          const outletStocks =
+            requiredBarangIds.length
+              ? await tx.outletStock.findMany(
+                  {
+                    where: {
+                      outletId,
+                      barangId: {
+                        in:
+                          requiredBarangIds,
+                      },
+                    },
+                    select: {
+                      barangId: true,
+                      stock: true,
+                      averageCost:
+                        true,
+                    },
+                  }
+                )
+              : [];
+
+          const outletStockMap =
+            new Map<
+              number,
+              {
+                stock: number;
+                averageCost: number;
+              }
+            >();
+
+          for (
+            const stock of
+              outletStocks
+          ) {
+            outletStockMap.set(
+              Number(
+                stock.barangId
+              ),
+              {
+                stock: Number(
+                  stock.stock || 0
+                ),
+                averageCost:
+                  Number(
+                    stock.averageCost ||
+                      0
+                  ),
+              }
+            );
+          }
+
+          /*
+           * ==================================================
+           * VALIDASI STOCK
+           * ==================================================
+           *
+           * Barang BOM sudah berasal dari query menu.
+           * Jadi tidak perlu barang.findUnique()
+           * lagi satu per satu.
            */
           for (
             const [
@@ -1442,20 +1743,8 @@ export async function POST(req: NextRequest) {
             ] of required
           ) {
             const stock =
-              await tx.outletStock.findUnique(
-                {
-                  where: {
-                    outletId_barangId: {
-                      outletId,
-                      barangId,
-                    },
-                  },
-                  select: {
-                    stock: true,
-                    averageCost:
-                      true,
-                  },
-                }
+              outletStockMap.get(
+                barangId
               );
 
             if (!stock) {
@@ -1464,20 +1753,38 @@ export async function POST(req: NextRequest) {
               );
             }
 
-            const barang =
-              await tx.barang.findUnique(
-                {
-                  where: {
-                    id: barangId,
-                  },
-                  select: {
-                    unit: true,
-                    baseUnit: true,
-                    conversionRate: true,
-                    active: true,
-                  },
-                }
+            const menuContainingBarang =
+              menus.find(
+                (menu) =>
+                  menu.recipes.some(
+                    (recipe) =>
+                      recipe.items.some(
+                        (item) =>
+                          Number(
+                            item.barangId
+                          ) ===
+                          Number(
+                            barangId
+                          )
+                      )
+                  )
               );
+
+            const barang =
+              menuContainingBarang?.recipes
+                .flatMap(
+                  (recipe) =>
+                    recipe.items
+                )
+                .find(
+                  (item) =>
+                    Number(
+                      item.barangId
+                    ) ===
+                    Number(
+                      barangId
+                    )
+                )?.barang;
 
             if (
               !barang ||
@@ -1490,9 +1797,7 @@ export async function POST(req: NextRequest) {
 
             const availableBase =
               toBaseQty(
-                Number(
-                  stock.stock || 0
-                ),
+                stock.stock,
                 barang.unit,
                 barang
               );
@@ -1519,10 +1824,13 @@ export async function POST(req: NextRequest) {
               );
             }
 
+            /*
+             * averageCost disimpan pada stock unit.
+             * Konversikan ke base cost untuk requirement.
+             */
             const averageCostMain =
               Number(
-                stock.averageCost ||
-                  0
+                stock.averageCost || 0
               );
 
             const rate =
@@ -1541,6 +1849,9 @@ export async function POST(req: NextRequest) {
           const now =
             new Date();
 
+          /*
+           * Nomor transaksi.
+           */
           const number =
             `POS-${outlet.code}-${now
               .toISOString()
@@ -1567,77 +1878,69 @@ export async function POST(req: NextRequest) {
            * ==================================================
            */
           const sale =
-            await tx.outletSale.create(
-              {
-                data: {
-                  number,
-                  outletId,
-                  userId:
-                    user.id,
-                  customerName,
-                  saleDate: now,
-                  subtotal,
-                  discount,
-                  total,
-                  paidAmount,
-                  changeAmount,
-                  paymentMethod,
-                  status: "PAID",
+            await tx.outletSale.create({
+              data: {
+                number,
+                outletId,
+                userId:
+                  user.id,
+                customerName,
+                saleDate: now,
+                subtotal,
+                discount,
+                total,
+                paidAmount,
+                changeAmount,
+                paymentMethod,
+                status: "PAID",
 
-                  items: {
-                    create:
-                      saleItems.map(
-                        (
-                          item
-                        ) => ({
-                          barangId:
-                            item.barangId,
-                          menuId:
-                            item.menuId,
-                          qty:
-                            item.qty,
-                          unitPrice:
-                            item.unitPrice,
-                          subtotal:
-                            item.subtotal,
-                        })
-                      ),
+                items: {
+                  create:
+                    saleItems.map(
+                      (item) => ({
+                        barangId:
+                          item.barangId,
+                        menuId:
+                          item.menuId,
+                        qty:
+                          item.qty,
+                        unitPrice:
+                          item.unitPrice,
+                        subtotal:
+                          item.subtotal,
+                      })
+                    ),
+                },
+              },
+
+              include: {
+                items: {
+                  include: {
+                    menu: true,
+                    barang: true,
                   },
                 },
 
-                include: {
-                  items: {
-                    include: {
-                      menu: true,
-                      barang: true,
-                    },
-                  },
+                outlet: true,
 
-                  outlet: true,
-
-                  user: {
-                    select: {
-                      id: true,
-                      fullname:
-                        true,
-                      username:
-                        true,
-                    },
+                user: {
+                  select: {
+                    id: true,
+                    fullname:
+                      true,
+                    username:
+                      true,
                   },
                 },
-              }
-            );
+              },
+            });
 
           /*
            * ==================================================
            * POTONG STOCK BOM
            * ==================================================
            *
-           * deltaBaseQty harus BASE UNIT.
-           *
-           * Satu transaksi database:
-           * Sale + OutletStock + StockCard + History
-           * akan commit atau rollback bersama.
+           * deltaBaseQty SELALU BASE UNIT.
            */
           for (
             const [
@@ -1651,10 +1954,17 @@ export async function POST(req: NextRequest) {
                 {
                   outletId,
                   barangId,
+
+                  /*
+                   * PENTING:
+                   * helper menerima base unit.
+                   */
                   deltaBaseQty:
                     -requirement.qtyBase,
+
                   reference:
                     sale.number,
+
                   description:
                     ayce.enabled
                       ? `POS ${sale.number} - AYCE ${ayce.packageName} - konsumsi BOM`
@@ -1662,60 +1972,91 @@ export async function POST(req: NextRequest) {
                 }
               );
 
-            const stockAfterRow =
-              await tx.outletStock.findUnique(
-                {
-                  where: {
-                    outletId_barangId: {
-                      outletId,
-                      barangId,
-                    },
-                  },
-                  select: {
-                    stock: true,
-                    averageCost:
-                      true,
-                  },
-                }
+            /*
+             * Tidak perlu findUnique outletStock lagi.
+             *
+             * changeOutletStock() sudah mengembalikan
+             * stockAfter.
+             *
+             * Jadi satu query per BOM benar-benar
+             * hilang dari sini.
+             */
+            const stockAfter =
+              Number(
+                stockResult.stockAfter ??
+                  0
               );
+
+            /*
+             * qtyOut harus menggunakan unit stock
+             * yang dikembalikan helper.
+             */
+            const qtyOut =
+              Math.abs(
+                Number(
+                  stockResult.deltaStockUnit ??
+                    0
+                )
+              );
+
+            /*
+             * averageCost sebelum transaksi digunakan
+             * sebagai basis nilai StockCard.
+             *
+             * Jika averageCost tidak tersedia,
+             * fallback ke unitCostBase.
+             */
+            const cachedStock =
+              outletStockMap.get(
+                barangId
+              );
+
+            const stockUnitCost =
+              Number(
+                cachedStock?.averageCost ??
+                  0
+              );
+
+            const unitPrice =
+              stockUnitCost > 0
+                ? stockUnitCost
+                : Number(
+                    requirement.unitCostBase ||
+                      0
+                  );
 
             await tx.stockCard.create({
               data: {
                 barangId,
-                trxDate: now,
+
+                trxDate:
+                  now,
+
                 trxType:
                   "POS_OUT",
+
                 trxNumber:
                   sale.number,
+
                 referenceId:
                   sale.id,
+
                 warehouse:
                   `OUTLET:${outlet.code}`,
+
                 qtyIn: 0,
-                qtyOut:
-                  Math.abs(
-                    stockResult.deltaStockUnit
-                  ),
+
+                qtyOut,
+
                 balance:
-                  Number(
-                    stockAfterRow?.stock ??
-                      stockResult.stockAfter
-                  ),
-                unitPrice:
-                  Number(
-                    stockAfterRow?.averageCost ??
-                      requirement.unitCostBase ??
-                      0
-                  ),
+                  stockAfter,
+
+                unitPrice,
+
                 totalValue:
-                  Math.abs(
-                    stockResult.deltaStockUnit
-                  ) *
-                  Number(
-                    stockAfterRow?.averageCost ??
-                      requirement.unitCostBase ??
-                      0
-                  ),
+                  qtyOut *
+                  unitPrice,
+
                 note:
                   ayce.enabled
                     ? `POS ${sale.number} - AYCE ${ayce.packageName} - konsumsi ${requirement.qtyBase} ${requirement.baseUnit}`
@@ -1728,10 +2069,6 @@ export async function POST(req: NextRequest) {
            * ==================================================
            * HISTORY
            * ==================================================
-           *
-           * Schema saat ini belum mempunyai tabel session AYCE.
-           * Metadata penting session tetap dicatat di History
-           * agar transaksi dapat diaudit tanpa migration destruktif.
            */
           const historyDescription =
             ayce.enabled
@@ -1742,17 +2079,23 @@ export async function POST(req: NextRequest) {
                   `PAX ${ayce.pax}.`,
                   `PAKET ${ayce.packageName}.`,
                   `HARGA PAKET ${ayce.packagePrice}.`,
+
                   ayce.durationMinutes
                     ? `DURASI ${ayce.durationMinutes} MENIT.`
                     : null,
+
                   ayce.startedAt
                     ? `START ${ayce.startedAt.toISOString()}.`
                     : null,
+
                   ayce.expiresAt
                     ? `EXPIRE ${ayce.expiresAt.toISOString()}.`
                     : null,
+
                   `ADD-ON ${ayceAddOnSubtotal}.`,
+
                   `STOCK BOM otomatis terpakai sebagai consumption.`,
+
                   body?.note
                     ? `CATATAN: ${String(
                         body.note
@@ -1764,6 +2107,7 @@ export async function POST(req: NextRequest) {
               : [
                   `POS ${outlet.name} ${sale.number} berhasil.`,
                   `Stock BOM otomatis terpakai.`,
+
                   body?.note
                     ? `CATATAN: ${String(
                         body.note
@@ -1777,10 +2121,13 @@ export async function POST(req: NextRequest) {
             data: {
               transactionType:
                 "STOCK_OUT",
+
               referenceNumber:
                 sale.number,
+
               userId:
                 user.id,
+
               description:
                 historyDescription,
             },
@@ -1788,30 +2135,43 @@ export async function POST(req: NextRequest) {
 
           return {
             ...sale,
+
             ayce: ayce.enabled
               ? {
                   enabled: true,
+
                   sessionId:
                     ayce.sessionId,
+
                   tableName:
                     ayce.tableName,
-                  pax: ayce.pax,
+
+                  pax:
+                    ayce.pax,
+
                   packageKey:
                     ayce.packageKey,
+
                   packageName:
                     ayce.packageName,
+
                   packagePrice:
                     ayce.packagePrice,
+
                   packageTotal:
                     ayce.packagePrice *
                     ayce.pax,
+
                   addOnSubtotal:
                     ayceAddOnSubtotal,
+
                   durationMinutes:
                     ayce.durationMinutes,
+
                   startedAt:
                     ayce.startedAt?.toISOString() ??
                     null,
+
                   expiresAt:
                     ayce.expiresAt?.toISOString() ??
                     null,
@@ -1824,9 +2184,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message: ayce.enabled
-          ? "Transaksi AYCE berhasil. Consumption BOM otomatis mengurangi stock outlet."
-          : "Transaksi POS berhasil. Stock BOM otomatis terpakai.",
+
+        message:
+          ayce.enabled
+            ? "Transaksi AYCE berhasil. Consumption BOM otomatis mengurangi stock outlet."
+            : "Transaksi POS berhasil. Stock BOM otomatis terpakai.",
+
         data: result,
       },
       {

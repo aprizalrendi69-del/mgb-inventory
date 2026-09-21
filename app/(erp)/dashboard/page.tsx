@@ -12,7 +12,6 @@ import {
   DollarSign,
   ShoppingCart,
   ArrowUpRight,
-  ArrowDownRight,
   ArrowDownLeft,
   FileText,
   ChevronRight,
@@ -27,7 +26,6 @@ import {
   TrendingUp,
   ShieldCheck,
   Sparkles,
-  Zap,
   CircleDollarSign,
   Gauge,
   TimerReset,
@@ -51,7 +49,7 @@ import {
 } from "recharts";
 
 /* =========================================================
-   TYPES
+TYPES
 ========================================================= */
 
 type StockAlert = {
@@ -73,36 +71,48 @@ type OnlineUser = {
   fullname?: string | null;
   username?: string | null;
   role?: string | null;
-
-  // =======================================================
-  // FOTO PROFIL
-  // =======================================================
   photo?: string | null;
 
   outlet?: {
     id?: number;
     name?: string | null;
   } | null;
+
   lastSeen?: string | null;
   isOnline?: boolean;
 };
 
+type DashboardStats = {
+  totalBarang: number;
+  totalSupplier: number;
+  totalCustomer: number;
+  totalPurchase: number;
+  totalDelivery: number;
+
+  nilaiPersediaan: number;
+
+  nilaiPersediaanPusat?: number;
+  nilaiPersediaanOutlet?: number;
+  nilaiPersediaanTotal?: number;
+
+  nilaiPersediaanOutletBreakdown?: {
+    outletId: number;
+    outletCode: string;
+    outletName: string;
+    value: number;
+  }[];
+
+  stockAlertCount: number;
+  stockOutCount: number;
+  stockCriticalCount: number;
+  stockLowCount: number;
+  purchaseTrend: number;
+  deliveryTrend: number;
+  stockTrend: number;
+};
+
 type DashboardData = {
-  stats: {
-    totalBarang: number;
-    totalSupplier: number;
-    totalCustomer: number;
-    totalPurchase: number;
-    totalDelivery: number;
-    nilaiPersediaan: number;
-    stockAlertCount: number;
-    stockOutCount: number;
-    stockCriticalCount: number;
-    stockLowCount: number;
-    purchaseTrend: number;
-    deliveryTrend: number;
-    stockTrend: number;
-  };
+  stats: DashboardStats;
 
   stockAlerts: StockAlert[];
   expiredItems: any[];
@@ -120,7 +130,7 @@ type DashboardData = {
 type Period = "7" | "30" | "90";
 
 /* =========================================================
-   HELPERS
+HELPERS
 ========================================================= */
 
 function formatNumber(value: number) {
@@ -211,7 +221,9 @@ function getInitials(name?: string | null) {
     return words[0].slice(0, 2).toUpperCase();
   }
 
-  return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase();
+  return `${words[0][0]}${
+    words[words.length - 1][0]
+  }`.toUpperCase();
 }
 
 function getOnlineDuration(lastSeen?: string | null) {
@@ -294,9 +306,6 @@ function normalizeOnlineUser(
         ? user.role
         : null,
 
-    // =====================================================
-    // FOTO PROFIL
-    // =====================================================
     photo: rawPhoto || null,
 
     outlet:
@@ -330,7 +339,7 @@ function normalizeOnlineUser(
 }
 
 /* =========================================================
-   PROFILE AVATAR
+PROFILE AVATAR
 ========================================================= */
 
 function ProfileAvatar({
@@ -353,7 +362,7 @@ function ProfileAvatar({
 
   return (
     <div className="relative shrink-0">
-      <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg bg-emerald-300/[0.10] text-[7px] font-bold text-emerald-300 ring-1 ring-white/[0.06]">
+      <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-[11px] bg-emerald-300/[0.10] text-[8px] font-bold text-emerald-300 ring-1 ring-white/[0.07]">
         {showPhoto ? (
           <img
             src={photo}
@@ -370,14 +379,13 @@ function ProfileAvatar({
         )}
       </div>
 
-      {/* ONLINE INDICATOR */}
-      <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border-2 border-[#102A23] bg-emerald-400" />
+      <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border-2 border-[#0B211B] bg-emerald-400" />
     </div>
   );
 }
 
 /* =========================================================
-   TOOLTIP
+TOOLTIP
 ========================================================= */
 
 function ChartTooltip({
@@ -459,7 +467,7 @@ function ChartTooltip({
 }
 
 /* =========================================================
-   SECTION HEADER
+SECTION HEADER
 ========================================================= */
 
 function SectionHeader({
@@ -503,7 +511,7 @@ function SectionHeader({
 }
 
 /* =========================================================
-   EMPTY STATE
+EMPTY STATE
 ========================================================= */
 
 function EmptyState({
@@ -533,7 +541,157 @@ function EmptyState({
 }
 
 /* =========================================================
-   DASHBOARD
+COMPACT INVENTORY VALUE
+========================================================= */
+
+function InventoryValueMini({
+  label,
+  value,
+  icon: Icon,
+  tone = "emerald",
+  featured = false,
+}: {
+  label: string;
+  value: number;
+  icon: any;
+  tone?: "emerald" | "blue" | "violet";
+  featured?: boolean;
+}) {
+  const toneMap = {
+    emerald: {
+      iconBg: "bg-emerald-50",
+      iconText: "text-emerald-600",
+      dot: "bg-emerald-500",
+      value: "text-emerald-700",
+    },
+    blue: {
+      iconBg: "bg-blue-50",
+      iconText: "text-blue-600",
+      dot: "bg-blue-500",
+      value: "text-blue-700",
+    },
+    violet: {
+      iconBg: "bg-violet-50",
+      iconText: "text-violet-600",
+      dot: "bg-violet-500",
+      value: "text-violet-700",
+    },
+  };
+
+  const colors = toneMap[tone];
+
+  return (
+    <div
+      title={formatCurrency(value)}
+      className={`group relative flex min-w-0 items-center gap-3 overflow-hidden rounded-[19px] border p-3 transition-all duration-300 hover:-translate-y-0.5 ${
+        featured
+          ? "border-emerald-100 bg-gradient-to-r from-emerald-50/80 via-white to-white shadow-[0_8px_25px_rgba(16,185,129,0.06)]"
+          : "border-slate-100 bg-slate-50/55 hover:border-slate-200 hover:bg-white hover:shadow-[0_10px_28px_rgba(15,23,42,0.06)]"
+      }`}
+    >
+      <div
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] ${colors.iconBg}`}
+      >
+        <Icon className={`h-4 w-4 ${colors.iconText}`} />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${colors.dot}`}
+          />
+
+          <p className="truncate text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">
+            {label}
+          </p>
+        </div>
+
+        <p
+          className={`mt-1 truncate font-bold tracking-[-0.025em] ${
+            featured
+              ? "text-[16px] text-emerald-700"
+              : `text-[15px] ${colors.value}`
+          }`}
+        >
+          {formatCompactCurrency(value)}
+        </p>
+      </div>
+
+      {featured && (
+        <span className="shrink-0 rounded-full bg-emerald-100/80 px-2 py-1 text-[6px] font-bold uppercase tracking-[0.12em] text-emerald-700">
+          Total
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+OUTLET VALUE MINI
+========================================================= */
+
+function OutletValueMini({
+  code,
+  name,
+  value,
+  index,
+}: {
+  code: string;
+  name: string;
+  value: number;
+  index: number;
+}) {
+  const accentStyles = [
+    "bg-emerald-500",
+    "bg-teal-500",
+    "bg-green-500",
+    "bg-lime-500",
+    "bg-cyan-500",
+    "bg-emerald-600",
+  ];
+
+  const accent =
+    accentStyles[index % accentStyles.length];
+
+  return (
+    <div className="group relative min-w-0 overflow-hidden rounded-[17px] border border-slate-100 bg-white px-3.5 py-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-100 hover:shadow-[0_10px_28px_rgba(15,23,42,0.07)]">
+      <div
+        className={`absolute bottom-0 left-0 top-0 w-[2px] ${accent}`}
+      />
+
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-slate-50 text-[7px] font-black tracking-tight text-slate-500 ring-1 ring-slate-100">
+            {code?.slice(0, 4) || "OUT"}
+          </div>
+
+          <div className="min-w-0">
+            <p className="truncate text-[9px] font-bold text-slate-700">
+              {name}
+            </p>
+
+            <p className="mt-0.5 truncate text-[7px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+              {code}
+            </p>
+          </div>
+        </div>
+
+        <div className="shrink-0 text-right">
+          <p className="text-[12px] font-bold tracking-tight text-slate-800">
+            {formatCompactCurrency(value)}
+          </p>
+
+          <p className="mt-0.5 text-[6px] font-medium uppercase tracking-[0.12em] text-slate-400">
+            Inventory
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+DASHBOARD
 ========================================================= */
 
 export default function Dashboard() {
@@ -559,7 +717,7 @@ export default function Dashboard() {
     useState(false);
 
   /* =======================================================
-     LOAD DASHBOARD
+  LOAD DASHBOARD
   ======================================================= */
 
   async function loadDashboard(
@@ -601,7 +759,7 @@ export default function Dashboard() {
   }
 
   /* =======================================================
-     ONLINE USERS
+  ONLINE USERS
   ======================================================= */
 
   async function loadOnlineUsers(
@@ -660,7 +818,7 @@ export default function Dashboard() {
   }
 
   /* =======================================================
-     INITIAL LOAD
+  INITIAL LOAD
   ======================================================= */
 
   useEffect(() => {
@@ -680,7 +838,7 @@ export default function Dashboard() {
   }, []);
 
   /* =======================================================
-     PERIOD
+  PERIOD
   ======================================================= */
 
   const handlePeriodChange = (
@@ -691,7 +849,7 @@ export default function Dashboard() {
   };
 
   /* =======================================================
-     CHART
+  CHART
   ======================================================= */
 
   const chartData = useMemo(() => {
@@ -726,7 +884,7 @@ export default function Dashboard() {
     chartSummary.keluar;
 
   /* =======================================================
-     METRICS
+  METRICS
   ======================================================= */
 
   const stockAlertCount =
@@ -743,10 +901,37 @@ export default function Dashboard() {
   const stockLowCount =
     data?.stats.stockLowCount ?? 0;
 
-  const inventoryValue =
+  const inventoryValuePusat =
     Number(
-      data?.stats.nilaiPersediaan || 0
+      data?.stats.nilaiPersediaanPusat ?? 0
     );
+
+  const inventoryValueOutlet =
+    Number(
+      data?.stats.nilaiPersediaanOutlet ?? 0
+    );
+
+  const legacyInventoryValue =
+    Number(
+      data?.stats.nilaiPersediaan ?? 0
+    );
+
+  const inventoryValueTotal =
+    data?.stats.nilaiPersediaanTotal != null
+      ? Number(
+          data.stats.nilaiPersediaanTotal
+        )
+      : inventoryValuePusat +
+            inventoryValueOutlet >
+          0
+      ? inventoryValuePusat +
+        inventoryValueOutlet
+      : legacyInventoryValue;
+
+  const hasInventoryBreakdown =
+    data?.stats.nilaiPersediaanPusat != null ||
+    data?.stats.nilaiPersediaanOutlet != null ||
+    data?.stats.nilaiPersediaanTotal != null;
 
   const stockHealth = Math.max(
     0,
@@ -778,7 +963,7 @@ export default function Dashboard() {
       : "Critical";
 
   /* =======================================================
-     KPI
+  KPI
   ======================================================= */
 
   const cards = [
@@ -843,20 +1028,6 @@ export default function Dashboard() {
       accent: "bg-indigo-500",
     },
     {
-      title: "Persediaan",
-      value:
-        formatCompactCurrency(
-          inventoryValue
-        ),
-      fullValue:
-        formatCurrency(inventoryValue),
-      description: "Valuasi inventory",
-      icon: CircleDollarSign,
-      iconBg: "bg-emerald-50",
-      iconColor: "text-emerald-600",
-      accent: "bg-emerald-500",
-    },
-    {
       title: "Stock Alert",
       value:
         stockAlertCount.toLocaleString(
@@ -883,7 +1054,7 @@ export default function Dashboard() {
   ];
 
   /* =======================================================
-     QUICK ACCESS
+  QUICK ACCESS
   ======================================================= */
 
   const menus = [
@@ -953,7 +1124,7 @@ export default function Dashboard() {
   ];
 
   /* =======================================================
-     STOCK STATUS
+  STOCK STATUS
   ======================================================= */
 
   function getStockStatus(
@@ -992,7 +1163,7 @@ export default function Dashboard() {
   }
 
   /* =======================================================
-     LOADING
+  LOADING
   ======================================================= */
 
   if (loading) {
@@ -1000,26 +1171,27 @@ export default function Dashboard() {
       <div className="min-h-screen bg-[#F2F5F4] p-4 sm:p-6 lg:p-8">
         <div className="mx-auto max-w-[1780px] space-y-5">
 
-          <div className="relative h-[360px] overflow-hidden rounded-[36px] bg-[#0B211B]">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(52,211,153,0.15),transparent_30%)]" />
+          <div className="relative h-[250px] overflow-hidden rounded-[30px] bg-[#071B16]">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_0%,rgba(52,211,153,0.13),transparent_30%)]" />
 
-            <div className="relative space-y-5 p-7 sm:p-10">
+            <div className="relative space-y-4 p-6 sm:p-8">
               <div className="h-5 w-28 animate-pulse rounded-full bg-white/10" />
 
-              <div className="h-12 max-w-2xl animate-pulse rounded-xl bg-white/10" />
+              <div className="h-10 max-w-xl animate-pulse rounded-xl bg-white/10" />
 
-              <div className="h-5 max-w-xl animate-pulse rounded-lg bg-white/5" />
+              <div className="h-4 max-w-lg animate-pulse rounded-lg bg-white/5" />
 
-              <div className="mt-10 grid max-w-2xl grid-cols-3 gap-3">
-                <div className="h-20 animate-pulse rounded-2xl bg-white/5" />
-                <div className="h-20 animate-pulse rounded-2xl bg-white/5" />
-                <div className="h-20 animate-pulse rounded-2xl bg-white/5" />
+              <div className="mt-7 grid max-w-2xl grid-cols-4 gap-3">
+                <div className="h-14 animate-pulse rounded-xl bg-white/5" />
+                <div className="h-14 animate-pulse rounded-xl bg-white/5" />
+                <div className="h-14 animate-pulse rounded-xl bg-white/5" />
+                <div className="h-14 animate-pulse rounded-xl bg-white/5" />
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-            {Array.from({ length: 7 }).map(
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+            {Array.from({ length: 6 }).map(
               (_, index) => (
                 <div
                   key={index}
@@ -1028,6 +1200,8 @@ export default function Dashboard() {
               )
             )}
           </div>
+
+          <div className="h-[120px] animate-pulse rounded-[28px] bg-white" />
 
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
             <div className="h-[560px] animate-pulse rounded-[32px] bg-white xl:col-span-2" />
@@ -1040,170 +1214,184 @@ export default function Dashboard() {
   }
 
   /* =======================================================
-     RENDER
+  RENDER
   ======================================================= */
 
   return (
     <div className="min-h-screen bg-[#F2F5F4] text-slate-800">
-
       <div className="mx-auto max-w-[1780px] space-y-5 p-4 sm:p-6 lg:p-8">
 
         {/* ===================================================
-            EXECUTIVE COMMAND CENTER
+            PREMIUM EXECUTIVE COMMAND CENTER
         =================================================== */}
 
-        <section className="relative overflow-hidden rounded-[36px] bg-[#071B16] shadow-[0_32px_100px_rgba(8,35,28,0.20)]">
+        <section className="relative overflow-hidden rounded-[30px] bg-[#071B16] shadow-[0_24px_70px_rgba(8,35,28,0.15)]">
 
-          {/* BACKGROUND */}
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="absolute -right-24 -top-28 h-[330px] w-[330px] rounded-full border border-emerald-300/[0.055]" />
 
-            <div className="absolute -right-40 -top-40 h-[520px] w-[520px] rounded-full border border-emerald-300/[0.07]" />
+            <div className="absolute right-[8%] top-[12%] h-[190px] w-[190px] rounded-full border border-white/[0.025]" />
 
-            <div className="absolute -right-10 top-14 h-[330px] w-[330px] rounded-full border border-emerald-300/[0.05]" />
+            <div className="absolute bottom-[-160px] left-[38%] h-[330px] w-[330px] rounded-full bg-emerald-400/[0.05] blur-3xl" />
 
-            <div className="absolute right-[12%] top-[20%] h-[230px] w-[230px] rounded-full border border-white/[0.025]" />
-
-            <div className="absolute bottom-[-220px] left-[30%] h-[520px] w-[520px] rounded-full bg-emerald-400/[0.07] blur-3xl" />
-
-            <div className="absolute left-[-140px] top-[30%] h-[350px] w-[350px] rounded-full bg-teal-400/[0.05] blur-3xl" />
-
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_15%,rgba(52,211,153,0.16),transparent_28%),linear-gradient(120deg,rgba(255,255,255,0.025),transparent_55%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_10%,rgba(52,211,153,0.12),transparent_30%),linear-gradient(120deg,rgba(255,255,255,0.02),transparent_60%)]" />
           </div>
 
-          <div className="relative p-6 sm:p-8 lg:p-10 xl:p-11">
+          <div className="relative p-5 sm:p-6 lg:p-7 xl:p-8">
 
-            <div className="grid grid-cols-1 gap-10 xl:grid-cols-[1fr_460px]">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_370px]">
 
-              {/* LEFT */}
+              {/* HERO LEFT */}
 
               <div className="min-w-0">
 
                 <div className="flex flex-wrap items-center gap-2">
 
-                  <div className="flex items-center gap-2 rounded-full border border-emerald-300/15 bg-emerald-300/[0.08] px-3.5 py-1.5">
-                    <Sparkles className="h-3.5 w-3.5 text-emerald-300" />
+                  <div className="flex items-center gap-2 rounded-full border border-emerald-300/15 bg-emerald-300/[0.08] px-3 py-1.5">
+                    <Sparkles className="h-3 w-3 text-emerald-300" />
 
-                    <span className="text-[9px] font-bold uppercase tracking-[0.24em] text-emerald-200">
+                    <span className="text-[8px] font-bold uppercase tracking-[0.23em] text-emerald-200">
                       MGB ERP
                     </span>
                   </div>
 
-                  <div className="hidden h-1 w-1 rounded-full bg-slate-600 sm:block" />
+                  <span className="hidden h-1 w-1 rounded-full bg-slate-600 sm:block" />
 
-                  <span className="text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  <span className="text-[8px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                     Executive Command Center
                   </span>
                 </div>
 
-                <h1 className="mt-6 max-w-5xl text-[34px] font-bold leading-[1.02] tracking-[-0.045em] text-white sm:text-[44px] lg:text-[54px] xl:text-[58px]">
+                <div className="mt-4 max-w-4xl">
+                  <h1 className="text-[29px] font-bold leading-[1.04] tracking-[-0.045em] text-white sm:text-[36px] lg:text-[42px]">
+                    PT. MITRA GARAM BOGATAMA
+                  </h1>
 
-                  PT. MITRA GARAM BOGATAMA
-                  <br className="hidden sm:block" />
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <span className="text-[22px] font-bold tracking-[-0.04em] text-emerald-300 sm:text-[27px]">
+                      Dashboard Pusat
+                    </span>
 
-                  <span className="text-emerald-300">
-                    Dasboard Pusat
-                  </span>
-                </h1>
+                    <span className="hidden h-1 w-1 rounded-full bg-emerald-400/50 sm:block" />
 
-                <p className="mt-5 max-w-2xl text-sm leading-7 text-slate-300/90 sm:text-[15px]">
+                    <span className="text-[8px] font-medium uppercase tracking-[0.15em] text-slate-500">
+                      Enterprise Resource Planning
+                    </span>
+                  </div>
+                </div>
+
+                <p className="mt-3 max-w-2xl text-[11px] leading-5 text-slate-300/80 sm:text-xs">
                   Pusat kendali operasional untuk
                   inventory, procurement, delivery,
                   customer, dan aktivitas bisnis
                   perusahaan dalam satu ekosistem ERP.
                 </p>
 
-                {/* SYSTEM STATUS */}
+                <div className="mt-4 flex flex-wrap gap-2">
 
-                <div className="mt-7 flex flex-wrap gap-2">
-
-                  <div className="flex items-center gap-2 rounded-xl border border-emerald-300/10 bg-emerald-300/[0.07] px-3.5 py-2.5 backdrop-blur-xl">
-                    <span className="relative flex h-2 w-2">
+                  <div className="flex items-center gap-2 rounded-lg border border-emerald-300/10 bg-emerald-300/[0.07] px-2.5 py-1.5">
+                    <span className="relative flex h-1.5 w-1.5">
                       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-50" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
                     </span>
 
-                    <span className="text-[9px] font-bold text-emerald-200">
+                    <span className="text-[7px] font-bold text-emerald-200">
                       SYSTEM ONLINE
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.045] px-3.5 py-2.5">
-                    <ShieldCheck className="h-3.5 w-3.5 text-slate-300" />
+                  <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.035] px-2.5 py-1.5">
+                    <ShieldCheck className="h-3 w-3 text-slate-400" />
 
-                    <span className="text-[9px] font-semibold text-slate-300">
+                    <span className="text-[7px] font-semibold text-slate-400">
                       SECURE MONITORING
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.045] px-3.5 py-2.5">
-                    <Radio className="h-3.5 w-3.5 text-emerald-300" />
+                  <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.035] px-2.5 py-1.5">
+                    <Radio className="h-3 w-3 text-emerald-300" />
 
-                    <span className="text-[9px] font-semibold text-slate-300">
+                    <span className="text-[7px] font-semibold text-slate-400">
                       LIVE OPERATIONS
                     </span>
                   </div>
 
                 </div>
 
-                {/* HERO METRICS */}
+                <div className="mt-5 grid grid-cols-2 border-t border-white/[0.07] pt-4 sm:grid-cols-4">
 
-                <div className="mt-10 grid grid-cols-2 border-t border-white/[0.08] pt-6 sm:grid-cols-4">
-
-                  <div className="px-1 sm:px-4">
-                    <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                      Inventory Value
+                  <div className="px-0 sm:px-3">
+                    <p className="text-[7px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                      Total Inventory
                     </p>
 
-                    <p className="mt-2 text-xl font-bold tracking-tight text-white">
+                    <p className="mt-1.5 text-[17px] font-bold tracking-tight text-white">
                       {formatCompactCurrency(
-                        inventoryValue
+                        inventoryValueTotal
                       )}
+                    </p>
+
+                    <p className="mt-0.5 text-[7px] text-emerald-300/60">
+                      Pusat + Outlet
                     </p>
                   </div>
 
-                  <div className="border-l border-white/[0.08] px-3 sm:px-4">
-                    <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                  <div className="border-l border-white/[0.07] px-3">
+                    <p className="text-[7px] font-bold uppercase tracking-[0.18em] text-slate-500">
                       Activity
                     </p>
 
-                    <p className="mt-2 text-xl font-bold tracking-tight text-white">
+                    <p className="mt-1.5 text-[17px] font-bold tracking-tight text-white">
                       {formatNumber(
                         totalActivity
                       )}
                     </p>
+
+                    <p className="mt-0.5 text-[7px] text-slate-500">
+                      Movement recorded
+                    </p>
                   </div>
 
-                  <div className="border-t border-white/[0.08] px-1 pt-5 sm:border-l sm:border-t-0 sm:px-4 sm:pt-0">
-                    <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                  <div className="mt-4 border-l border-white/[0.07] px-3 sm:mt-0">
+                    <p className="text-[7px] font-bold uppercase tracking-[0.18em] text-slate-500">
                       Users Active
                     </p>
 
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="text-xl font-bold text-white">
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <span className="text-[17px] font-bold text-white">
                         {onlineUsers.length}
                       </span>
 
-                      <span className="relative flex h-2 w-2">
+                      <span className="relative flex h-1.5 w-1.5">
                         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
-                        <span className="relative h-2 w-2 rounded-full bg-emerald-400" />
+
+                        <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-400" />
                       </span>
                     </div>
+
+                    <p className="mt-0.5 text-[7px] text-slate-500">
+                      Live monitoring
+                    </p>
                   </div>
 
-                  <div className="border-l border-t border-white/[0.08] px-3 pt-5 sm:border-t-0 sm:px-4 sm:pt-0">
-                    <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                  <div className="mt-4 border-l border-white/[0.07] px-3 sm:mt-0">
+                    <p className="text-[7px] font-bold uppercase tracking-[0.18em] text-slate-500">
                       Stock Health
                     </p>
 
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="text-xl font-bold text-emerald-300">
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <span className="text-[17px] font-bold text-emerald-300">
                         {stockHealth}%
                       </span>
 
-                      <span className="text-[8px] font-semibold text-emerald-400">
+                      <span className="rounded-full bg-emerald-400/[0.08] px-1.5 py-0.5 text-[6px] font-bold text-emerald-300">
                         {stockHealthLabel}
                       </span>
                     </div>
+
+                    <p className="mt-0.5 text-[7px] text-slate-500">
+                      Inventory condition
+                    </p>
                   </div>
 
                 </div>
@@ -1212,31 +1400,29 @@ export default function Dashboard() {
               {/* RIGHT COMMAND PANEL */}
 
               <div className="relative">
+                <div className="overflow-hidden rounded-[23px] border border-emerald-300/[0.10] bg-white/[0.04] p-3 backdrop-blur-2xl">
 
-                <div className="overflow-hidden rounded-[28px] border border-emerald-300/[0.11] bg-white/[0.045] p-4 backdrop-blur-2xl">
+                  <div className="flex items-center gap-2.5 rounded-[17px] border border-white/[0.06] bg-black/[0.09] p-2.5">
 
-                  {/* DATE */}
-
-                  <div className="flex items-center gap-3 rounded-[20px] border border-white/[0.06] bg-black/[0.08] p-3">
-
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[15px] bg-emerald-400/[0.09] ring-1 ring-emerald-300/[0.10]">
-                      <CalendarDays className="h-5 w-5 text-emerald-300" />
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/[0.08] ring-1 ring-emerald-300/[0.08]">
+                      <CalendarDays className="h-4 w-4 text-emerald-300" />
                     </div>
 
                     <div className="min-w-0 flex-1">
 
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                        <p className="text-[7px] font-bold uppercase tracking-[0.18em] text-slate-500">
                           Hari ini
                         </p>
 
-                        <div className="flex items-center gap-1.5 rounded-full bg-emerald-400/[0.09] px-2.5 py-1">
+                        <div className="flex items-center gap-1 rounded-full bg-emerald-400/[0.08] px-2 py-0.5">
                           <span className="relative flex h-1.5 w-1.5">
                             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-50" />
+
                             <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-400" />
                           </span>
 
-                          <span className="text-[8px] font-bold text-emerald-300">
+                          <span className="text-[6px] font-bold text-emerald-300">
                             {onlineLoading
                               ? "..."
                               : `${onlineUsers.length} ONLINE`}
@@ -1244,10 +1430,9 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      <p className="mt-1 truncate text-sm font-semibold text-white">
+                      <p className="mt-1 truncate text-[11px] font-semibold text-white">
                         {today}
                       </p>
-
                     </div>
 
                     <button
@@ -1264,10 +1449,10 @@ export default function Dashboard() {
                         onlineRefreshing
                       }
                       title="Refresh dashboard"
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-slate-300 transition-all duration-300 hover:scale-105 hover:bg-emerald-400/[0.12] hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] text-slate-300 transition-all duration-300 hover:bg-emerald-400/[0.12] hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <RefreshCw
-                        className={`h-4 w-4 ${
+                        className={`h-3.5 w-3.5 ${
                           refreshing ||
                           onlineRefreshing
                             ? "animate-spin"
@@ -1275,39 +1460,38 @@ export default function Dashboard() {
                         }`}
                       />
                     </button>
-
                   </div>
 
                   {/* ONLINE USERS */}
 
-                  <div className="mt-3 rounded-[20px] border border-white/[0.06] bg-black/[0.08] p-4">
+                  <div className="mt-2.5 rounded-[17px] border border-white/[0.06] bg-black/[0.07] p-3">
 
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Users className="h-3.5 w-3.5 text-emerald-400" />
+                      <div className="flex items-center gap-1.5">
+                        <Users className="h-3 w-3 text-emerald-400" />
 
-                        <span className="text-[8px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                        <span className="text-[7px] font-bold uppercase tracking-[0.17em] text-slate-500">
                           Active Users
                         </span>
                       </div>
 
-                      <span className="text-[8px] font-semibold text-slate-500">
-                        Live monitoring
+                      <span className="text-[6px] font-semibold uppercase tracking-wider text-slate-600">
+                        Live
                       </span>
                     </div>
 
-                    <div className="mt-3 space-y-2">
+                    <div className="mt-2.5 space-y-1.5">
 
                       {onlineLoading ? (
                         <>
-                          <div className="h-9 animate-pulse rounded-xl bg-white/[0.05]" />
-                          <div className="h-9 animate-pulse rounded-xl bg-white/[0.04]" />
-                          <div className="h-9 animate-pulse rounded-xl bg-white/[0.03]" />
+                          <div className="h-8 animate-pulse rounded-lg bg-white/[0.05]" />
+                          <div className="h-8 animate-pulse rounded-lg bg-white/[0.04]" />
+                          <div className="h-8 animate-pulse rounded-lg bg-white/[0.03]" />
                         </>
                       ) : onlineUsers.length > 0 ? (
                         <>
                           {onlineUsers
-                            .slice(0, 4)
+                            .slice(0, 3)
                             .map((user) => {
                               const displayName =
                                 getUserDisplayName(
@@ -1326,22 +1510,21 @@ export default function Dashboard() {
                                   } • ${getOnlineDuration(
                                     user.lastSeen
                                   )}`}
-                                  className="flex items-center gap-2.5 rounded-xl border border-white/[0.05] bg-white/[0.035] px-2.5 py-2 transition hover:bg-white/[0.06]"
+                                  className="flex items-center gap-2 rounded-lg border border-white/[0.05] bg-white/[0.03] px-2 py-1.5"
                                 >
-
-                                  {/* PROFILE PHOTO */}
-
                                   <ProfileAvatar
                                     user={user}
-                                    displayName={displayName}
+                                    displayName={
+                                      displayName
+                                    }
                                   />
 
                                   <div className="min-w-0 flex-1">
-                                    <p className="truncate text-[9px] font-semibold text-slate-200">
+                                    <p className="truncate text-[8px] font-semibold text-slate-200">
                                       {displayName}
                                     </p>
 
-                                    <p className="truncate text-[7px] text-slate-500">
+                                    <p className="truncate text-[6px] text-slate-500">
                                       {formatRole(
                                         user.role
                                       )}
@@ -1352,7 +1535,7 @@ export default function Dashboard() {
                                     </p>
                                   </div>
 
-                                  <span className="shrink-0 text-[7px] text-slate-600">
+                                  <span className="shrink-0 text-[6px] text-slate-600">
                                     {getOnlineDuration(
                                       user.lastSeen
                                     )}
@@ -1361,67 +1544,65 @@ export default function Dashboard() {
                               );
                             })}
 
-                          {onlineUsers.length > 4 && (
-                            <div className="flex items-center justify-center rounded-xl border border-dashed border-white/[0.07] py-2">
-                              <span className="text-[7px] font-bold text-emerald-300">
-                                +{onlineUsers.length - 4} pengguna lainnya
+                          {onlineUsers.length > 3 && (
+                            <div className="flex items-center justify-center rounded-lg border border-dashed border-white/[0.07] py-1.5">
+                              <span className="text-[6px] font-bold text-emerald-300">
+                                +{onlineUsers.length - 3} pengguna lainnya
                               </span>
                             </div>
                           )}
                         </>
                       ) : (
-                        <div className="flex items-center justify-center rounded-xl border border-dashed border-white/[0.07] py-6">
-                          <span className="text-[9px] text-slate-600">
+                        <div className="flex items-center justify-center rounded-lg border border-dashed border-white/[0.07] py-5">
+                          <span className="text-[7px] text-slate-600">
                             Tidak ada user aktif
                           </span>
                         </div>
                       )}
-
                     </div>
                   </div>
 
-                  {/* COMMAND STATUS */}
+                  {/* SYSTEM STATUS */}
 
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="mt-2.5 grid grid-cols-2 gap-2">
 
-                    <div className="rounded-[18px] border border-white/[0.06] bg-white/[0.035] p-3">
+                    <div className="rounded-[15px] border border-white/[0.06] bg-white/[0.03] p-2.5">
                       <div className="flex items-center justify-between">
-                        <Command className="h-3.5 w-3.5 text-slate-500" />
+                        <Command className="h-3 w-3 text-slate-500" />
 
-                        <span className="text-[7px] font-bold uppercase tracking-wider text-emerald-400">
+                        <span className="text-[6px] font-bold uppercase tracking-wider text-emerald-400">
                           READY
                         </span>
                       </div>
 
-                      <p className="mt-2 text-[8px] text-slate-500">
+                      <p className="mt-1.5 text-[7px] text-slate-500">
                         ERP Core
                       </p>
 
-                      <p className="mt-0.5 text-xs font-bold text-slate-200">
+                      <p className="mt-0.5 text-[10px] font-bold text-slate-200">
                         Operational
                       </p>
                     </div>
 
-                    <div className="rounded-[18px] border border-white/[0.06] bg-white/[0.035] p-3">
+                    <div className="rounded-[15px] border border-white/[0.06] bg-white/[0.03] p-2.5">
                       <div className="flex items-center justify-between">
-                        <Activity className="h-3.5 w-3.5 text-emerald-400" />
+                        <Activity className="h-3 w-3 text-emerald-400" />
 
-                        <span className="text-[7px] font-bold uppercase tracking-wider text-emerald-400">
+                        <span className="text-[6px] font-bold uppercase tracking-wider text-emerald-400">
                           LIVE
                         </span>
                       </div>
 
-                      <p className="mt-2 text-[8px] text-slate-500">
+                      <p className="mt-1.5 text-[7px] text-slate-500">
                         Monitoring
                       </p>
 
-                      <p className="mt-0.5 text-xs font-bold text-slate-200">
+                      <p className="mt-0.5 text-[10px] font-bold text-slate-200">
                         Active
                       </p>
                     </div>
 
                   </div>
-
                 </div>
               </div>
             </div>
@@ -1432,7 +1613,7 @@ export default function Dashboard() {
             KPI GRID
         =================================================== */}
 
-        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
 
           {cards.map((card) => {
             const Icon = card.icon;
@@ -1440,12 +1621,7 @@ export default function Dashboard() {
             return (
               <div
                 key={card.title}
-                title={
-                  "fullValue" in card
-                    ? card.fullValue
-                    : undefined
-                }
-                className="group relative overflow-hidden rounded-[25px] border border-white bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.045)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_22px_50px_rgba(15,23,42,0.10)]"
+                className="group relative overflow-hidden rounded-[23px] border border-white bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_22px_50px_rgba(15,23,42,0.09)]"
               >
 
                 <div
@@ -1455,7 +1631,7 @@ export default function Dashboard() {
                 <div className="flex items-start justify-between">
 
                   <div
-                    className={`flex h-11 w-11 items-center justify-center rounded-[15px] ${card.iconBg} transition-transform duration-300 group-hover:scale-105`}
+                    className={`flex h-11 w-11 items-center justify-center rounded-[14px] ${card.iconBg} transition-transform duration-300 group-hover:scale-105`}
                   >
                     <Icon
                       className={`h-[18px] w-[18px] ${card.iconColor}`}
@@ -1493,17 +1669,193 @@ export default function Dashboard() {
         </section>
 
         {/* ===================================================
+            COMPACT INVENTORY VALUATION
+        =================================================== */}
+
+        <section className="relative overflow-hidden rounded-[27px] border border-slate-200/80 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
+
+          <div className="pointer-events-none absolute right-[-80px] top-[-100px] h-[250px] w-[250px] rounded-full bg-emerald-50 blur-3xl" />
+
+          <div className="relative p-4 sm:p-5">
+
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
+
+              {/* TITLE */}
+
+              <div className="flex min-w-[230px] items-center gap-3 xl:w-[270px]">
+
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] bg-emerald-50 ring-1 ring-emerald-100">
+                  <CircleDollarSign className="h-4 w-4 text-emerald-600" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-emerald-600">
+                    Executive Valuation
+                  </p>
+
+                  <h2 className="mt-0.5 text-[15px] font-bold tracking-tight text-slate-800">
+                    Nilai Persediaan
+                  </h2>
+
+                  <p className="mt-0.5 truncate text-[8px] text-slate-400">
+                    Pusat + seluruh outlet
+                  </p>
+                </div>
+
+              </div>
+
+              {/* VALUE CARDS */}
+
+              <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
+
+                <InventoryValueMini
+                  label="Gudang Pusat"
+                  value={inventoryValuePusat}
+                  icon={Warehouse}
+                  tone="emerald"
+                />
+
+                <InventoryValueMini
+                  label="Seluruh Outlet"
+                  value={inventoryValueOutlet}
+                  icon={Boxes}
+                  tone="blue"
+                />
+
+                <InventoryValueMini
+                  label="Total Inventory"
+                  value={inventoryValueTotal}
+                  icon={CircleDollarSign}
+                  tone="violet"
+                  featured
+                />
+
+              </div>
+
+            </div>
+
+            {!hasInventoryBreakdown && (
+              <div className="mt-3 flex items-center gap-2 rounded-[13px] border border-amber-100 bg-amber-50/60 px-3 py-2">
+                <AlertCircle className="h-3 w-3 shrink-0 text-amber-500" />
+
+                <span className="text-[7px] font-medium text-amber-600">
+                  Dashboard menggunakan legacy inventory value karena breakdown persediaan belum tersedia dari API.
+                </span>
+              </div>
+            )}
+
+          </div>
+        </section>
+
+        {/* ===================================================
+            OUTLET INVENTORY — COMPACT
+        =================================================== */}
+
+        <section className="rounded-[27px] border border-slate-200/80 bg-white p-4 shadow-[0_8px_30px_rgba(15,23,42,0.04)] sm:p-5">
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+            <div className="flex items-center gap-3">
+
+              <div className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-blue-50 ring-1 ring-blue-100">
+                <Boxes className="h-4 w-4 text-blue-600" />
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-emerald-600">
+                    Outlet Inventory
+                  </p>
+
+                  <span className="h-1 w-1 rounded-full bg-emerald-300" />
+                  
+                  <span className="text-[7px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                    Valuation
+                  </span>
+                </div>
+
+                <h2 className="mt-0.5 text-[15px] font-bold tracking-tight text-slate-800">
+                  Nilai Persediaan Per Outlet
+                </h2>
+              </div>
+
+            </div>
+
+            <div className="flex items-center gap-2">
+
+              <span className="hidden text-[7px] text-slate-400 sm:block">
+                Stock × average cost
+              </span>
+
+              <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[7px] font-bold uppercase tracking-[0.12em] text-blue-600">
+                {data?.stats.nilaiPersediaanOutletBreakdown?.length ?? 0} Outlet
+              </span>
+
+            </div>
+
+          </div>
+
+          {data?.stats.nilaiPersediaanOutletBreakdown?.length ? (
+
+            <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+
+              {data.stats.nilaiPersediaanOutletBreakdown.map(
+                (outlet, index) => (
+                  <OutletValueMini
+                    key={outlet.outletId}
+                    code={outlet.outletCode}
+                    name={outlet.outletName}
+                    value={outlet.value}
+                    index={index}
+                  />
+                )
+              )}
+
+            </div>
+
+          ) : (
+
+            <div className="mt-4 rounded-[18px] border border-dashed border-slate-200 bg-slate-50/60">
+              <EmptyState
+                icon={Boxes}
+                title="Belum ada data outlet"
+                description="Nilai persediaan outlet akan muncul setelah stok outlet tersedia."
+              />
+            </div>
+
+          )}
+
+          <div className="mt-3 flex items-center justify-between rounded-[15px] border border-emerald-100 bg-emerald-50/55 px-3.5 py-2.5">
+
+            <div className="flex items-center gap-2">
+              <CircleCheck className="h-3.5 w-3.5 text-emerald-500" />
+
+              <span className="text-[8px] font-semibold text-emerald-700">
+                Total seluruh persediaan outlet
+              </span>
+            </div>
+
+            <span className="text-[12px] font-bold tracking-tight text-emerald-700">
+              {formatCompactCurrency(
+                inventoryValueOutlet
+              )}
+            </span>
+
+          </div>
+
+        </section>
+
+        {/* ===================================================
             OPERATIONAL SNAPSHOT
         =================================================== */}
 
         <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
 
-          <div className="relative overflow-hidden rounded-[25px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-white p-5">
+          <div className="relative overflow-hidden rounded-[24px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-white p-5">
 
             <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-emerald-100/50 blur-2xl" />
 
             <div className="relative flex items-center justify-between">
-
               <div>
                 <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-emerald-600">
                   Inventory Flow
@@ -1517,7 +1869,6 @@ export default function Dashboard() {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-emerald-100">
                 <ArrowDownLeft className="h-4 w-4 text-emerald-500" />
               </div>
-
             </div>
 
             <div className="relative mt-5 flex items-end justify-between">
@@ -1539,10 +1890,9 @@ export default function Dashboard() {
               </span>
 
             </div>
-
           </div>
 
-          <div className="relative overflow-hidden rounded-[25px] border border-slate-200 bg-white p-5">
+          <div className="relative overflow-hidden rounded-[24px] border border-slate-200 bg-white p-5">
 
             <div className="relative flex items-center justify-between">
 
@@ -1581,10 +1931,9 @@ export default function Dashboard() {
               </span>
 
             </div>
-
           </div>
 
-          <div className="relative overflow-hidden rounded-[25px] border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-white p-5">
+          <div className="relative overflow-hidden rounded-[24px] border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-white p-5">
 
             <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-blue-100/50 blur-2xl" />
 
@@ -1625,7 +1974,6 @@ export default function Dashboard() {
               </span>
 
             </div>
-
           </div>
 
         </section>
@@ -1638,7 +1986,7 @@ export default function Dashboard() {
 
           {/* CHART */}
 
-          <div className="overflow-hidden rounded-[32px] border border-white bg-white p-6 shadow-[0_8px_32px_rgba(15,23,42,0.045)] xl:col-span-2">
+          <div className="overflow-hidden rounded-[30px] border border-white bg-white p-6 shadow-[0_8px_32px_rgba(15,23,42,0.045)] xl:col-span-2">
 
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 
@@ -1674,12 +2022,12 @@ export default function Dashboard() {
                 ))}
 
               </div>
-
             </div>
 
             <div className="mt-6 grid grid-cols-3 gap-3">
 
               <div className="rounded-[20px] border border-emerald-100 bg-emerald-50/60 p-3.5">
+
                 <div className="flex items-center justify-between">
                   <ArrowDownLeft className="h-4 w-4 text-emerald-500" />
 
@@ -1697,9 +2045,11 @@ export default function Dashboard() {
                 <p className="mt-0.5 text-[8px] text-emerald-600/70">
                   Barang masuk
                 </p>
+
               </div>
 
               <div className="rounded-[20px] border border-slate-200 bg-slate-50 p-3.5">
+
                 <div className="flex items-center justify-between">
                   <ArrowUpRight className="h-4 w-4 text-slate-500" />
 
@@ -1717,9 +2067,11 @@ export default function Dashboard() {
                 <p className="mt-0.5 text-[8px] text-slate-400">
                   Barang keluar
                 </p>
+
               </div>
 
               <div className="rounded-[20px] border border-blue-100 bg-blue-50/60 p-3.5">
+
                 <div className="flex items-center justify-between">
                   <TrendingUp className="h-4 w-4 text-blue-500" />
 
@@ -1737,6 +2089,7 @@ export default function Dashboard() {
                 <p className="mt-0.5 text-[8px] text-blue-500/70">
                   Total aktivitas
                 </p>
+
               </div>
 
             </div>
@@ -1757,7 +2110,6 @@ export default function Dashboard() {
                       bottom: 5,
                     }}
                   >
-
                     <defs>
 
                       <linearGradient
@@ -1937,12 +2289,11 @@ export default function Dashboard() {
               </div>
 
             </div>
-
           </div>
 
           {/* INVENTORY HEALTH */}
 
-          <div className="rounded-[32px] border border-white bg-white p-6 shadow-[0_8px_32px_rgba(15,23,42,0.045)]">
+          <div className="rounded-[30px] border border-white bg-white p-6 shadow-[0_8px_32px_rgba(15,23,42,0.045)]">
 
             <SectionHeader
               eyebrow="Inventory Intelligence"
@@ -1951,7 +2302,7 @@ export default function Dashboard() {
               icon={Gauge}
             />
 
-            <div className="relative mt-6 overflow-hidden rounded-[28px] bg-[#0C2720] p-6">
+            <div className="relative mt-6 overflow-hidden rounded-[27px] bg-[#0C2720] p-6">
 
               <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-emerald-400/[0.08] blur-2xl" />
 
@@ -1994,14 +2345,12 @@ export default function Dashboard() {
                 </div>
 
                 <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[0.07]">
-
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-all duration-700"
                     style={{
                       width: `${stockHealth}%`,
                     }}
                   />
-
                 </div>
 
                 <div className="mt-2 flex justify-between">
@@ -2016,8 +2365,6 @@ export default function Dashboard() {
 
               </div>
             </div>
-
-            {/* ALERT BREAKDOWN */}
 
             <div className="mt-4 grid grid-cols-3 gap-2">
 
@@ -2059,30 +2406,23 @@ export default function Dashboard() {
 
             </div>
 
-            {/* INVENTORY VALUE */}
-
-            <div
-              title={formatCurrency(
-                inventoryValue
-              )}
-              className="mt-4 overflow-hidden rounded-[22px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-4"
-            >
+            <div className="mt-4 rounded-[22px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-4">
 
               <div className="flex items-center justify-between">
 
                 <div>
                   <p className="text-[8px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Nilai Persediaan
+                    Total Persediaan
                   </p>
 
                   <p className="mt-1 text-xl font-bold tracking-tight text-emerald-600">
                     {formatCompactCurrency(
-                      inventoryValue
+                      inventoryValueTotal
                     )}
                   </p>
 
                   <p className="mt-1 text-[8px] text-slate-400">
-                    Current inventory valuation
+                    Pusat + Outlet
                   </p>
                 </div>
 
@@ -2092,10 +2432,38 @@ export default function Dashboard() {
 
               </div>
 
+              <div className="mt-4 space-y-2">
+
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-[8px] font-medium text-slate-500">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    Pusat
+                  </span>
+
+                  <span className="text-[9px] font-bold text-slate-700">
+                    {formatCompactCurrency(
+                      inventoryValuePusat
+                    )}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-[8px] font-medium text-slate-500">
+                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                    Outlet
+                  </span>
+
+                  <span className="text-[9px] font-bold text-slate-700">
+                    {formatCompactCurrency(
+                      inventoryValueOutlet
+                    )}
+                  </span>
+                </div>
+
+              </div>
             </div>
 
           </div>
-
         </section>
 
         {/* ===================================================
@@ -2108,6 +2476,7 @@ export default function Dashboard() {
 
             <div>
               <div className="flex items-center gap-2">
+
                 <p className="text-[8px] font-bold uppercase tracking-[0.22em] text-emerald-600">
                   Navigation
                 </p>
@@ -2117,6 +2486,7 @@ export default function Dashboard() {
                 <span className="text-[8px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                   Core Modules
                 </span>
+
               </div>
 
               <h2 className="mt-1 text-xl font-bold tracking-[-0.025em] text-slate-800">
@@ -2147,7 +2517,7 @@ export default function Dashboard() {
                 <Link
                   key={menu.title}
                   href={menu.href}
-                  className="group relative overflow-hidden rounded-[24px] border border-white bg-white p-4 shadow-[0_7px_26px_rgba(15,23,42,0.04)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_42px_rgba(15,23,42,0.09)]"
+                  className="group relative overflow-hidden rounded-[23px] border border-white bg-white p-4 shadow-[0_7px_26px_rgba(15,23,42,0.04)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_42px_rgba(15,23,42,0.09)]"
                 >
 
                   <div className="flex items-start justify-between">
@@ -2193,7 +2563,6 @@ export default function Dashboard() {
             })}
 
           </div>
-
         </section>
 
         {/* ===================================================
@@ -2204,7 +2573,7 @@ export default function Dashboard() {
 
           {/* ACTIVITY */}
 
-          <div className="rounded-[32px] border border-white bg-white p-6 shadow-[0_8px_32px_rgba(15,23,42,0.045)]">
+          <div className="rounded-[30px] border border-white bg-white p-6 shadow-[0_8px_32px_rgba(15,23,42,0.045)]">
 
             <div className="flex items-start justify-between">
 
@@ -2216,14 +2585,17 @@ export default function Dashboard() {
               />
 
               <div className="flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1.5">
+
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-50" />
+
                   <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 </span>
 
                 <span className="text-[7px] font-bold text-emerald-600">
                   LIVE
                 </span>
+
               </div>
 
             </div>
@@ -2277,12 +2649,11 @@ export default function Dashboard() {
               )}
 
             </div>
-
           </div>
 
           {/* STOCK ALERT */}
 
-          <div className="rounded-[32px] border border-white bg-white p-6 shadow-[0_8px_32px_rgba(15,23,42,0.045)]">
+          <div className="rounded-[30px] border border-white bg-white p-6 shadow-[0_8px_32px_rgba(15,23,42,0.045)]">
 
             <div className="flex items-start justify-between">
 
@@ -2299,11 +2670,13 @@ export default function Dashboard() {
                 </span>
               ) : (
                 <div className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-1.5">
+
                   <CircleCheck className="h-3 w-3 text-emerald-500" />
 
                   <span className="text-[8px] font-bold text-emerald-600">
                     SAFE
                   </span>
+
                 </div>
               )}
 
@@ -2436,6 +2809,7 @@ export default function Dashboard() {
                             </div>
 
                             <div className="mt-2">
+
                               <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
 
                                 <div
@@ -2444,12 +2818,12 @@ export default function Dashboard() {
                                     width: `${Math.max(
                                       Math.min(
                                         Number(
-                                          item.percentage || 0
+                                          item.percentage ||
+                                            0
                                         ),
                                         100
                                       ),
-                                      item.stock >
-                                        0
+                                      item.stock > 0
                                         ? 4
                                         : 0
                                     )}%`,
@@ -2457,6 +2831,7 @@ export default function Dashboard() {
                                 />
 
                               </div>
+
                             </div>
 
                             <div className="mt-2 flex items-center justify-between">
@@ -2479,9 +2854,7 @@ export default function Dashboard() {
                             </div>
 
                           </div>
-
                         </div>
-
                       </div>
                     );
                   })
@@ -2494,9 +2867,7 @@ export default function Dashboard() {
               )}
 
             </div>
-
           </div>
-
         </section>
 
         {/* ===================================================
@@ -2506,7 +2877,6 @@ export default function Dashboard() {
         <section>
 
           <div className="mb-4">
-
             <p className="text-[8px] font-bold uppercase tracking-[0.22em] text-emerald-600">
               Operational Queue
             </p>
@@ -2518,14 +2888,13 @@ export default function Dashboard() {
             <p className="mt-1 text-[10px] text-slate-400">
               Aktivitas operasional yang masih membutuhkan proses
             </p>
-
           </div>
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
 
             {/* PURCHASE */}
 
-            <div className="group rounded-[32px] border border-white bg-white p-6 shadow-[0_8px_32px_rgba(15,23,42,0.045)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_45px_rgba(15,23,42,0.075)]">
+            <div className="group rounded-[30px] border border-white bg-white p-6 shadow-[0_8px_32px_rgba(15,23,42,0.045)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_45px_rgba(15,23,42,0.075)]">
 
               <div className="flex items-start justify-between">
 
@@ -2578,12 +2947,11 @@ export default function Dashboard() {
                 )}
 
               </div>
-
             </div>
 
             {/* DELIVERY */}
 
-            <div className="group rounded-[32px] border border-white bg-white p-6 shadow-[0_8px_32px_rgba(15,23,42,0.045)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_45px_rgba(15,23,42,0.075)]">
+            <div className="group rounded-[30px] border border-white bg-white p-6 shadow-[0_8px_32px_rgba(15,23,42,0.045)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_45px_rgba(15,23,42,0.075)]">
 
               <div className="flex items-start justify-between">
 
@@ -2636,12 +3004,11 @@ export default function Dashboard() {
                 )}
 
               </div>
-
             </div>
 
             {/* EXPIRED */}
 
-            <div className="group rounded-[32px] border border-white bg-white p-6 shadow-[0_8px_32px_rgba(15,23,42,0.045)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_45px_rgba(15,23,42,0.075)]">
+            <div className="group rounded-[30px] border border-white bg-white p-6 shadow-[0_8px_32px_rgba(15,23,42,0.045)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_45px_rgba(15,23,42,0.075)]">
 
               <div className="flex items-start justify-between">
 
@@ -2724,11 +3091,9 @@ export default function Dashboard() {
                 )}
 
               </div>
-
             </div>
 
           </div>
-
         </section>
 
         {/* ===================================================
@@ -2738,7 +3103,6 @@ export default function Dashboard() {
         <footer className="flex flex-col items-center justify-between gap-4 border-t border-slate-200/80 py-8 sm:flex-row">
 
           <div>
-
             <div className="flex items-center gap-2">
 
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#0D2922]">
@@ -2758,7 +3122,6 @@ export default function Dashboard() {
               </div>
 
             </div>
-
           </div>
 
           <div className="flex items-center gap-3">

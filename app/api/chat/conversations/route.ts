@@ -21,11 +21,7 @@ async function getCurrentUser(request: NextRequest) {
       },
     });
 
-    if (!user) {
-      return null;
-    }
-
-    if (!user.active) {
+    if (!user || !user.active) {
       return null;
     }
 
@@ -35,6 +31,24 @@ async function getCurrentUser(request: NextRequest) {
     return null;
   }
 }
+
+const userSelect = {
+  id: true,
+  username: true,
+  fullname: true,
+  photo: true,
+  role: true,
+  outletId: true,
+  lastSeen: true,
+
+  outlet: {
+    select: {
+      id: true,
+      code: true,
+      name: true,
+    },
+  },
+} as const;
 
 export async function GET(request: NextRequest) {
   try {
@@ -70,22 +84,7 @@ export async function GET(request: NextRequest) {
           participants: {
             include: {
               user: {
-                select: {
-                  id: true,
-                  username: true,
-                  fullname: true,
-                  role: true,
-                  outletId: true,
-                  lastSeen: true,
-
-                  outlet: {
-                    select: {
-                      id: true,
-                      code: true,
-                      name: true,
-                    },
-                  },
-                },
+                select: userSelect,
               },
             },
           },
@@ -102,6 +101,7 @@ export async function GET(request: NextRequest) {
                 select: {
                   id: true,
                   fullname: true,
+                  photo: true,
                 },
               },
             },
@@ -111,80 +111,68 @@ export async function GET(request: NextRequest) {
 
     const now = Date.now();
 
-    const result = conversations.map(
-      (conversation) => {
-        const me =
-          conversation.participants.find(
-            (participant) =>
-              participant.userId ===
-              currentUser.id,
-          );
+    const result = conversations.map((conversation) => {
+      const me = conversation.participants.find(
+        (participant) =>
+          participant.userId === currentUser.id,
+      );
 
-        const otherParticipants =
-          conversation.participants.filter(
-            (participant) =>
-              participant.userId !==
-              currentUser.id,
-          );
+      const otherParticipants =
+        conversation.participants.filter(
+          (participant) =>
+            participant.userId !== currentUser.id,
+        );
 
-        const otherUsers =
-          otherParticipants.map(
-            (participant) => {
-              const lastSeen =
-                participant.user.lastSeen
-                  ?.getTime() ?? 0;
+      const otherUsers = otherParticipants.map(
+        (participant) => {
+          const lastSeen =
+            participant.user.lastSeen?.getTime() ?? 0;
 
-              return {
-                ...participant.user,
+          return {
+            ...participant.user,
 
-                online:
-                  lastSeen > 0 &&
-                  now - lastSeen <=
-                    60 * 1000,
+            online:
+              lastSeen > 0 &&
+              now - lastSeen <= 60 * 1000,
 
-                lastReadAt:
-                  participant.lastReadAt,
-              };
-            },
-          );
+            lastReadAt: participant.lastReadAt,
+          };
+        },
+      );
 
-        const lastMessage =
-          conversation.messages[0] ?? null;
+      const lastMessage =
+        conversation.messages[0] ?? null;
 
-        return {
-          id: conversation.id,
+      return {
+        id: conversation.id,
 
-          createdAt:
-            conversation.createdAt,
+        createdAt: conversation.createdAt,
 
-          updatedAt:
-            conversation.updatedAt,
+        updatedAt: conversation.updatedAt,
 
-          participants:
-            otherUsers,
+        participants: otherUsers,
 
-          lastMessage: lastMessage
-            ? {
-                id: lastMessage.id,
-                message:
-                  lastMessage.message,
-                createdAt:
-                  lastMessage.createdAt,
-                readAt:
-                  lastMessage.readAt,
-                senderId:
-                  lastMessage.senderId,
-                senderName:
-                  lastMessage.sender
-                    .fullname,
-              }
-            : null,
+        lastMessage: lastMessage
+          ? {
+              id: lastMessage.id,
 
-          lastReadAt:
-            me?.lastReadAt ?? null,
-        };
-      },
-    );
+              message: lastMessage.message,
+
+              createdAt: lastMessage.createdAt,
+
+              readAt: lastMessage.readAt,
+
+              senderId: lastMessage.senderId,
+
+              senderName: lastMessage.sender.fullname,
+
+              senderPhoto: lastMessage.sender.photo,
+            }
+          : null,
+
+        lastReadAt: me?.lastReadAt ?? null,
+      };
+    });
 
     return NextResponse.json({
       success: true,
@@ -199,8 +187,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          "Gagal mengambil percakapan",
+        error: "Gagal mengambil percakapan",
       },
       {
         status: 500,
@@ -209,12 +196,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(
-  request: NextRequest,
-) {
+export async function POST(request: NextRequest) {
   try {
-    const currentUser =
-      await getCurrentUser(request);
+    const currentUser = await getCurrentUser(request);
 
     if (!currentUser) {
       return NextResponse.json(
@@ -230,9 +214,7 @@ export async function POST(
 
     const body = await request.json();
 
-    const targetUserId = Number(
-      body.userId,
-    );
+    const targetUserId = Number(body.userId);
 
     if (!Number.isInteger(targetUserId)) {
       return NextResponse.json(
@@ -246,10 +228,7 @@ export async function POST(
       );
     }
 
-    if (
-      targetUserId ===
-      currentUser.id
-    ) {
+    if (targetUserId === currentUser.id) {
       return NextResponse.json(
         {
           success: false,
@@ -262,13 +241,12 @@ export async function POST(
       );
     }
 
-    const targetUser =
-      await prisma.user.findFirst({
-        where: {
-          id: targetUserId,
-          active: true,
-        },
-      });
+    const targetUser = await prisma.user.findFirst({
+      where: {
+        id: targetUserId,
+        active: true,
+      },
+    });
 
     if (!targetUser) {
       return NextResponse.json(
@@ -283,67 +261,48 @@ export async function POST(
     }
 
     const existing =
-      await prisma.chatConversation.findFirst(
-        {
-          where: {
-            participants: {
-              every: {
-                userId: {
-                  in: [
-                    currentUser.id,
-                    targetUserId,
-                  ],
+      await prisma.chatConversation.findFirst({
+        where: {
+          participants: {
+            every: {
+              userId: {
+                in: [
+                  currentUser.id,
+                  targetUserId,
+                ],
+              },
+            },
+          },
+
+          AND: [
+            {
+              participants: {
+                some: {
+                  userId: currentUser.id,
                 },
               },
             },
 
-            AND: [
-              {
-                participants: {
-                  some: {
-                    userId:
-                      currentUser.id,
-                  },
+            {
+              participants: {
+                some: {
+                  userId: targetUserId,
                 },
               },
+            },
+          ],
+        },
 
-              {
-                participants: {
-                  some: {
-                    userId:
-                      targetUserId,
-                  },
-                },
-              },
-            ],
-          },
-
-          include: {
-            participants: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    username: true,
-                    fullname: true,
-                    role: true,
-                    outletId: true,
-                    lastSeen: true,
-
-                    outlet: {
-                      select: {
-                        id: true,
-                        code: true,
-                        name: true,
-                      },
-                    },
-                  },
-                },
+        include: {
+          participants: {
+            include: {
+              user: {
+                select: userSelect,
               },
             },
           },
         },
-      );
+      });
 
     if (existing) {
       return NextResponse.json({
@@ -358,12 +317,10 @@ export async function POST(
           participants: {
             create: [
               {
-                userId:
-                  currentUser.id,
+                userId: currentUser.id,
               },
               {
-                userId:
-                  targetUserId,
+                userId: targetUserId,
               },
             ],
           },
@@ -373,22 +330,7 @@ export async function POST(
           participants: {
             include: {
               user: {
-                select: {
-                  id: true,
-                  username: true,
-                  fullname: true,
-                  role: true,
-                  outletId: true,
-                  lastSeen: true,
-
-                  outlet: {
-                    select: {
-                      id: true,
-                      code: true,
-                      name: true,
-                    },
-                  },
-                },
+                select: userSelect,
               },
             },
           },
@@ -413,8 +355,7 @@ export async function POST(
     return NextResponse.json(
       {
         success: false,
-        error:
-          "Gagal membuat percakapan",
+        error: "Gagal membuat percakapan",
       },
       {
         status: 500,

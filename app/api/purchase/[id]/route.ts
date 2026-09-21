@@ -38,33 +38,29 @@ async function getCurrentUser() {
    */
 
   try {
-    const session =
-      await prisma.session.findUnique({
-        where: {
-          token: sessionCookie.value,
-        },
+    const session = await prisma.session.findUnique({
+      where: {
+        token: sessionCookie.value,
+      },
 
-        select: {
-          expiresAt: true,
+      select: {
+        expiresAt: true,
 
-          user: {
-            select: {
-              id: true,
-              username: true,
-              fullname: true,
-              role: true,
-              active: true,
-              outletId: true,
-            },
+        user: {
+          select: {
+            id: true,
+            username: true,
+            fullname: true,
+            role: true,
+            active: true,
+            outletId: true,
           },
         },
-      });
+      },
+    });
 
     if (session) {
-      if (
-        session.expiresAt <
-        new Date()
-      ) {
+      if (session.expiresAt < new Date()) {
         return null;
       }
 
@@ -88,10 +84,7 @@ async function getCurrentUser() {
    */
 
   try {
-    const parsed =
-      JSON.parse(
-        sessionCookie.value
-      );
+    const parsed = JSON.parse(sessionCookie.value);
 
     const userId = Number(
       parsed?.user?.id ??
@@ -101,26 +94,26 @@ async function getCurrentUser() {
 
     if (
       !userId ||
-      !Number.isInteger(userId)
+      !Number.isInteger(userId) ||
+      userId <= 0
     ) {
       return null;
     }
 
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
 
-        select: {
-          id: true,
-          username: true,
-          fullname: true,
-          role: true,
-          active: true,
-          outletId: true,
-        },
-      });
+      select: {
+        id: true,
+        username: true,
+        fullname: true,
+        role: true,
+        active: true,
+        outletId: true,
+      },
+    });
 
     if (!user || !user.active) {
       return null;
@@ -161,13 +154,19 @@ async function getCurrentUser() {
  */
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: RouteContext
 ) {
   try {
     const { id } = await params;
 
     const purchaseId = Number(id);
+
+    /*
+     * =====================================================
+     * VALIDASI ID
+     * =====================================================
+     */
 
     if (
       !Number.isInteger(purchaseId) ||
@@ -176,8 +175,7 @@ export async function GET(
       return NextResponse.json(
         {
           success: false,
-          message:
-            "ID Purchase tidak valid",
+          message: "ID Purchase tidak valid",
         },
         {
           status: 400,
@@ -302,157 +300,122 @@ export async function GET(
      * =====================================================
      */
 
-    const payable =
-      purchase.payable
-        ? {
-            id:
-              purchase.payable.id,
+    const payable = purchase.payable
+      ? {
+          id: purchase.payable.id,
 
-            purchaseId:
-              purchase.payable.purchaseId,
+          purchaseId:
+            purchase.payable.purchaseId,
 
-            supplierId:
-              purchase.payable.supplierId,
+          supplierId:
+            purchase.payable.supplierId,
 
-            outletId:
-              purchase.payable.outletId,
+          outletId:
+            purchase.payable.outletId,
 
-            /*
-             * =================================================
-             * INVOICE SUPPLIER
-             * =================================================
-             */
+          /*
+           * =================================================
+           * INVOICE SUPPLIER
+           * =================================================
+           */
 
-            invoiceNumber:
-              purchase.payable
-                .invoiceNumber,
+          invoiceNumber:
+            purchase.payable.invoiceNumber,
 
-            invoiceDate:
-              purchase.payable
-                .invoiceDate,
+          invoiceDate:
+            purchase.payable.invoiceDate,
 
-            dueDate:
-              purchase.payable
-                .dueDate,
+          dueDate:
+            purchase.payable.dueDate,
 
-            /*
-             * =================================================
-             * NOMINAL
-             * =================================================
-             */
+          /*
+           * =================================================
+           * NOMINAL
+           * =================================================
+           */
 
-            amount:
-              Number(
-                purchase.payable
-                  .amount ?? 0
-              ),
+          amount: Number(
+            purchase.payable.amount ?? 0
+          ),
 
-            paidAmount:
-              Number(
-                purchase.payable
-                  .paidAmount ?? 0
-              ),
+          paidAmount: Number(
+            purchase.payable.paidAmount ?? 0
+          ),
 
-            outstanding:
-              Number(
-                purchase.payable
-                  .outstanding ?? 0
-              ),
+          outstanding: Number(
+            purchase.payable.outstanding ?? 0
+          ),
 
-            status:
-              purchase.payable.status,
+          status:
+            purchase.payable.status,
 
-            /*
-             * =================================================
-             * PAYMENT HISTORY
-             * =================================================
-             */
+          /*
+           * =================================================
+           * PAYMENT HISTORY
+           * =================================================
+           */
 
-            payments:
-              purchase.payable
-                .payments.map(
-                  (payment) => ({
-                    id:
-                      payment.id,
+          payments:
+            purchase.payable.payments.map(
+              (payment) => ({
+                id: payment.id,
 
-                    number:
-                      payment.number,
+                number: payment.number,
 
-                    payableId:
-                      payment.payableId,
+                payableId:
+                  payment.payableId,
 
-                    purchaseId:
-                      payment.purchaseId,
+                purchaseId:
+                  payment.purchaseId,
 
-                    outletPurchaseId:
-                      payment.outletPurchaseId,
+                outletPurchaseId:
+                  payment.outletPurchaseId,
 
-                    accountId:
-                      payment.accountId,
+                accountId:
+                  payment.accountId,
 
-                    paymentDate:
-                      payment.paymentDate,
+                paymentDate:
+                  payment.paymentDate,
 
-                    amount:
-                      Number(
-                        payment.amount ??
-                          0
-                      ),
-
-                    method:
-                      payment.method,
-
-                    status:
-                      payment.status,
-
-                    referenceNumber:
-                      payment.referenceNumber,
-
-                    note:
-                      payment.note,
-
-                    remarks:
-                      payment.note,
-
-                    account:
-                      payment.account
-                        ? {
-                            id:
-                              payment
-                                .account
-                                .id,
-
-                            code:
-                              payment
-                                .account
-                                .code,
-
-                            name:
-                              payment
-                                .account
-                                .name,
-
-                            type:
-                              payment
-                                .account
-                                .type,
-                          }
-                        : null,
-                  })
+                amount: Number(
+                  payment.amount ?? 0
                 ),
-          }
-        : null;
+
+                method: payment.method,
+
+                status: payment.status,
+
+                referenceNumber:
+                  payment.referenceNumber,
+
+                note: payment.note,
+
+                remarks: payment.note,
+
+                account:
+                  payment.account
+                    ? {
+                        id:
+                          payment.account.id,
+
+                        code:
+                          payment.account.code,
+
+                        name:
+                          payment.account.name,
+
+                        type:
+                          payment.account.type,
+                      }
+                    : null,
+              })
+            ),
+        }
+      : null;
 
     /*
      * =====================================================
      * RESPONSE
-     * =====================================================
-     *
-     * Purchase tetap dikembalikan dengan struktur utama
-     * yang sama.
-     *
-     * payable ditambahkan secara eksplisit.
-     *
      * =====================================================
      */
 
@@ -519,6 +482,12 @@ export async function PUT(
 
     const purchaseId = Number(id);
 
+    /*
+     * =====================================================
+     * VALIDASI ID
+     * =====================================================
+     */
+
     if (
       !Number.isInteger(purchaseId) ||
       purchaseId <= 0
@@ -526,8 +495,7 @@ export async function PUT(
       return NextResponse.json(
         {
           success: false,
-          message:
-            "ID Purchase tidak valid",
+          message: "ID Purchase tidak valid",
         },
         {
           status: 400,
@@ -541,7 +509,21 @@ export async function PUT(
      * =====================================================
      */
 
-    const body = await req.json();
+    let body: any;
+
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Body request tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
     const {
       supplierId,
@@ -550,20 +532,28 @@ export async function PUT(
       description,
       remarks,
       items,
-    } = body;
+    } = body ?? {};
 
     /*
      * =====================================================
-     * VALIDASI SUPPLIER
+     * VALIDASI SUPPLIER ID
      * =====================================================
      */
 
-    if (!supplierId) {
+    const parsedSupplierId = Number(
+      supplierId
+    );
+
+    if (
+      !Number.isInteger(
+        parsedSupplierId
+      ) ||
+      parsedSupplierId <= 0
+    ) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Supplier wajib dipilih",
+          message: "Supplier wajib dipilih",
         },
         {
           status: 400,
@@ -584,8 +574,7 @@ export async function PUT(
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Item Purchase kosong",
+          message: "Item Purchase kosong",
         },
         {
           status: 400,
@@ -599,17 +588,14 @@ export async function PUT(
      * =====================================================
      */
 
-    const selectedPaymentMethod =
-      String(
-        paymentMethod || ""
-      )
-        .trim()
-        .toUpperCase();
+    const selectedPaymentMethod = String(
+      paymentMethod || ""
+    )
+      .trim()
+      .toUpperCase();
 
     const allowedPaymentMethods =
-      Object.values(
-        PaymentMethod
-      );
+      Object.values(PaymentMethod);
 
     if (
       !selectedPaymentMethod ||
@@ -658,11 +644,9 @@ export async function PUT(
         );
       }
 
-      finalPurchaseDate =
-        parsedDate;
+      finalPurchaseDate = parsedDate;
     } else {
-      finalPurchaseDate =
-        new Date();
+      finalPurchaseDate = new Date();
     }
 
     /*
@@ -722,7 +706,7 @@ export async function PUT(
     const supplier =
       await prisma.supplier.findUnique({
         where: {
-          id: Number(supplierId),
+          id: parsedSupplierId,
         },
       });
 
@@ -747,32 +731,81 @@ export async function PUT(
 
     let total = 0;
 
+    const validatedItems: Array<{
+      barangId: number;
+      qty: number;
+      price: number;
+      subtotal: number;
+    }> = [];
+
     for (const item of items) {
-      const barangId =
-        Number(item.barangId);
+      const barangId = Number(
+        item?.barangId
+      );
 
-      const qty =
-        Number(item.qty);
+      const qty = Number(item?.qty);
 
-      const price =
-        Number(item.price);
+      const price = Number(item?.price);
+
+      /*
+       * ===================================================
+       * VALIDASI ANGKA
+       * ===================================================
+       */
 
       if (
-        !barangId ||
-        qty <= 0 ||
-        price <= 0
+        !Number.isInteger(barangId) ||
+        barangId <= 0
       ) {
         return NextResponse.json(
           {
             success: false,
             message:
-              "Barang, Qty, dan Harga harus valid",
+              "Barang tidak valid",
           },
           {
             status: 400,
           }
         );
       }
+
+      if (
+        !Number.isFinite(qty) ||
+        qty <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Qty harus berupa angka lebih dari 0",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      if (
+        !Number.isFinite(price) ||
+        price <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Harga harus berupa angka lebih dari 0",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /*
+       * ===================================================
+       * CEK BARANG
+       * ===================================================
+       */
 
       const barang =
         await prisma.barang.findUnique({
@@ -794,8 +827,53 @@ export async function PUT(
         );
       }
 
-      total +=
-        qty * price;
+      const subtotal = qty * price;
+
+      if (
+        !Number.isFinite(subtotal)
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Subtotal item tidak valid",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      total += subtotal;
+
+      validatedItems.push({
+        barangId,
+        qty,
+        price,
+        subtotal,
+      });
+    }
+
+    /*
+     * =====================================================
+     * VALIDASI TOTAL
+     * =====================================================
+     */
+
+    if (
+      !Number.isFinite(total) ||
+      total <= 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Total Purchase Order tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
     }
 
     /*
@@ -834,10 +912,13 @@ export async function PUT(
 
               data: {
                 supplierId:
-                  Number(supplierId),
+                  parsedSupplierId,
 
                 /*
                  * TANGGAL PO
+                 *
+                 * Jika purchaseDate tidak dikirim,
+                 * tanggal lama tetap dipertahankan.
                  */
 
                 purchaseDate:
@@ -873,33 +954,18 @@ export async function PUT(
 
                 items: {
                   create:
-                    items.map(
-                      (item: any) => {
-                        const qty =
-                          Number(
-                            item.qty
-                          );
+                    validatedItems.map(
+                      (item) => ({
+                        barangId:
+                          item.barangId,
 
-                        const price =
-                          Number(
-                            item.price
-                          );
+                        qty: item.qty,
 
-                        return {
-                          barangId:
-                            Number(
-                              item.barangId
-                            ),
+                        price: item.price,
 
-                          qty,
-
-                          price,
-
-                          subtotal:
-                            qty *
-                            price,
-                        };
-                      }
+                        subtotal:
+                          item.subtotal,
+                      })
                     ),
                 },
               },
@@ -1085,7 +1151,8 @@ export async function DELETE(
     const requestedSource =
       req.nextUrl.searchParams
         .get("source")
-        ?.toUpperCase();
+        ?.trim()
+        .toUpperCase();
 
     if (
       requestedSource &&
@@ -1163,7 +1230,9 @@ export async function DELETE(
         await prisma.$transaction(
           async (tx) => {
             /*
+             * =================================================
              * HAPUS ITEM
+             * =================================================
              */
 
             await tx.purchaseItem.deleteMany({
@@ -1174,7 +1243,9 @@ export async function DELETE(
             });
 
             /*
+             * =================================================
              * HAPUS PURCHASE
+             * =================================================
              */
 
             await tx.purchase.delete({
@@ -1184,7 +1255,9 @@ export async function DELETE(
             });
 
             /*
+             * =================================================
              * HISTORY
+             * =================================================
              */
 
             await tx.history.create({
@@ -1307,7 +1380,9 @@ export async function DELETE(
       await prisma.$transaction(
         async (tx) => {
           /*
+           * =================================================
            * HAPUS ITEM OUTLET
+           * =================================================
            */
 
           await tx.outletPurchaseItem.deleteMany({
@@ -1318,7 +1393,9 @@ export async function DELETE(
           });
 
           /*
+           * =================================================
            * HAPUS PURCHASE OUTLET
+           * =================================================
            */
 
           await tx.outletPurchase.delete({
@@ -1328,7 +1405,9 @@ export async function DELETE(
           });
 
           /*
+           * =================================================
            * HISTORY
+           * =================================================
            */
 
           await tx.history.create({

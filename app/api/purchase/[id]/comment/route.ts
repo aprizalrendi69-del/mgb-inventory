@@ -9,10 +9,6 @@ type RouteContext = {
   }>;
 };
 
-// =====================================================
-// CURRENT USER
-// =====================================================
-
 async function getCurrentUser() {
   const cookieStore = await cookies();
 
@@ -24,36 +20,27 @@ async function getCurrentUser() {
     return null;
   }
 
-  // ===================================================
-  // DATABASE SESSION
-  // ===================================================
-
   try {
-    const session =
-      await prisma.session.findUnique({
-        where: {
-          token: sessionCookie.value,
-        },
-
-        select: {
-          expiresAt: true,
-
-          user: {
-            select: {
-              id: true,
-              fullname: true,
-              role: true,
-              active: true,
-              outletId: true,
-            },
+    const session = await prisma.session.findUnique({
+      where: {
+        token: sessionCookie.value,
+      },
+      select: {
+        expiresAt: true,
+        user: {
+          select: {
+            id: true,
+            fullname: true,
+            role: true,
+            active: true,
+            outletId: true,
           },
         },
-      });
+      },
+    });
 
     if (session) {
-      if (
-        session.expiresAt < new Date()
-      ) {
+      if (session.expiresAt < new Date()) {
         return null;
       }
 
@@ -64,20 +51,14 @@ async function getCurrentUser() {
       return session.user;
     }
   } catch (error) {
-    console.error(
-      "DATABASE SESSION CHECK ERROR:",
-      error
-    );
+    console.error("DATABASE SESSION CHECK ERROR:", error);
   }
 
-  // ===================================================
-  // JSON SESSION
-  // ===================================================
-
+  /*
+   * Fallback untuk session cookie berbentuk JSON.
+   */
   try {
-    const parsed = JSON.parse(
-      sessionCookie.value
-    );
+    const parsed = JSON.parse(sessionCookie.value);
 
     const userId = Number(
       parsed?.user?.id ??
@@ -92,20 +73,18 @@ async function getCurrentUser() {
       return null;
     }
 
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
-
-        select: {
-          id: true,
-          fullname: true,
-          role: true,
-          active: true,
-          outletId: true,
-        },
-      });
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        fullname: true,
+        role: true,
+        active: true,
+        outletId: true,
+      },
+    });
 
     if (!user || !user.active) {
       return null;
@@ -113,22 +92,12 @@ async function getCurrentUser() {
 
     return user;
   } catch (error) {
-    console.error(
-      "JSON SESSION CHECK ERROR:",
-      error
-    );
-
+    console.error("JSON SESSION CHECK ERROR:", error);
     return null;
   }
 }
 
-// =====================================================
-// CENTRAL PURCHASE ACCESS
-// =====================================================
-
-function canAccessCentralPurchase(
-  role: Role
-) {
+function canAccessCentralPurchase(role: Role) {
   return (
     role === Role.ADMIN ||
     role === Role.MANAGER ||
@@ -136,13 +105,7 @@ function canAccessCentralPurchase(
   );
 }
 
-// =====================================================
-// GET PURCHASE ID
-// =====================================================
-
-function getPurchaseId(
-  value: string
-) {
+function getPurchaseId(value: string) {
   const id = Number(value);
 
   if (
@@ -155,17 +118,36 @@ function getPurchaseId(
   return id;
 }
 
-// =====================================================
-// GET COMMENTS
-// =====================================================
+function normalizeMentionIds(
+  value: unknown
+): number[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      value
+        .map((item) => Number(item))
+        .filter(
+          (id) =>
+            Number.isInteger(id) &&
+            id > 0
+        )
+    )
+  );
+}
+
+// =========================================================
+// GET
+// =========================================================
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: RouteContext
 ) {
   try {
-    const user =
-      await getCurrentUser();
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
@@ -173,26 +155,18 @@ export async function GET(
           success: false,
           message: "Tidak login",
         },
-        {
-          status: 401,
-        }
+        { status: 401 }
       );
     }
 
-    if (
-      !canAccessCentralPurchase(
-        user.role
-      )
-    ) {
+    if (!canAccessCentralPurchase(user.role)) {
       return NextResponse.json(
         {
           success: false,
           message:
             "Anda tidak memiliki akses komentar Purchase Pusat",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
 
@@ -203,28 +177,21 @@ export async function GET(
           message:
             "User outlet tidak dapat mengakses komentar Purchase Pusat",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
 
-    const { id } =
-      await params;
+    const { id } = await params;
 
-    const purchaseId =
-      getPurchaseId(id);
+    const purchaseId = getPurchaseId(id);
 
     if (!purchaseId) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "ID Purchase tidak valid",
+          message: "ID Purchase tidak valid",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
@@ -233,10 +200,8 @@ export async function GET(
         where: {
           id: purchaseId,
         },
-
         select: {
           id: true,
-          number: true,
         },
       });
 
@@ -247,9 +212,7 @@ export async function GET(
           message:
             "Purchase Order tidak ditemukan",
         },
-        {
-          status: 404,
-        }
+        { status: 404 }
       );
     }
 
@@ -258,7 +221,6 @@ export async function GET(
         where: {
           purchaseId,
         },
-
         include: {
           user: {
             select: {
@@ -268,8 +230,23 @@ export async function GET(
               outletId: true,
             },
           },
+          mentions: {
+            orderBy: {
+              createdAt: "asc",
+            },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  fullname: true,
+                  role: true,
+                  outletId: true,
+                  active: true,
+                },
+              },
+            },
+          },
         },
-
         orderBy: {
           createdAt: "asc",
         },
@@ -277,10 +254,9 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-
       data: comments,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(
       "GET PURCHASE COMMENTS ERROR:",
       error
@@ -292,24 +268,21 @@ export async function GET(
         message:
           "Gagal mengambil komentar Purchase Order",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
 
-// =====================================================
-// POST COMMENT
-// =====================================================
+// =========================================================
+// POST
+// =========================================================
 
 export async function POST(
   req: NextRequest,
   { params }: RouteContext
 ) {
   try {
-    const user =
-      await getCurrentUser();
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
@@ -317,26 +290,18 @@ export async function POST(
           success: false,
           message: "Tidak login",
         },
-        {
-          status: 401,
-        }
+        { status: 401 }
       );
     }
 
-    if (
-      !canAccessCentralPurchase(
-        user.role
-      )
-    ) {
+    if (!canAccessCentralPurchase(user.role)) {
       return NextResponse.json(
         {
           success: false,
           message:
             "Anda tidak memiliki akses komentar Purchase Pusat",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
 
@@ -347,32 +312,25 @@ export async function POST(
           message:
             "User outlet tidak dapat memberikan komentar pada Purchase Pusat",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
 
-    const { id } =
-      await params;
+    const { id } = await params;
 
-    const purchaseId =
-      getPurchaseId(id);
+    const purchaseId = getPurchaseId(id);
 
     if (!purchaseId) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "ID Purchase tidak valid",
+          message: "ID Purchase tidak valid",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    let body: any;
+    let body: unknown;
 
     try {
       body = await req.json();
@@ -380,19 +338,16 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Body request tidak valid",
+          message: "Body request tidak valid",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
     const comment =
-      typeof body?.comment ===
+      typeof (body as { comment?: unknown })?.comment ===
       "string"
-        ? body.comment.trim()
+        ? (body as { comment: string }).comment.trim()
         : "";
 
     if (!comment) {
@@ -402,9 +357,7 @@ export async function POST(
           message:
             "Komentar tidak boleh kosong",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
@@ -415,21 +368,23 @@ export async function POST(
           message:
             "Komentar maksimal 2000 karakter",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
+
+    const mentionedUserIds =
+      normalizeMentionIds(
+        (body as { mentionedUserIds?: unknown })
+          ?.mentionedUserIds
+      );
 
     const purchase =
       await prisma.purchase.findUnique({
         where: {
           id: purchaseId,
         },
-
         select: {
           id: true,
-          number: true,
         },
       });
 
@@ -440,11 +395,56 @@ export async function POST(
           message:
             "Purchase Order tidak ditemukan",
         },
-        {
-          status: 404,
-        }
+        { status: 404 }
       );
     }
+
+    // =====================================================
+    // VALIDATE MENTION USERS
+    // =====================================================
+
+    if (mentionedUserIds.length > 0) {
+      const mentionUsers =
+        await prisma.user.findMany({
+          where: {
+            id: {
+              in: mentionedUserIds,
+            },
+            active: true,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+      const foundIds = new Set(
+        mentionUsers.map(
+          (item) => item.id
+        )
+      );
+
+      const invalidIds =
+        mentionedUserIds.filter(
+          (mentionId) =>
+            !foundIds.has(mentionId)
+        );
+
+      if (invalidIds.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Salah satu user yang di-mention tidak ditemukan atau sudah tidak aktif",
+            invalidUserIds: invalidIds,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // =====================================================
+    // CREATE COMMENT
+    // =====================================================
 
     const result =
       await prisma.$transaction(
@@ -453,13 +453,21 @@ export async function POST(
             await tx.purchaseComment.create({
               data: {
                 purchaseId,
-
-                userId:
-                  user.id,
-
+                userId: user.id,
                 comment,
+                mentions:
+                  mentionedUserIds.length > 0
+                    ? {
+                        create:
+                          mentionedUserIds.map(
+                            (mentionedUserId) => ({
+                              userId:
+                                mentionedUserId,
+                            })
+                          ),
+                      }
+                    : undefined,
               },
-
               include: {
                 user: {
                   select: {
@@ -469,22 +477,32 @@ export async function POST(
                     outletId: true,
                   },
                 },
+                mentions: {
+                  orderBy: {
+                    createdAt: "asc",
+                  },
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        fullname: true,
+                        role: true,
+                        outletId: true,
+                        active: true,
+                      },
+                    },
+                  },
+                },
               },
             });
 
           await tx.history.create({
             data: {
-              transactionType:
-                "PURCHASE",
-
-              referenceNumber:
-                purchase.number,
-
+              transactionType: "PURCHASE",
+              referenceNumber: String(purchase.id),
               description:
-                `Menambahkan komentar pada Purchase Order ${purchase.number}`,
-
-              userId:
-                user.id,
+                `Menambahkan komentar pada Purchase Order #${purchase.id}`,
+              userId: user.id,
             },
           });
 
@@ -494,13 +512,11 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-
       message:
         "Komentar berhasil ditambahkan",
-
       data: result,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(
       "POST PURCHASE COMMENT ERROR:",
       error
@@ -512,9 +528,7 @@ export async function POST(
         message:
           "Gagal menambahkan komentar",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }

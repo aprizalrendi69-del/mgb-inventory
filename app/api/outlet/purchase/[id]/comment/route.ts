@@ -24,32 +24,33 @@ async function getCurrentUser() {
     return null;
   }
 
+  // ===================================================
+  // DATABASE SESSION
+  // ===================================================
+
   try {
-    const session =
-      await prisma.session.findUnique({
-        where: {
-          token: sessionCookie.value,
-        },
+    const session = await prisma.session.findUnique({
+      where: {
+        token: sessionCookie.value,
+      },
 
-        select: {
-          expiresAt: true,
+      select: {
+        expiresAt: true,
 
-          user: {
-            select: {
-              id: true,
-              fullname: true,
-              role: true,
-              active: true,
-              outletId: true,
-            },
+        user: {
+          select: {
+            id: true,
+            fullname: true,
+            role: true,
+            active: true,
+            outletId: true,
           },
         },
-      });
+      },
+    });
 
     if (session) {
-      if (
-        session.expiresAt < new Date()
-      ) {
+      if (session.expiresAt < new Date()) {
         return null;
       }
 
@@ -66,10 +67,12 @@ async function getCurrentUser() {
     );
   }
 
+  // ===================================================
+  // FALLBACK JSON SESSION
+  // ===================================================
+
   try {
-    const parsed = JSON.parse(
-      sessionCookie.value
-    );
+    const parsed = JSON.parse(sessionCookie.value);
 
     const userId = Number(
       parsed?.user?.id ??
@@ -84,20 +87,19 @@ async function getCurrentUser() {
       return null;
     }
 
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
 
-        select: {
-          id: true,
-          fullname: true,
-          role: true,
-          active: true,
-          outletId: true,
-        },
-      });
+      select: {
+        id: true,
+        fullname: true,
+        role: true,
+        active: true,
+        outletId: true,
+      },
+    });
 
     if (!user || !user.active) {
       return null;
@@ -118,9 +120,7 @@ async function getCurrentUser() {
 // ACCESS
 // =====================================================
 
-function canAccessOutletPurchase(
-  role: Role
-) {
+function canAccessOutletPurchase(role: Role) {
   return (
     role === Role.ADMIN ||
     role === Role.MANAGER ||
@@ -133,9 +133,7 @@ function canAccessOutletPurchase(
 // ID
 // =====================================================
 
-function getPurchaseId(
-  value: string
-) {
+function getPurchaseId(value: string) {
   const id = Number(value);
 
   if (
@@ -149,8 +147,40 @@ function getPurchaseId(
 }
 
 // =====================================================
+// NORMALIZE MENTION IDS
+// =====================================================
+
+function normalizeMentionIds(
+  value: unknown
+): number[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const ids = value
+    .map((item) => Number(item))
+    .filter(
+      (id) =>
+        Number.isInteger(id) &&
+        id > 0
+    );
+
+  return Array.from(new Set(ids));
+}
+
+// =====================================================
 // CHECK PURCHASE ACCESS
 // =====================================================
+//
+// OUTLET_ADMIN:
+// -> HANYA purchase outlet milik outlet sendiri.
+//
+// ADMIN / MANAGER / PURCHASING:
+// -> Bisa mengakses semua Purchase Outlet.
+//
+// Tidak pernah percaya outletId dari frontend.
+// Scope selalu berdasarkan session user.
+//
 
 async function getAccessiblePurchase(
   purchaseId: number,
@@ -159,11 +189,12 @@ async function getAccessiblePurchase(
     outletId: number | null;
   }
 ) {
-  if (
-    user.role ===
-    Role.OUTLET_ADMIN
-  ) {
-    if (!user.outletId) {
+  // ---------------------------------------------------
+  // OUTLET ADMIN
+  // ---------------------------------------------------
+
+  if (user.role === Role.OUTLET_ADMIN) {
+    if (user.outletId === null) {
       return null;
     }
 
@@ -180,6 +211,10 @@ async function getAccessiblePurchase(
       },
     });
   }
+
+  // ---------------------------------------------------
+  // ADMIN / MANAGER / PURCHASING
+  // ---------------------------------------------------
 
   return prisma.outletPurchase.findUnique({
     where: {
@@ -199,12 +234,15 @@ async function getAccessiblePurchase(
 // =====================================================
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: RouteContext
 ) {
   try {
-    const user =
-      await getCurrentUser();
+    const user = await getCurrentUser();
+
+    // =================================================
+    // AUTH
+    // =================================================
 
     if (!user) {
       return NextResponse.json(
@@ -218,11 +256,11 @@ export async function GET(
       );
     }
 
-    if (
-      !canAccessOutletPurchase(
-        user.role
-      )
-    ) {
+    // =================================================
+    // ROLE ACCESS
+    // =================================================
+
+    if (!canAccessOutletPurchase(user.role)) {
       return NextResponse.json(
         {
           success: false,
@@ -235,10 +273,13 @@ export async function GET(
       );
     }
 
+    // =================================================
+    // OUTLET ADMIN MUST HAVE OUTLET
+    // =================================================
+
     if (
-      user.role ===
-        Role.OUTLET_ADMIN &&
-      !user.outletId
+      user.role === Role.OUTLET_ADMIN &&
+      user.outletId === null
     ) {
       return NextResponse.json(
         {
@@ -252,11 +293,13 @@ export async function GET(
       );
     }
 
-    const { id } =
-      await params;
+    // =================================================
+    // PURCHASE ID
+    // =================================================
 
-    const purchaseId =
-      getPurchaseId(id);
+    const { id } = await params;
+
+    const purchaseId = getPurchaseId(id);
 
     if (!purchaseId) {
       return NextResponse.json(
@@ -271,6 +314,10 @@ export async function GET(
       );
     }
 
+    // =================================================
+    // CHECK PURCHASE ACCESS
+    // =================================================
+
     const purchase =
       await getAccessiblePurchase(
         purchaseId,
@@ -282,7 +329,7 @@ export async function GET(
         {
           success: false,
           message:
-            "Purchase Outlet tidak ditemukan",
+            "Purchase Outlet tidak ditemukan atau Anda tidak memiliki akses",
         },
         {
           status: 404,
@@ -290,11 +337,14 @@ export async function GET(
       );
     }
 
+    // =================================================
+    // GET COMMENTS
+    // =================================================
+
     const comments =
       await prisma.purchaseComment.findMany({
         where: {
-          outletPurchaseId:
-            purchaseId,
+          outletPurchaseId: purchaseId,
         },
 
         include: {
@@ -304,6 +354,25 @@ export async function GET(
               fullname: true,
               role: true,
               outletId: true,
+              active: true,
+            },
+          },
+
+          mentions: {
+            orderBy: {
+              createdAt: "asc",
+            },
+
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  fullname: true,
+                  role: true,
+                  outletId: true,
+                  active: true,
+                },
+              },
             },
           },
         },
@@ -313,12 +382,37 @@ export async function GET(
         },
       });
 
+    // =================================================
+    // UI HELPER
+    // =================================================
+    //
+    // canDelete HANYA untuk membantu frontend.
+    //
+    // Security DELETE tetap dilakukan di:
+    // [commentId]/route.ts
+    //
+    // Jangan pernah percaya nilai canDelete dari client.
+    //
+
+    const data = comments.map((item) => ({
+      ...item,
+
+      canDelete:
+        item.user.id === user.id,
+    }));
+
+    // =================================================
+    // RESPONSE
+    // =================================================
+
     return NextResponse.json({
       success: true,
 
-      data: comments,
+      currentUserId: user.id,
+
+      data,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(
       "GET OUTLET PURCHASE COMMENTS ERROR:",
       error
@@ -346,8 +440,11 @@ export async function POST(
   { params }: RouteContext
 ) {
   try {
-    const user =
-      await getCurrentUser();
+    const user = await getCurrentUser();
+
+    // =================================================
+    // AUTH
+    // =================================================
 
     if (!user) {
       return NextResponse.json(
@@ -361,11 +458,11 @@ export async function POST(
       );
     }
 
-    if (
-      !canAccessOutletPurchase(
-        user.role
-      )
-    ) {
+    // =================================================
+    // ROLE ACCESS
+    // =================================================
+
+    if (!canAccessOutletPurchase(user.role)) {
       return NextResponse.json(
         {
           success: false,
@@ -378,10 +475,13 @@ export async function POST(
       );
     }
 
+    // =================================================
+    // OUTLET ADMIN MUST HAVE OUTLET
+    // =================================================
+
     if (
-      user.role ===
-        Role.OUTLET_ADMIN &&
-      !user.outletId
+      user.role === Role.OUTLET_ADMIN &&
+      user.outletId === null
     ) {
       return NextResponse.json(
         {
@@ -395,11 +495,13 @@ export async function POST(
       );
     }
 
-    const { id } =
-      await params;
+    // =================================================
+    // PURCHASE ID
+    // =================================================
 
-    const purchaseId =
-      getPurchaseId(id);
+    const { id } = await params;
+
+    const purchaseId = getPurchaseId(id);
 
     if (!purchaseId) {
       return NextResponse.json(
@@ -414,7 +516,11 @@ export async function POST(
       );
     }
 
-    let body: any;
+    // =================================================
+    // PARSE BODY
+    // =================================================
+
+    let body: unknown;
 
     try {
       body = await req.json();
@@ -431,10 +537,19 @@ export async function POST(
       );
     }
 
+    // =================================================
+    // COMMENT
+    // =================================================
+
     const comment =
-      typeof body?.comment ===
-      "string"
-        ? body.comment.trim()
+      typeof (body as {
+        comment?: unknown;
+      })?.comment === "string"
+        ? (
+            body as {
+              comment: string;
+            }
+          ).comment.trim()
         : "";
 
     if (!comment) {
@@ -463,6 +578,21 @@ export async function POST(
       );
     }
 
+    // =================================================
+    // MENTION IDS
+    // =================================================
+
+    const mentionedUserIds =
+      normalizeMentionIds(
+        (body as {
+          mentionedUserIds?: unknown;
+        })?.mentionedUserIds
+      );
+
+    // =================================================
+    // CHECK PURCHASE ACCESS
+    // =================================================
+
     const purchase =
       await getAccessiblePurchase(
         purchaseId,
@@ -474,13 +604,68 @@ export async function POST(
         {
           success: false,
           message:
-            "Purchase Outlet tidak ditemukan",
+            "Purchase Outlet tidak ditemukan atau Anda tidak memiliki akses",
         },
         {
           status: 404,
         }
       );
     }
+
+    // =================================================
+    // VALIDATE MENTION USERS
+    // =================================================
+
+    if (mentionedUserIds.length > 0) {
+      const mentionUsers =
+        await prisma.user.findMany({
+          where: {
+            id: {
+              in: mentionedUserIds,
+            },
+
+            active: true,
+          },
+
+          select: {
+            id: true,
+          },
+        });
+
+      const foundIds = new Set(
+        mentionUsers.map(
+          (item) => item.id
+        )
+      );
+
+      const invalidIds =
+        mentionedUserIds.filter(
+          (mentionId) =>
+            !foundIds.has(mentionId)
+        );
+
+      if (invalidIds.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Salah satu user yang di-mention tidak ditemukan atau sudah tidak aktif",
+
+            invalidUserIds:
+              invalidIds,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+    }
+
+    // =================================================
+    // CREATE COMMENT
+    // + MENTIONS
+    // + HISTORY
+    // =================================================
 
     const result =
       await prisma.$transaction(
@@ -495,6 +680,21 @@ export async function POST(
                   user.id,
 
                 comment,
+
+                mentions:
+                  mentionedUserIds.length > 0
+                    ? {
+                        create:
+                          mentionedUserIds.map(
+                            (
+                              mentionedUserId
+                            ) => ({
+                              userId:
+                                mentionedUserId,
+                            })
+                          ),
+                      }
+                    : undefined,
               },
 
               include: {
@@ -504,10 +704,33 @@ export async function POST(
                     fullname: true,
                     role: true,
                     outletId: true,
+                    active: true,
+                  },
+                },
+
+                mentions: {
+                  orderBy: {
+                    createdAt: "asc",
+                  },
+
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        fullname: true,
+                        role: true,
+                        outletId: true,
+                        active: true,
+                      },
+                    },
                   },
                 },
               },
             });
+
+          // ===========================================
+          // HISTORY
+          // ===========================================
 
           await tx.history.create({
             data: {
@@ -529,15 +752,28 @@ export async function POST(
         }
       );
 
+    // =================================================
+    // RESPONSE
+    // =================================================
+
     return NextResponse.json({
       success: true,
 
       message:
         "Komentar berhasil ditambahkan",
 
-      data: result,
+      currentUserId: user.id,
+
+      data: {
+        ...result,
+
+        // UI helper saja.
+        // Backend DELETE tetap melakukan
+        // pengecekan ownership.
+        canDelete: true,
+      },
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(
       "POST OUTLET PURCHASE COMMENT ERROR:",
       error

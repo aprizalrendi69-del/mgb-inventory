@@ -29,6 +29,25 @@ function parseTempoDays(value: unknown) {
 }
 
 // =====================================================
+// PARSE OPTIONAL STRING
+// =====================================================
+
+function parseOptionalString(
+  value: unknown
+): string | null {
+  if (
+    value === undefined ||
+    value === null
+  ) {
+    return null;
+  }
+
+  const result = String(value).trim();
+
+  return result || null;
+}
+
+// =====================================================
 // GET SUPPLIER DETAIL
 // GET /api/supplier/:id
 // =====================================================
@@ -135,6 +154,10 @@ export async function PATCH(
       );
     }
 
+    // =================================================
+    // CEK SUPPLIER
+    // =================================================
+
     const existing =
       await prisma.supplier.findUnique({
         where: {
@@ -192,6 +215,10 @@ export async function PATCH(
       );
     }
 
+    // =================================================
+    // TEMPO PEMBAYARAN
+    // =================================================
+
     let tempoDays: number;
 
     try {
@@ -214,6 +241,39 @@ export async function PATCH(
     }
 
     // =================================================
+    // INFORMASI REKENING
+    // =================================================
+    //
+    // Jika field dikirim:
+    //   ""     -> null
+    //   "123"  -> "123"
+    //
+    // Jika field tidak dikirim:
+    //   gunakan nilai existing.
+    // =================================================
+
+    const noRekening =
+      body.noRekening !== undefined
+        ? parseOptionalString(
+            body.noRekening
+          )
+        : existing.noRekening;
+
+    const namaRekening =
+      body.namaRekening !== undefined
+        ? parseOptionalString(
+            body.namaRekening
+          )
+        : existing.namaRekening;
+
+    const jenisRekening =
+      body.jenisRekening !== undefined
+        ? parseOptionalString(
+            body.jenisRekening
+          )
+        : existing.jenisRekening;
+
+    // =================================================
     // UPDATE
     // =================================================
 
@@ -224,33 +284,63 @@ export async function PATCH(
         },
 
         data: {
+          // ===========================================
+          // IDENTITAS SUPPLIER
+          // ===========================================
+
           code,
           name,
 
+          // ===========================================
+          // INFORMASI KONTAK
+          // ===========================================
+
           address:
             body.address !== undefined
-              ? body.address || null
+              ? parseOptionalString(
+                  body.address
+                )
               : existing.address,
 
           city:
             body.city !== undefined
-              ? body.city || null
+              ? parseOptionalString(
+                  body.city
+                )
               : existing.city,
 
           phone:
             body.phone !== undefined
-              ? body.phone || null
+              ? parseOptionalString(
+                  body.phone
+                )
               : existing.phone,
 
           email:
             body.email !== undefined
-              ? body.email || null
+              ? parseOptionalString(
+                  body.email
+                )
               : existing.email,
 
           contactPerson:
             body.contactPerson !== undefined
-              ? body.contactPerson || null
+              ? parseOptionalString(
+                  body.contactPerson
+                )
               : existing.contactPerson,
+
+          // ===========================================
+          // INFORMASI REKENING SUPPLIER
+          // ===========================================
+
+          noRekening,
+          namaRekening,
+          jenisRekening,
+
+          // ===========================================
+          // TEMPO PEMBAYARAN
+          // ===========================================
 
           tempoDays,
         },
@@ -267,7 +357,10 @@ export async function PATCH(
       error
     );
 
-    // Prisma duplicate unique code
+    // =================================================
+    // PRISMA DUPLICATE UNIQUE CODE
+    // =================================================
+
     if (error?.code === "P2002") {
       return NextResponse.json(
         {
@@ -415,6 +508,10 @@ export async function DELETE(
         },
       }),
     ]);
+
+    // =================================================
+    // CEK APAKAH SUDAH MEMILIKI HISTORY
+    // =================================================
 
     const hasHistory =
       purchaseCount > 0 ||

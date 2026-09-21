@@ -1,2482 +1,457 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-
 import { prisma } from "@/lib/prisma";
+import { toBaseQty } from "@/lib/base-unit";
 
 export const dynamic = "force-dynamic";
 
-/*
-===========================================================
-MANUFACTURE RECIPE / BOM API
-===========================================================
+const ROLE_ADMIN = "ADMIN";
+const ROLE_MANAGER = "MANAGER";
+const ROLE_OUTLET_ADMIN = "OUTLET_ADMIN";
+const ROLE_ADMIN_PUSAT = "ADMIN_PUSAT";
 
-FLOW:
+const ALLOWED_ROLES = new Set([
+  ROLE_ADMIN,
+  ROLE_MANAGER,
+  ROLE_ADMIN_PUSAT,
+  ROLE_OUTLET_ADMIN,
+]);
 
-GET
-- Admin / Manager / Gudang:
-  - tanpa outletId = semua outlet
-  - dengan outletId = outlet tertentu
-- Outlet Admin:
-  - selalu outlet miliknya
-
-POST
-- Membuat Recipe/BOM Manufacture Outlet
-- Wajib memiliki outlet
-- Tidak mengubah stock
-
-PUT / PATCH
-- Update Recipe/BOM
-- Tidak mengubah stock
-- ID dapat berasal dari:
-  1. URL pathname
-  2. ?id=
-  3. body.id
-- outletId dapat berasal dari:
-  1. body.outletId
-  2. ?outletId=
-  3. outletId recipe lama
-  4. user.outletId
-- Outlet Admin selalu dipaksa ke outlet miliknya
-
-DELETE
-- Hapus Recipe hanya jika belum dipakai Manufacture Order
-===========================================================
-*/
-
-const ALLOWED_ROLES = [
-  "ADMIN",
-  "MANAGER",
-  "GUDANG",
-  "OUTLET_ADMIN",
-] as const;
+type CurrentUser = {
+  id: number;
+  role: string;
+  outletId: number | null;
+  active: boolean;
+};
 
 type RecipeItemInput = {
-  itemType?: string;
-  barangId?: number | string | null;
-  name?: string | null;
-  qty?: number | string | null;
-  unit?: string | null;
+  barangId: number;
+  qty: number;
+  unit: string;
 };
 
-type RecipeBody = {
-  id?: number | string | null;
-
-  outletId?: number | string | null;
-
-  code?: string | null;
-  name?: string | null;
-
-  menuId?: number | string | null;
-
-  productCkId?: number | string | null;
-
-  outputBarangId?: number | string | null;
-
-  outputQty?: number | string | null;
-
-  notes?: string | null;
-
-  active?: boolean;
-
-  items?: RecipeItemInput[];
-};
-
-/*
-===========================================================
-RESPONSE HELPER
-===========================================================
-*/
-
-function fail(
-  message: string,
-  status = 400,
-) {
-  return NextResponse.json(
-    {
-      success: false,
-      message,
-    },
-    {
-      status,
-    },
-  );
+function roleOf(value: unknown) {
+  return String(value ?? "").trim().toUpperCase();
 }
 
-/*
-===========================================================
-TYPE CONVERTER
-===========================================================
-*/
+function jsonError(message: string, status = 400, extra?: Record<string, unknown>) {
+  return NextResponse.json({ success: false, message, ...extra }, { status });
+}
 
-function toInt(
-  value: unknown,
-): number | null {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
-    return null;
-  }
-
+function numberOrNull(value: unknown) {
   const n = Number(value);
-
-  if (!Number.isInteger(n)) {
-    return null;
-  }
-
-  return n;
+  return Number.isFinite(n) ? n : null;
 }
 
-function toFloat(
-  value: unknown,
-): number | null {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
-    return null;
-  }
-
-  const n = Number(value);
-
-  if (!Number.isFinite(n)) {
-    return null;
-  }
-
-  return n;
-}
-
-function cleanString(
-  value: unknown,
-): string | null {
-  if (
-    value === null ||
-    value === undefined
-  ) {
-    return null;
-  }
-
-  const result =
-    String(value).trim();
-
-  return result || null;
-}
-
-/*
-===========================================================
-AUTHENTICATION
-===========================================================
-*/
-
-async function getUser() {
-  const cookieStore =
-    await cookies();
-
-  const sessionCookie =
-    cookieStore.get("erp-session") ||
-    cookieStore.get("session");
-
-  if (!sessionCookie) {
-    return null;
-  }
-
-  let userId = 0;
-
-  /*
-   * -------------------------------------------------------
-   * SESSION TABLE
-   * -------------------------------------------------------
-   */
+async function getCurrentUser(): Promise<CurrentUser | null> {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get("erp-session") || cookieStore.get("session");
+  if (!sessionCookie?.value) return null;
 
   try {
-    const session =
-      await prisma.session.findUnique({
-        where: {
-          token:
-            sessionCookie.value,
-        },
-
-        select: {
-          expiresAt: true,
-
-          user: {
-            select: {
-              id: true,
-            },
+    const bySession = await prisma.user.findFirst({
+      where: {
+        sessions: {
+          some: {
+            token: sessionCookie.value,
+            expiresAt: { gt: new Date() },
           },
         },
-      });
-
-    if (
-      session &&
-      session.expiresAt >
-        new Date()
-    ) {
-      userId =
-        session.user.id;
-    }
+      },
+      select: { id: true, role: true, outletId: true, active: true },
+    });
+    if (bySession?.active) return bySession;
   } catch {
-    /*
-     * Fallback ke format
-     * session lama.
-     */
+    // Fall through to legacy JSON session.
   }
 
-  /*
-   * -------------------------------------------------------
-   * LEGACY JSON SESSION
-   * -------------------------------------------------------
-   */
+  try {
+    const parsed = JSON.parse(sessionCookie.value);
+    const userId = Number(parsed?.user?.id ?? parsed?.id ?? 0);
+    if (!Number.isInteger(userId) || userId <= 0) return null;
 
-  if (!userId) {
-    try {
-      const parsed =
-        JSON.parse(
-          sessionCookie.value,
-        );
-
-      userId = Number(
-        parsed?.user?.id ??
-          parsed?.id ??
-          0,
-      );
-    } catch {
-      // ignore
-    }
-  }
-
-  if (!userId) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, outletId: true, active: true },
+    });
+    return user?.active ? user : null;
+  } catch {
     return null;
   }
+}
 
-  return prisma.user.findUnique({
+function canManageRecipe(role: unknown) {
+  return ALLOWED_ROLES.has(roleOf(role));
+}
+
+function resolveOutletId(user: CurrentUser, requested: unknown) {
+  const role = roleOf(user.role);
+  if (role === ROLE_OUTLET_ADMIN) {
+    const own = Number(user.outletId ?? 0);
+    if (!Number.isInteger(own) || own <= 0) {
+      throw new Error("User Outlet Admin belum terhubung dengan outlet");
+    }
+    if (requested !== undefined && requested !== null && requested !== "" && Number(requested) !== own) {
+      throw new Error("Anda tidak dapat mengelola Recipe di outlet lain");
+    }
+    return own;
+  }
+
+  const outletId = Number(requested ?? 0);
+  if (!Number.isInteger(outletId) || outletId <= 0) {
+    throw new Error("Outlet wajib dipilih");
+  }
+  return outletId;
+}
+
+async function validateRecipePayload(tx: any, body: any, currentId?: number) {
+  const code = String(body?.code ?? "").trim();
+  const name = String(body?.name ?? "").trim();
+  const outletId = Number(body?.outletId ?? 0);
+  const outputBarangId = Number(body?.outputBarangId ?? 0);
+  const outputQty = Number(body?.outputQty ?? 0);
+  const productCkId = body?.productCkId === null || body?.productCkId === "" || body?.productCkId === undefined
+    ? null
+    : Number(body.productCkId);
+  const menuId = body?.menuId === null || body?.menuId === "" || body?.menuId === undefined
+    ? null
+    : Number(body.menuId);
+  const active = body?.active === undefined ? true : Boolean(body.active);
+
+  if (!code) throw new Error("Code Recipe wajib diisi");
+  if (!name) throw new Error("Nama Recipe wajib diisi");
+  if (!Number.isInteger(outletId) || outletId <= 0) throw new Error("Outlet wajib dipilih");
+  if (!Number.isInteger(outputBarangId) || outputBarangId <= 0) throw new Error("Barang output Recipe wajib dipilih");
+  if (!Number.isFinite(outputQty) || outputQty <= 0) throw new Error("Output quantity Recipe tidak valid");
+  if (menuId !== null) throw new Error("Recipe Manufacture tidak boleh menggunakan Menu POS");
+  if (productCkId !== null && (!Number.isInteger(productCkId) || productCkId <= 0)) {
+    throw new Error("Product CK tidak valid");
+  }
+
+  const outlet = await tx.outlet.findUnique({
+    where: { id: outletId },
+    select: { id: true, code: true, name: true, active: true },
+  });
+  if (!outlet) throw new Error("Outlet tidak ditemukan");
+  if (!outlet.active) throw new Error("Outlet tidak aktif");
+
+  const duplicate = await tx.recipe.findFirst({
     where: {
-      id: userId,
+      code,
+      ...(currentId ? { NOT: { id: currentId } } : {}),
     },
+    select: { id: true },
+  });
+  if (duplicate) throw new Error("Code Recipe sudah digunakan");
 
+  const outputBarang = await tx.barang.findUnique({
+    where: { id: outputBarangId },
     select: {
       id: true,
-      username: true,
-      fullname: true,
-      role: true,
-      outletId: true,
+      code: true,
+      name: true,
+      unit: true,
+      baseUnit: true,
+      conversionRate: true,
       active: true,
     },
   });
-}
+  if (!outputBarang) throw new Error("Barang output Recipe tidak ditemukan");
+  if (!outputBarang.active) throw new Error("Barang output Recipe tidak aktif");
 
-/*
-===========================================================
-ROLE
-===========================================================
-*/
-
-function canAccessManufacture(
-  role: unknown,
-) {
-  return ALLOWED_ROLES.includes(
-    String(role).toUpperCase() as any,
-  );
-}
-
-/*
-===========================================================
-OUTLET VALIDATION
-===========================================================
-*/
-
-async function validateOutlet(
-  outletId: number,
-) {
-  if (
-    !Number.isInteger(outletId) ||
-    outletId <= 0
-  ) {
-    throw new Error(
-      "Outlet ID tidak valid.",
-    );
-  }
-
-  const outlet =
-    await prisma.outlet.findUnique({
-      where: {
-        id: outletId,
-      },
-
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        active: true,
-      },
+  let productCk = null;
+  if (productCkId !== null) {
+    productCk = await tx.productCk.findUnique({
+      where: { id: productCkId },
+      select: { id: true, code: true, name: true, active: true, outputBarangId: true },
     });
-
-  if (!outlet) {
-    throw new Error(
-      "Outlet tidak ditemukan.",
-    );
-  }
-
-  if (!outlet.active) {
-    throw new Error(
-      "Outlet tidak aktif.",
-    );
-  }
-
-  return outlet;
-}
-
-/*
-===========================================================
-RESOLVE OUTLET CREATE
-===========================================================
-*/
-
-async function resolveOutletId(
-  user: {
-    id: number;
-    role: any;
-    outletId: number | null;
-  },
-  requestedOutletId?: unknown,
-) {
-  const role =
-    String(user.role).toUpperCase();
-
-  /*
-   * -------------------------------------------------------
-   * OUTLET ADMIN
-   * -------------------------------------------------------
-   *
-   * Tidak boleh memilih outlet lain.
-   */
-
-  if (
-    role === "OUTLET_ADMIN"
-  ) {
-    if (!user.outletId) {
-      throw new Error(
-        "User Outlet Admin belum memiliki outlet.",
-      );
-    }
-
-    const outlet =
-      await validateOutlet(
-        user.outletId,
-      );
-
-    return outlet.id;
-  }
-
-  /*
-   * -------------------------------------------------------
-   * ADMIN / MANAGER / GUDANG
-   * -------------------------------------------------------
-   */
-
-  const outletId =
-    toInt(requestedOutletId);
-
-  /*
-   * Penting:
-   * untuk CREATE outlet memang wajib.
-   */
-
-  if (
-    !outletId ||
-    outletId <= 0
-  ) {
-    /*
-     * Bila user pusat juga memiliki
-     * outletId, boleh dipakai sebagai
-     * fallback.
-     *
-     * Ini membantu frontend lama
-     * yang belum mengirim outletId.
-     */
-
-    if (user.outletId) {
-      const outlet =
-        await validateOutlet(
-          user.outletId,
-        );
-
-      return outlet.id;
-    }
-
-    throw new Error(
-      "Outlet wajib dipilih.",
-    );
-  }
-
-  const outlet =
-    await validateOutlet(
-      outletId,
-    );
-
-  return outlet.id;
-}
-
-/*
-===========================================================
-RESOLVE OUTLET GET
-===========================================================
-*/
-
-async function resolveGetOutletFilter(
-  user: {
-    id: number;
-    role: any;
-    outletId: number | null;
-  },
-  requestedOutletId?: unknown,
-) {
-  const role =
-    String(user.role).toUpperCase();
-
-  /*
-   * Outlet Admin:
-   * selalu outlet sendiri.
-   */
-
-  if (
-    role === "OUTLET_ADMIN"
-  ) {
-    if (!user.outletId) {
-      throw new Error(
-        "User Outlet Admin belum memiliki outlet.",
-      );
-    }
-
-    const outlet =
-      await validateOutlet(
-        user.outletId,
-      );
-
-    return outlet.id;
-  }
-
-  /*
-   * Tidak ada filter:
-   * pusat melihat semua outlet.
-   */
-
-  if (
-    requestedOutletId ===
-      undefined ||
-    requestedOutletId ===
-      null ||
-    requestedOutletId === ""
-  ) {
-    return undefined;
-  }
-
-  const outletId =
-    toInt(requestedOutletId);
-
-  if (
-    !outletId ||
-    outletId <= 0
-  ) {
-    throw new Error(
-      "Outlet ID tidak valid.",
-    );
-  }
-
-  const outlet =
-    await validateOutlet(
-      outletId,
-    );
-
-  return outlet.id;
-}
-
-/*
-===========================================================
-GET RECIPE ID DARI REQUEST
-===========================================================
-*/
-
-function getRecipeIdFromRequest(
-  req: NextRequest,
-  body?: RecipeBody | null,
-) {
-  /*
-   * URL pathname:
-   *
-   * /api/manufacture/recipes/1
-   */
-
-  const pathname =
-    new URL(req.url)
-      .pathname;
-
-  const segments =
-    pathname
-      .split("/")
-      .filter(Boolean);
-
-  const recipesIndex =
-    segments.lastIndexOf(
-      "recipes",
-    );
-
-  if (
-    recipesIndex >= 0 &&
-    segments[
-      recipesIndex + 1
-    ]
-  ) {
-    const pathnameId =
-      toInt(
-        segments[
-          recipesIndex + 1
-        ],
-      );
-
-    if (pathnameId) {
-      return pathnameId;
+    if (!productCk) throw new Error("Product CK tidak ditemukan");
+    if (!productCk.active) throw new Error("Product CK tidak aktif");
+    if (productCk.outputBarangId !== outputBarangId) {
+      throw new Error("Output Barang Recipe tidak sesuai dengan Product CK");
     }
   }
 
-  /*
-   * Query:
-   *
-   * ?id=1
-   */
+  const rawItems = Array.isArray(body?.items) ? body.items : [];
+  if (!rawItems.length) throw new Error("Recipe / BOM harus memiliki minimal 1 bahan");
 
-  const { searchParams } =
-    new URL(req.url);
+  const merged = new Map<number, RecipeItemInput>();
+  for (const raw of rawItems) {
+    const barangId = Number(raw?.barangId ?? 0);
+    const qty = Number(raw?.qty ?? 0);
+    const unit = String(raw?.unit ?? "").trim();
+    if (!Number.isInteger(barangId) || barangId <= 0) throw new Error("Barang bahan tidak valid");
+    if (!Number.isFinite(qty) || qty <= 0) throw new Error("Qty bahan harus lebih besar dari 0");
+    if (!unit) throw new Error("Satuan bahan wajib diisi");
 
-  const queryId =
-    toInt(
-      searchParams.get("id"),
-    );
+    const barang = await tx.barang.findUnique({
+      where: { id: barangId },
+      select: { id: true, name: true, unit: true, baseUnit: true, conversionRate: true, active: true },
+    });
+    if (!barang) throw new Error(`Barang bahan ID ${barangId} tidak ditemukan`);
+    if (!barang.active) throw new Error(`Barang bahan ${barang.name} tidak aktif`);
 
-  if (queryId) {
-    return queryId;
-  }
+    try {
+      const baseQty = toBaseQty(qty, unit, barang);
+      if (!Number.isFinite(baseQty) || baseQty <= 0) throw new Error("invalid");
+    } catch {
+      throw new Error(`Satuan "${unit}" pada bahan "${barang.name}" tidak sesuai dengan unit master/base unit`);
+    }
 
-  /*
-   * Body:
-   *
-   * { id: 1 }
-   */
-
-  const bodyId =
-    toInt(body?.id);
-
-  if (bodyId) {
-    return bodyId;
-  }
-
-  return null;
-}
-
-/*
-===========================================================
-FORMAT BARANG
-===========================================================
-*/
-
-function formatRecipeItem(
-  item: any,
-) {
-  const barang =
-    item.barang;
-
-  if (!barang) {
-    return item;
-  }
-
-  const unit =
-    barang.unit ??
-    item.unit ??
-    "";
-
-  const baseUnit =
-    barang.baseUnit ??
-    unit;
-
-  const conversionRate =
-    Number(
-      barang.conversionRate ??
-        1,
-    );
-
-  const hasConversion =
-    Boolean(
-      unit &&
-        baseUnit &&
-        unit !== baseUnit &&
-        conversionRate > 1,
-    );
-
-  return {
-    ...item,
-
-    barang: {
-      ...barang,
-
+    const old = merged.get(barangId);
+    merged.set(barangId, {
+      barangId,
+      qty: (old?.qty ?? 0) + qty,
       unit,
-
-      baseUnit,
-
-      conversionRate,
-
-      hasConversion,
-
-      conversionLabel:
-        hasConversion
-          ? `1 ${unit} = ${conversionRate} ${baseUnit}`
-          : `1 ${unit}`,
-
-      stockUnit:
-        unit,
-
-      stockBaseUnit:
-        hasConversion
-          ? baseUnit
-          : unit,
-    },
-  };
-}
-
-/*
-===========================================================
-FORMAT RECIPE
-===========================================================
-*/
-
-async function formatRecipe(
-  recipe: any,
-) {
-  let outlet = null;
-
-  if (recipe.outletId) {
-    outlet =
-      await prisma.outlet.findUnique({
-        where: {
-          id: Number(
-            recipe.outletId,
-          ),
-        },
-
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          active: true,
-        },
-      });
+    });
   }
 
   return {
-    ...recipe,
-
-    outlet,
-
-    outletId:
-      recipe.outletId,
-
-    items:
-      Array.isArray(
-        recipe.items,
-      )
-        ? recipe.items.map(
-            formatRecipeItem,
-          )
-        : [],
+    code,
+    name,
+    outletId,
+    productCkId,
+    outputBarangId,
+    outputQty,
+    active,
+    items: Array.from(merged.values()),
+    outputBarang,
+    productCk,
   };
 }
 
-/*
-===========================================================
-GET
-===========================================================
-*/
+function recipeInclude() {
+  return {
+    menu: { select: { id: true, code: true, name: true, active: true, price: true } },
+    productCk: { select: { id: true, code: true, name: true, active: true, outputBarangId: true } },
+    outputBarang: {
+      select: {
+        id: true, code: true, barcode: true, name: true, unit: true,
+        baseUnit: true, conversionRate: true, minimumStock: true, active: true,
+      },
+    },
+    items: {
+      orderBy: { id: "asc" },
+      include: {
+        barang: {
+          select: {
+            id: true, code: true, barcode: true, name: true, category: true,
+            brand: true, unit: true, baseUnit: true, conversionRate: true, active: true,
+          },
+        },
+      },
+    },
+  } as const;
+}
 
-export async function GET(
-  req: NextRequest,
-) {
+export async function GET(req: NextRequest) {
   try {
-    const user =
-      await getUser();
+    const user = await getCurrentUser();
+    if (!user) return jsonError("Tidak login atau session tidak valid", 401);
+    if (!canManageRecipe(user.role)) return jsonError("Anda tidak memiliki akses Manufacture", 403);
 
-    if (
-      !user ||
-      !user.active
-    ) {
-      return fail(
-        "Tidak login.",
-        401,
-      );
+    const { searchParams } = new URL(req.url);
+    const requestedOutlet = searchParams.get("outletId");
+    const search = searchParams.get("search")?.trim() ?? "";
+    const activeParam = searchParams.get("active");
+    const idParam = searchParams.get("id");
+
+    if (idParam) {
+      const id = Number(idParam);
+      if (!Number.isInteger(id) || id <= 0) return jsonError("ID Recipe tidak valid");
+      const recipe = await prisma.recipe.findUnique({ where: { id }, include: recipeInclude() });
+      if (!recipe) return jsonError("Recipe / BOM tidak ditemukan", 404);
+      if (roleOf(user.role) === ROLE_OUTLET_ADMIN && Number(recipe.outletId) !== Number(user.outletId)) {
+        return jsonError("Anda tidak memiliki akses ke Recipe outlet ini", 403);
+      }
+      return NextResponse.json({ success: true, data: recipe });
     }
 
-    const role =
-      String(user.role).toUpperCase();
-
-    if (
-      !canAccessManufacture(role)
-    ) {
-      return fail(
-        "Tidak memiliki akses.",
-        403,
-      );
+    let outletId: number | undefined;
+    if (roleOf(user.role) === ROLE_OUTLET_ADMIN) {
+      outletId = resolveOutletId(user, user.outletId);
+    } else if (requestedOutlet) {
+      outletId = Number(requestedOutlet);
+      if (!Number.isInteger(outletId) || outletId <= 0) return jsonError("Outlet ID tidak valid");
     }
 
-    const { searchParams } =
-      new URL(req.url);
-
-    const requestedOutletId =
-      searchParams.get(
-        "outletId",
-      );
-
-    const search =
-      searchParams
-        .get("search")
-        ?.trim() || "";
-
-    const activeParam =
-      searchParams.get(
-        "active",
-      );
-
-    const outletId =
-      await resolveGetOutletFilter(
-        user,
-        requestedOutletId,
-      );
-
-    /*
-     * Manufacture Outlet:
-     * menuId harus null.
-     */
-
-    const where: any = {
-      menuId: null,
-    };
-
-    if (
-      outletId !== undefined
-    ) {
-      where.outletId =
-        outletId;
-    }
-
-    if (
-      activeParam === "true"
-    ) {
-      where.active = true;
-    }
-
-    if (
-      activeParam === "false"
-    ) {
-      where.active = false;
-    }
-
+    const where: any = {};
+    if (outletId) where.outletId = outletId;
+    if (activeParam === "true" || activeParam === "false") where.active = activeParam === "true";
     if (search) {
       where.OR = [
-        {
-          code: {
-            contains: search,
-          },
-        },
-
-        {
-          name: {
-            contains: search,
-          },
-        },
-
-        {
-          productCk: {
-            name: {
-              contains: search,
-            },
-          },
-        },
-
-        {
-          outputBarang: {
-            name: {
-              contains: search,
-            },
-          },
-        },
+        { code: { contains: search } },
+        { name: { contains: search } },
       ];
     }
 
-    const recipes =
-      await prisma.recipe.findMany({
-        where,
-
-        orderBy: {
-          id: "desc",
-        },
-
-        include: {
-          productCk: {
-            include: {
-              outputBarang: true,
-            },
-          },
-
-          outputBarang: true,
-
-          items: {
-            include: {
-              barang: true,
-            },
-
-            orderBy: {
-              id: "asc",
-            },
-          },
-
-          orders: {
-            orderBy: {
-              id: "desc",
-            },
-
-            take: 10,
-          },
-        },
-      });
-
-    const formattedRecipes =
-      await Promise.all(
-        recipes.map(
-          formatRecipe,
-        ),
-      );
+    const data = await prisma.recipe.findMany({
+      where,
+      include: recipeInclude(),
+      orderBy: [{ active: "desc" }, { name: "asc" }, { id: "desc" }],
+    });
 
     return NextResponse.json({
       success: true,
-
-      scope: {
-        role,
-
-        outletId:
-          role ===
-          "OUTLET_ADMIN"
-            ? user.outletId
-            : outletId ?? null,
-
-        allOutlets:
-          role !==
-            "OUTLET_ADMIN" &&
-          outletId ===
-            undefined,
-      },
-
-      total:
-        formattedRecipes.length,
-
-      data:
-        formattedRecipes,
+      data,
+      meta: { total: data.length, outletId: outletId ?? null, search, active: activeParam ?? null },
     });
   } catch (error: any) {
-    console.error(
-      "GET /api/manufacture/recipes:",
-      error,
-    );
-
-    return fail(
-      error?.message ||
-        "Gagal mengambil Recipe/BOM Outlet.",
-      500,
-    );
+    console.error("GET /api/manufacture/recipes ERROR:", error);
+    return jsonError(error?.message || "Gagal mengambil Recipe / BOM", 500);
   }
 }
 
-/*
-===========================================================
-POST
-===========================================================
-*/
-
-export async function POST(
-  req: NextRequest,
-) {
+export async function POST(req: NextRequest) {
   try {
-    const user =
-      await getUser();
+    const user = await getCurrentUser();
+    if (!user) return jsonError("Tidak login atau session tidak valid", 401);
+    if (!canManageRecipe(user.role)) return jsonError("Anda tidak memiliki akses Manufacture", 403);
 
-    if (
-      !user ||
-      !user.active
-    ) {
-      return fail(
-        "Tidak login.",
-        401,
-      );
-    }
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== "object") return jsonError("Request body tidak valid");
 
-    const role =
-      String(user.role).toUpperCase();
-
-    if (
-      !canAccessManufacture(role)
-    ) {
-      return fail(
-        "Tidak memiliki akses.",
-        403,
-      );
-    }
-
-    let body: RecipeBody;
-
-    try {
-      body =
-        (await req.json()) as RecipeBody;
-    } catch {
-      return fail(
-        "Body request tidak valid.",
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * OUTLET
-     * -------------------------------------------------------
-     */
-
-    const outletId =
-      await resolveOutletId(
-        user,
-        body.outletId,
-      );
-
-    /*
-     * -------------------------------------------------------
-     * BASIC
-     * -------------------------------------------------------
-     */
-
-    const code =
-      cleanString(body.code);
-
-    const name =
-      cleanString(body.name);
-
-    if (!code) {
-      return fail(
-        "Code Recipe/BOM wajib diisi.",
-      );
-    }
-
-    if (!name) {
-      return fail(
-        "Nama Recipe/BOM wajib diisi.",
-      );
-    }
-
-    /*
-     * Manufacture Outlet tidak boleh
-     * memakai Menu POS.
-     */
-
-    if (
-      body.menuId !==
-        undefined &&
-      body.menuId !==
-        null &&
-      body.menuId !== ""
-    ) {
-      return fail(
-        "BOM Manufacture Outlet tidak boleh menggunakan Menu POS.",
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * PRODUCT CK
-     * -------------------------------------------------------
-     */
-
-    const productCkId =
-      toInt(
-        body.productCkId,
-      );
-
-    const requestedOutputBarangId =
-      toInt(
-        body.outputBarangId,
-      );
-
-    const outputQty =
-      toFloat(
-        body.outputQty,
-      );
-
-    if (
-      outputQty === null ||
-      outputQty <= 0
-    ) {
-      return fail(
-        "Qty output harus lebih dari 0.",
-      );
-    }
-
-    let finalOutputBarangId =
-      requestedOutputBarangId;
-
-    if (
-      productCkId !== null
-    ) {
-      const productCk =
-        await prisma.productCK.findUnique({
-          where: {
-            id: productCkId,
-          },
-
-          select: {
-            id: true,
-            name: true,
-            outputBarangId: true,
-            active: true,
-          },
-        });
-
-      if (!productCk) {
-        return fail(
-          "Product CK tidak ditemukan.",
-        );
-      }
-
-      if (!productCk.active) {
-        return fail(
-          "Product CK tidak aktif.",
-        );
-      }
-
-      if (
-        finalOutputBarangId ===
-        null
-      ) {
-        finalOutputBarangId =
-          productCk.outputBarangId;
-      }
-    }
-
-    if (
-      finalOutputBarangId ===
-      null
-    ) {
-      return fail(
-        "Output barang wajib dipilih.",
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * OUTPUT BARANG
-     * -------------------------------------------------------
-     */
-
-    const outputBarang =
-      await prisma.barang.findUnique({
-        where: {
-          id:
-            finalOutputBarangId,
-        },
-
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          unit: true,
-          baseUnit: true,
-          conversionRate: true,
-          active: true,
-        },
-      });
-
-    if (!outputBarang) {
-      return fail(
-        "Barang output tidak ditemukan.",
-      );
-    }
-
-    if (!outputBarang.active) {
-      return fail(
-        "Barang output tidak aktif.",
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * ITEMS
-     * -------------------------------------------------------
-     */
-
-    const rawItems =
-      Array.isArray(body.items)
-        ? body.items
-        : [];
-
-    if (!rawItems.length) {
-      return fail(
-        "Minimal harus ada 1 bahan Recipe.",
-      );
-    }
-
-    let recipeItems:
-      {
-        barangId: number;
-        qty: number;
-        unit: string | null;
-      }[];
-
-    try {
-      recipeItems =
-        rawItems.map(
-          (item, index) => {
-            const barangId =
-              toInt(
-                item.barangId,
-              );
-
-            const qty =
-              toFloat(
-                item.qty,
-              );
-
-            const unit =
-              cleanString(
-                item.unit,
-              );
-
-            if (
-              barangId === null
-            ) {
-              throw new Error(
-                `Barang pada item ke-${index + 1} tidak valid.`,
-              );
-            }
-
-            if (
-              qty === null ||
-              qty <= 0
-            ) {
-              throw new Error(
-                `Qty pada item ke-${index + 1} harus lebih dari 0.`,
-              );
-            }
-
-            return {
-              barangId,
-              qty,
-              unit,
-            };
-          },
-        );
-    } catch (error: any) {
-      return fail(
-        error?.message ||
-          "Item Recipe tidak valid.",
-      );
-    }
-
-    const barangIds = [
-      ...new Set(
-        recipeItems.map(
-          (item) =>
-            item.barangId,
-        ),
-      ),
-    ];
-
-    const existingBarangs =
-      await prisma.barang.findMany({
-        where: {
-          id: {
-            in: barangIds,
-          },
-        },
-
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          unit: true,
-          baseUnit: true,
-          conversionRate: true,
-          active: true,
-        },
-      });
-
-    const existingIds =
-      new Set(
-        existingBarangs.map(
-          (item) => item.id,
-        ),
-      );
-
-    const missing =
-      barangIds.filter(
-        (id) =>
-          !existingIds.has(id),
-      );
-
-    if (missing.length) {
-      return fail(
-        `Ada barang bahan yang tidak ditemukan: ${missing.join(
-          ", ",
-        )}`,
-      );
-    }
-
-    const inactive =
-      existingBarangs.filter(
-        (item) =>
-          !item.active,
-      );
-
-    if (inactive.length) {
-      return fail(
-        `Ada bahan yang tidak aktif: ${inactive
-          .map(
-            (item) =>
-              item.name,
-          )
-          .join(", ")}`,
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * DUPLICATE CODE
-     * -------------------------------------------------------
-     */
-
-    const duplicate =
-      await prisma.recipe.findUnique({
-        where: {
-          code,
-        },
-
-        select: {
-          id: true,
-        },
-      });
-
-    if (duplicate) {
-      return fail(
-        `Code Recipe/BOM "${code}" sudah digunakan.`,
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * CREATE
-     * -------------------------------------------------------
-     */
-
-    const recipe =
-      await prisma.recipe.create({
+    const outletId = resolveOutletId(user, body.outletId);
+    const normalized = await prisma.$transaction(async (tx) => {
+      const payload = await validateRecipePayload(tx, { ...body, outletId });
+      const recipe = await tx.recipe.create({
         data: {
-          code,
-
-          name,
-
-          outletId,
-
-          menuId: null,
-
-          productCkId:
-            productCkId !== null
-              ? productCkId
-              : null,
-
-          outputBarangId:
-            finalOutputBarangId,
-
-          outputQty,
-
-          notes:
-            cleanString(
-              body.notes,
-            ),
-
-          active:
-            typeof body.active ===
-            "boolean"
-              ? body.active
-              : true,
-
+          code: payload.code,
+          name: payload.name,
+          outletId: payload.outletId,
+          productCkId: payload.productCkId,
+          outputBarangId: payload.outputBarangId,
+          outputQty: payload.outputQty,
+          active: payload.active,
           items: {
-            create:
-              recipeItems.map(
-                (item) => ({
-                  barangId:
-                    item.barangId,
-
-                  qty:
-                    item.qty,
-
-                  unit:
-                    item.unit,
-                }),
-              ),
+            create: payload.items.map((item) => ({
+              barangId: item.barangId,
+              qty: item.qty,
+              unit: item.unit,
+            })),
           },
         },
-
-        include: {
-          productCk: {
-            include: {
-              outputBarang: true,
-            },
-          },
-
-          outputBarang: true,
-
-          items: {
-            include: {
-              barang: true,
-            },
-
-            orderBy: {
-              id: "asc",
-            },
-          },
-
-          orders: true,
-        },
+        include: recipeInclude(),
       });
+      return recipe;
+    });
 
-    const formatted =
-      await formatRecipe(
-        recipe,
-      );
-
-    return NextResponse.json(
-      {
-        success: true,
-
-        message:
-          "Recipe/BOM Outlet berhasil dibuat.",
-
-        data: formatted,
-      },
-      {
-        status: 201,
-      },
-    );
+    return NextResponse.json({ success: true, message: "Recipe / BOM berhasil dibuat", data: normalized }, { status: 201 });
   } catch (error: any) {
-    console.error(
-      "POST /api/manufacture/recipes:",
-      error,
-    );
-
-    if (
-      error?.code ===
-      "P2002"
-    ) {
-      return fail(
-        "Code Recipe/BOM sudah digunakan.",
-      );
-    }
-
-    if (
-      error?.code ===
-      "P2003"
-    ) {
-      return fail(
-        "Relasi Outlet/Barang/Product CK tidak valid.",
-      );
-    }
-
-    /*
-     * Error validasi bisnis
-     * harus 400, bukan 500.
-     */
-
-    const message =
-      error?.message ||
-      "Gagal membuat Recipe/BOM Outlet.";
-
-    if (
-      message.includes(
-        "Outlet",
-      ) ||
-      message.includes(
-        "Barang",
-      ) ||
-      message.includes(
-        "Product CK",
-      ) ||
-      message.includes(
-        "Qty",
-      )
-    ) {
-      return fail(
-        message,
-        400,
-      );
-    }
-
-    return fail(
-      message,
-      500,
-    );
+    console.error("POST /api/manufacture/recipes ERROR:", error);
+    return jsonError(error?.message || "Gagal membuat Recipe / BOM", 400);
   }
 }
 
-/*
-===========================================================
-PUT
-===========================================================
-*/
-
-export async function PUT(
-  req: NextRequest,
-) {
-  try {
-    const user =
-      await getUser();
-
-    if (
-      !user ||
-      !user.active
-    ) {
-      return fail(
-        "Tidak login.",
-        401,
-      );
-    }
-
-    const role =
-      String(user.role).toUpperCase();
-
-    if (
-      !canAccessManufacture(role)
-    ) {
-      return fail(
-        "Tidak memiliki akses.",
-        403,
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * BODY
-     * -------------------------------------------------------
-     */
-
-    let body: RecipeBody;
-
-    try {
-      body =
-        (await req.json()) as RecipeBody;
-    } catch {
-      /*
-       * Beberapa frontend bisa
-       * mengirim body kosong.
-       */
-
-      body = {};
-    }
-
-    /*
-     * -------------------------------------------------------
-     * ID
-     * -------------------------------------------------------
-     *
-     * Support:
-     *
-     * /recipes/1
-     * /recipes/1?id=1
-     * body { id: 1 }
-     * -------------------------------------------------------
-     */
-
-    const id =
-      getRecipeIdFromRequest(
-        req,
-        body,
-      );
-
-    console.log(
-      "PUT Recipe ID:",
-      id,
-      "URL:",
-      req.url,
-    );
-
-    if (!id) {
-      return fail(
-        "ID Recipe wajib diisi.",
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * EXISTING
-     * -------------------------------------------------------
-     */
-
-    const existing =
-      await prisma.recipe.findUnique({
-        where: {
-          id,
-        },
-
-        include: {
-          items: true,
-
-          orders: {
-            select: {
-              id: true,
-              status: true,
-            },
-          },
-        },
-      });
-
-    if (!existing) {
-      return fail(
-        "Recipe/BOM tidak ditemukan.",
-        404,
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * MENU POS PROTECTION
-     * -------------------------------------------------------
-     */
-
-    if (
-      body.menuId !==
-        undefined &&
-      body.menuId !==
-        null &&
-      body.menuId !== ""
-    ) {
-      return fail(
-        "BOM Manufacture Outlet tidak boleh menggunakan Menu POS.",
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * OUTLET
-     * -------------------------------------------------------
-     *
-     * INI BAGIAN UTAMA PERBAIKAN.
-     *
-     * Prioritas:
-     *
-     * 1. body.outletId
-     * 2. query ?outletId=
-     * 3. existing.outletId
-     * 4. user.outletId
-     *
-     * Dengan demikian frontend lama
-     * yang hanya mengirim:
-     *
-     * PUT /recipes/1?id=1
-     *
-     * tidak langsung gagal hanya karena
-     * body tidak membawa outletId.
-     * -------------------------------------------------------
-     */
-
-    const { searchParams } =
-      new URL(req.url);
-
-    const requestedOutletId =
-      body.outletId ??
-      searchParams.get(
-        "outletId",
-      ) ??
-      existing.outletId ??
-      user.outletId;
-
-    let outletId: number;
-
-    try {
-      outletId =
-        await resolveOutletId(
-          user,
-          requestedOutletId,
-        );
-    } catch (error: any) {
-      return fail(
-        error?.message ||
-          "Outlet wajib dipilih.",
-        400,
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * OUTLET OWNERSHIP
-     * -------------------------------------------------------
-     */
-
-    /*
-     * Bila recipe lama belum memiliki
-     * outletId, sekarang akan diberikan
-     * ke outlet hasil resolve.
-     *
-     * Bila sudah memiliki outlet,
-     * tidak boleh dipindahkan sembarangan.
-     */
-
-    if (
-      existing.outletId &&
-      outletId !==
-        existing.outletId
-    ) {
-      return fail(
-        "Recipe bukan milik outlet tersebut.",
-        403,
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * BASIC DATA
-     * -------------------------------------------------------
-     */
-
-    const code =
-      body.code !==
-      undefined
-        ? cleanString(
-            body.code,
-          )
-        : existing.code;
-
-    const name =
-      body.name !==
-      undefined
-        ? cleanString(
-            body.name,
-          )
-        : existing.name;
-
-    if (!code) {
-      return fail(
-        "Code Recipe/BOM wajib diisi.",
-      );
-    }
-
-    if (!name) {
-      return fail(
-        "Nama Recipe/BOM wajib diisi.",
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * DUPLICATE CODE
-     * -------------------------------------------------------
-     */
-
-    if (
-      code !==
-      existing.code
-    ) {
-      const duplicate =
-        await prisma.recipe.findFirst({
-          where: {
-            code,
-
-            NOT: {
-              id,
-            },
-          },
-
-          select: {
-            id: true,
-            code: true,
-          },
-        });
-
-      if (duplicate) {
-        return fail(
-          `Code Recipe/BOM "${code}" sudah digunakan.`,
-        );
-      }
-    }
-
-    /*
-     * -------------------------------------------------------
-     * OUTPUT BARANG
-     * -------------------------------------------------------
-     */
-
-    let finalOutputBarangId =
-      existing.outputBarangId;
-
-    if (
-      body.outputBarangId !==
-      undefined
-    ) {
-      const parsed =
-        toInt(
-          body.outputBarangId,
-        );
-
-      /*
-       * Jangan menerima 0
-       * sebagai output barang.
-       */
-
-      if (
-        parsed === null ||
-        parsed <= 0
-      ) {
-        return fail(
-          "Output barang tidak valid.",
-        );
-      }
-
-      finalOutputBarangId =
-        parsed;
-    }
-
-    /*
-     * -------------------------------------------------------
-     * OUTPUT QTY
-     * -------------------------------------------------------
-     */
-
-    let finalOutputQty =
-      Number(
-        existing.outputQty,
-      );
-
-    if (
-      body.outputQty !==
-      undefined
-    ) {
-      const parsed =
-        toFloat(
-          body.outputQty,
-        );
-
-      if (
-        parsed === null ||
-        parsed <= 0
-      ) {
-        return fail(
-          "Qty output harus lebih dari 0.",
-        );
-      }
-
-      finalOutputQty =
-        parsed;
-    }
-
-    if (
-      !Number.isFinite(
-        finalOutputQty,
-      ) ||
-      finalOutputQty <= 0
-    ) {
-      return fail(
-        "Qty output harus lebih dari 0.",
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * PRODUCT CK
-     * -------------------------------------------------------
-     */
-
-    let productCkId =
-      existing.productCkId;
-
-    if (
-      body.productCkId !==
-      undefined
-    ) {
-      productCkId =
-        toInt(
-          body.productCkId,
-        );
-    }
-
-    if (
-      productCkId !== null
-    ) {
-      const productCk =
-        await prisma.productCK.findUnique({
-          where: {
-            id: productCkId,
-          },
-
-          select: {
-            id: true,
-            outputBarangId: true,
-            active: true,
-          },
-        });
-
-      if (!productCk) {
-        return fail(
-          "Product CK tidak ditemukan.",
-        );
-      }
-
-      if (!productCk.active) {
-        return fail(
-          "Product CK tidak aktif.",
-        );
-      }
-
-      /*
-       * Bila recipe belum memiliki
-       * output barang dan Product CK
-       * menyediakan output barang,
-       * gunakan output Product CK.
-       */
-
-      if (
-        finalOutputBarangId ===
-          null ||
-        finalOutputBarangId ===
-          undefined
-      ) {
-        finalOutputBarangId =
-          productCk.outputBarangId;
-      }
-    }
-
-    if (
-      finalOutputBarangId ===
-        null ||
-      finalOutputBarangId ===
-        undefined
-    ) {
-      return fail(
-        "Output barang wajib dipilih.",
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * VALIDATE OUTPUT BARANG
-     * -------------------------------------------------------
-     */
-
-    const outputBarang =
-      await prisma.barang.findUnique({
-        where: {
-          id:
-            finalOutputBarangId,
-        },
-
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          unit: true,
-          baseUnit: true,
-          conversionRate: true,
-          active: true,
-        },
-      });
-
-    if (!outputBarang) {
-      return fail(
-        "Barang output tidak ditemukan.",
-      );
-    }
-
-    if (!outputBarang.active) {
-      return fail(
-        "Barang output tidak aktif.",
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * ITEMS
-     * -------------------------------------------------------
-     *
-     * Bila body.items tidak dikirim:
-     * item lama dipertahankan.
-     *
-     * Bila body.items dikirim:
-     * item lama diganti dengan item baru.
-     * -------------------------------------------------------
-     */
-
-    let recipeItems:
-      | {
-          barangId: number;
-          qty: number;
-          unit: string | null;
-        }[]
-      | null = null;
-
-    if (
-      body.items !==
-      undefined
-    ) {
-      const rawItems =
-        Array.isArray(
-          body.items,
-        )
+async function updateRecipe(req: NextRequest, partial: boolean) {
+  const user = await getCurrentUser();
+  if (!user) return jsonError("Tidak login atau session tidak valid", 401);
+  if (!canManageRecipe(user.role)) return jsonError("Anda tidak memiliki akses Manufacture", 403);
+
+  const { searchParams } = new URL(req.url);
+  const id = Number(searchParams.get("id") ?? 0);
+  if (!Number.isInteger(id) || id <= 0) return jsonError("ID Recipe tidak valid");
+
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object") return jsonError("Request body tidak valid");
+
+  const existing = await prisma.recipe.findUnique({ where: { id }, include: { items: true } });
+  if (!existing) return jsonError("Recipe / BOM tidak ditemukan", 404);
+  if (roleOf(user.role) === ROLE_OUTLET_ADMIN && Number(existing.outletId) !== Number(user.outletId)) {
+    return jsonError("Anda tidak memiliki akses ke Recipe outlet ini", 403);
+  }
+
+  const has = (key: string) => Object.prototype.hasOwnProperty.call(body, key);
+
+  const mergedBody = partial
+    ? {
+        code: has("code") ? body.code : existing.code,
+        name: has("name") ? body.name : existing.name,
+        outletId: has("outletId") ? body.outletId : existing.outletId,
+        productCkId: has("productCkId") ? body.productCkId : existing.productCkId,
+        outputBarangId: has("outputBarangId") ? body.outputBarangId : existing.outputBarangId,
+        outputQty: has("outputQty") ? body.outputQty : existing.outputQty,
+        active: has("active") ? body.active : existing.active,
+        items: Array.isArray(body.items)
           ? body.items
-          : [];
-
-      if (!rawItems.length) {
-        return fail(
-          "Minimal harus ada 1 bahan Recipe.",
-        );
+          : existing.items.map((item: any) => ({ barangId: item.barangId, qty: item.qty, unit: item.unit })),
       }
+    : body;
 
-      try {
-        recipeItems =
-          rawItems.map(
-            (item, index) => {
-              const barangId =
-                toInt(
-                  item.barangId,
-                );
+  const outletId = resolveOutletId(user, mergedBody.outletId);
 
-              const qty =
-                toFloat(
-                  item.qty,
-                );
-
-              const unit =
-                cleanString(
-                  item.unit,
-                );
-
-              if (
-                barangId ===
-                null
-              ) {
-                throw new Error(
-                  `Barang pada item ke-${index + 1} tidak valid.`,
-                );
-              }
-
-              if (
-                qty === null ||
-                qty <= 0
-              ) {
-                throw new Error(
-                  `Qty pada item ke-${index + 1} harus lebih dari 0.`,
-                );
-              }
-
-              return {
-                barangId,
-                qty,
-                unit,
-              };
-            },
-          );
-      } catch (error: any) {
-        return fail(
-          error?.message ||
-            "Item Recipe tidak valid.",
-        );
-      }
-
-      const barangIds = [
-        ...new Set(
-          recipeItems.map(
-            (item) =>
-              item.barangId,
-          ),
-        ),
-      ];
-
-      const existingBarangs =
-        await prisma.barang.findMany({
-          where: {
-            id: {
-              in: barangIds,
-            },
-          },
-
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            unit: true,
-            baseUnit: true,
-            conversionRate: true,
-            active: true,
-          },
-        });
-
-      const existingIds =
-        new Set(
-          existingBarangs.map(
-            (item) =>
-              item.id,
-          ),
-        );
-
-      const missing =
-        barangIds.filter(
-          (barangId) =>
-            !existingIds.has(
-              barangId,
-            ),
-        );
-
-      if (missing.length) {
-        return fail(
-          `Barang bahan tidak ditemukan: ${missing.join(
-            ", ",
-          )}`,
-        );
-      }
-
-      const inactive =
-        existingBarangs.filter(
-          (item) =>
-            !item.active,
-        );
-
-      if (inactive.length) {
-        return fail(
-          `Ada bahan Recipe yang tidak aktif: ${inactive
-            .map(
-              (item) =>
-                item.name,
-            )
-            .join(", ")}`,
-        );
-      }
-    }
-
-    /*
-     * -------------------------------------------------------
-     * TRANSACTION
-     * -------------------------------------------------------
-     */
-
-    const updated =
-      await prisma.$transaction(
-        async (tx) => {
-          /*
-           * Ganti Recipe Item hanya
-           * jika items dikirim.
-           */
-
-          if (
-            recipeItems !==
-            null
-          ) {
-            await tx.recipeItem.deleteMany(
-              {
-                where: {
-                  recipeId: id,
-                },
-              },
-            );
-
-            await tx.recipeItem.createMany(
-              {
-                data:
-                  recipeItems.map(
-                    (item) => ({
-                      recipeId:
-                        id,
-
-                      barangId:
-                        item.barangId,
-
-                      qty:
-                        item.qty,
-
-                      unit:
-                        item.unit,
-                    }),
-                  ),
-              },
-            );
-          }
-
-          /*
-           * Update recipe.
-           */
-
-          return tx.recipe.update({
-            where: {
-              id,
-            },
-
-            data: {
-              code,
-
-              name,
-
-              /*
-               * Ini bagian penting:
-               *
-               * Recipe lama yang outletId null
-               * sekarang akan mendapatkan outlet.
-               */
-
-              outletId,
-
-              /*
-               * Manufacture Recipe
-               * selalu bukan Menu POS.
-               */
-
-              menuId: null,
-
-              productCkId,
-
-              outputBarangId:
-                finalOutputBarangId,
-
-              outputQty:
-                finalOutputQty,
-
-              notes:
-                body.notes !==
-                undefined
-                  ? cleanString(
-                      body.notes,
-                    )
-                  : undefined,
-
-              active:
-                typeof body.active ===
-                "boolean"
-                  ? body.active
-                  : undefined,
-            },
-
-            include: {
-              productCk: {
-                include: {
-                  outputBarang:
-                    true,
-                },
-              },
-
-              outputBarang:
-                true,
-
-              items: {
-                include: {
-                  barang: true,
-                },
-
-                orderBy: {
-                  id: "asc",
-                },
-              },
-
-              orders: {
-                orderBy: {
-                  id: "desc",
-                },
-              },
-            },
-          });
+  const result = await prisma.$transaction(async (tx) => {
+    const payload = await validateRecipePayload(tx, { ...mergedBody, outletId }, id);
+    await tx.recipeItem.deleteMany({ where: { recipeId: id } });
+    const recipe = await tx.recipe.update({
+      where: { id },
+      data: {
+        code: payload.code,
+        name: payload.name,
+        outletId: payload.outletId,
+        productCkId: payload.productCkId,
+        outputBarangId: payload.outputBarangId,
+        outputQty: payload.outputQty,
+        active: payload.active,
+        items: {
+          create: payload.items.map((item) => ({ barangId: item.barangId, qty: item.qty, unit: item.unit })),
         },
-      );
-
-    /*
-     * -------------------------------------------------------
-     * FORMAT RESPONSE
-     * -------------------------------------------------------
-     */
-
-    const formatted =
-      await formatRecipe(
-        updated,
-      );
-
-    return NextResponse.json({
-      success: true,
-
-      message:
-        "Recipe/BOM Outlet berhasil diperbarui.",
-
-      data: formatted,
+      },
+      include: recipeInclude(),
     });
+    return recipe;
+  });
+
+  return NextResponse.json({ success: true, message: "Recipe / BOM berhasil diperbarui", data: result });
+}
+
+export async function PUT(req: NextRequest) {
+  try {
+    return await updateRecipe(req, false);
   } catch (error: any) {
-    console.error(
-      "PUT /api/manufacture/recipes:",
-      error,
-    );
-
-    if (
-      error?.code ===
-      "P2002"
-    ) {
-      return fail(
-        "Code Recipe/BOM sudah digunakan.",
-      );
-    }
-
-    if (
-      error?.code ===
-      "P2003"
-    ) {
-      return fail(
-        "Relasi data tidak valid.",
-      );
-    }
-
-    /*
-     * Jangan menjadikan error validasi
-     * sebagai HTTP 500.
-     */
-
-    const message =
-      error?.message ||
-      "Gagal memperbarui Recipe/BOM Outlet.";
-
-    if (
-      message.includes(
-        "Outlet",
-      ) ||
-      message.includes(
-        "Barang",
-      ) ||
-      message.includes(
-        "Product CK",
-      ) ||
-      message.includes(
-        "Qty",
-      ) ||
-      message.includes(
-        "Recipe",
-      )
-    ) {
-      return fail(
-        message,
-        400,
-      );
-    }
-
-    return fail(
-      message,
-      500,
-    );
+    console.error("PUT /api/manufacture/recipes ERROR:", error);
+    return jsonError(error?.message || "Gagal memperbarui Recipe / BOM", 400);
   }
 }
 
-/*
-===========================================================
-PATCH
-===========================================================
-*/
-
-export async function PATCH(
-  req: NextRequest,
-) {
-  return PUT(req);
+export async function PATCH(req: NextRequest) {
+  try {
+    return await updateRecipe(req, true);
+  } catch (error: any) {
+    console.error("PATCH /api/manufacture/recipes ERROR:", error);
+    return jsonError(error?.message || "Gagal memperbarui Recipe / BOM", 400);
+  }
 }
 
-/*
-===========================================================
-DELETE
-===========================================================
-*/
-
-export async function DELETE(
-  req: NextRequest,
-) {
+export async function DELETE(req: NextRequest) {
   try {
-    const user =
-      await getUser();
+    const user = await getCurrentUser();
+    if (!user) return jsonError("Tidak login atau session tidak valid", 401);
+    if (!canManageRecipe(user.role)) return jsonError("Anda tidak memiliki akses Manufacture", 403);
 
-    if (
-      !user ||
-      !user.active
-    ) {
-      return fail(
-        "Tidak login.",
-        401,
-      );
+    const { searchParams } = new URL(req.url);
+    const id = Number(searchParams.get("id") ?? 0);
+    if (!Number.isInteger(id) || id <= 0) return jsonError("ID Recipe tidak valid");
+
+    const existing = await prisma.recipe.findUnique({ where: { id }, select: { id: true, outletId: true, name: true } });
+    if (!existing) return jsonError("Recipe / BOM tidak ditemukan", 404);
+    if (roleOf(user.role) === ROLE_OUTLET_ADMIN && Number(existing.outletId) !== Number(user.outletId)) {
+      return jsonError("Anda tidak memiliki akses ke Recipe outlet ini", 403);
     }
 
-    const role =
-      String(user.role).toUpperCase();
-
-    if (
-      !canAccessManufacture(role)
-    ) {
-      return fail(
-        "Tidak memiliki akses.",
-        403,
-      );
+    const used = await prisma.manufactureOrder.count({ where: { recipeId: id } });
+    if (used > 0) {
+      return jsonError("Recipe tidak dapat dihapus karena sudah digunakan oleh Manufacture Order. Nonaktifkan Recipe jika tidak ingin digunakan lagi.", 409);
     }
 
-    const { searchParams } =
-      new URL(req.url);
-
-    let body: any = null;
-
-    try {
-      body =
-        await req.json();
-    } catch {
-      body = null;
-    }
-
-    const id =
-      getRecipeIdFromRequest(
-        req,
-        body,
-      );
-
-    if (!id) {
-      return fail(
-        "ID Recipe wajib diisi.",
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * FIND RECIPE
-     * -------------------------------------------------------
-     */
-
-    const recipe =
-      await prisma.recipe.findUnique({
-        where: {
-          id,
-        },
-
-        include: {
-          orders: {
-            select: {
-              id: true,
-              number: true,
-              status: true,
-            },
-          },
-        },
-      });
-
-    if (!recipe) {
-      return fail(
-        "Recipe/BOM tidak ditemukan.",
-        404,
-      );
-    }
-
-    /*
-     * Recipe tanpa outlet
-     * bukan Recipe Outlet yang valid.
-     */
-
-    if (!recipe.outletId) {
-      return fail(
-        "Recipe ini belum memiliki Outlet.",
-        400,
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * OUTLET
-     * -------------------------------------------------------
-     */
-
-    const requestedOutletId =
-      body?.outletId ??
-      searchParams.get(
-        "outletId",
-      ) ??
-      recipe.outletId;
-
-    let outletId: number;
-
-    try {
-      outletId =
-        await resolveOutletId(
-          user,
-          requestedOutletId,
-        );
-    } catch (error: any) {
-      return fail(
-        error?.message ||
-          "Outlet tidak valid.",
-        400,
-      );
-    }
-
-    if (
-      outletId !==
-      recipe.outletId
-    ) {
-      return fail(
-        "Recipe bukan milik outlet tersebut.",
-        403,
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * PROTECT USED RECIPE
-     * -------------------------------------------------------
-     */
-
-    if (
-      recipe.orders.length >
-      0
-    ) {
-      return fail(
-        "Recipe/BOM tidak dapat dihapus karena sudah digunakan pada Manufacture Order.",
-      );
-    }
-
-    /*
-     * -------------------------------------------------------
-     * DELETE
-     * -------------------------------------------------------
-     */
-
-    await prisma.recipe.delete({
-      where: {
-        id,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.recipeItem.deleteMany({ where: { recipeId: id } });
+      await tx.recipe.delete({ where: { id } });
     });
 
-    return NextResponse.json({
-      success: true,
-
-      message:
-        "Recipe/BOM Outlet berhasil dihapus.",
-    });
+    return NextResponse.json({ success: true, message: "Recipe / BOM berhasil dihapus", data: { id } });
   } catch (error: any) {
-    console.error(
-      "DELETE /api/manufacture/recipes:",
-      error,
-    );
-
-    if (
-      error?.code ===
-      "P2003"
-    ) {
-      return fail(
-        "Recipe/BOM tidak dapat dihapus karena masih digunakan.",
-      );
-    }
-
-    return fail(
-      error?.message ||
-        "Gagal menghapus Recipe/BOM Outlet.",
-      500,
-    );
+    console.error("DELETE /api/manufacture/recipes ERROR:", error);
+    return jsonError(error?.message || "Gagal menghapus Recipe / BOM", 400);
   }
 }

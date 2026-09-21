@@ -49,6 +49,7 @@ export const dynamic = "force-dynamic";
 const ROLE_ADMIN = "ADMIN";
 const ROLE_MANAGER = "MANAGER";
 const ROLE_OUTLET_ADMIN = "OUTLET_ADMIN";
+const ROLE_ADMIN_PUSAT = "ADMIN_PUSAT";
 
 const MANUFACTURE_STATUS = "COMPLETED";
 
@@ -182,6 +183,7 @@ function canManufacture(role: unknown): boolean {
   return (
     normalizedRole === ROLE_ADMIN ||
     normalizedRole === ROLE_MANAGER ||
+    normalizedRole === ROLE_ADMIN_PUSAT ||
     normalizedRole === ROLE_OUTLET_ADMIN
   );
 }

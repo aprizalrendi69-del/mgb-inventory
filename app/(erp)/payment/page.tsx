@@ -188,17 +188,102 @@ type UserInfo = {
 ========================================================= */
 
 function formatRupiah(value: number) {
-  return Number(value || 0).toLocaleString("id-ID");
+  const numeric = Number(value || 0);
+
+  if (!Number.isFinite(numeric)) {
+    return "0";
+  }
+
+  return numeric.toLocaleString("id-ID", {
+    maximumFractionDigits: 6,
+  });
 }
 
-function parseRupiah(value: string) {
-  const raw = String(value || "").replace(/\D/g, "");
+function parseRupiah(value: string | number) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  let raw = String(value ?? "")
+    .trim()
+    .replace(/\s/g, "")
+    .replace(/^Rp\.?/i, "");
 
   if (!raw) return 0;
 
-  const parsed = Number(raw);
+  // Support Indonesian decimal input:
+  //   0,4       -> 0.4
+  //   0.4       -> 0.4
+  //   1.234,56  -> 1234.56
+  //   1,234.56  -> 1234.56
+  // The last separator is treated as the decimal separator when
+  // both separators are present. A single separator followed by
+  // 1-2 digits is also treated as a decimal separator.
+  raw = raw.replace(/[^0-9,.-]/g, "");
+
+  const negative = raw.startsWith("-");
+  raw = raw.replace(/-/g, "");
+
+  const lastComma = raw.lastIndexOf(",");
+  const lastDot = raw.lastIndexOf(".");
+  const lastSeparator = Math.max(lastComma, lastDot);
+
+  let normalized = raw;
+
+  if (lastSeparator >= 0) {
+    const fraction = raw.slice(lastSeparator + 1);
+    const separatorCount =
+      (raw.match(/,/g)?.length ?? 0) +
+      (raw.match(/\./g)?.length ?? 0);
+
+    if (separatorCount > 1 || fraction.length <= 2) {
+      const integerPart = raw
+        .slice(0, lastSeparator)
+        .replace(/[,.]/g, "");
+      const decimalPart = fraction.replace(/[,.]/g, "");
+
+      normalized =
+        decimalPart.length > 0
+          ? `${integerPart || "0"}.${decimalPart}`
+          : integerPart || "0";
+    } else {
+      normalized = raw.replace(/[,.]/g, "");
+    }
+  }
+
+  const parsed = Number(
+    `${negative ? "-" : ""}${normalized}`
+  );
 
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sanitizeRupiahInput(value: string) {
+  let raw = String(value ?? "")
+    .replace(/\s/g, "")
+    .replace(/^Rp\.?/i, "")
+    .replace(/[^0-9,.]/g, "");
+
+  if (!raw) return "";
+
+  // Use comma as the Indonesian decimal separator in the UI.
+  // A dot is accepted from keyboard/paste and normalized to comma.
+  raw = raw.replace(/\./g, ",");
+
+  const firstComma = raw.indexOf(",");
+
+  if (firstComma >= 0) {
+    const integerPart = raw
+      .slice(0, firstComma)
+      .replace(/,/g, "");
+    const decimalPart = raw
+      .slice(firstComma + 1)
+      .replace(/,/g, "");
+
+    return `${integerPart || "0"},${decimalPart}`;
+  }
+
+  return raw;
 }
 
 function formatDate(value?: string | null) {
@@ -1986,13 +2071,13 @@ export default function PaymentPage() {
   ========================================================= */
 
   return (
-    <div className="min-h-full bg-[#F3F7F5]">
+    <div className="min-h-full bg-[#F4F8FC]">
 
       {/* ===================================================
           PREMIUM HERO
       =================================================== */}
 
-      <section className="relative overflow-hidden border-b border-[#DCE8E2] bg-white">
+      <section className="relative overflow-hidden border-b border-[#D9E7F4] bg-white">
 
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.10),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(24,53,45,0.05),transparent_35%)]" />
 
@@ -2004,7 +2089,7 @@ export default function PaymentPage() {
 
               <div className="relative shrink-0">
 
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#18352D] text-white shadow-xl shadow-[#18352D]/15 md:h-16 md:w-16">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#003B73] text-white shadow-xl shadow-[#003B73]/15 md:h-16 md:w-16">
 
                   <CreditCard
                     size={27}
@@ -2028,7 +2113,7 @@ export default function PaymentPage() {
 
                 <div className="flex flex-wrap items-center gap-2">
 
-                  <span className="rounded-full border border-[#D3E4DD] bg-[#F0F7F3] px-2.5 py-1 text-[9px] font-extrabold tracking-[0.16em] text-[#497F70]">
+                  <span className="rounded-full border border-[#C8DDF0] bg-[#F0F7F3] px-2.5 py-1 text-[9px] font-extrabold tracking-[0.16em] text-[#00529C]">
                     FINANCE
                   </span>
 
@@ -2043,7 +2128,7 @@ export default function PaymentPage() {
 
                 </div>
 
-                <h1 className="mt-2 text-2xl font-black tracking-[-0.035em] text-[#18352D] md:text-3xl">
+                <h1 className="mt-2 text-2xl font-black tracking-[-0.035em] text-[#003B73] md:text-3xl">
                   Pembayaran Supplier
                 </h1>
 
@@ -2056,7 +2141,7 @@ export default function PaymentPage() {
 
                 <div className="mt-4 flex flex-wrap items-center gap-2">
 
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#CDE0D7] bg-[#EEF6F2] px-3 py-1.5 text-[10px] font-extrabold text-[#497F70]">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#C8DDF0] bg-[#EAF3FC] px-3 py-1.5 text-[10px] font-extrabold text-[#00529C]">
                     <Landmark size={11} />
                     PUSAT
                     <span className="rounded-full bg-white/80 px-1.5 py-0.5 text-[9px]">
@@ -2094,7 +2179,7 @@ export default function PaymentPage() {
                   loading ||
                   loadingPayables
                 }
-                className="group inline-flex items-center justify-center gap-2 rounded-xl border border-[#D5E3DD] bg-white px-4 py-3 text-xs font-bold text-[#52645D] shadow-sm transition hover:-translate-y-0.5 hover:border-[#B9D0C6] hover:bg-[#F8FBF9] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                className="group inline-flex items-center justify-center gap-2 rounded-xl border border-[#D5E3F0] bg-white px-4 py-3 text-xs font-bold text-[#52645D] shadow-sm transition hover:-translate-y-0.5 hover:border-[#A9C8E6] hover:bg-[#F6FAFE] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RefreshCw
                   size={16}
@@ -2114,7 +2199,7 @@ export default function PaymentPage() {
                   onClick={() => {
                     void openPayment();
                   }}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#497F70] px-5 py-3 text-xs font-extrabold text-white shadow-lg shadow-[#497F70]/20 transition hover:-translate-y-0.5 hover:bg-[#3D6D60] hover:shadow-xl"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#00529C] px-5 py-3 text-xs font-extrabold text-white shadow-lg shadow-[#00529C]/20 transition hover:-translate-y-0.5 hover:bg-[#00417D] hover:shadow-xl"
                 >
                   <Plus size={16} />
                   Pembayaran Baru
@@ -2182,9 +2267,9 @@ export default function PaymentPage() {
 
           {/* TOTAL PAYMENT */}
 
-          <div className="group relative overflow-hidden rounded-2xl border border-[#DCE8E2] bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl">
+          <div className="group relative overflow-hidden rounded-2xl border border-[#D9E7F4] bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl">
 
-            <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-[#497F70]/5 blur-2xl transition group-hover:bg-[#497F70]/10" />
+            <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-[#00529C]/5 blur-2xl transition group-hover:bg-[#00529C]/10" />
 
             <div className="relative">
 
@@ -2192,17 +2277,17 @@ export default function PaymentPage() {
 
                 <div>
 
-                  <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#82948D]">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#7892AA]">
                     Total Pembayaran
                   </p>
 
-                  <p className="mt-2 text-lg font-black tracking-tight text-[#18352D]">
+                  <p className="mt-2 text-lg font-black tracking-tight text-[#003B73]">
                     Rp {formatRupiah(totalPayment)}
                   </p>
 
                 </div>
 
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E8F2FB] text-[#00529C]">
                   <Wallet size={19} />
                 </div>
 
@@ -2210,7 +2295,7 @@ export default function PaymentPage() {
 
               <div className="mt-4 flex items-center gap-2 text-[10px] text-gray-400">
 
-                <span className="h-1.5 w-1.5 rounded-full bg-[#497F70]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-[#00529C]" />
 
                 Akumulasi seluruh pembayaran
 
@@ -2222,7 +2307,7 @@ export default function PaymentPage() {
 
           {/* TRANSACTIONS */}
 
-          <div className="group relative overflow-hidden rounded-2xl border border-[#DCE8E2] bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl">
+          <div className="group relative overflow-hidden rounded-2xl border border-[#D9E7F4] bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl">
 
             <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-blue-500/5 blur-2xl" />
 
@@ -2232,11 +2317,11 @@ export default function PaymentPage() {
 
                 <div>
 
-                  <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#82948D]">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#7892AA]">
                     Transaksi
                   </p>
 
-                  <p className="mt-2 text-2xl font-black tracking-tight text-[#18352D]">
+                  <p className="mt-2 text-2xl font-black tracking-tight text-[#003B73]">
                     {totalTransaction}
                   </p>
 
@@ -2258,7 +2343,7 @@ export default function PaymentPage() {
 
           {/* PAID */}
 
-          <div className="group relative overflow-hidden rounded-2xl border border-[#DCE8E2] bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl">
+          <div className="group relative overflow-hidden rounded-2xl border border-[#D9E7F4] bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl">
 
             <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-emerald-500/5 blur-2xl" />
 
@@ -2268,7 +2353,7 @@ export default function PaymentPage() {
 
                 <div>
 
-                  <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#82948D]">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#7892AA]">
                     Invoice Lunas
                   </p>
 
@@ -2294,7 +2379,7 @@ export default function PaymentPage() {
 
           {/* PARTIAL */}
 
-          <div className="group relative overflow-hidden rounded-2xl border border-[#DCE8E2] bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl">
+          <div className="group relative overflow-hidden rounded-2xl border border-[#D9E7F4] bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl">
 
             <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-amber-500/5 blur-2xl" />
 
@@ -2304,7 +2389,7 @@ export default function PaymentPage() {
 
                 <div>
 
-                  <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#82948D]">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#7892AA]">
                     Sebagian
                   </p>
 
@@ -2370,11 +2455,11 @@ export default function PaymentPage() {
             MAIN PAYMENT PANEL
         ================================================= */}
 
-        <section className="overflow-hidden rounded-3xl border border-[#DCE8E2] bg-white shadow-sm">
+        <section className="overflow-hidden rounded-3xl border border-[#D9E7F4] bg-white shadow-sm">
 
           {/* PANEL HEADER */}
 
-          <div className="border-b border-[#E7EEEA] bg-gradient-to-r from-white via-white to-[#F7FAF8] px-5 py-5 md:px-6">
+          <div className="border-b border-[#E1EBF5] bg-gradient-to-r from-white via-white to-[#F5F9FD] px-5 py-5 md:px-6">
 
             <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
 
@@ -2382,15 +2467,15 @@ export default function PaymentPage() {
 
                 <div className="flex flex-wrap items-center gap-2">
 
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#18352D] text-white">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#003B73] text-white">
                     <ReceiptText size={17} />
                   </div>
 
-                  <h2 className="text-base font-black tracking-tight text-[#18352D]">
+                  <h2 className="text-base font-black tracking-tight text-[#003B73]">
                     Riwayat Pembayaran
                   </h2>
 
-                  <span className="rounded-full bg-[#EAF3EF] px-2.5 py-1 text-[9px] font-extrabold text-[#497F70]">
+                  <span className="rounded-full bg-[#E8F2FB] px-2.5 py-1 text-[9px] font-extrabold text-[#00529C]">
                     {filteredPayments.length} transaksi
                   </span>
 
@@ -2404,13 +2489,13 @@ export default function PaymentPage() {
 
               </div>
 
-              <div className="rounded-2xl border border-[#DCE8E2] bg-[#F8FBF9] px-4 py-3">
+              <div className="rounded-2xl border border-[#D9E7F4] bg-[#F6FAFE] px-4 py-3">
 
-                <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#82948D]">
+                <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#7892AA]">
                   Nilai hasil filter
                 </p>
 
-                <p className="mt-1 text-sm font-black text-[#18352D]">
+                <p className="mt-1 text-sm font-black text-[#003B73]">
                   Rp {formatRupiah(filteredPaymentAmount)}
                 </p>
 
@@ -2420,7 +2505,7 @@ export default function PaymentPage() {
 
             {/* FILTERS */}
 
-            <div className="mt-5 rounded-2xl border border-[#E1EBE6] bg-[#F9FBFA] p-4">
+            <div className="mt-5 rounded-2xl border border-[#E0EBF5] bg-[#F9FBFA] p-4">
 
               <div className="mb-3 flex items-center justify-between">
 
@@ -2428,10 +2513,10 @@ export default function PaymentPage() {
 
                   <SlidersHorizontal
                     size={14}
-                    className="text-[#497F70]"
+                    className="text-[#00529C]"
                   />
 
-                  <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#647870]">
+                  <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#58758E]">
                     Filter Transaksi
                   </span>
 
@@ -2443,7 +2528,7 @@ export default function PaymentPage() {
                     onClick={
                       resetFilter
                     }
-                    className="text-[10px] font-extrabold text-[#497F70] transition hover:text-[#18352D]"
+                    className="text-[10px] font-extrabold text-[#00529C] transition hover:text-[#003B73]"
                   >
                     Reset Filter
                   </button>
@@ -2457,7 +2542,7 @@ export default function PaymentPage() {
 
                 <div className="xl:col-span-2">
 
-                  <label className="mb-1.5 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#82948D]">
+                  <label className="mb-1.5 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#7892AA]">
                     Pencarian
                   </label>
 
@@ -2477,7 +2562,7 @@ export default function PaymentPage() {
                         )
                       }
                       placeholder="Invoice, supplier, PO, pembayaran..."
-                      className="h-11 w-full rounded-xl border border-[#D6E4DE] bg-white pl-10 pr-3 text-xs font-medium text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                      className="h-11 w-full rounded-xl border border-[#D6E4DE] bg-white pl-10 pr-3 text-xs font-medium text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                     />
 
                   </div>
@@ -2488,7 +2573,7 @@ export default function PaymentPage() {
 
                 <div>
 
-                  <label className="mb-1.5 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#82948D]">
+                  <label className="mb-1.5 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#7892AA]">
                     Outlet
                   </label>
 
@@ -2496,7 +2581,7 @@ export default function PaymentPage() {
 
                     <Building2
                       size={15}
-                      className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#497F70]"
+                      className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#00529C]"
                     />
 
                     <select
@@ -2511,7 +2596,7 @@ export default function PaymentPage() {
                       disabled={
                         isOutletAdmin
                       }
-                      className="h-11 w-full appearance-none rounded-xl border border-[#D6E4DE] bg-white pl-10 pr-9 text-xs font-semibold text-gray-700 outline-none transition focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10 disabled:cursor-not-allowed disabled:bg-[#F1F4F2] disabled:text-gray-500"
+                      className="h-11 w-full appearance-none rounded-xl border border-[#D6E4DE] bg-white pl-10 pr-9 text-xs font-semibold text-gray-700 outline-none transition focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10 disabled:cursor-not-allowed disabled:bg-[#F1F4F2] disabled:text-gray-500"
                     >
 
                       {!isOutletAdmin && (
@@ -2554,7 +2639,7 @@ export default function PaymentPage() {
 
                 <div>
 
-                  <label className="mb-1.5 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#82948D]">
+                  <label className="mb-1.5 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#7892AA]">
                     Status
                   </label>
 
@@ -2569,7 +2654,7 @@ export default function PaymentPage() {
                           e.target.value
                         )
                       }
-                      className="h-11 w-full appearance-none rounded-xl border border-[#D6E4DE] bg-white px-3 pr-9 text-xs font-semibold text-gray-700 outline-none transition focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                      className="h-11 w-full appearance-none rounded-xl border border-[#D6E4DE] bg-white px-3 pr-9 text-xs font-semibold text-gray-700 outline-none transition focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                     >
 
                       <option value="ALL">
@@ -2603,7 +2688,7 @@ export default function PaymentPage() {
 
                 <div>
 
-                  <label className="mb-1.5 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#82948D]">
+                  <label className="mb-1.5 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#7892AA]">
                     Metode
                   </label>
 
@@ -2618,7 +2703,7 @@ export default function PaymentPage() {
                           e.target.value
                         )
                       }
-                      className="h-11 w-full appearance-none rounded-xl border border-[#D6E4DE] bg-white px-3 pr-9 text-xs font-semibold text-gray-700 outline-none transition focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                      className="h-11 w-full appearance-none rounded-xl border border-[#D6E4DE] bg-white px-3 pr-9 text-xs font-semibold text-gray-700 outline-none transition focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                     >
 
                       <option value="ALL">
@@ -2664,7 +2749,7 @@ export default function PaymentPage() {
 
                 <div>
 
-                  <label className="mb-1.5 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#82948D]">
+                  <label className="mb-1.5 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#7892AA]">
                     Dari
                   </label>
 
@@ -2685,7 +2770,7 @@ export default function PaymentPage() {
                           e.target.value
                         )
                       }
-                      className="h-11 w-full rounded-xl border border-[#D6E4DE] bg-white pl-9 pr-3 text-xs font-medium text-gray-700 outline-none focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                      className="h-11 w-full rounded-xl border border-[#D6E4DE] bg-white pl-9 pr-3 text-xs font-medium text-gray-700 outline-none focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                     />
 
                   </div>
@@ -2696,7 +2781,7 @@ export default function PaymentPage() {
 
                 <div>
 
-                  <label className="mb-1.5 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#82948D]">
+                  <label className="mb-1.5 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#7892AA]">
                     Sampai
                   </label>
 
@@ -2717,7 +2802,7 @@ export default function PaymentPage() {
                           e.target.value
                         )
                       }
-                      className="h-11 w-full rounded-xl border border-[#D6E4DE] bg-white pl-9 pr-3 text-xs font-medium text-gray-700 outline-none focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                      className="h-11 w-full rounded-xl border border-[#D6E4DE] bg-white pl-9 pr-3 text-xs font-medium text-gray-700 outline-none focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                     />
 
                   </div>
@@ -2727,7 +2812,7 @@ export default function PaymentPage() {
               </div>
 
               {hasActiveFilter && (
-                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#E7EEEA] pt-3">
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#E1EBF5] pt-3">
 
                   <span className="text-[10px] font-medium text-gray-400">
                     Filter aktif:
@@ -2778,7 +2863,7 @@ export default function PaymentPage() {
 
               <thead>
 
-                <tr className="border-b border-[#E4ECE8] bg-[#F7FAF8]">
+                <tr className="border-b border-[#E4ECE8] bg-[#F5F9FD]">
 
                   <th className="w-14 px-5 py-4 text-left text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#73867E]">
                     No
@@ -2846,9 +2931,9 @@ export default function PaymentPage() {
 
                       <div className="flex flex-col items-center">
 
-                        <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EAF3EF] text-[#497F70]">
+                        <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E8F2FB] text-[#00529C]">
 
-                          <div className="absolute inset-0 animate-ping rounded-2xl bg-[#497F70]/5" />
+                          <div className="absolute inset-0 animate-ping rounded-2xl bg-[#00529C]/5" />
 
                           <RefreshCw
                             size={21}
@@ -2857,7 +2942,7 @@ export default function PaymentPage() {
 
                         </div>
 
-                        <p className="mt-4 text-sm font-extrabold text-[#18352D]">
+                        <p className="mt-4 text-sm font-extrabold text-[#003B73]">
                           Memuat pembayaran
                         </p>
 
@@ -2884,13 +2969,13 @@ export default function PaymentPage() {
 
                       <div className="flex flex-col items-center">
 
-                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EAF3EF] text-[#497F70]">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#E8F2FB] text-[#00529C]">
                           <ReceiptText
                             size={27}
                           />
                         </div>
 
-                        <p className="mt-4 text-sm font-extrabold text-[#18352D]">
+                        <p className="mt-4 text-sm font-extrabold text-[#003B73]">
                           Tidak ada transaksi
                         </p>
 
@@ -2906,7 +2991,7 @@ export default function PaymentPage() {
                             onClick={
                               resetFilter
                             }
-                            className="mt-4 rounded-xl border border-[#D5E5DC] bg-white px-4 py-2.5 text-xs font-extrabold text-[#497F70] shadow-sm transition hover:bg-[#F5F8F6]"
+                            className="mt-4 rounded-xl border border-[#D1E1F0] bg-white px-4 py-2.5 text-xs font-extrabold text-[#00529C] shadow-sm transition hover:bg-[#F5F8F6]"
                           >
                             Bersihkan Filter
                           </button>
@@ -3007,7 +3092,7 @@ export default function PaymentPage() {
                                 className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
                                   scope ===
                                   "PUSAT"
-                                    ? "bg-[#EAF3EF] text-[#497F70]"
+                                    ? "bg-[#E8F2FB] text-[#00529C]"
                                     : scope ===
                                       "OUTLET"
                                     ? "bg-blue-50 text-blue-600"
@@ -3032,7 +3117,7 @@ export default function PaymentPage() {
 
                                 <div className="flex flex-wrap items-center gap-1.5">
 
-                                  <span className="font-extrabold tracking-tight text-[#18352D]">
+                                  <span className="font-extrabold tracking-tight text-[#003B73]">
                                     {payment.number ||
                                       "-"}
                                   </span>
@@ -3041,7 +3126,7 @@ export default function PaymentPage() {
                                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[8px] font-extrabold tracking-[0.12em] ${
                                       scope ===
                                       "PUSAT"
-                                        ? "border-[#C9DED5] bg-[#EAF3EF] text-[#497F70]"
+                                        ? "border-[#C9DED5] bg-[#E8F2FB] text-[#00529C]"
                                         : scope ===
                                           "OUTLET"
                                         ? "border-blue-200 bg-blue-50 text-blue-700"
@@ -3097,11 +3182,11 @@ export default function PaymentPage() {
 
                               {hasInvoice ? (
 
-                                <div className="rounded-xl border border-[#DDE9E4] bg-[#F8FBF9] p-3">
+                                <div className="rounded-xl border border-[#DDE9E4] bg-[#F6FAFE] p-3">
 
                                   <div className="flex items-start gap-2.5">
 
-                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#E8F2FB] text-[#00529C]">
                                       <FileText
                                         size={14}
                                       />
@@ -3109,11 +3194,11 @@ export default function PaymentPage() {
 
                                     <div className="min-w-0">
 
-                                      <p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#82948D]">
+                                      <p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#7892AA]">
                                         Invoice Supplier
                                       </p>
 
-                                      <p className="mt-1 break-all text-xs font-black tracking-tight text-[#18352D]">
+                                      <p className="mt-1 break-all text-xs font-black tracking-tight text-[#003B73]">
                                         {
                                           invoiceNumber
                                         }
@@ -3203,7 +3288,7 @@ export default function PaymentPage() {
 
                               <div className="flex items-center gap-2">
 
-                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E8F2FB] text-[#00529C]">
                                   <Landmark
                                     size={14}
                                   />
@@ -3211,7 +3296,7 @@ export default function PaymentPage() {
 
                                 <div>
 
-                                  <span className="inline-flex rounded-full border border-[#C9DED5] bg-[#EAF3EF] px-2.5 py-1 text-[8px] font-extrabold tracking-wider text-[#497F70]">
+                                  <span className="inline-flex rounded-full border border-[#C9DED5] bg-[#E8F2FB] px-2.5 py-1 text-[8px] font-extrabold tracking-wider text-[#00529C]">
                                     PUSAT
                                   </span>
 
@@ -3265,7 +3350,7 @@ export default function PaymentPage() {
 
                               <div className="flex items-center gap-2">
 
-                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E8F2FB] text-[#00529C]">
                                   <Landmark
                                     size={14}
                                   />
@@ -3273,7 +3358,7 @@ export default function PaymentPage() {
 
                                 <div>
 
-                                  <div className="text-xs font-extrabold text-[#18352D]">
+                                  <div className="text-xs font-extrabold text-[#003B73]">
                                     Pusat
                                   </div>
 
@@ -3482,7 +3567,7 @@ export default function PaymentPage() {
                                     payable.id
                                   );
                                 }}
-                                className="inline-flex items-center gap-1.5 rounded-xl bg-[#497F70] px-3 py-2 text-[10px] font-extrabold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#3D6D60] hover:shadow-md"
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-[#00529C] px-3 py-2 text-[10px] font-extrabold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#00417D] hover:shadow-md"
                               >
                                 <ArrowDownCircle
                                   size={13}
@@ -3533,15 +3618,15 @@ export default function PaymentPage() {
 
               {/* MODAL TOP ACCENT */}
 
-              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#18352D] via-[#497F70] to-[#8CB5A6]" />
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#003B73] via-[#00529C] to-[#8CB5A6]" />
 
               {/* HEADER */}
 
-              <div className="flex items-center justify-between border-b border-[#E5ECE9] bg-gradient-to-r from-[#F7FAF8] via-white to-white px-6 py-5">
+              <div className="flex items-center justify-between border-b border-[#DFEAF4] bg-gradient-to-r from-[#F5F9FD] via-white to-white px-6 py-5">
 
                 <div className="flex items-center gap-3">
 
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#18352D] text-white shadow-lg shadow-[#18352D]/15">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#003B73] text-white shadow-lg shadow-[#003B73]/15">
                     <CircleDollarSign
                       size={21}
                     />
@@ -3551,11 +3636,11 @@ export default function PaymentPage() {
 
                     <div className="flex items-center gap-2">
 
-                      <h2 className="text-lg font-black tracking-tight text-[#18352D]">
+                      <h2 className="text-lg font-black tracking-tight text-[#003B73]">
                         Pembayaran Supplier
                       </h2>
 
-                      <span className="rounded-full bg-[#EAF3EF] px-2.5 py-1 text-[8px] font-extrabold tracking-[0.12em] text-[#497F70]">
+                      <span className="rounded-full bg-[#E8F2FB] px-2.5 py-1 text-[8px] font-extrabold tracking-[0.12em] text-[#00529C]">
                         PAYMENT
                       </span>
 
@@ -3597,7 +3682,7 @@ export default function PaymentPage() {
 
                     <div className="mb-2 flex items-center justify-between">
 
-                      <label className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#58736A]">
+                      <label className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#426B89]">
                         Invoice / Payable
                       </label>
 
@@ -3622,7 +3707,7 @@ export default function PaymentPage() {
                           savingPayment ||
                           loadingPayables
                         }
-                        className="w-full appearance-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3.5 pr-10 text-xs font-semibold text-gray-700 outline-none transition focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10 disabled:bg-gray-100"
+                        className="w-full appearance-none rounded-xl border border-[#D1E1F0] bg-[#FAFCFB] px-4 py-3.5 pr-10 text-xs font-semibold text-gray-700 outline-none transition focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10 disabled:bg-gray-100"
                       >
 
                         <option value="">
@@ -3704,7 +3789,7 @@ export default function PaymentPage() {
 
                     <div className="mt-2 flex flex-wrap gap-2">
 
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[#EAF3EF] px-2.5 py-1 text-[8px] font-extrabold text-[#497F70]">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#E8F2FB] px-2.5 py-1 text-[8px] font-extrabold text-[#00529C]">
                         <Landmark size={9} />
                         PUSAT
                       </span>
@@ -3736,7 +3821,7 @@ export default function PaymentPage() {
                         : "LAINNYA";
 
                     return (
-                      <div className="overflow-hidden rounded-2xl border border-[#DCE8E2] bg-gradient-to-br from-[#F4F9F6] via-white to-white">
+                      <div className="overflow-hidden rounded-2xl border border-[#D9E7F4] bg-gradient-to-br from-[#F4F9F6] via-white to-white">
 
                         <div className="border-b border-[#E4ECE8] px-5 py-4">
 
@@ -3744,11 +3829,11 @@ export default function PaymentPage() {
 
                             <div className="min-w-0">
 
-                              <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#82948D]">
+                              <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#7892AA]">
                                 Detail Hutang
                               </p>
 
-                              <p className="mt-1 truncate text-base font-black tracking-tight text-[#18352D]">
+                              <p className="mt-1 truncate text-base font-black tracking-tight text-[#003B73]">
                                 {selectedPayable.invoiceNumber ||
                                   `PAYABLE-${selectedPayable.id}`}
                               </p>
@@ -3759,7 +3844,7 @@ export default function PaymentPage() {
                                   className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[8px] font-extrabold tracking-wide ${
                                     selectedScope ===
                                     "PUSAT"
-                                      ? "border-[#C9DED5] bg-[#EAF3EF] text-[#497F70]"
+                                      ? "border-[#C9DED5] bg-[#E8F2FB] text-[#00529C]"
                                       : selectedScope ===
                                         "OUTLET"
                                       ? "border-blue-200 bg-blue-50 text-blue-700"
@@ -3879,10 +3964,10 @@ export default function PaymentPage() {
 
                                 <Landmark
                                   size={14}
-                                  className="text-[#497F70]"
+                                  className="text-[#00529C]"
                                 />
 
-                                <span className="text-xs font-extrabold text-[#18352D]">
+                                <span className="text-xs font-extrabold text-[#003B73]">
                                   Gudang / Pusat
                                 </span>
 
@@ -3958,7 +4043,7 @@ export default function PaymentPage() {
 
                   <div>
 
-                    <label className="mb-2 block text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#58736A]">
+                    <label className="mb-2 block text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#426B89]">
                       Nominal Pembayaran
                     </label>
 
@@ -3975,41 +4060,29 @@ export default function PaymentPage() {
                           paymentAmount
                         }
                         onChange={(e) => {
-
-                          const raw =
-                            e.target.value.replace(
-                              /\D/g,
-                              ""
-                            );
-
                           setPaymentAmount(
-                            raw
-                              ? Number(
-                                  raw
-                                ).toLocaleString(
-                                  "id-ID"
-                                )
-                              : ""
+                            sanitizeRupiahInput(
+                              e.target.value
+                            )
                           );
-
                         }}
                         placeholder="0"
                         disabled={
                           savingPayment
                         }
-                        className="h-14 w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-12 pr-4 text-lg font-black tracking-tight text-[#18352D] outline-none transition focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                        className="h-14 w-full rounded-xl border border-[#D1E1F0] bg-[#FAFCFB] py-3 pl-12 pr-4 text-lg font-black tracking-tight text-[#003B73] outline-none transition focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                       />
 
                     </div>
 
                     {selectedPayable && (
-                      <div className="mt-2 flex items-center justify-between rounded-xl border border-[#E5ECE9] bg-[#F7FAF8] px-3.5 py-2.5">
+                      <div className="mt-2 flex items-center justify-between rounded-xl border border-[#DFEAF4] bg-[#F5F9FD] px-3.5 py-2.5">
 
                         <span className="text-[10px] font-medium text-gray-500">
                           Maksimal pembayaran
                         </span>
 
-                        <span className="text-xs font-black text-[#18352D]">
+                        <span className="text-xs font-black text-[#003B73]">
                           Rp{" "}
                           {formatRupiah(
                             selectedPayable.outstanding
@@ -4025,7 +4098,7 @@ export default function PaymentPage() {
 
                   <div>
 
-                    <label className="mb-2 block text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#58736A]">
+                    <label className="mb-2 block text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#426B89]">
                       Metode Pembayaran
                     </label>
 
@@ -4043,7 +4116,7 @@ export default function PaymentPage() {
                         disabled={
                           savingPayment
                         }
-                        className="h-12 w-full appearance-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 pr-10 text-xs font-bold text-gray-700 outline-none focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                        className="h-12 w-full appearance-none rounded-xl border border-[#D1E1F0] bg-[#FAFCFB] px-4 pr-10 text-xs font-bold text-gray-700 outline-none focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                       >
 
                         <option value="PETTY_CASH">
@@ -4095,7 +4168,7 @@ export default function PaymentPage() {
 
                   <div>
 
-                    <label className="mb-2 block text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#58736A]">
+                    <label className="mb-2 block text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#426B89]">
                       Tanggal Pembayaran
                     </label>
 
@@ -4119,7 +4192,7 @@ export default function PaymentPage() {
                         disabled={
                           savingPayment
                         }
-                        className="h-12 w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 pl-10 text-xs font-semibold text-gray-700 outline-none focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                        className="h-12 w-full rounded-xl border border-[#D1E1F0] bg-[#FAFCFB] px-4 pl-10 text-xs font-semibold text-gray-700 outline-none focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                       />
 
                     </div>
@@ -4130,7 +4203,7 @@ export default function PaymentPage() {
 
                   <div>
 
-                    <label className="mb-2 block text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#58736A]">
+                    <label className="mb-2 block text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#426B89]">
                       Nomor Referensi
                     </label>
 
@@ -4148,7 +4221,7 @@ export default function PaymentPage() {
                         savingPayment
                       }
                       placeholder="No. transfer / bukti pembayaran"
-                      className="h-12 w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 text-xs font-medium text-gray-700 outline-none focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                      className="h-12 w-full rounded-xl border border-[#D1E1F0] bg-[#FAFCFB] px-4 text-xs font-medium text-gray-700 outline-none focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                     />
 
                   </div>
@@ -4157,7 +4230,7 @@ export default function PaymentPage() {
 
                   <div>
 
-                    <label className="mb-2 block text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#58736A]">
+                    <label className="mb-2 block text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#426B89]">
                       Keterangan
                     </label>
 
@@ -4175,7 +4248,7 @@ export default function PaymentPage() {
                       }
                       rows={3}
                       placeholder="Keterangan pembayaran..."
-                      className="w-full resize-none rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-xs font-medium text-gray-700 outline-none focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                      className="w-full resize-none rounded-xl border border-[#D1E1F0] bg-[#FAFCFB] px-4 py-3 text-xs font-medium text-gray-700 outline-none focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                     />
 
                   </div>
@@ -4186,7 +4259,7 @@ export default function PaymentPage() {
 
               {/* FOOTER */}
 
-              <div className="flex flex-col-reverse gap-2 border-t border-[#E5ECE9] bg-[#FAFCFB] px-6 py-4 sm:flex-row sm:justify-end">
+              <div className="flex flex-col-reverse gap-2 border-t border-[#DFEAF4] bg-[#FAFCFB] px-6 py-4 sm:flex-row sm:justify-end">
 
                 <button
                   type="button"
@@ -4196,7 +4269,7 @@ export default function PaymentPage() {
                   onClick={
                     closePayment
                   }
-                  className="rounded-xl border border-[#D5E5DC] bg-white px-5 py-3 text-xs font-extrabold text-gray-600 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
+                  className="rounded-xl border border-[#D1E1F0] bg-white px-5 py-3 text-xs font-extrabold text-gray-600 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                 >
                   Batal
                 </button>
@@ -4221,7 +4294,7 @@ export default function PaymentPage() {
                   onClick={
                     submitPayment
                   }
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#18352D] px-6 py-3 text-xs font-extrabold text-white shadow-lg shadow-[#18352D]/15 transition hover:bg-[#23483E] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#003B73] px-6 py-3 text-xs font-extrabold text-white shadow-lg shadow-[#003B73]/15 transition hover:bg-[#23483E] disabled:cursor-not-allowed disabled:opacity-50"
                 >
 
                   {savingPayment && (

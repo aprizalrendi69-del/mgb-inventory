@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-import {
-  PaymentMethod,
-  Role,
-} from "@prisma/client";
+import { PaymentMethod, Role } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { processPayment } from "@/lib/payment";
@@ -25,14 +22,9 @@ async function getCurrentUser() {
   try {
     const data = JSON.parse(session.value);
 
-    const userId = Number(
-      data?.user?.id ?? data?.id
-    );
+    const userId = Number(data?.user?.id ?? data?.id);
 
-    if (
-      !Number.isInteger(userId) ||
-      userId <= 0
-    ) {
+    if (!Number.isInteger(userId) || userId <= 0) {
       return null;
     }
 
@@ -53,170 +45,70 @@ async function getCurrentUser() {
 }
 
 // =====================================================
-// NORMALIZE PAYMENT METHOD
+// NORMALIZE METHOD
 // =====================================================
 
-function normalizePaymentMethod(
-  value: unknown
-): string {
+function normalizePaymentMethod(value: unknown): string {
   return String(value ?? "")
     .trim()
-    .toUpperCase()
-    .replace(/[\s-]+/g, "_");
+    .toUpperCase();
 }
 
 // =====================================================
-// PARSE AMOUNT
-// =====================================================
-//
-// Support:
-//
-// 100000
-// "100000"
-// "100.000"
-// "1.250.000"
-// "100,000"
-// "1,250,000"
-// "100.50"
-// "100,50"
-// "1.250.000,50"
-//
+// SAFE DATE
 // =====================================================
 
-function parseAmount(
-  value: unknown
-): number {
-  if (typeof value === "number") {
-    return Number.isFinite(value)
-      ? value
-      : NaN;
+function parsePaymentDate(value: unknown): Date | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
   }
 
-  const raw = String(
-    value ?? ""
-  ).trim();
+  const date = new Date(String(value));
 
-  if (!raw) {
-    return NaN;
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
   }
 
-  // Remove currency / whitespace.
-  const cleaned = raw
-    .replace(/Rp/gi, "")
-    .replace(/\s/g, "");
-
-  // Indonesian format:
-  // 1.250.000,50
-  if (
-    cleaned.includes(".") &&
-    cleaned.includes(",")
-  ) {
-    return Number(
-      cleaned
-        .replace(/\./g, "")
-        .replace(",", ".")
-    );
-  }
-
-  // Only dot.
-  if (cleaned.includes(".")) {
-    const parts =
-      cleaned.split(".");
-
-    const lastPart =
-      parts[parts.length - 1];
-
-    // 100.50 = decimal
-    if (
-      parts.length === 2 &&
-      /^\d{1,2}$/.test(lastPart)
-    ) {
-      return Number(cleaned);
-    }
-
-    // 100.000 / 1.250.000 = thousands
-    return Number(
-      cleaned.replace(/\./g, "")
-    );
-  }
-
-  // Only comma.
-  if (cleaned.includes(",")) {
-    const parts =
-      cleaned.split(",");
-
-    const lastPart =
-      parts[parts.length - 1];
-
-    // 100,50 = decimal
-    if (
-      parts.length === 2 &&
-      /^\d{1,2}$/.test(lastPart)
-    ) {
-      return Number(
-        cleaned.replace(",", ".")
-      );
-    }
-
-    // 100,000 / 1,250,000 = thousands
-    return Number(
-      cleaned.replace(/,/g, "")
-    );
-  }
-
-  return Number(
-    cleaned.replace(/[^\d-]/g, "")
-  );
+  return date;
 }
 
 // =====================================================
-// CLEAN OPTIONAL STRING
+// SAFE STRING
 // =====================================================
 
-function cleanOptionalString(
-  value: unknown
-): string | null {
-  const result = String(
-    value ?? ""
-  ).trim();
+function cleanString(value: unknown): string | null {
+  const result = String(value ?? "").trim();
 
   return result || null;
 }
 
 // =====================================================
-// POST PURCHASE PAYMENT
-// =====================================================
+// POST PAYMENT PURCHASE PUSAT
 //
-// BUSINESS RULE
+// BUSINESS RULE:
 //
-// NON TEMPO:
+// NON TEMPO
 //
 // CASH
-// -> Payment
-// -> Petty Cash OUT
-//
 // COD
-// -> Payment
-// -> Petty Cash OUT
-//
 // CBD
 // -> Payment
 // -> Petty Cash OUT
 //
 // TRANSFER
 // -> Payment
-// -> Tidak menggunakan Petty Cash
-//
-// TEMPO INITIAL:
+// -> TIDAK mengurangi Petty Cash
 //
 // TEMPO
 // -> PurchasePayable
 // -> TIDAK membuat Payment
 // -> TIDAK mengurangi Petty Cash
 //
-// TEMPO SETTLEMENT:
+// TEMPO SETTLEMENT
 //
-// CASH / COD / CBD
+// CASH
+// COD
+// CBD
 // -> Payment
 // -> Petty Cash OUT
 // -> Payable berkurang
@@ -226,13 +118,17 @@ function cleanOptionalString(
 // -> Tidak mengurangi Petty Cash
 // -> Payable berkurang
 //
-// IMPORTANT:
+// Tidak ada Bank Account.
+// Tidak ada Cash Account.
 //
-// PurchasePayable HANYA dipakai untuk Purchase TEMPO.
+// ACCESS:
 //
-// Purchase non-TEMPO TIDAK boleh menggunakan payable
-// sebagai sumber outstanding pembayaran.
+// ADMIN
+// MANAGER
+// -> boleh pembayaran Purchase Pusat
 //
+// OUTLET_ADMIN
+// -> tidak boleh
 // =====================================================
 
 export async function POST(
@@ -248,8 +144,7 @@ export async function POST(
     // USER
     // =================================================
 
-    const user =
-      await getCurrentUser();
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
@@ -287,7 +182,7 @@ export async function POST(
         {
           success: false,
           message:
-            "Tidak memiliki akses pembayaran Purchase Pusat",
+            "Tidak memiliki akses pembayaran Purchase Pusat.",
         },
         {
           status: 403,
@@ -296,26 +191,18 @@ export async function POST(
     }
 
     // =================================================
-    // PURCHASE ID
+    // PARAMETER ID
     // =================================================
 
-    const { id } =
-      await context.params;
+    const { id } = await context.params;
 
-    const purchaseId =
-      Number(id);
+    const purchaseId = Number(id);
 
-    if (
-      !Number.isInteger(
-        purchaseId
-      ) ||
-      purchaseId <= 0
-    ) {
+    if (!Number.isInteger(purchaseId) || purchaseId <= 0) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "ID Purchase tidak valid",
+          message: "ID Purchase tidak valid.",
         },
         {
           status: 400,
@@ -327,20 +214,15 @@ export async function POST(
     // BODY
     // =================================================
 
-    let body: Record<
-      string,
-      unknown
-    >;
+    let body: Record<string, unknown>;
 
     try {
-      body =
-        await req.json();
+      body = await req.json();
     } catch {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Body request tidak valid.",
+          message: "Body request tidak valid.",
         },
         {
           status: 400,
@@ -352,20 +234,13 @@ export async function POST(
     // AMOUNT
     // =================================================
 
-    const amount =
-      parseAmount(
-        body.amount
-      );
+    const amount = Number(body.amount);
 
-    if (
-      !Number.isFinite(amount) ||
-      amount <= 0
-    ) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Jumlah pembayaran tidak valid.",
+          message: "Jumlah pembayaran tidak valid.",
         },
         {
           status: 400,
@@ -377,38 +252,21 @@ export async function POST(
     // METHOD
     // =================================================
 
-    let method =
-      normalizePaymentMethod(
-        body.method
-      );
-
-    // Frontend lama mungkin mengirim PETTY_CASH.
-    // Secara bisnis PETTY_CASH = CASH.
-
-    if (
-      method === "PETTY_CASH"
-    ) {
-      method = "CASH";
-    }
+    const method = normalizePaymentMethod(body.method);
 
     const allowedMethods = [
       "CASH",
-      "TRANSFER",
-      "TEMPO",
       "COD",
       "CBD",
+      "TRANSFER",
+      "TEMPO",
     ];
 
-    if (
-      !allowedMethods.includes(
-        method
-      )
-    ) {
+    if (!allowedMethods.includes(method)) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Metode pembayaran tidak valid.",
+          message: "Metode pembayaran tidak valid.",
         },
         {
           status: 400,
@@ -420,69 +278,49 @@ export async function POST(
     // OPTIONAL DATA
     // =================================================
 
-    const referenceNumber =
-      cleanOptionalString(
-        body.referenceNumber
+    const referenceNumber = cleanString(
+      body.referenceNumber
+    );
+
+    const remarks = cleanString(body.remarks);
+
+    const paymentDate = parsePaymentDate(body.paymentDate);
+
+    if (
+      body.paymentDate !== undefined &&
+      body.paymentDate !== null &&
+      body.paymentDate !== "" &&
+      !paymentDate
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Tanggal pembayaran tidak valid.",
+        },
+        {
+          status: 400,
+        }
       );
-
-    const remarks =
-      cleanOptionalString(
-        body.remarks
-      );
-
-    let paymentDate:
-      | Date
-      | undefined;
-
-    if (body.paymentDate) {
-      const parsedDate =
-        new Date(
-          String(
-            body.paymentDate
-          )
-        );
-
-      if (
-        Number.isNaN(
-          parsedDate.getTime()
-        )
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Tanggal pembayaran tidak valid.",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-
-      paymentDate =
-        parsedDate;
     }
 
     // =================================================
     // PURCHASE
     // =================================================
 
-    const purchase =
-      await prisma.purchase.findUnique({
-        where: {
-          id: purchaseId,
-        },
-        include: {
-          payable: true,
-        },
-      });
+    const purchase = await prisma.purchase.findUnique({
+      where: {
+        id: purchaseId,
+      },
+      include: {
+        payable: true,
+      },
+    });
 
     if (!purchase) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Purchase tidak ditemukan.",
+          message: "Purchase tidak ditemukan.",
         },
         {
           status: 404,
@@ -494,10 +332,7 @@ export async function POST(
     // PURCHASE STATUS
     // =================================================
 
-    if (
-      purchase.status ===
-      "DRAFT"
-    ) {
+    if (purchase.status === "DRAFT") {
       return NextResponse.json(
         {
           success: false,
@@ -510,10 +345,7 @@ export async function POST(
       );
     }
 
-    if (
-      purchase.status ===
-      "CANCELLED"
-    ) {
+    if (purchase.status === "CANCELLED") {
       return NextResponse.json(
         {
           success: false,
@@ -527,21 +359,30 @@ export async function POST(
     }
 
     // =================================================
-    // PURCHASE METHOD
+    // PURCHASE TOTAL
     // =================================================
 
-    let purchaseMethod =
-      normalizePaymentMethod(
-        purchase.paymentMethod
-      );
+    const total = Number(purchase.total ?? 0);
 
-    // Kompatibilitas data lama.
-    if (
-      purchaseMethod ===
-      "PETTY_CASH"
-    ) {
-      purchaseMethod = "CASH";
+    if (!Number.isFinite(total) || total <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Total Purchase tidak valid.",
+        },
+        {
+          status: 400,
+        }
+      );
     }
+
+    // =================================================
+    // PURCHASE PAYMENT METHOD
+    // =================================================
+
+    const purchaseMethod = normalizePaymentMethod(
+      purchase.paymentMethod
+    );
 
     if (!purchaseMethod) {
       return NextResponse.json(
@@ -556,14 +397,28 @@ export async function POST(
       );
     }
 
+    if (!allowedMethods.includes(purchaseMethod)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Metode pembayaran Purchase tidak dikenali.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
     // =================================================
     // TRANSFER REFERENCE
+    //
+    // Berlaku untuk:
+    // 1. Purchase non-TEMPO
+    // 2. Settlement TEMPO
     // =================================================
 
-    if (
-      method === "TRANSFER" &&
-      !referenceNumber
-    ) {
+    if (method === "TRANSFER" && !referenceNumber) {
       return NextResponse.json(
         {
           success: false,
@@ -577,60 +432,30 @@ export async function POST(
     }
 
     // =================================================
-    // TOTAL PURCHASE
-    // =================================================
-
-    const total =
-      Number(
-        purchase.total ?? 0
-      );
-
-    if (
-      !Number.isFinite(total) ||
-      total <= 0
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Total Purchase tidak valid.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
     // =================================================
     // TEMPO PURCHASE
     // =================================================
+    // =================================================
 
-    if (
-      purchaseMethod ===
-      "TEMPO"
-    ) {
+    if (purchaseMethod === "TEMPO") {
       // =================================================
       // TEMPO INITIAL
-      // =================================================
       //
-      // Belum punya payable:
+      // Belum mempunyai payable.
       //
-      // method HARUS TEMPO
-      // amount HARUS sama dengan total
+      // WAJIB:
+      // method = TEMPO
       //
-      // CREATE PAYABLE ONLY.
+      // HASIL:
+      // PurchasePayable dibuat.
       //
-      // Tidak create Payment.
-      // Tidak potong Petty Cash.
+      // TIDAK:
+      // - membuat Payment
+      // - mengurangi Petty Cash
       // =================================================
 
-      if (
-        !purchase.payable
-      ) {
-        if (
-          method !==
-          "TEMPO"
-        ) {
+      if (!purchase.payable) {
+        if (method !== "TEMPO") {
           return NextResponse.json(
             {
               success: false,
@@ -643,20 +468,16 @@ export async function POST(
           );
         }
 
-        if (
-          Math.abs(
-            amount - total
-          ) > 0.01
-        ) {
+        // ===============================================
+        // NILAI HARUS FULL TOTAL PURCHASE
+        // ===============================================
+
+        if (Math.abs(amount - total) > 0.01) {
           return NextResponse.json(
             {
               success: false,
               message:
-                `Nilai Purchase Payable harus sama dengan total Purchase. Total Purchase Rp ${Math.round(
-                  total
-                ).toLocaleString(
-                  "id-ID"
-                )}.`,
+                "Nilai Purchase Payable harus sama dengan total Purchase.",
             },
             {
               status: 400,
@@ -664,61 +485,27 @@ export async function POST(
           );
         }
 
-        // Jangan gunakan prisma transaction di sini
-        // karena processPayment juga transaction.
+        // ===============================================
+        // CREATE PAYABLE
         //
-        // Tetapi sebelum create, lakukan pengecekan
-        // ulang agar tidak membuat duplicate payable
-        // karena race condition sederhana.
-
-        const existingPayable =
-          await prisma.purchasePayable.findUnique({
-            where: {
-              purchaseId:
-                purchase.id,
-            },
-          });
-
-        if (existingPayable) {
-          return NextResponse.json(
-            {
-              success: false,
-              message:
-                "Purchase Payable untuk Purchase ini sudah tersedia.",
-              data: {
-                payable:
-                  existingPayable,
-              },
-            },
-            {
-              status: 409,
-            }
-          );
-        }
+        // Tidak ada Payment.
+        // Tidak ada Petty Cash.
+        // ===============================================
 
         const payable =
           await prisma.purchasePayable.create({
             data: {
-              purchaseId:
-                purchase.id,
+              purchaseId: purchase.id,
 
-              supplierId:
-                purchase.supplierId,
+              supplierId: purchase.supplierId,
 
-              outletId:
-                null,
+              amount: total,
 
-              amount:
-                total,
+              paidAmount: 0,
 
-              paidAmount:
-                0,
+              outstanding: total,
 
-              outstanding:
-                total,
-
-              status:
-                "OUTSTANDING",
+              status: "OUTSTANDING",
             },
           });
 
@@ -726,12 +513,9 @@ export async function POST(
           {
             success: true,
             message:
-              "Purchase Payable berhasil dibuat.",
-
+              "Purchase Payable berhasil dibuat. Purchase tercatat sebagai hutang.",
             data: {
-              type:
-                "PAYABLE",
-
+              type: "PAYABLE",
               payable,
             },
           },
@@ -745,43 +529,52 @@ export async function POST(
       // TEMPO SETTLEMENT
       // =================================================
 
-      const payable =
-        purchase.payable;
+      const payable = purchase.payable;
 
-      const payableAmount =
-        Number(
-          payable.amount ?? 0
-        );
+      const payableAmount = Number(payable.amount ?? 0);
 
-      const payablePaidAmount =
-        Number(
-          payable.paidAmount ?? 0
-        );
+      const paidAmount = Number(payable.paidAmount ?? 0);
 
-      const storedOutstanding =
-        Number(
-          payable.outstanding
-        );
+      const storedOutstanding = Number(
+        payable.outstanding ?? NaN
+      );
 
-      // Gunakan outstanding tersimpan jika valid.
-      // Kalau data lama rusak/null, hitung ulang.
-      const outstanding =
-        Number.isFinite(
-          storedOutstanding
-        )
-          ? Math.max(
-              0,
-              storedOutstanding
-            )
-          : Math.max(
-              0,
-              payableAmount -
-                payablePaidAmount
-            );
+      const calculatedOutstanding = Math.max(
+        0,
+        payableAmount - paidAmount
+      );
+
+      const outstanding = Number.isFinite(
+        storedOutstanding
+      )
+        ? Math.max(0, storedOutstanding)
+        : calculatedOutstanding;
+
+      // =================================================
+      // PAYABLE INVALID
+      // =================================================
 
       if (
-        outstanding <= 0
+        !Number.isFinite(payableAmount) ||
+        payableAmount <= 0
       ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Nilai Purchase Payable tidak valid.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      // =================================================
+      // SUDAH LUNAS
+      // =================================================
+
+      if (outstanding <= 0.01) {
         return NextResponse.json(
           {
             success: false,
@@ -794,16 +587,23 @@ export async function POST(
         );
       }
 
-      // TEMPO tidak boleh menjadi metode settlement.
-      if (
-        method ===
-        "TEMPO"
-      ) {
+      // =================================================
+      // TEMPO TIDAK BOLEH SETTLEMENT DENGAN TEMPO
+      // =================================================
+
+      const settlementMethods = [
+        "CASH",
+        "TRANSFER",
+        "COD",
+        "CBD",
+      ];
+
+      if (!settlementMethods.includes(method)) {
         return NextResponse.json(
           {
             success: false,
             message:
-              "Pelunasan hutang TEMPO harus menggunakan CASH, COD, CBD, atau TRANSFER.",
+              "Pelunasan hutang TEMPO hanya dapat menggunakan CASH, TRANSFER, COD, atau CBD.",
           },
           {
             status: 400,
@@ -812,22 +612,15 @@ export async function POST(
       }
 
       // =================================================
-      // SETTLEMENT AMOUNT
+      // JUMLAH TIDAK BOLEH MELEBIHI HUTANG
       // =================================================
 
-      if (
-        amount >
-        outstanding + 0.01
-      ) {
+      if (amount > outstanding + 0.01) {
         return NextResponse.json(
           {
             success: false,
             message:
-              `Jumlah pembayaran melebihi outstanding hutang. Outstanding saat ini Rp ${Math.round(
-                outstanding
-              ).toLocaleString(
-                "id-ID"
-              )}.`,
+              "Jumlah pembayaran melebihi outstanding hutang.",
           },
           {
             status: 400,
@@ -837,75 +630,47 @@ export async function POST(
 
       // =================================================
       // PROCESS TEMPO SETTLEMENT
+      //
+      // CASH/COD/CBD
+      // -> Payment
+      // -> Petty Cash OUT
+      // -> Payable berkurang
+      //
+      // TRANSFER
+      // -> Payment
+      // -> Tidak mengurangi Petty Cash
+      // -> Payable berkurang
       // =================================================
-      //
-      // IMPORTANT:
-      //
-      // payableId dikirim secara eksplisit.
-      //
-      // Jadi processPayment tidak boleh memilih
-      // payable lain.
-      // =================================================
 
-      const result =
-        await processPayment({
-          purchaseId:
-            purchase.id,
+      const result = await processPayment({
+        purchaseId: purchase.id,
 
-          payableId:
-            payable.id,
+        supplierId: purchase.supplierId,
 
-          supplierId:
-            purchase.supplierId,
+        amount,
 
-          amount,
+        method: method as PaymentMethod,
 
-          method:
-            method as PaymentMethod,
+        outletId: null,
 
-          outletId:
-            null,
+        userId: user.id,
 
-          userId:
-            user.id,
+        referenceNumber,
 
-          referenceNumber,
+        remarks,
 
-          remarks,
+        paymentDate,
 
-          paymentDate,
-
-          purchaseNumber:
-            purchase.number,
-        });
-
-      const resultPayable =
-        result?.payable;
-
-      const resultOutstanding =
-        resultPayable
-          ? Number(
-              resultPayable.outstanding
-            )
-          : Math.max(
-              0,
-              outstanding - amount
-            );
+        purchaseNumber: purchase.number,
+      });
 
       return NextResponse.json(
         {
           success: true,
-
           message:
-            resultOutstanding <=
-            0.01
-              ? "Pelunasan Purchase berhasil dan hutang sekarang LUNAS."
-              : "Pelunasan Purchase berhasil.",
-
+            "Pelunasan Purchase berhasil.",
           data: {
-            type:
-              "PAYABLE_PAYMENT",
-
+            type: "PAYABLE_PAYMENT",
             ...result,
           },
         },
@@ -916,46 +681,21 @@ export async function POST(
     }
 
     // =================================================
-    // NON-TEMPO
     // =================================================
-    //
-    // IMPORTANT:
-    //
-    // Purchase non-TEMPO TIDAK boleh memakai
-    // PurchasePayable sebagai outstanding.
-    //
-    // Payment harus full sesuai total Purchase.
-    //
+    // NON TEMPO PURCHASE
     // =================================================
-
-    if (
-      purchase.payable
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Purchase non-TEMPO tidak boleh memiliki Purchase Payable. Periksa data Purchase/Payable sebelum melakukan pembayaran.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
+    // =================================================
 
     // =================================================
     // METHOD HARUS SESUAI PURCHASE
     // =================================================
 
-    if (
-      method !==
-      purchaseMethod
-    ) {
+    if (method !== purchaseMethod) {
       return NextResponse.json(
         {
           success: false,
           message:
-            `Metode pembayaran tidak sesuai dengan Purchase. Metode Purchase: ${purchaseMethod}, metode pembayaran: ${method}.`,
+            `Metode pembayaran tidak sesuai dengan Purchase. Metode Purchase: ${purchaseMethod}.`,
         },
         {
           status: 400,
@@ -964,89 +704,87 @@ export async function POST(
     }
 
     // =================================================
-    // NON-TEMPO HARUS FULL PAYMENT
+    // NON TEMPO HARUS FULL PAYMENT
     // =================================================
 
-    if (
-      Math.abs(
-        amount - total
-      ) > 0.01
-    ) {
+    if (Math.abs(amount - total) > 0.01) {
       return NextResponse.json(
         {
           success: false,
           message:
-            `Jumlah pembayaran harus sama dengan total Purchase. Total Purchase Rp ${Math.round(
-              total
-            ).toLocaleString(
-              "id-ID"
-            )}, pembayaran Rp ${Math.round(
-              amount
-            ).toLocaleString(
-              "id-ID"
-            )}.`,
+            "Jumlah pembayaran harus sama dengan total Purchase.",
         },
         {
           status: 400,
+        }
+      );
+    }
+
+    // =================================================
+    // NON TEMPO TIDAK BOLEH MEMILIKI PAYABLE
+    //
+    // Karena hanya TEMPO yang membuat hutang.
+    // =================================================
+
+    if (purchase.payable) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Purchase non-TEMPO memiliki data Purchase Payable. Data pembayaran tidak dapat diproses sebelum data hutang diperiksa.",
+        },
+        {
+          status: 409,
         }
       );
     }
 
     // =================================================
     // PROCESS NORMAL PAYMENT
-    // =================================================
     //
-    // CASH / COD / CBD
+    // CASH
+    // COD
+    // CBD
     // -> Payment
     // -> Petty Cash OUT
     //
     // TRANSFER
     // -> Payment
-    // -> tanpa Petty Cash
-    //
-    // payableId sengaja TIDAK dikirim.
+    // -> Tidak mengurangi Petty Cash
     // =================================================
 
-    const result =
-      await processPayment({
-        purchaseId:
-          purchase.id,
+    const result = await processPayment({
+      purchaseId: purchase.id,
 
-        supplierId:
-          purchase.supplierId,
+      supplierId: purchase.supplierId,
 
-        amount,
+      amount,
 
-        method:
-          method as PaymentMethod,
+      method: method as PaymentMethod,
 
-        outletId:
-          null,
+      outletId: null,
 
-        userId:
-          user.id,
+      userId: user.id,
 
-        referenceNumber,
+      referenceNumber,
 
-        remarks,
+      remarks,
 
-        paymentDate,
+      paymentDate,
 
-        purchaseNumber:
-          purchase.number,
-      });
+      purchaseNumber: purchase.number,
+    });
+
+    // =================================================
+    // SUCCESS
+    // =================================================
 
     return NextResponse.json(
       {
         success: true,
-
-        message:
-          "Pembayaran Purchase berhasil.",
-
+        message: "Pembayaran Purchase berhasil.",
         data: {
-          type:
-            "PAYMENT",
-
+          type: "PAYMENT",
           ...result,
         },
       },

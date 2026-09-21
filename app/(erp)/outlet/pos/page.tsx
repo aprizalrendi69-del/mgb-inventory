@@ -42,6 +42,7 @@ import {
   ChevronRight,
   WalletCards,
   ArrowDownToLine,
+  Keyboard,
 } from "lucide-react";
 
 type Outlet = {
@@ -87,6 +88,15 @@ type Sale = {
   discount?: number;
   serviceCharge?: number;
   ppn?: number;
+  ayce?: boolean;
+  tableName?: string | null;
+  pax?: number | null;
+  packageName?: string | null;
+  packagePrice?: number | null;
+  durationMinutes?: number | null;
+  startedAt?: string | null;
+  expiresAt?: string | null;
+  cashierName?: string | null;
   outlet: Outlet;
   items: SaleItem[];
 };
@@ -132,6 +142,20 @@ type ConsumptionEntry = {
   qty: number;
   orderedAt: string;
   sessionId: string;
+};
+
+type RefillRequest = {
+  id: string;
+  sessionId: string;
+  tableName: string;
+  pax: number;
+  menuId: number;
+  name: string;
+  qty: number;
+  requestedAt: string;
+  staffName: string;
+  status: "PENDING" | "DISERAHKAN" | "DIBATALKAN";
+  deliveredAt?: string | null;
 };
 
 const AYCE_STORAGE_KEY = "mgb-pos-ayce-sessions-v1";
@@ -271,9 +295,22 @@ export default function PosOutletPage() {
   const [tableName, setTableName] = useState("");
   const [pax, setPax] = useState("2");
   const [aycePackageKey, setAycePackageKey] = useState("AYCE_199K");
+  const [manualDurationMinutes, setManualDurationMinutes] = useState("100");
   const [ayceSession, setAyceSession] = useState<AyceSession | null>(null);
+  // Multiple concurrent AYCE tables. ayceSession = table/session yang sedang aktif di POS.
+  const [ayceSessions, setAyceSessions] = useState<AyceSession[]>([]);
+  const [sessionCarts, setSessionCarts] = useState<Record<string, CartItem[]>>({});
+  const [sessionConsumptions, setSessionConsumptions] = useState<Record<string, ConsumptionEntry[]>>({});
   const [consumptions, setConsumptions] = useState<ConsumptionEntry[]>([]);
+  const [refillRequests, setRefillRequests] = useState<RefillRequest[]>([]);
+  const [refillOpen, setRefillOpen] = useState(false);
+  const [refillStep, setRefillStep] = useState<"info" | "input">("info");
+  const [refillMenuId, setRefillMenuId] = useState<number | null>(null);
+  const [refillQty, setRefillQty] = useState("1");
+  const [refillSearch, setRefillSearch] = useState("");
+  const [refillCategory, setRefillCategory] = useState("ALL");
   const [aycePanelOpen, setAycePanelOpen] = useState(false);
+  const [aycePanelMode, setAycePanelMode] = useState<"new" | "detail">("new");
   const [sessionLoading, setSessionLoading] = useState(false);
 
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -288,6 +325,9 @@ export default function PosOutletPage() {
 
   const [payOpen, setPayOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportRange, setReportRange] = useState<"TODAY" | "ALL">("TODAY");
+  const [printTarget, setPrintTarget] = useState<"receipt" | "report">("receipt");
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState("");
 
@@ -305,8 +345,64 @@ export default function PosOutletPage() {
 
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptSale, setReceiptSale] = useState<Sale | null>(null);
+  const [receiptMeta, setReceiptMeta] = useState({
+    ayce: false,
+    tableName: "",
+    pax: 0,
+    packageName: "",
+    packagePrice: 0,
+    durationMinutes: 0,
+    startedAt: "",
+    expiresAt: "",
+    cashierName: "",
+  });
 
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // ============================================================
+  // TOUCH KEYBOARD
+  // Designed for POS touchscreen monitors so the cashier can search
+  // menu names / codes without relying on the physical keyboard.
+  // ============================================================
+  const [searchKeyboardOpen, setSearchKeyboardOpen] = useState(false);
+  const [keyboardMode, setKeyboardMode] = useState<"LETTERS" | "NUMBERS">("LETTERS");
+
+  const keyboardRows =
+    keyboardMode === "LETTERS"
+      ? [
+          ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+          ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+          ["Z", "X", "C", "V", "B", "N", "M"],
+        ]
+      : [
+          ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+          ["-", "/", "_", ".", ":", "(", ")", "+", "%"],
+        ];
+
+  const handleSearchKeyboardKey = (key: string) => {
+    if (key === "BACKSPACE") {
+      setSearch((value) => value.slice(0, -1));
+      return;
+    }
+
+    if (key === "CLEAR") {
+      setSearch("");
+      return;
+    }
+
+    if (key === "SPACE") {
+      setSearch((value) => `${value} `);
+      return;
+    }
+
+    if (key === "ENTER") {
+      scanOrSearch();
+      setSearchKeyboardOpen(false);
+      return;
+    }
+
+    setSearch((value) => `${value}${key}`);
+  };
 
   const loadHolds = () => {
     try {
@@ -331,38 +427,93 @@ export default function PosOutletPage() {
       const outletKey = String(outletId || "");
       const saved = parsed?.[outletKey];
 
-      if (saved?.session) {
-        setAyceSession(saved.session);
-        setAyceEnabled(true);
-        setTableName(saved.session.tableName || "");
-        setPax(String(saved.session.pax || 1));
-        setAycePackageKey(saved.session.packageKey || "AYCE_199K");
-        setConsumptions(
-          Array.isArray(saved.consumptions) ? saved.consumptions : []
-        );
-      } else {
-        setAyceSession(null);
-        setConsumptions([]);
+      // New format: many simultaneous table sessions per outlet.
+      if (Array.isArray(saved?.sessions)) {
+        const sessions: AyceSession[] = saved.sessions;
+        const carts: Record<string, CartItem[]> = saved.sessionCarts || {};
+        const consumptionMap: Record<string, ConsumptionEntry[]> = saved.sessionConsumptions || {};
+        const savedRefills: RefillRequest[] = Array.isArray(saved.refillRequests) ? saved.refillRequests : [];
+        const activeId = saved.activeSessionId || sessions[0]?.id || "";
+        const active = sessions.find((item) => item.id === activeId) || sessions[0] || null;
+        const activeConsumptions = active ? (consumptionMap[active.id] || []) : [];
+
+        setAyceSessions(sessions);
+        setSessionCarts(carts);
+        setSessionConsumptions(consumptionMap);
+        setRefillRequests(savedRefills);
+        setAyceSession(active);
+        setAyceEnabled(Boolean(active));
+        setTableName(active?.tableName || "");
+        setPax(String(active?.pax || 1));
+        setAycePackageKey(active?.packageKey || "AYCE_199K");
+        setManualDurationMinutes(String(active?.durationMinutes || 100));
+        setConsumptions(activeConsumptions);
+        setCart(active ? (carts[active.id] || []) : []);
+        return;
       }
-    } catch {
+
+      // Backward compatibility with the previous one-session format.
+      if (saved?.session) {
+        const session: AyceSession = saved.session;
+        const entries = Array.isArray(saved.consumptions) ? saved.consumptions : [];
+        const sessions = [session];
+        const carts: Record<string, CartItem[]> = {};
+        const consumptionMap: Record<string, ConsumptionEntry[]> = { [session.id]: entries };
+
+        setAyceSessions(sessions);
+        setSessionCarts(carts);
+        setSessionConsumptions(consumptionMap);
+        setRefillRequests([]);
+        setAyceSession(session);
+        setAyceEnabled(true);
+        setTableName(session.tableName || "");
+        setPax(String(session.pax || 1));
+        setAycePackageKey(session.packageKey || "AYCE_199K");
+        setManualDurationMinutes(String(session.durationMinutes || 100));
+        setConsumptions(entries);
+        setCart([]);
+        return;
+      }
+
+      setAyceSessions([]);
+      setSessionCarts({});
+      setSessionConsumptions({});
+      setRefillRequests([]);
       setAyceSession(null);
       setConsumptions([]);
+      setAyceEnabled(false);
+      setCart([]);
+    } catch {
+      setAyceSessions([]);
+      setSessionCarts({});
+      setSessionConsumptions({});
+      setRefillRequests([]);
+      setAyceSession(null);
+      setConsumptions([]);
+      setAyceEnabled(false);
+      setCart([]);
     }
   };
 
-  const persistAyceSession = (
-    session: AyceSession | null,
-    entries: ConsumptionEntry[] = consumptions
+  const persistAyceSessions = (
+    sessions: AyceSession[],
+    carts: Record<string, CartItem[]>,
+    consumptionMap: Record<string, ConsumptionEntry[]>,
+    activeSessionId: string | null,
+    requests: RefillRequest[] = refillRequests
   ) => {
     try {
       const raw = localStorage.getItem(AYCE_STORAGE_KEY);
       const parsed = raw ? JSON.parse(raw) : {};
       const outletKey = String(outletId || "");
 
-      if (session) {
+      if (sessions.length) {
         parsed[outletKey] = {
-          session,
-          consumptions: entries,
+          sessions,
+          sessionCarts: carts,
+          sessionConsumptions: consumptionMap,
+          refillRequests: requests,
+          activeSessionId,
         };
       } else {
         delete parsed[outletKey];
@@ -372,6 +523,67 @@ export default function PosOutletPage() {
     } catch {
       // Local persistence is only a client-side convenience.
     }
+  };
+
+  // Keep the active table's cart isolated from every other open table.
+  useEffect(() => {
+    if (!ayceSession) return;
+    setSessionCarts((current) => ({
+      ...current,
+      [ayceSession.id]: cart,
+    }));
+  }, [cart, ayceSession?.id]);
+
+  function selectAyceSession(sessionId: string) {
+    const target = ayceSessions.find((item) => item.id === sessionId);
+    if (!target) return;
+
+    if (ayceSession?.id === target.id) return;
+
+    setAyceSession(target);
+    setAyceEnabled(true);
+    setTableName(target.tableName);
+    setPax(String(target.pax));
+    setAycePackageKey(target.packageKey);
+    setManualDurationMinutes(String(target.durationMinutes));
+    setConsumptions(sessionConsumptions[target.id] || []);
+    setCart(sessionCarts[target.id] || []);
+    setPayOpen(false);
+    setMobileCartOpen(false);
+
+    persistAyceSessions(
+      ayceSessions,
+      sessionCarts,
+      sessionConsumptions,
+      target.id
+    );
+  };
+
+  const persistAyceSession = (
+    session: AyceSession | null,
+    entries: ConsumptionEntry[] = consumptions
+  ) => {
+    const nextSessions = session
+      ? ayceSessions.some((item) => item.id === session.id)
+        ? ayceSessions.map((item) => item.id === session.id ? session : item)
+        : [...ayceSessions, session]
+      : ayceSessions;
+
+    const nextConsumptions = { ...sessionConsumptions };
+    if (session) nextConsumptions[session.id] = entries;
+
+    const nextCarts = { ...sessionCarts };
+    if (session) nextCarts[session.id] = cart;
+
+    setAyceSessions(nextSessions);
+    setSessionConsumptions(nextConsumptions);
+    setSessionCarts(nextCarts);
+    persistAyceSessions(
+      nextSessions,
+      nextCarts,
+      nextConsumptions,
+      session?.id || ayceSession?.id || null
+    );
   };
 
   const selectedAycePackage =
@@ -401,6 +613,94 @@ export default function PosOutletPage() {
       : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
 
+  function openNewAyceSessionPanel() {
+    setAycePanelMode("new");
+    setTableName("");
+    setPax("2");
+    const defaultPackage = aycePackages[0];
+    if (defaultPackage) {
+      setAycePackageKey(defaultPackage.key);
+      setManualDurationMinutes(String(defaultPackage.durationMinutes));
+    }
+    setAycePanelOpen(true);
+  }
+
+  function openAyceDetailPanel() {
+    if (!ayceSession) return;
+    setAycePanelMode("detail");
+    setAycePanelOpen(true);
+  }
+
+  function openAyceRefill() {
+    if (!ayceSession || ayceSession.status !== "OPEN") {
+      alert("Pilih session AYCE aktif terlebih dahulu.");
+      return;
+    }
+    if (ayceExpired) {
+      alert("Waktu AYCE sudah habis. Refill tidak dapat dibuat.");
+      return;
+    }
+    setRefillStep("info");
+    setRefillMenuId(null);
+    setRefillQty("1");
+    setRefillSearch("");
+    setRefillCategory("ALL");
+    setRefillOpen(true);
+  }
+
+  function confirmAyceRefillInfo() {
+    if (!ayceSession) return;
+    setRefillStep("input");
+  }
+
+  function submitAyceRefillRequest() {
+    if (!ayceSession) return;
+    if (ayceExpired) {
+      alert("Waktu AYCE sudah habis. Refill tidak dapat dibuat.");
+      return;
+    }
+    const menu = menus.find((item) => item.menuId === refillMenuId);
+    const qty = Math.max(1, Math.floor(Number(refillQty || 0)));
+    if (!menu || !menu.menuId) { alert("Pilih item refill terlebih dahulu."); return; }
+    if (!Number.isFinite(qty) || qty < 1) { alert("Qty refill minimal 1."); return; }
+    if (!Number.isFinite(Number(menu.stock)) || Number(menu.stock) <= 0) { alert(`${menu.name} sedang habis.`); return; }
+    if (qty > Number(menu.stock)) { alert(`Qty ${menu.name} melebihi stock tersedia (${menu.stock}).`); return; }
+    const request: RefillRequest = {
+      id: `REFILL-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      sessionId: ayceSession.id, tableName: ayceSession.tableName, pax: ayceSession.pax,
+      menuId: menu.menuId, name: menu.name, qty, requestedAt: new Date().toISOString(),
+      staffName: cashier || "Kasir", status: "PENDING",
+    };
+    const nextRequests = [...refillRequests, request];
+    setRefillRequests(nextRequests);
+    persistAyceSessions(ayceSessions, sessionCarts, sessionConsumptions, ayceSession.id, nextRequests);
+    setRefillOpen(false);
+    alert(`Request refill ${menu.name} ×${qty} untuk Meja ${ayceSession.tableName} sudah dibuat PENDING.`);
+  }
+
+  function markRefillDelivered(requestId: string) {
+    const request = refillRequests.find((item) => item.id === requestId);
+    if (!request || request.status !== "PENDING") return;
+    if (!ayceSession || request.sessionId !== ayceSession.id) { alert("Pilih meja/session yang sesuai untuk memproses refill ini."); return; }
+    const now = new Date().toISOString();
+    const nextEntries = [...(sessionConsumptions[request.sessionId] || consumptions)];
+    const existing = nextEntries.find((entry) => entry.sessionId === request.sessionId && entry.menuId === request.menuId);
+    if (existing) { existing.qty += request.qty; existing.orderedAt = now; }
+    else nextEntries.push({ id: `CONS-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, menuId: request.menuId, name: request.name, qty: request.qty, orderedAt: now, sessionId: request.sessionId });
+    const nextRequests = refillRequests.map((item) => item.id === requestId ? { ...item, status: "DISERAHKAN" as const, deliveredAt: now } : item);
+    const updatedSession = { ...ayceSession, consumptionCount: nextEntries.reduce((sum, item) => sum + item.qty, 0) };
+    const nextSessions = ayceSessions.map((item) => item.id === updatedSession.id ? updatedSession : item);
+    const nextConsumptions = { ...sessionConsumptions, [updatedSession.id]: nextEntries };
+    setRefillRequests(nextRequests); setConsumptions(nextEntries); setAyceSession(updatedSession); setAyceSessions(nextSessions); setSessionConsumptions(nextConsumptions);
+    persistAyceSessions(nextSessions, sessionCarts, nextConsumptions, updatedSession.id, nextRequests);
+  }
+
+  function cancelRefillRequest(requestId: string) {
+    const nextRequests = refillRequests.map((item) => item.id === requestId && item.status === "PENDING" ? { ...item, status: "DIBATALKAN" as const } : item);
+    setRefillRequests(nextRequests);
+    persistAyceSessions(ayceSessions, sessionCarts, sessionConsumptions, ayceSession?.id || null, nextRequests);
+  }
+
   function startAyceSession() {
     if (!outletId) {
       alert("Pilih outlet terlebih dahulu.");
@@ -418,9 +718,25 @@ export default function PosOutletPage() {
       return;
     }
 
+    const normalizedTable = normalize(tableName);
+    const occupied = ayceSessions.find(
+      (item) => item.status === "OPEN" && normalize(item.tableName) === normalizedTable
+    );
+    if (occupied) {
+      alert(`Meja ${occupied.tableName} sudah memiliki session AYCE aktif.`);
+      selectAyceSession(occupied.id);
+      return;
+    }
+
+    const parsedDuration = Math.floor(Number(manualDurationMinutes || 0));
+    if (!Number.isFinite(parsedDuration) || parsedDuration < 1 || parsedDuration > 1440) {
+      alert("Durasi AYCE harus 1–1440 menit.");
+      return;
+    }
+
     const now = new Date();
     const expires = new Date(
-      now.getTime() + selectedAycePackage.durationMinutes * 60 * 1000
+      now.getTime() + parsedDuration * 60 * 1000
     );
 
     const session: AyceSession = {
@@ -430,18 +746,51 @@ export default function PosOutletPage() {
       packageKey: selectedAycePackage.key,
       packageName: selectedAycePackage.name,
       packagePrice: selectedAycePackage.price,
-      durationMinutes: selectedAycePackage.durationMinutes,
+      durationMinutes: parsedDuration,
       startedAt: now.toISOString(),
       expiresAt: expires.toISOString(),
       status: "OPEN",
       consumptionCount: 0,
     };
 
+    const nextSessions = [...ayceSessions, session];
+    const nextCarts = { ...sessionCarts, [session.id]: [] };
+    const nextConsumptions = { ...sessionConsumptions, [session.id]: [] };
+
+    setAyceSessions(nextSessions);
+    setSessionCarts(nextCarts);
+    setSessionConsumptions(nextConsumptions);
     setAyceSession(session);
     setAyceEnabled(true);
     setConsumptions([]);
+    setCart([]);
     setAycePanelOpen(false);
-    persistAyceSession(session, []);
+    setTableName(session.tableName);
+    setPax(String(session.pax));
+    setManualDurationMinutes(String(session.durationMinutes));
+    persistAyceSessions(nextSessions, nextCarts, nextConsumptions, session.id);
+  }
+
+  function updateAyceTimer() {
+    if (!ayceSession) return;
+
+    const parsedDuration = Math.floor(Number(manualDurationMinutes || 0));
+    if (!Number.isFinite(parsedDuration) || parsedDuration < 1 || parsedDuration > 1440) {
+      alert("Durasi AYCE harus 1–1440 menit.");
+      return;
+    }
+
+    const expires = new Date(clock.getTime() + parsedDuration * 60 * 1000);
+    const updatedSession: AyceSession = {
+      ...ayceSession,
+      durationMinutes: parsedDuration,
+      expiresAt: expires.toISOString(),
+      status: "OPEN",
+    };
+
+    setAyceSession(updatedSession);
+    setManualDurationMinutes(String(parsedDuration));
+    persistAyceSession(updatedSession, consumptions);
   }
 
   function closeAyceSession() {
@@ -455,20 +804,32 @@ export default function PosOutletPage() {
       return;
     }
 
-    setAyceSession(null);
-    setConsumptions([]);
-    setAyceEnabled(false);
-    setTableName("");
-    setPax("2");
-    setCart([]);
-    persistAyceSession(null, []);
+    const remainingSessions = ayceSessions.filter((item) => item.id !== ayceSession.id);
+    const nextCarts = { ...sessionCarts };
+    const nextConsumptions = { ...sessionConsumptions };
+    delete nextCarts[ayceSession.id];
+    delete nextConsumptions[ayceSession.id];
+
+    const nextActive = remainingSessions[0] || null;
+    setAyceSessions(remainingSessions);
+    setSessionCarts(nextCarts);
+    setSessionConsumptions(nextConsumptions);
+    setAyceSession(nextActive);
+    setConsumptions(nextActive ? (nextConsumptions[nextActive.id] || []) : []);
+    setAyceEnabled(Boolean(nextActive));
+    setTableName(nextActive?.tableName || "");
+    setPax(String(nextActive?.pax || 2));
+    setAycePackageKey(nextActive?.packageKey || "AYCE_199K");
+    setManualDurationMinutes(String(nextActive?.durationMinutes || 100));
+    setCart(nextActive ? (nextCarts[nextActive.id] || []) : []);
+    persistAyceSessions(remainingSessions, nextCarts, nextConsumptions, nextActive?.id || null);
   }
 
   function recordAyceConsumption(items: CartItem[]) {
     if (!ayceSession || ayceSession.status !== "OPEN") return;
 
     const now = new Date().toISOString();
-    const nextEntries = [...consumptions];
+    const nextEntries = [...(sessionConsumptions[ayceSession.id] || consumptions)];
 
     for (const item of items) {
       const existing = nextEntries.find(
@@ -500,9 +861,24 @@ export default function PosOutletPage() {
       ),
     };
 
+    const nextSessions = ayceSessions.map((item) =>
+      item.id === updatedSession.id ? updatedSession : item
+    );
+    const nextConsumptions = {
+      ...sessionConsumptions,
+      [updatedSession.id]: nextEntries,
+    };
+
     setConsumptions(nextEntries);
     setAyceSession(updatedSession);
-    persistAyceSession(updatedSession, nextEntries);
+    setAyceSessions(nextSessions);
+    setSessionConsumptions(nextConsumptions);
+    persistAyceSessions(
+      nextSessions,
+      sessionCarts,
+      nextConsumptions,
+      updatedSession.id
+    );
   }
 
 
@@ -666,15 +1042,14 @@ export default function PosOutletPage() {
     Math.max(0, subtotal - disc)
   );
 
-  const serviceCharge = isGangnam
-    ? roundMoney(taxable * 0.05)
-    : 0;
+  // TAX & SERVICE — BUSINESS RULE LOCKED
+  // Service Charge 5% dari taxable setelah diskon.
+  // PPN 10% dihitung setelah Service Charge.
+  const serviceCharge = roundMoney(taxable * 0.05);
 
-  const ppn = isGangnam
-    ? roundMoney(
-        (taxable + serviceCharge) * 0.11
-      )
-    : 0;
+  const ppn = roundMoney(
+    (taxable + serviceCharge) * 0.10
+  );
 
   const total = roundMoney(
     Math.max(
@@ -922,6 +1297,7 @@ export default function PosOutletPage() {
     if (target) {
       add(target);
       setSearch("");
+      setSearchKeyboardOpen(false);
       return;
     }
 
@@ -1041,7 +1417,7 @@ export default function PosOutletPage() {
   }
 
   async function checkout() {
-    if (!cart.length) {
+    if (!cart.length && !ayceSession) {
       return alert(
         "Keranjang masih kosong."
       );
@@ -1061,11 +1437,8 @@ export default function PosOutletPage() {
       return;
     }
 
-    if (ayceSession && ayceExpired) {
-      return alert(
-        "Waktu AYCE sudah habis. Silakan tutup session sebelum checkout."
-      );
-    }
+    // Bill AYCE tetap dapat ditutup setelah timer habis.
+    // Timer adalah kontrol layanan; pembayaran/close bill tetap dapat diproses.
 
     if (total <= 0) {
       return alert(
@@ -1120,8 +1493,17 @@ export default function PosOutletPage() {
                   durationMinutes: ayceSession.durationMinutes,
                   startedAt: ayceSession.startedAt,
                   expiresAt: ayceSession.expiresAt,
+                  packageTotal: aycePackageTotal,
+                  addonSubtotal: ayceOrderSubtotal,
+                  subtotal,
+                  discount: disc,
+                  serviceCharge,
+                  ppn,
+                  total,
                 }
               : null,
+            cashierName: cashier || null,
+            pricing: { subtotal, discount: disc, serviceCharge, ppn, total },
             consumption: ayceSession
               ? cart.map((item) => ({
                   menuId: item.menuId,
@@ -1156,15 +1538,47 @@ export default function PosOutletPage() {
         );
       }
 
-      const sale =
-        json.data || null;
+      const sale = json.data || null;
+      const checkoutAyce = ayceSession;
 
       setLastSale(sale);
       setReceiptSale(sale);
+      setReceiptMeta({
+        ayce: Boolean(checkoutAyce),
+        tableName: checkoutAyce?.tableName || "",
+        pax: checkoutAyce?.pax || 0,
+        packageName: checkoutAyce?.packageName || "",
+        packagePrice: checkoutAyce?.packagePrice || 0,
+        durationMinutes: checkoutAyce?.durationMinutes || 0,
+        startedAt: checkoutAyce?.startedAt || "",
+        expiresAt: checkoutAyce?.expiresAt || "",
+        cashierName: cashier || "",
+      });
       setPayOpen(false);
 
-      if (ayceSession) {
+      if (checkoutAyce) {
         recordAyceConsumption(cart);
+
+        // Successful payment closes ONLY the active table. Other AYCE tables stay open.
+        const remainingSessions = ayceSessions.filter((item) => item.id !== checkoutAyce.id);
+        const nextCarts = { ...sessionCarts };
+        const nextConsumptions = { ...sessionConsumptions };
+        delete nextCarts[checkoutAyce.id];
+        delete nextConsumptions[checkoutAyce.id];
+        const nextActive = remainingSessions[0] || null;
+
+        setAyceSessions(remainingSessions);
+        setSessionCarts(nextCarts);
+        setSessionConsumptions(nextConsumptions);
+        setAyceSession(nextActive);
+        setConsumptions(nextActive ? (nextConsumptions[nextActive.id] || []) : []);
+        setAyceEnabled(Boolean(nextActive));
+        setTableName(nextActive?.tableName || "");
+        setPax(String(nextActive?.pax || 2));
+        setAycePackageKey(nextActive?.packageKey || "AYCE_199K");
+        setManualDurationMinutes(String(nextActive?.durationMinutes || 100));
+        setCart(nextActive ? (nextCarts[nextActive.id] || []) : []);
+        persistAyceSessions(remainingSessions, nextCarts, nextConsumptions, nextActive?.id || null);
       }
 
       clearCart();
@@ -1194,23 +1608,35 @@ export default function PosOutletPage() {
     }
   }
 
-  function openReceipt(
-    sale: Sale | null
-  ) {
+  function openReceipt(sale: Sale | null) {
     if (!sale) {
-      alert(
-        "Belum ada transaksi untuk dicetak."
-      );
-
+      alert("Belum ada transaksi untuk dicetak.");
       return;
     }
 
     setReceiptSale(sale);
+    setReceiptMeta({
+      ayce: Boolean(sale.ayce),
+      tableName: sale.tableName || "",
+      pax: Number(sale.pax || 0),
+      packageName: sale.packageName || "",
+      packagePrice: Number(sale.packagePrice || 0),
+      durationMinutes: Number(sale.durationMinutes || 0),
+      startedAt: sale.startedAt || "",
+      expiresAt: sale.expiresAt || "",
+      cashierName: sale.cashierName || cashier || "",
+    });
     setReceiptOpen(true);
   }
 
   function printReceipt() {
-    window.print();
+    setPrintTarget("receipt");
+    window.setTimeout(() => window.print(), 50);
+  }
+
+  function printSalesReport() {
+    setPrintTarget("report");
+    window.setTimeout(() => window.print(), 50);
   }
 
   const filteredSales =
@@ -1228,11 +1654,126 @@ export default function PosOutletPage() {
               ""
             } ${
               sale.paymentMethod
-            }`
+            } ${sale.tableName || ""}`
           ).includes(q);
         }
       );
     }, [sales, historySearch]);
+
+  const reportSales = useMemo(() => {
+    if (reportRange === "ALL") return sales;
+    const today = new Date();
+    const key = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    return sales.filter((sale) => {
+      const date = new Date(sale.saleDate);
+      const saleKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      return saleKey === key;
+    });
+  }, [sales, reportRange]);
+
+  const reportTotal = useMemo(
+    () => roundMoney(reportSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0)),
+    [reportSales]
+  );
+  const reportPaid = useMemo(
+    () => roundMoney(reportSales.reduce((sum, sale) => sum + Number(sale.paidAmount || 0), 0)),
+    [reportSales]
+  );
+  const reportCash = useMemo(
+    () => roundMoney(reportSales.filter((sale) => sale.paymentMethod === "CASH").reduce((sum, sale) => sum + Number(sale.total || 0), 0)),
+    [reportSales]
+  );
+  const reportQris = useMemo(
+    () => roundMoney(reportSales.filter((sale) => sale.paymentMethod === "QRIS").reduce((sum, sale) => sum + Number(sale.total || 0), 0)),
+    [reportSales]
+  );
+  const reportTransfer = useMemo(
+    () => roundMoney(reportSales.filter((sale) => sale.paymentMethod === "TRANSFER").reduce((sum, sale) => sum + Number(sale.total || 0), 0)),
+    [reportSales]
+  );
+  const reportItems = useMemo(
+    () => reportSales.reduce((sum, sale) => sum + (sale.items || []).reduce((itemSum, item) => itemSum + Number(item.qty || 0), 0), 0),
+    [reportSales]
+  );
+
+  // Rekap item terjual lintas transaksi.
+  // AYCE item tetap dihitung sebagai item/qty terjual, walaupun unitPrice = 0.
+  const reportItemSummary = useMemo(() => {
+    const map = new Map<string, {
+      name: string;
+      qty: number;
+      salesValue: number;
+      transactions: number;
+      ayceQty: number;
+      paidQty: number;
+    }>();
+
+    for (const sale of reportSales) {
+      for (const item of sale.items || []) {
+        const name = item.menu?.name || item.barang?.name || `Item #${item.id}`;
+        const key = name.trim().toLowerCase();
+        const qty = Number(item.qty || 0);
+        const value = Number(item.subtotal || (item.unitPrice || 0) * qty || 0);
+        const existing = map.get(key);
+
+        if (existing) {
+          existing.qty += qty;
+          existing.salesValue += value;
+          existing.transactions += 1;
+          if (sale.ayce) existing.ayceQty += qty;
+          else existing.paidQty += qty;
+        } else {
+          map.set(key, {
+            name,
+            qty,
+            salesValue: value,
+            transactions: 1,
+            ayceQty: sale.ayce ? qty : 0,
+            paidQty: sale.ayce ? 0 : qty,
+          });
+        }
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => b.qty - a.qty || b.salesValue - a.salesValue || a.name.localeCompare(b.name));
+  }, [reportSales]);
+
+  const reportGrossItemSales = useMemo(
+    () => roundMoney(reportItemSummary.reduce((sum, item) => sum + item.salesValue, 0)),
+    [reportItemSummary]
+  );
+  const reportDiscount = useMemo(
+    () => roundMoney(reportSales.reduce((sum, sale) => sum + Number(sale.discount || 0), 0)),
+    [reportSales]
+  );
+  const reportService = useMemo(
+    () => roundMoney(reportSales.reduce((sum, sale) => sum + Number(sale.serviceCharge || 0), 0)),
+    [reportSales]
+  );
+  const reportPpn = useMemo(
+    () => roundMoney(reportSales.reduce((sum, sale) => sum + Number(sale.ppn || 0), 0)),
+    [reportSales]
+  );
+  const reportAyceTransactions = useMemo(
+    () => reportSales.filter((sale) => sale.ayce).length,
+    [reportSales]
+  );
+  const reportStaffSummary = useMemo(() => {
+    const map = new Map<string, { staff: string; transactions: number; total: number; items: number }>();
+    for (const sale of reportSales) {
+      const staff = (sale.cashierName || "Staff tidak tercatat").trim() || "Staff tidak tercatat";
+      const existing = map.get(staff);
+      const qty = (sale.items || []).reduce((sum, item) => sum + Number(item.qty || 0), 0);
+      if (existing) {
+        existing.transactions += 1;
+        existing.total += Number(sale.total || 0);
+        existing.items += qty;
+      } else {
+        map.set(staff, { staff, transactions: 1, total: Number(sale.total || 0), items: qty });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.total - a.total || a.staff.localeCompare(b.staff));
+  }, [reportSales]);
 
   const theme = isGangnam
     ? "gangnam"
@@ -1610,7 +2151,7 @@ export default function PosOutletPage() {
                     : "text-slate-400"
                 }`}
               >
-                {itemCount} item dalam order
+                {ayceSession ? `${ayceSession.pax} pax • ${ayceSession.packageName}` : `${itemCount} item dalam order`}
               </div>
             </div>
 
@@ -1685,7 +2226,7 @@ export default function PosOutletPage() {
           setPayOpen(true)
         }
         disabled={
-          !cart.length ||
+          (!cart.length && !ayceSession) ||
           !outletId
         }
         className="group relative mx-4 mb-4 overflow-hidden rounded-[20px] bg-gradient-to-r from-[#497F70] via-emerald-500 to-teal-400 px-5 py-4 text-left text-slate-950 shadow-[0_12px_35px_rgba(16,185,129,0.18)] transition hover:shadow-[0_16px_45px_rgba(16,185,129,0.28)] disabled:cursor-not-allowed disabled:opacity-25"
@@ -1719,7 +2260,7 @@ export default function PosOutletPage() {
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[2147483647] flex min-h-screen flex-col overflow-hidden ${
+      className={`pos-root print-${printTarget} fixed inset-0 z-[2147483647] flex min-h-screen flex-col overflow-hidden ${
         isDark
           ? "bg-[#050907] text-white"
           : "bg-[#f3f6f5] text-slate-900"
@@ -2045,7 +2586,7 @@ export default function PosOutletPage() {
         </aside>
 
         {/* CENTER */}
-        <section className="flex min-w-0 flex-1 flex-col gap-3">
+        <section className="relative flex min-w-0 flex-1 flex-col gap-3">
           {/* SEARCH / TOOLBAR */}
           <div className="flex shrink-0 gap-2">
             <div
@@ -2065,11 +2606,16 @@ export default function PosOutletPage() {
                     event.target.value
                   )
                 }
-                onKeyDown={(event) =>
-                  event.key ===
-                    "Enter" &&
-                  scanOrSearch()
-                }
+                onFocus={() => setSearchKeyboardOpen(true)}
+                onClick={() => setSearchKeyboardOpen(true)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    scanOrSearch();
+                    setSearchKeyboardOpen(false);
+                  }
+                }}
+                inputMode="none"
                 placeholder="Cari menu atau scan kode..."
                 className={`w-full bg-transparent px-3 py-3.5 text-xs font-semibold outline-none ${
                   isDark
@@ -2083,7 +2629,7 @@ export default function PosOutletPage() {
                 onClick={
                   scanOrSearch
                 }
-                className={`mr-2 flex h-8 w-8 items-center justify-center rounded-lg transition ${
+                className={`mr-1 flex h-8 w-8 items-center justify-center rounded-lg transition ${
                   isDark
                     ? "bg-white/[0.04] text-slate-500 hover:bg-emerald-400/10 hover:text-emerald-300"
                     : "bg-slate-100 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600"
@@ -2091,6 +2637,27 @@ export default function PosOutletPage() {
                 title="Cari kode menu"
               >
                 <ScanLine className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  setSearchKeyboardOpen(true);
+                  window.setTimeout(() => searchRef.current?.focus(), 0);
+                }}
+                className={`mr-2 flex h-8 w-8 items-center justify-center rounded-lg transition ${
+                  searchKeyboardOpen
+                    ? isDark
+                      ? "bg-emerald-400 text-slate-950"
+                      : "bg-emerald-500 text-white"
+                    : isDark
+                      ? "bg-white/[0.04] text-slate-500 hover:bg-emerald-400/10 hover:text-emerald-300"
+                      : "bg-slate-100 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600"
+                }`}
+                title="Buka keyboard touchscreen"
+              >
+                <Keyboard className="h-4 w-4" />
               </button>
             </div>
 
@@ -2132,6 +2699,20 @@ export default function PosOutletPage() {
                   {activeHolds.length}
                 </span>
               )}
+            </button>
+
+            {/* SALES REPORT */}
+            <button
+              type="button"
+              onClick={() => setReportOpen(true)}
+              className={`hidden items-center gap-2 rounded-[18px] border px-4 text-[9px] font-black uppercase tracking-wider transition xl:flex ${
+                isDark
+                  ? "border-white/[0.07] bg-white/[0.025] text-slate-400 hover:border-emerald-400/20 hover:text-emerald-300"
+                  : "border-slate-200 bg-white text-slate-500 hover:border-emerald-200 hover:text-emerald-600"
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              Sales Report
             </button>
 
             {/* VIEW */}
@@ -2181,6 +2762,169 @@ export default function PosOutletPage() {
               </button>
             </div>
           </div>
+
+          {searchKeyboardOpen && (
+            <div className="fixed inset-x-0 bottom-4 z-[220] flex justify-center px-2 sm:bottom-6 sm:px-4">
+              <div
+                className={`w-full max-w-[1180px] overflow-hidden rounded-[30px] border shadow-[0_-24px_90px_rgba(0,0,0,0.42)] backdrop-blur-2xl ${
+                  isDark
+                    ? "border-white/[0.10] bg-[#07100df7] text-white"
+                    : "border-slate-200 bg-white/[0.98] text-slate-900 shadow-slate-400/30"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-5 sm:py-3.5">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div
+                      className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${
+                        isDark
+                          ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-600"
+                      }`}
+                    >
+                      <div className="absolute inset-0 rounded-2xl bg-emerald-400/10 blur-md" />
+                      <Keyboard className="relative h-5 w-5" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[8px] font-black uppercase tracking-[0.24em] text-emerald-400">
+                          MGB TOUCH INPUT
+                        </span>
+                        <span
+                          className={`hidden rounded-full px-2 py-0.5 text-[7px] font-black uppercase tracking-wider sm:inline-flex ${
+                            isDark
+                              ? "bg-white/[0.05] text-slate-500"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {keyboardMode === "LETTERS" ? "ABC MODE" : "123 MODE"}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 truncate text-xs font-black sm:text-sm">
+                        {search || "Cari menu atau scan kode..."}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() =>
+                        setKeyboardMode((value) =>
+                          value === "LETTERS" ? "NUMBERS" : "LETTERS"
+                        )
+                      }
+                      className={`flex h-10 items-center gap-2 rounded-xl border px-3 text-[8px] font-black uppercase tracking-wider transition active:scale-95 ${
+                        isDark
+                          ? "border-white/[0.08] bg-white/[0.04] text-emerald-300 hover:bg-emerald-400/10"
+                          : "border-slate-200 bg-slate-50 text-emerald-700 hover:bg-emerald-50"
+                      }`}
+                    >
+                      <span className="hidden sm:inline">{keyboardMode === "LETTERS" ? "Angka" : "Huruf"}</span>
+                      <span>{keyboardMode === "LETTERS" ? "123" : "ABC"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSearchKeyboardOpen(false)}
+                      className={`flex h-10 w-10 items-center justify-center rounded-xl border transition active:scale-95 ${
+                        isDark
+                          ? "border-white/[0.08] bg-white/[0.04] text-slate-500 hover:bg-red-500/10 hover:text-red-300"
+                          : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-red-50 hover:text-red-500"
+                      }`}
+                      title="Tutup keyboard"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="px-3 pb-3 pt-2.5 sm:px-5 sm:pb-4">
+                  <div className="space-y-1.5 sm:space-y-2">
+                    {keyboardRows.map((row, rowIndex) => (
+                      <div
+                        key={rowIndex}
+                        className={`mx-auto flex w-full max-w-[1050px] justify-center gap-1.5 sm:gap-2 ${
+                          rowIndex === 1 ? "px-[3%] sm:px-[4%]" : "px-0"
+                        }`}
+                      >
+                        {row.map((key) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onPointerDown={(event) => event.preventDefault()}
+                            onClick={() => handleSearchKeyboardKey(key)}
+                            className={`h-11 min-w-0 flex-1 rounded-xl border text-sm font-black shadow-sm transition duration-100 active:translate-y-[1px] active:scale-[0.97] sm:h-12 sm:rounded-2xl sm:text-base ${
+                              isDark
+                                ? "border-white/[0.08] bg-[#101b17] text-white shadow-black/20 hover:border-emerald-400/25 hover:bg-[#14251f]"
+                                : "border-slate-200 bg-slate-50 text-slate-800 shadow-slate-200/40 hover:border-emerald-200 hover:bg-emerald-50"
+                            }`}
+                          >
+                            {key}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+
+                    <div className="mx-auto grid w-full max-w-[1050px] grid-cols-[0.9fr_2.8fr_0.9fr_1.2fr] gap-1.5 sm:gap-2">
+                      <button
+                        type="button"
+                        onPointerDown={(event) => event.preventDefault()}
+                        onClick={() => handleSearchKeyboardKey("CLEAR")}
+                        className="h-11 rounded-xl border border-red-400/20 bg-red-500/10 text-[8px] font-black uppercase tracking-wider text-red-400 transition active:scale-[0.97] hover:bg-red-500/15 sm:h-12 sm:rounded-2xl sm:text-[9px]"
+                      >
+                        CLEAR
+                      </button>
+
+                      <button
+                        type="button"
+                        onPointerDown={(event) => event.preventDefault()}
+                        onClick={() => handleSearchKeyboardKey("SPACE")}
+                        className={`h-11 rounded-xl border text-[8px] font-black uppercase tracking-wider transition active:scale-[0.97] sm:h-12 sm:rounded-2xl sm:text-[9px] ${
+                          isDark
+                            ? "border-white/[0.08] bg-[#101b17] text-slate-400 hover:bg-[#14251f]"
+                            : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                        }`}
+                      >
+                        SPACE
+                      </button>
+
+                      <button
+                        type="button"
+                        onPointerDown={(event) => event.preventDefault()}
+                        onClick={() => handleSearchKeyboardKey("BACKSPACE")}
+                        className={`h-11 rounded-xl border text-base font-black transition active:scale-[0.97] sm:h-12 sm:rounded-2xl sm:text-lg ${
+                          isDark
+                            ? "border-white/[0.08] bg-[#101b17] text-slate-300 hover:bg-[#14251f]"
+                            : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                        }`}
+                        title="Hapus karakter terakhir"
+                      >
+                        ←
+                      </button>
+
+                      <button
+                        type="button"
+                        onPointerDown={(event) => event.preventDefault()}
+                        onClick={() => handleSearchKeyboardKey("ENTER")}
+                        className="h-11 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-[8px] font-black uppercase tracking-wider text-white shadow-[0_8px_28px_rgba(16,185,129,0.22)] transition active:scale-[0.97] hover:from-emerald-500 hover:to-emerald-400 sm:h-12 sm:rounded-2xl sm:text-[9px]"
+                      >
+                        ENTER
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 hidden items-center justify-center gap-2 text-[7px] font-bold uppercase tracking-[0.18em] text-slate-600 sm:flex">
+                    <span className="h-1 w-1 rounded-full bg-emerald-400" />
+                    Touchscreen Ready
+                    <span className="h-1 w-1 rounded-full bg-slate-600" />
+                    MGB POS
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* =====================================================
               PACKAGE / QUICK ORDER BOARD
@@ -2328,6 +3072,78 @@ export default function PosOutletPage() {
                   : "border-slate-200 bg-white"
               }`}
             >
+              {/* MULTI-TABLE SESSION BOARD */}
+              <div className={`border-b p-3 ${isDark ? "border-white/[0.06] bg-black/10" : "border-slate-100 bg-slate-50"}`}>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[7px] font-black uppercase tracking-[0.22em] text-slate-500">
+                      ACTIVE TABLE SESSIONS
+                    </div>
+                    <div className="mt-0.5 text-[8px] font-bold text-slate-400">
+                      {ayceSessions.length} meja sedang memiliki session AYCE
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openNewAyceSessionPanel}
+                    className="rounded-xl bg-red-600 px-3 py-2 text-[7px] font-black uppercase tracking-wider text-white shadow-lg shadow-red-900/20 hover:bg-red-500"
+                  >
+                    + Buka Meja
+                  </button>
+                </div>
+
+                {ayceSessions.length ? (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                    {ayceSessions.map((session) => {
+                      const remaining = Math.max(
+                        0,
+                        Math.floor((new Date(session.expiresAt).getTime() - clock.getTime()) / 1000)
+                      );
+                      const expired = remaining <= 0;
+                      const active = ayceSession?.id === session.id;
+                      const sessionItemQty = (sessionCarts[session.id] || []).reduce((sum, item) => sum + item.qty, 0);
+
+                      return (
+                        <button
+                          key={session.id}
+                          type="button"
+                          onClick={() => selectAyceSession(session.id)}
+                          className={`relative overflow-hidden rounded-2xl border p-3 text-left transition hover:-translate-y-0.5 ${
+                            active
+                              ? "border-red-400/40 bg-red-500/10 shadow-[0_12px_30px_rgba(239,68,68,.12)]"
+                              : isDark
+                                ? "border-white/[0.07] bg-white/[0.025] hover:border-red-400/20"
+                                : "border-slate-200 bg-white hover:border-red-200"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="truncate text-[10px] font-black">MEJA {session.tableName}</div>
+                              <div className="mt-1 text-[7px] font-bold uppercase tracking-wider text-slate-500">
+                                {session.pax} PAX · {session.packageName}
+                              </div>
+                            </div>
+                            <span className={`shrink-0 rounded-full px-1.5 py-1 text-[6px] font-black ${expired ? "bg-red-500/15 text-red-400" : "bg-emerald-500/10 text-emerald-400"}`}>
+                              {expired ? "HABIS" : "OPEN"}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex items-end justify-between gap-2">
+                            <span className={`text-sm font-black tabular-nums ${expired ? "text-red-400" : "text-emerald-400"}`}>
+                              {formatDuration(remaining)}
+                            </span>
+                            <span className="text-[7px] font-bold text-slate-500">{sessionItemQty} item</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className={`rounded-2xl border border-dashed p-3 text-center text-[8px] font-bold ${isDark ? "border-white/[0.08] text-slate-600" : "border-slate-200 text-slate-400"}`}>
+                    Belum ada meja AYCE aktif. Klik <b>+ Buka Meja</b> untuk membuka session baru.
+                  </div>
+                )}
+              </div>
+
               <div className="flex flex-wrap items-center gap-2.5 p-3">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <div
@@ -2395,9 +3211,11 @@ export default function PosOutletPage() {
                       </div>
                     </div>
 
+                    <button type="button" onClick={openAyceRefill} disabled={ayceExpired} className={`rounded-xl border px-3 py-2 text-[7px] font-black uppercase tracking-wider transition ${ayceExpired ? "cursor-not-allowed border-white/[0.05] bg-white/[0.02] text-slate-600" : "border-amber-400/20 bg-amber-500/[0.08] text-amber-300 hover:bg-amber-500/[0.14]"}`}>+ Refill</button>
+
                     <button
                       type="button"
-                      onClick={() => setAycePanelOpen(true)}
+                      onClick={() => { setAycePanelMode("detail"); setAycePanelOpen(true); }}
                       className="rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2 text-[7px] font-black uppercase tracking-wider text-slate-400 hover:text-white"
                     >
                       Session
@@ -2414,7 +3232,7 @@ export default function PosOutletPage() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setAycePanelOpen(true)}
+                    onClick={openNewAyceSessionPanel}
                     className="rounded-xl bg-red-600 px-4 py-2.5 text-[8px] font-black uppercase tracking-wider text-white shadow-lg shadow-red-900/20 hover:bg-red-500"
                   >
                     + BUKA SESSION AYCE
@@ -2933,6 +3751,19 @@ export default function PosOutletPage() {
       >
         <button
           type="button"
+          onClick={() => setReportOpen(true)}
+          className={`hidden h-9 items-center gap-2 rounded-xl border px-4 text-[8px] font-black uppercase tracking-wider transition lg:flex ${
+            isDark
+              ? "border-white/[0.06] bg-white/[0.025] text-slate-500 hover:text-emerald-300"
+              : "border-slate-200 bg-slate-50 text-slate-500 hover:text-emerald-600"
+          }`}
+        >
+          <FileText className="h-3.5 w-3.5" />
+          Sales Report
+        </button>
+
+        <button
+          type="button"
           onClick={() =>
             setHistoryOpen(true)
           }
@@ -3070,7 +3901,7 @@ export default function PosOutletPage() {
                       Table Session
                     </div>
                     <div className="text-base font-black">
-                      {ayceSession ? "SESSION AYCE AKTIF" : "BUKA SESSION AYCE"}
+                      {aycePanelMode === "detail" && ayceSession ? `SESSION ${ayceSession.tableName}` : "BUKA SESSION AYCE BARU"}
                     </div>
                     <div className="mt-0.5 text-[8px] text-slate-500">
                       Meja → Pax → Paket → Timer → Consumption
@@ -3089,7 +3920,7 @@ export default function PosOutletPage() {
             </div>
 
             <div className="space-y-4 p-5">
-              {ayceSession ? (
+              {aycePanelMode === "detail" && ayceSession ? (
                 <>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
@@ -3139,6 +3970,37 @@ export default function PosOutletPage() {
                     </div>
                   </div>
 
+                  <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+                    <div className="flex items-end gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-2 text-[7px] font-black uppercase tracking-wider text-slate-500">
+                          Durasi Manual / Timer
+                        </div>
+                        <div className="relative">
+                          <Clock3 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-red-400" />
+                          <input
+                            type="number"
+                            min="1"
+                            max="1440"
+                            value={manualDurationMinutes}
+                            onChange={(e) => setManualDurationMinutes(e.target.value)}
+                            className={`w-full rounded-xl border py-3 pl-9 pr-3 text-xs font-black outline-none ${
+                              isDark ? "border-white/[0.07] bg-white/[0.025] text-white" : "border-slate-200 bg-white text-slate-900"
+                            }`}
+                          />
+                        </div>
+                        <div className="mt-1 text-[7px] text-slate-500">Masukkan menit. Maksimal 24 jam.</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={updateAyceTimer}
+                        className="rounded-xl bg-red-600 px-4 py-3 text-[8px] font-black uppercase tracking-wider text-white hover:bg-red-500"
+                      >
+                        Terapkan
+                      </button>
+                    </div>
+                  </div>
+
                   <div>
                     <div className="mb-2 text-[7px] font-black uppercase tracking-wider text-slate-500">
                       Consumption
@@ -3172,6 +4034,22 @@ export default function PosOutletPage() {
                         </div>
                       )}
                     </div>
+                  </div>
+
+                  <div>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="text-[7px] font-black uppercase tracking-wider text-slate-500">Refill / Request Item</div>
+                      <button type="button" onClick={openAyceRefill} disabled={ayceExpired} className="rounded-lg bg-amber-500 px-2.5 py-1.5 text-[7px] font-black uppercase tracking-wider text-black disabled:opacity-40">+ Request Refill</button>
+                    </div>
+                    <div className="max-h-52 overflow-auto rounded-2xl border border-white/[0.06]">
+                      {refillRequests.filter((item) => item.sessionId === ayceSession.id).length ? refillRequests.filter((item) => item.sessionId === ayceSession.id).slice().reverse().map((request) => (
+                        <div key={request.id} className="border-b border-white/[0.05] px-3 py-3 last:border-b-0">
+                          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-[9px] font-black">{request.name} ×{request.qty}</div><div className="mt-1 text-[7px] text-slate-500">{new Date(request.requestedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} · {request.staffName}</div></div><span className={`shrink-0 rounded-full px-2 py-1 text-[6px] font-black ${request.status === "PENDING" ? "bg-amber-500/15 text-amber-300" : request.status === "DISERAHKAN" ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"}`}>{request.status}</span></div>
+                          {request.status === "PENDING" && <div className="mt-2 flex gap-2"><button type="button" onClick={() => markRefillDelivered(request.id)} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[6px] font-black uppercase tracking-wider text-white">Tandai Diserahkan</button><button type="button" onClick={() => cancelRefillRequest(request.id)} className="rounded-lg border border-red-400/10 bg-red-500/[0.06] px-2.5 py-1.5 text-[6px] font-black uppercase tracking-wider text-red-300">Batal</button></div>}
+                        </div>
+                      )) : <div className="p-5 text-center text-[8px] text-slate-500">Belum ada request refill untuk meja ini.</div>}
+                    </div>
+                    <div className="mt-2 text-[7px] leading-relaxed text-slate-500">Alur: customer info → staff konfirmasi → input item/qty → PENDING → setelah barang benar-benar diberikan, klik <b className="text-emerald-300">Tandai Diserahkan</b>. Baru setelah itu masuk consumption/HPP.</div>
                   </div>
 
                   <button
@@ -3224,6 +4102,32 @@ export default function PosOutletPage() {
                     </div>
                   </div>
 
+                  <div className="rounded-2xl border border-red-400/10 bg-red-500/[0.05] p-4">
+                    <div className="mb-2 text-[7px] font-black uppercase tracking-wider text-slate-500">
+                      TIMER MANUAL
+                    </div>
+                    <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+                      <div>
+                        <input
+                          type="number"
+                          min="1"
+                          max="1440"
+                          value={manualDurationMinutes}
+                          onChange={(e) => setManualDurationMinutes(e.target.value)}
+                          placeholder="100"
+                          className={`w-full rounded-xl border px-4 py-3 text-sm font-black outline-none ${
+                            isDark ? "border-white/[0.07] bg-white/[0.025] text-white" : "border-slate-200 bg-white text-slate-900"
+                          }`}
+                        />
+                        <div className="mt-1 text-[7px] text-slate-500">Bisa diisi sesuai durasi promo / operasional meja.</div>
+                      </div>
+                      <div className="rounded-xl border border-red-400/10 bg-red-500/10 px-4 py-3 text-center">
+                        <div className="text-[6px] font-black uppercase tracking-wider text-red-300/70">Preview</div>
+                        <div className="mt-0.5 text-sm font-black text-red-400">{manualDurationMinutes || 0} MIN</div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
                     <div className="mb-2 text-[7px] font-black uppercase tracking-wider text-slate-500">
                       Paket AYCE
@@ -3233,7 +4137,10 @@ export default function PosOutletPage() {
                         <button
                           key={pkg.key}
                           type="button"
-                          onClick={() => setAycePackageKey(pkg.key)}
+                          onClick={() => {
+                            setAycePackageKey(pkg.key);
+                            setManualDurationMinutes(String(pkg.durationMinutes));
+                          }}
                           className={`rounded-2xl border p-3 text-left transition ${
                             aycePackageKey === pkg.key
                               ? "border-red-400/30 bg-red-500 text-white"
@@ -3297,6 +4204,100 @@ export default function PosOutletPage() {
           </div>
         </div>
       )}
+
+      {/* =====================================================
+          PREMIUM AYCE REFILL / REQUEST CENTER
+      ====================================================== */}
+      {refillOpen && ayceSession && (() => {
+        const availableRefillMenus = menus.filter((menu) => {
+          if (!menu.menuId || Number(menu.stock) <= 0) return false;
+          const matchesSearch = !refillSearch.trim() || `${menu.name} ${menu.category} ${menu.code}`.toLowerCase().includes(refillSearch.trim().toLowerCase());
+          const matchesCategory = refillCategory === "ALL" || menu.category === refillCategory;
+          return matchesSearch && matchesCategory;
+        });
+        const refillCategories = Array.from(new Set(menus.filter((m) => m.menuId && Number(m.stock) > 0).map((m) => m.category).filter(Boolean)));
+        const selectedRefillMenu = menus.find((m) => m.menuId === refillMenuId);
+        const sessionRefills = refillRequests.filter((item) => item.sessionId === ayceSession.id);
+        const pendingCount = sessionRefills.filter((item) => item.status === "PENDING").length;
+        const deliveredCount = sessionRefills.filter((item) => item.status === "DISERAHKAN").length;
+        const deliveredQty = sessionRefills.filter((item) => item.status === "DISERAHKAN").reduce((sum, item) => sum + item.qty, 0);
+        return (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-3 backdrop-blur-md">
+            <div className={`flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[30px] border shadow-[0_30px_120px_rgba(0,0,0,0.55)] ${isDark ? "border-white/[0.08] bg-[#08100e] text-white" : "border-slate-200 bg-white text-slate-900"}`}>
+              <div className={`relative shrink-0 overflow-hidden border-b px-5 py-5 ${isDark ? "border-white/[0.06] bg-gradient-to-br from-amber-950/40 via-[#0b1512] to-[#08100e]" : "border-slate-100 bg-gradient-to-br from-amber-50 to-white"}`}>
+                <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-amber-400/[0.08] blur-3xl" />
+                <div className="relative flex items-start justify-between gap-4">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-400/10 ring-1 ring-amber-400/20"><Drumstick className="h-6 w-6 text-amber-300" /></div>
+                    <div className="min-w-0">
+                      <div className="text-[8px] font-black uppercase tracking-[0.28em] text-amber-400">AYCE SERVICE CONTROL</div>
+                      <div className="mt-1 truncate text-xl font-black">REFILL CENTER · MEJA {ayceSession.tableName}</div>
+                      <div className="mt-1 text-[8px] text-slate-500">{ayceSession.pax} PAX · {ayceSession.packageName} · Staff {cashier || "Kasir"}</div>
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => setRefillOpen(false)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.04] text-slate-500 hover:text-white"><X className="h-5 w-5" /></button>
+                </div>
+                <div className="relative mt-4 grid grid-cols-3 gap-2">
+                  <div className="rounded-2xl border border-amber-400/10 bg-amber-400/[0.05] px-3 py-2.5"><div className="text-[7px] font-black uppercase tracking-wider text-slate-500">Menunggu</div><div className="mt-1 text-lg font-black text-amber-300">{pendingCount}</div></div>
+                  <div className="rounded-2xl border border-emerald-400/10 bg-emerald-400/[0.05] px-3 py-2.5"><div className="text-[7px] font-black uppercase tracking-wider text-slate-500">Diserahkan</div><div className="mt-1 text-lg font-black text-emerald-300">{deliveredCount}</div></div>
+                  <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"><div className="text-[7px] font-black uppercase tracking-wider text-slate-500">Qty Refill</div><div className="mt-1 text-lg font-black">{deliveredQty}</div></div>
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-auto p-5">
+                {refillStep === "info" ? (
+                  <div className="mx-auto max-w-2xl space-y-5 py-4">
+                    <div className="rounded-[26px] border border-amber-400/20 bg-gradient-to-br from-amber-500/[0.10] to-transparent p-6">
+                      <div className="flex items-start gap-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-400/10 text-amber-300"><AlertTriangle className="h-6 w-6" /></div>
+                        <div><div className="text-base font-black">KONFIRMASI REFILL CUSTOMER</div><div className="mt-2 text-[10px] leading-relaxed text-slate-400">Sebelum staff memilih daging, pastikan customer sudah menyampaikan item yang ingin direfill dan staff sudah mengonfirmasi permintaannya. Setelah dikonfirmasi, request akan dicatat ke antrean refill meja ini.</div></div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4"><div className="text-[7px] font-black uppercase tracking-wider text-slate-500">MEJA / PAX</div><div className="mt-1 font-black">{ayceSession.tableName} · {ayceSession.pax} PAX</div></div>
+                      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4"><div className="text-[7px] font-black uppercase tracking-wider text-slate-500">STAFF</div><div className="mt-1 font-black">{cashier || "Kasir"}</div></div>
+                    </div>
+                    <div className="flex gap-2"><button type="button" onClick={() => setRefillOpen(false)} className="flex-1 rounded-2xl border border-white/[0.08] bg-white/[0.025] py-3.5 text-[8px] font-black uppercase tracking-wider text-slate-400">Batal</button><button type="button" onClick={confirmAyceRefillInfo} className="flex-[1.7] rounded-2xl bg-amber-400 py-3.5 text-[8px] font-black uppercase tracking-wider text-black shadow-lg shadow-amber-950/20">✓ Customer Sudah Diinfo · Pilih Item</button></div>
+                  </div>
+                ) : (
+                  <div className="grid gap-5 lg:grid-cols-[1.55fr_0.85fr]">
+                    <div className="min-w-0">
+                      <div className="mb-3 flex items-center justify-between gap-3"><div><div className="text-[8px] font-black uppercase tracking-[0.2em] text-amber-400">STEP 2 · PILIH ITEM</div><div className="mt-1 text-xs font-black">Item refill tersedia</div></div><div className="rounded-xl bg-emerald-400/10 px-2.5 py-1.5 text-[7px] font-black text-emerald-300">{availableRefillMenus.length} ITEM</div></div>
+                      <div className="relative mb-3"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" /><input value={refillSearch} onChange={(e) => setRefillSearch(e.target.value)} placeholder="Cari daging / menu..." className={`w-full rounded-2xl border py-3 pl-10 pr-4 text-xs font-bold outline-none ${isDark ? "border-white/[0.07] bg-white/[0.025] text-white placeholder:text-slate-600" : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"}`} /></div>
+                      <div className="mb-4 flex gap-2 overflow-x-auto pb-1"><button type="button" onClick={() => setRefillCategory("ALL")} className={`shrink-0 rounded-full px-3 py-2 text-[7px] font-black uppercase tracking-wider ${refillCategory === "ALL" ? "bg-amber-400 text-black" : "bg-white/[0.04] text-slate-500"}`}>Semua</button>{refillCategories.map((cat) => <button type="button" key={cat} onClick={() => setRefillCategory(cat)} className={`shrink-0 rounded-full px-3 py-2 text-[7px] font-black uppercase tracking-wider ${refillCategory === cat ? "bg-amber-400 text-black" : "bg-white/[0.04] text-slate-500"}`}>{cat}</button>)}</div>
+                      <div className="grid max-h-[54vh] grid-cols-2 gap-3 overflow-auto pr-1 sm:grid-cols-3">
+                        {availableRefillMenus.map((menu) => {
+                          const selected = refillMenuId === menu.menuId;
+                          const priorQty = sessionRefills.filter((r) => r.menuId === menu.menuId && r.status === "DISERAHKAN").reduce((sum, r) => sum + r.qty, 0);
+                          return <button type="button" key={menu.menuId} onClick={() => setRefillMenuId(menu.menuId)} className={`group overflow-hidden rounded-[22px] border text-left transition ${selected ? "border-amber-400/60 bg-amber-400/[0.08] ring-2 ring-amber-400/10" : isDark ? "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.04]" : "border-slate-200 bg-white hover:border-slate-300"}`}>
+                            <div className="relative aspect-[1.35/1] overflow-hidden bg-slate-900/20">{menu.image ? <img src={menu.image} alt={menu.name} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" /> : <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-amber-500/10 to-transparent"><Drumstick className="h-9 w-9 text-amber-300/60" /></div>}<div className="absolute left-2 top-2 rounded-full bg-black/65 px-2 py-1 text-[6px] font-black text-white backdrop-blur">STOCK {menu.stock}</div>{selected && <div className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-amber-400 text-black"><CheckCircle2 className="h-4 w-4" /></div>}</div>
+                            <div className="p-3"><div className="truncate text-[9px] font-black">{menu.name}</div><div className="mt-1 truncate text-[7px] text-slate-500">{menu.category || "Menu AYCE"}</div><div className="mt-2 flex items-center justify-between"><span className="text-[6px] font-black uppercase text-amber-300">INCLUDED AYCE</span><span className="text-[6px] text-slate-600">Refill {priorQty}×</span></div></div>
+                          </button>;
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="lg:sticky lg:top-0 lg:self-start">
+                      <div className={`rounded-[26px] border p-4 ${isDark ? "border-white/[0.07] bg-white/[0.025]" : "border-slate-200 bg-slate-50"}`}>
+                        <div className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500">REQUEST PREVIEW</div>
+                        {selectedRefillMenu ? <>
+                          <div className="mt-4 flex gap-3"><div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-slate-900/20">{selectedRefillMenu.image ? <img src={selectedRefillMenu.image} alt={selectedRefillMenu.name} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><Drumstick className="h-6 w-6 text-amber-300/60" /></div>}</div><div className="min-w-0"><div className="truncate text-sm font-black">{selectedRefillMenu.name}</div><div className="mt-1 text-[7px] text-slate-500">Stock tersedia: {selectedRefillMenu.stock}</div><div className="mt-1 text-[7px] font-black text-amber-300">AYCE · Rp0</div></div></div>
+                          <div className="mt-5"><div className="mb-2 text-[7px] font-black uppercase tracking-wider text-slate-500">JUMLAH REFILL</div><div className="flex items-center gap-2"><button type="button" onClick={() => setRefillQty(String(Math.max(1, Number(refillQty || 1) - 1)))} className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.025]"><Minus className="h-4 w-4" /></button><input type="number" min="1" max={Math.max(1, Number(selectedRefillMenu.stock || 1))} value={refillQty} onChange={(e) => setRefillQty(e.target.value)} className={`h-11 flex-1 rounded-xl border px-3 text-center text-base font-black outline-none ${isDark ? "border-white/[0.07] bg-white/[0.025]" : "border-slate-200 bg-white"}`} /><button type="button" onClick={() => setRefillQty(String(Math.min(Number(selectedRefillMenu.stock || 1), Number(refillQty || 1) + 1)))} className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.025]"><Plus className="h-4 w-4" /></button></div><div className="mt-2 flex gap-2">{[1,2,3,5].map((n) => <button type="button" key={n} onClick={() => setRefillQty(String(Math.min(Number(selectedRefillMenu.stock || 1), n)))} className={`flex-1 rounded-lg py-2 text-[7px] font-black ${Number(refillQty) === n ? "bg-amber-400 text-black" : "bg-white/[0.04] text-slate-500"}`}>×{n}</button>)}</div></div>
+                          <div className="mt-4 rounded-2xl border border-amber-400/10 bg-amber-400/[0.05] p-3 text-[7px] leading-relaxed text-slate-400"><span className="font-black text-amber-300">PENDING:</span> belum masuk consumption. Setelah daging benar-benar diberikan ke customer, staff wajib menekan <b className="text-emerald-300">Tandai Diserahkan</b>.</div>
+                          <button type="button" onClick={submitAyceRefillRequest} className="mt-4 w-full rounded-2xl bg-amber-400 py-3.5 text-[8px] font-black uppercase tracking-wider text-black shadow-lg shadow-amber-950/20">Kirim Request · ×{Math.max(1, Number(refillQty || 1))}</button>
+                        </> : <div className="py-12 text-center"><Package className="mx-auto h-9 w-9 text-slate-600" /><div className="mt-3 text-[9px] font-black text-slate-500">Pilih item refill</div><div className="mt-1 text-[7px] text-slate-600">Klik kartu daging/menu di sebelah kiri</div></div>}
+                      </div>
+                      <button type="button" onClick={() => setRefillStep("info")} className="mt-3 w-full rounded-2xl border border-white/[0.07] bg-white/[0.025] py-3 text-[7px] font-black uppercase tracking-wider text-slate-500">← Kembali ke Konfirmasi Customer</button>
+                    </div>
+                  </div>
+                )}
+
+                {refillStep === "input" && sessionRefills.length > 0 && <div className="mt-6 border-t border-white/[0.06] pt-5"><div className="mb-3 flex items-center justify-between"><div><div className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500">REFILL QUEUE</div><div className="mt-1 text-xs font-black">Antrean Meja {ayceSession.tableName}</div></div><span className="text-[7px] text-slate-500">{sessionRefills.length} request</span></div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{sessionRefills.slice().reverse().map((request) => <div key={request.id} className={`rounded-2xl border p-3 ${request.status === "PENDING" ? "border-amber-400/15 bg-amber-400/[0.04]" : request.status === "DISERAHKAN" ? "border-emerald-400/10 bg-emerald-400/[0.03]" : "border-red-400/10 bg-red-400/[0.03]"}`}><div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[9px] font-black">{request.name} <span className="text-amber-300">×{request.qty}</span></div><div className="mt-1 text-[6px] text-slate-500">{new Date(request.requestedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} · {request.staffName}</div></div><span className={`shrink-0 rounded-full px-2 py-1 text-[6px] font-black ${request.status === "PENDING" ? "bg-amber-500/15 text-amber-300" : request.status === "DISERAHKAN" ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"}`}>{request.status}</span></div>{request.status === "PENDING" && <div className="mt-3 flex gap-2"><button type="button" onClick={() => markRefillDelivered(request.id)} className="flex-1 rounded-xl bg-emerald-600 py-2 text-[6px] font-black uppercase tracking-wider text-white">✓ Sudah Diberikan</button><button type="button" onClick={() => cancelRefillRequest(request.id)} className="rounded-xl border border-red-400/10 px-3 py-2 text-[6px] font-black uppercase text-red-300">Batal</button></div>}{request.status === "DISERAHKAN" && <div className="mt-2 text-[6px] font-bold text-emerald-400">Consumption tercatat · {request.deliveredAt ? new Date(request.deliveredAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "sudah diserahkan"}</div>}</div>)}</div></div>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* =====================================================
           PAYMENT MODAL
@@ -3630,9 +4631,143 @@ export default function PosOutletPage() {
                     : missingBomCount >
                       0
                     ? "BOM BELUM SIAP"
+                    : ayceSession
+                    ? "CLOSE BILL & BAYAR"
                     : "KONFIRMASI & BAYAR"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
+          SALES REPORT MODAL
+      ====================================================== */}
+      {reportOpen && (
+        <div className="fixed inset-0 z-[145] flex items-center justify-center bg-black/85 p-3 backdrop-blur-md">
+          <div className={`flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-[28px] border shadow-[0_30px_100px_rgba(0,0,0,0.6)] ${isDark ? "border-white/[0.08] bg-[#08100d] text-white" : "border-slate-200 bg-white text-slate-900"}`}>
+            <div className="flex items-center justify-between border-b p-5">
+              <div>
+                <div className="text-[8px] font-bold uppercase tracking-[0.25em] text-emerald-400">Sales Intelligence</div>
+                <div className="mt-1 text-xl font-black">LAPORAN SALES & ITEM TERJUAL</div>
+                <div className="mt-1 text-[8px] text-slate-500">Transaksi, staff, item terjual, qty, pembayaran, service 5% dan PPN 10%.</div>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={printSalesReport} className="rounded-xl bg-emerald-500 px-3 py-2 text-[8px] font-black text-white"><Printer className="mr-1 inline h-3.5 w-3.5" />Print Report</button>
+                <button type="button" onClick={() => setReportOpen(false)} className="h-9 w-9 rounded-xl bg-white/[0.04] text-slate-500"><X className="mx-auto h-4 w-4" /></button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+              <div className="flex gap-1 rounded-xl border border-white/[0.07] p-1">
+                {[['TODAY','Hari Ini'],['ALL','Semua']].map(([key,label]) => (
+                  <button key={key} type="button" onClick={() => setReportRange(key as "TODAY" | "ALL")} className={`rounded-lg px-3 py-2 text-[8px] font-black ${reportRange === key ? "bg-emerald-500 text-white" : "text-slate-500"}`}>{label}</button>
+                ))}
+              </div>
+              <span className="text-[8px] text-slate-500">{reportSales.length} transaksi · {reportItems} qty item · {reportAyceTransactions} AYCE</span>
+            </div>
+
+            <div id="pos-sales-report" className="min-h-0 overflow-auto p-5">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
+                {[
+                  ['TRANSAKSI', String(reportSales.length)],
+                  ['OMZET / GRAND TOTAL', money(reportTotal)],
+                  ['TOTAL BAYAR', money(reportPaid)],
+                  ['DISKON', money(reportDiscount)],
+                  ['SERVICE 5%', money(reportService)],
+                  ['PPN 10%', money(reportPpn)],
+                ].map(([label,value]) => (
+                  <div key={label} className={`rounded-2xl border p-4 ${isDark ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-200 bg-slate-50"}`}>
+                    <div className="text-[7px] font-black text-slate-500">{label}</div>
+                    <div className="mt-2 text-lg font-black text-emerald-400">{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+                {[
+                  ['AVG / TX', money(reportSales.length ? reportTotal / reportSales.length : 0)],
+                  ['ITEM / TX', reportSales.length ? (reportItems / reportSales.length).toFixed(1) : '0.0'],
+                  ['AYCE TX', String(reportAyceTransactions)],
+                  ['NILAI ITEM', money(reportGrossItemSales)],
+                ].map(([label,value]) => (
+                  <div key={label} className={`rounded-2xl border p-4 ${isDark ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-200 bg-slate-50"}`}>
+                    <div className="text-[7px] font-black text-slate-500">{label}</div>
+                    <div className="mt-2 text-sm font-black">{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                {[['CASH',reportCash,Banknote],['QRIS',reportQris,QrCode],['TRANSFER',reportTransfer,Landmark]].map(([label,value,Icon]: any) => (
+                  <div key={label} className={`rounded-2xl border p-4 ${isDark ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-200 bg-slate-50"}`}>
+                    <div className="flex items-center gap-3"><Icon className="h-5 w-5 text-emerald-400"/><div><div className="text-[7px] font-black text-slate-500">{label}</div><div className="mt-1 text-sm font-black">{money(value)}</div></div></div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_1fr]">
+                <section className="overflow-hidden rounded-2xl border border-white/[0.06]">
+                  <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
+                    <div><div className="text-[9px] font-black uppercase">ITEM TERJUAL</div><div className="text-[7px] text-slate-500">Rekap qty seluruh transaksi</div></div>
+                    <div className="text-[8px] font-black text-emerald-400">{reportItemSummary.length} item</div>
+                  </div>
+                  <div className="overflow-auto">
+                    <table className="w-full text-[9px]">
+                      <thead className="bg-white/[0.03] text-slate-500"><tr><th className="p-3 text-left">#</th><th className="p-3 text-left">Nama Item</th><th className="p-3 text-right">Qty</th><th className="p-3 text-right">AYCE</th><th className="p-3 text-right">Berbayar</th><th className="p-3 text-right">Nilai</th></tr></thead>
+                      <tbody>{reportItemSummary.map((item, index) => (
+                        <tr key={item.name} className="border-t border-white/[0.05]">
+                          <td className="p-3 text-slate-500">{index + 1}</td>
+                          <td className="p-3 font-bold">{item.name}</td>
+                          <td className="p-3 text-right font-black text-emerald-400">{item.qty}</td>
+                          <td className="p-3 text-right">{item.ayceQty}</td>
+                          <td className="p-3 text-right">{item.paidQty}</td>
+                          <td className="p-3 text-right">{money(item.salesValue)}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <section className="overflow-hidden rounded-2xl border border-white/[0.06]">
+                  <div className="border-b border-white/[0.06] px-4 py-3"><div className="text-[9px] font-black uppercase">REKAP STAFF</div><div className="text-[7px] text-slate-500">Staff/kasir yang melakukan transaksi</div></div>
+                  <div className="overflow-auto">
+                    <table className="w-full text-[9px]">
+                      <thead className="bg-white/[0.03] text-slate-500"><tr><th className="p-3 text-left">Staff</th><th className="p-3 text-right">Tx</th><th className="p-3 text-right">Qty</th><th className="p-3 text-right">Omzet</th></tr></thead>
+                      <tbody>{reportStaffSummary.map((staff) => (
+                        <tr key={staff.staff} className="border-t border-white/[0.05]"><td className="p-3 font-bold">{staff.staff}</td><td className="p-3 text-right">{staff.transactions}</td><td className="p-3 text-right">{staff.items}</td><td className="p-3 text-right font-black text-emerald-400">{money(staff.total)}</td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+
+              <section className="mt-5 overflow-hidden rounded-2xl border border-white/[0.06]">
+                <div className="border-b border-white/[0.06] px-4 py-3"><div className="text-[9px] font-black uppercase">DETAIL TRANSAKSI</div><div className="text-[7px] text-slate-500">Staff, meja, pax, item, pembayaran dan total</div></div>
+                <div className="overflow-auto">
+                  <table className="w-full min-w-[1050px] text-[9px]">
+                    <thead className="bg-white/[0.03] text-slate-500"><tr><th className="p-3 text-left">Tanggal</th><th className="p-3 text-left">No. Transaksi</th><th className="p-3 text-left">Staff</th><th className="p-3 text-left">Meja / Pax</th><th className="p-3 text-left">Item Terjual</th><th className="p-3 text-left">Metode</th><th className="p-3 text-right">Diskon</th><th className="p-3 text-right">Service 5%</th><th className="p-3 text-right">PPN 10%</th><th className="p-3 text-right">Total</th></tr></thead>
+                    <tbody>{reportSales.map((sale) => {
+                      const itemsText = (sale.items || []).map((item) => `${item.menu?.name || item.barang?.name || `Item #${item.id}`} ×${item.qty}`).join(', ') || (sale.ayce ? `Paket AYCE${sale.packageName ? ` — ${sale.packageName}` : ''}` : 'Tidak ada item');
+                      return (
+                        <tr key={sale.id} className="border-t border-white/[0.05] align-top">
+                          <td className="p-3 text-slate-500">{new Date(sale.saleDate).toLocaleString("id-ID")}</td>
+                          <td className="p-3 font-black">{sale.number}</td>
+                          <td className="p-3 font-bold">{sale.cashierName || "Staff tidak tercatat"}</td>
+                          <td className="p-3">{sale.tableName || "-"}{sale.pax ? ` / ${sale.pax} pax` : ""}</td>
+                          <td className="max-w-[330px] p-3 leading-5">{itemsText}</td>
+                          <td className="p-3">{sale.paymentMethod}</td>
+                          <td className="p-3 text-right">{money(sale.discount || 0)}</td>
+                          <td className="p-3 text-right">{money(sale.serviceCharge || 0)}</td>
+                          <td className="p-3 text-right">{money(sale.ppn || 0)}</td>
+                          <td className="p-3 text-right font-black text-emerald-400">{money(sale.total)}</td>
+                        </tr>
+                      );
+                    })}</tbody>
+                  </table>
+                </div>
+              </section>
             </div>
           </div>
         </div>
@@ -4315,10 +5450,20 @@ export default function PosOutletPage() {
                   </div>
 
                   <div className="mt-3 border-b border-dashed pb-3 text-[9px]">
-                    {
-                      receiptSale.number
-                    }
+                    {receiptSale.number}
                   </div>
+
+                  {receiptMeta.ayce && (
+                    <div className="mt-3 rounded-xl bg-red-50 p-3 text-left text-[9px]">
+                      <div className="font-black uppercase tracking-wider text-red-600">AYCE • CLOSE BILL</div>
+                      <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-slate-600">
+                        <span>Meja <b>{receiptMeta.tableName}</b></span>
+                        <span>Pax <b>{receiptMeta.pax}</b></span>
+                        <span>Paket <b>{receiptMeta.packageName}</b></span>
+                        <span>Durasi <b>{receiptMeta.durationMinutes} min</b></span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-5 space-y-3">
@@ -4380,7 +5525,7 @@ export default function PosOutletPage() {
 
                   <div className="flex justify-between">
                     <span>
-                      Service
+                      Service (5%)
                     </span>
 
                     <b>
@@ -4393,7 +5538,7 @@ export default function PosOutletPage() {
 
                   <div className="flex justify-between">
                     <span>
-                      PPN
+                      PPN (10%)
                     </span>
 
                     <b>
@@ -4459,7 +5604,7 @@ export default function PosOutletPage() {
                 )}
 
                 <div className="mt-6 text-center text-[9px] text-slate-400">
-                  Terima kasih telah berbelanja.
+                  {receiptMeta.ayce ? "Terima kasih. Session AYCE telah ditutup." : "Terima kasih telah berbelanja."}
                 </div>
               </div>
 
@@ -4501,7 +5646,9 @@ export default function PosOutletPage() {
           }
 
           #pos-receipt,
-          #pos-receipt * {
+          #pos-receipt *,
+          #pos-sales-report,
+          #pos-sales-report * {
             visibility: visible !important;
           }
 
@@ -4512,6 +5659,27 @@ export default function PosOutletPage() {
             width: 80mm !important;
             margin: 0 !important;
             padding: 5mm !important;
+            background: white !important;
+            color: black !important;
+            overflow: visible !important;
+            max-height: none !important;
+          }
+
+          .print-receipt #pos-sales-report {
+            display: none !important;
+          }
+
+          .print-report #pos-receipt {
+            display: none !important;
+          }
+
+          #pos-sales-report {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 8mm !important;
             background: white !important;
             color: black !important;
             overflow: visible !important;

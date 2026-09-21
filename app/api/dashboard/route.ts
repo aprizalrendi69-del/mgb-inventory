@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     /* =====================================================
-       2. NILAI PERSEDIAAN
+       2. NILAI PERSEDIAAN PUSAT
     ===================================================== */
 
     const inventories = await prisma.inventory.findMany({
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    const nilaiPersediaan = inventories.reduce(
+    const nilaiPersediaanPusat = inventories.reduce(
       (total, item) => {
         const stock = Number(item.stock || 0);
         const cost = Number(item.averageCost || 0);
@@ -64,41 +64,174 @@ export async function GET(req: NextRequest) {
     );
 
     /* =====================================================
+       2B. NILAI PERSEDIAAN OUTLET
+
+       Setiap outlet memiliki OutletStock sendiri.
+
+       Nilai:
+       stock × averageCost
+
+       Sekaligus dibuat breakdown per outlet supaya dashboard
+       bisa menampilkan:
+
+       Outlet A     Rp 10.000.000
+       Outlet B     Rp  7.500.000
+       Outlet C     Rp  3.200.000
+
+       Nilai tetap menggunakan averageCost milik OutletStock.
+    ===================================================== */
+
+    const outletStocks = await prisma.outletStock.findMany({
+      select: {
+        stock: true,
+        averageCost: true,
+
+        outlet: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    /* =====================================================
+       BREAKDOWN NILAI PERSEDIAAN PER OUTLET
+    ===================================================== */
+
+    type OutletInventoryBreakdown = {
+      outletId: number;
+      outletCode: string;
+      outletName: string;
+      value: number;
+    };
+
+    const outletInventoryMap =
+      new Map<number, OutletInventoryBreakdown>();
+
+    for (const item of outletStocks) {
+      const stock = Number(item.stock || 0);
+      const cost = Number(item.averageCost || 0);
+
+      const value = stock * cost;
+
+      /*
+       * Jika relasi outlet tidak ditemukan, skip.
+       * OutletStock normalnya selalu mempunyai outlet.
+       */
+      if (!item.outlet) {
+        continue;
+      }
+
+      const existing =
+        outletInventoryMap.get(item.outlet.id);
+
+      if (existing) {
+        existing.value += value;
+      } else {
+        outletInventoryMap.set(item.outlet.id, {
+          outletId: item.outlet.id,
+
+          outletCode:
+            item.outlet.code ||
+            `OUTLET-${item.outlet.id}`,
+
+          outletName:
+            item.outlet.name ||
+            `Outlet ${item.outlet.id}`,
+
+          value,
+        });
+      }
+    }
+
+    /*
+     * Urutkan berdasarkan nama outlet
+     * supaya dashboard konsisten.
+     */
+    const nilaiPersediaanOutletBreakdown =
+      Array.from(
+        outletInventoryMap.values()
+      ).sort((a, b) =>
+        a.outletName.localeCompare(
+          b.outletName,
+          "id"
+        )
+      );
+
+    /*
+     * Total seluruh outlet dihitung dari breakdown.
+     *
+     * Dengan cara ini:
+     *
+     * nilaiPersediaanOutlet
+     *
+     * selalu sama dengan total:
+     *
+     * Outlet A + Outlet B + Outlet C + ...
+     */
+    const nilaiPersediaanOutlet =
+      nilaiPersediaanOutletBreakdown.reduce(
+        (total, outlet) =>
+          total + outlet.value,
+        0
+      );
+
+    /* =====================================================
+       2C. TOTAL SELURUH PERSEDIAAN
+
+       Pusat + seluruh outlet
+    ===================================================== */
+
+    const nilaiPersediaanTotal =
+      nilaiPersediaanPusat +
+      nilaiPersediaanOutlet;
+
+    /* =====================================================
        3. STOCK ALERT
     ===================================================== */
 
-    const stockData = await prisma.barang.findMany({
-      where: {
-        active: true,
-        minimumStock: {
-          gt: 0,
+    const stockData =
+      await prisma.barang.findMany({
+        where: {
+          active: true,
+          minimumStock: {
+            gt: 0,
+          },
         },
-      },
 
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        stock: true,
-        minimumStock: true,
-        unit: true,
-      },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          stock: true,
+          minimumStock: true,
+          unit: true,
+        },
 
-      orderBy: {
-        stock: "asc",
-      },
+        orderBy: {
+          stock: "asc",
+        },
 
-      take: 100,
-    });
+        take: 100,
+      });
 
     const stockAlerts = stockData
       .map((item) => {
-        const stock = Number(item.stock || 0);
-        const minimumStock = Number(item.minimumStock || 0);
+        const stock = Number(
+          item.stock || 0
+        );
+
+        const minimumStock =
+          Number(
+            item.minimumStock || 0
+          );
 
         const percentage =
           minimumStock > 0
-            ? (stock / minimumStock) * 100
+            ? (stock / minimumStock) *
+              100
             : 100;
 
         let status:
@@ -111,7 +244,9 @@ export async function GET(req: NextRequest) {
         if (stock <= 0) {
           status = "OUT_OF_STOCK";
           priority = 1;
-        } else if (stock <= minimumStock * 0.5) {
+        } else if (
+          stock <= minimumStock * 0.5
+        ) {
           status = "CRITICAL";
           priority = 2;
         } else {
@@ -130,12 +265,16 @@ export async function GET(req: NextRequest) {
           unit: item.unit,
 
           percentage: Math.min(
-            Math.max(percentage, 0),
+            Math.max(
+              percentage,
+              0
+            ),
             100
           ),
 
           shortage: Math.max(
-            minimumStock - stock,
+            minimumStock -
+              stock,
             0
           ),
 
@@ -145,14 +284,24 @@ export async function GET(req: NextRequest) {
       })
       .filter(
         (item) =>
-          item.stock <= item.minimumStock
+          item.stock <=
+          item.minimumStock
       )
       .sort((a, b) => {
-        if (a.priority !== b.priority) {
-          return a.priority - b.priority;
+        if (
+          a.priority !==
+          b.priority
+        ) {
+          return (
+            a.priority -
+            b.priority
+          );
         }
 
-        return a.stock - b.stock;
+        return (
+          a.stock -
+          b.stock
+        );
       })
       .slice(0, 20);
 
@@ -242,75 +391,96 @@ export async function GET(req: NextRequest) {
 
     const now = new Date();
 
-    const expiredItems = batchStocks
-      .map((item) => {
-        const expiredDate =
-          new Date(item.expiredDate);
+    const expiredItems =
+      batchStocks
+        .map((item) => {
+          const expiredDate =
+            new Date(
+              item.expiredDate
+            );
 
-        const diffMs =
-          expiredDate.getTime() -
-          now.getTime();
+          const diffMs =
+            expiredDate.getTime() -
+            now.getTime();
 
-        const sisaHari = Math.ceil(
-          diffMs /
-            (1000 * 60 * 60 * 24)
-        );
+          const sisaHari =
+            Math.ceil(
+              diffMs /
+                (1000 *
+                  60 *
+                  60 *
+                  24)
+            );
 
-        const warningDays =
-          Number(
-            item.barang.expiredWarning || 30
-          );
+          const warningDays =
+            Number(
+              item.barang
+                .expiredWarning ||
+                30
+            );
 
-        let status:
-          | "EXPIRED"
-          | "WARNING"
-          | "SAFE";
+          let status:
+            | "EXPIRED"
+            | "WARNING"
+            | "SAFE";
 
-        if (sisaHari < 0) {
-          status = "EXPIRED";
-        } else if (
-          sisaHari <= warningDays
-        ) {
-          status = "WARNING";
-        } else {
-          status = "SAFE";
-        }
+          if (sisaHari < 0) {
+            status = "EXPIRED";
+          } else if (
+            sisaHari <=
+            warningDays
+          ) {
+            status = "WARNING";
+          } else {
+            status = "SAFE";
+          }
 
-        return {
-          id: item.id,
+          return {
+            id: item.id,
 
-          barangId: item.barang.id,
+            barangId:
+              item.barang.id,
 
-          code: item.barang.code,
+            code:
+              item.barang.code,
 
-          name: item.barang.name,
+            name:
+              item.barang.name,
 
-          unit: item.barang.unit,
+            unit:
+              item.barang.unit,
 
-          batch: item.batchNumber,
+            batch:
+              item.batchNumber,
 
-          qty: Number(item.qty || 0),
+            qty: Number(
+              item.qty || 0
+            ),
 
-          expired: item.expiredDate,
+            expired:
+              item.expiredDate,
 
-          sisaHari,
+            sisaHari,
 
-          status,
+            status,
 
-          expiredWarning: warningDays,
-        };
-      })
-      .filter(
-        (item) =>
-          item.status === "EXPIRED" ||
-          item.status === "WARNING"
-      )
-      .sort(
-        (a, b) =>
-          a.sisaHari -
-          b.sisaHari
-      )
-      .slice(0, 10);
+            expiredWarning:
+              warningDays,
+          };
+        })
+        .filter(
+          (item) =>
+            item.status ===
+              "EXPIRED" ||
+            item.status ===
+              "WARNING"
+        )
+        .sort(
+          (a, b) =>
+            a.sisaHari -
+            b.sisaHari
+        )
+        .slice(0, 10);
 
     /* =====================================================
        7. AKTIVITAS TERBARU
@@ -351,44 +521,52 @@ export async function GET(req: NextRequest) {
       });
 
     const activities = [
-      ...purchases.map((item) => ({
-        id: `purchase-${item.id}`,
+      ...purchases.map(
+        (item) => ({
+          id: `purchase-${item.id}`,
 
-        type: "purchase",
+          type: "purchase",
 
-        title:
-          item.number ||
-          `PO #${item.id}`,
+          title:
+            item.number ||
+            `PO #${item.id}`,
 
-        description:
-          `Purchase Order • ${item.status}`,
+          description:
+            `Purchase Order • ${item.status}`,
 
-        createdAt:
-          item.updatedAt ||
-          item.createdAt,
-      })),
+          createdAt:
+            item.updatedAt ||
+            item.createdAt,
+        })
+      ),
 
-      ...deliveries.map((item) => ({
-        id: `delivery-${item.id}`,
+      ...deliveries.map(
+        (item) => ({
+          id: `delivery-${item.id}`,
 
-        type: "delivery",
+          type: "delivery",
 
-        title:
-          item.number ||
-          `Delivery #${item.id}`,
+          title:
+            item.number ||
+            `Delivery #${item.id}`,
 
-        description:
-          `Delivery Order • ${item.status}`,
+          description:
+            `Delivery Order • ${item.status}`,
 
-        createdAt:
-          item.updatedAt ||
-          item.createdAt,
-      })),
+          createdAt:
+            item.updatedAt ||
+            item.createdAt,
+        })
+      ),
     ]
       .sort(
         (a, b) =>
-          new Date(b.createdAt).getTime() -
-          new Date(a.createdAt).getTime()
+          new Date(
+            b.createdAt
+          ).getTime() -
+          new Date(
+            a.createdAt
+          ).getTime()
       )
       .slice(0, 10);
 
@@ -398,7 +576,8 @@ export async function GET(req: NextRequest) {
        7 / 30 / 90 HARI
     ===================================================== */
 
-    const startDate = new Date();
+    const startDate =
+      new Date();
 
     startDate.setHours(
       0,
@@ -446,11 +625,19 @@ export async function GET(req: NextRequest) {
       }
     >();
 
-    for (let i = 0; i < period; i++) {
-      const date = new Date(startDate);
+    for (
+      let i = 0;
+      i < period;
+      i++
+    ) {
+      const date =
+        new Date(
+          startDate
+        );
 
       date.setDate(
-        startDate.getDate() + i
+        startDate.getDate() +
+          i
       );
 
       const key =
@@ -460,20 +647,27 @@ export async function GET(req: NextRequest) {
           date.getDate()
         ).padStart(2, "0")}`;
 
-      chartMap.set(key, {
-        masuk: 0,
-        keluar: 0,
-        date,
-      });
+      chartMap.set(
+        key,
+        {
+          masuk: 0,
+          keluar: 0,
+          date,
+        }
+      );
     }
 
     /* =====================================================
        MASUKKAN DATA STOCK CARD
     ===================================================== */
 
-    for (const card of stockCards) {
+    for (
+      const card of stockCards
+    ) {
       const date =
-        new Date(card.trxDate);
+        new Date(
+          card.trxDate
+        );
 
       if (
         Number.isNaN(
@@ -508,9 +702,6 @@ export async function GET(req: NextRequest) {
 
     /* =====================================================
        FORMAT CHART
-
-       id dibuat unik berdasarkan tanggal lengkap.
-       Frontend bisa menggunakan item.id sebagai React key.
     ===================================================== */
 
     const chart =
@@ -534,28 +725,23 @@ export async function GET(req: NextRequest) {
               }
             ),
 
-          masuk: value.masuk,
+          masuk:
+            value.masuk,
 
-          keluar: value.keluar,
+          keluar:
+            value.keluar,
         })
       );
 
     /* =====================================================
        9. USER ONLINE
-
-       User dianggap ONLINE apabila heartbeat terakhir
-       masih dalam 2 menit terakhir.
-
-       Heartbeat:
-       POST /api/me/heartbeat
-
-       Data menggunakan:
-       User.lastSeen
     ===================================================== */
 
-    const onlineThreshold = new Date(
-      Date.now() - 2 * 60 * 1000
-    );
+    const onlineThreshold =
+      new Date(
+        Date.now() -
+          2 * 60 * 1000
+      );
 
     const onlineUsers =
       await prisma.user.findMany({
@@ -593,29 +779,43 @@ export async function GET(req: NextRequest) {
     ===================================================== */
 
     const formattedOnlineUsers =
-      onlineUsers.map((user) => ({
-        id: user.id,
+      onlineUsers.map(
+        (user) => ({
+          id: user.id,
 
-        username: user.username,
+          username:
+            user.username,
 
-        fullname:
-          user.fullname ||
-          user.username,
+          fullname:
+            user.fullname ||
+            user.username,
 
-        role: user.role,
+          role: user.role,
 
-        outlet: user.outlet
-          ? {
-              id: user.outlet.id,
-              code: user.outlet.code,
-              name: user.outlet.name,
-            }
-          : null,
+          outlet:
+            user.outlet
+              ? {
+                  id:
+                    user.outlet
+                      .id,
 
-        lastSeen: user.lastSeen,
+                  code:
+                    user.outlet
+                      .code,
 
-        status: "ONLINE" as const,
-      }));
+                  name:
+                    user.outlet
+                      .name,
+                }
+              : null,
+
+          lastSeen:
+            user.lastSeen,
+
+          status:
+            "ONLINE" as const,
+        })
+      );
 
     /* =====================================================
        10. RESPONSE
@@ -636,7 +836,52 @@ export async function GET(req: NextRequest) {
 
           totalDelivery,
 
-          nilaiPersediaan,
+          /*
+           * BACKWARD COMPATIBILITY
+           *
+           * nilaiPersediaan tetap menunjuk
+           * inventory pusat.
+           */
+          nilaiPersediaan:
+            nilaiPersediaanPusat,
+
+          /*
+           * INVENTORY PUSAT
+           */
+          nilaiPersediaanPusat,
+
+          /*
+           * TOTAL INVENTORY SELURUH OUTLET
+           */
+          nilaiPersediaanOutlet,
+
+          /*
+           * BREAKDOWN INVENTORY PER OUTLET
+           *
+           * Contoh:
+           *
+           * [
+           *   {
+           *     outletId: 1,
+           *     outletCode: "OUT-A",
+           *     outletName: "Outlet A",
+           *     value: 10000000
+           *   },
+           *   {
+           *     outletId: 2,
+           *     outletCode: "OUT-B",
+           *     outletName: "Outlet B",
+           *     value: 7500000
+           *   }
+           * ]
+           */
+          nilaiPersediaanOutletBreakdown,
+
+          /*
+           * INVENTORY PUSAT +
+           * SELURUH OUTLET
+           */
+          nilaiPersediaanTotal,
 
           stockAlertCount:
             stockAlerts.length,

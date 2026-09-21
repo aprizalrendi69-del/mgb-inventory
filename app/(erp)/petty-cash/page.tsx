@@ -1649,7 +1649,7 @@ function exportPettyCashPDF() {
   doc.setTextColor(18, 59, 93);
 
   doc.text(
-    "REKENING KORAN PETTY CASH",
+    "REKENING KORAN • PETTY CASH",
     margin,
     16
   );
@@ -2117,7 +2117,7 @@ function exportPettyCashPDF() {
 
               <div className="relative">
 
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#0066B3] to-[#0B86C8] text-white shadow-[0_8px_20px_rgba(0,102,179,0.20)]">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#00529C] to-[#0077C8] text-white shadow-[0_8px_20px_rgba(0,102,179,0.20)]">
 
                   <Wallet size={20} />
 
@@ -2135,14 +2135,14 @@ function exportPettyCashPDF() {
                     Petty Cash
                   </h1>
 
-                  <span className="rounded-full border border-[#CFE2ED] bg-[#F0F7FB] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-[#0066B3]">
+                  <span className="rounded-full border border-[#CFE2ED] bg-[#F0F7FB] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-[#00529C]">
                     Finance
                   </span>
 
                 </div>
 
                 <p className="mt-0.5 text-[10px] font-medium text-[#8094A2]">
-                  Kelola saldo, pengeluaran, dan mutasi kas kecil
+                  Mutasi rekening kas kecil • kontrol saldo dan transaksi terverifikasi
                 </p>
 
               </div>
@@ -2170,7 +2170,7 @@ function exportPettyCashPDF() {
                         e.target.value
                       )
                     }
-                    className="h-10 min-w-[225px] appearance-none rounded-xl border border-[#C8DCE8] bg-[#F7FAFC] px-3.5 pr-9 text-[10px] font-bold text-[#315A78] shadow-sm outline-none transition focus:border-[#0066B3] focus:bg-white focus:ring-4 focus:ring-[#0066B3]/10"
+                    className="h-10 min-w-[225px] appearance-none rounded-xl border border-[#C8DCE8] bg-[#F7FAFC] px-3.5 pr-9 text-[10px] font-bold text-[#315A78] shadow-sm outline-none transition focus:border-[#00529C] focus:bg-white focus:ring-4 focus:ring-[#00529C]/10"
                   >
                     <option value="PUSAT">
                       PUSAT • Petty Cash Pusat
@@ -2199,12 +2199,12 @@ function exportPettyCashPDF() {
                     null ? (
                       <Landmark
                         size={14}
-                        className="text-[#0066B3]"
+                        className="text-[#00529C]"
                       />
                     ) : (
                       <Building2
                         size={14}
-                        className="text-[#0066B3]"
+                        className="text-[#00529C]"
                       />
                     )}
 
@@ -2247,7 +2247,7 @@ function exportPettyCashPDF() {
                   onClick={
                     openManualTransaction
                   }
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#0066B3] to-[#087CC1] px-4 text-[10px] font-extrabold text-white shadow-[0_8px_20px_rgba(0,102,179,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(0,102,179,0.24)]"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00529C] to-[#087CC1] px-4 text-[10px] font-extrabold text-white shadow-[0_8px_20px_rgba(0,102,179,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(0,102,179,0.24)]"
                 >
                   <ArrowUpRight
                     size={15}
@@ -2260,7 +2260,7 @@ function exportPettyCashPDF() {
                 <button
                   type="button"
                   onClick={openTopUp}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#087A56] to-[#0B966B] px-4 text-[10px] font-extrabold text-white shadow-[0_8px_20px_rgba(8,122,86,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(8,122,86,0.24)]"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#006BBA] to-[#0088D1] px-4 text-[10px] font-extrabold text-white shadow-[0_8px_20px_rgba(8,122,86,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(8,122,86,0.24)]"
                 >
                   <Plus size={15} />
                   Top Up
@@ -2294,7 +2294,7 @@ function exportPettyCashPDF() {
               "relative min-h-[185px] overflow-hidden rounded-2xl p-6 text-white shadow-[0_18px_45px_rgba(22,75,110,0.14)] " +
               (pettyCashBalance < 0
                 ? "bg-gradient-to-br from-[#A91D16] via-[#C62828] to-[#9E1B16]"
-                : "bg-gradient-to-br from-[#005A9F] via-[#006FBA] to-[#0A88C9]")
+                : "bg-gradient-to-br from-[#004F98] via-[#0066B3] to-[#0088D1]")
             }
           >
 
@@ -2404,7 +2404,7 @@ function exportPettyCashPDF() {
 
               </div>
 
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF6FB] text-[#0066B3] transition group-hover:scale-105">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF6FB] text-[#00529C] transition group-hover:scale-105">
 
                 <ArrowDownLeft
                   size={18}
@@ -2420,7 +2420,7 @@ function exportPettyCashPDF() {
                 Transaksi approved
               </span>
 
-              <span className="text-[9px] font-bold text-[#0066B3]">
+              <span className="text-[9px] font-bold text-[#00529C]">
                 Masuk
               </span>
 
@@ -2490,7 +2490,7 @@ function exportPettyCashPDF() {
 
               </div>
 
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EFF7FC] text-[#0066B3] transition group-hover:scale-105">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EFF7FC] text-[#00529C] transition group-hover:scale-105">
 
                 <Clock3 size={18} />
 
@@ -2504,7 +2504,7 @@ function exportPettyCashPDF() {
                 Perlu tindakan
               </span>
 
-              <span className="text-[9px] font-bold text-[#0066B3]">
+              <span className="text-[9px] font-bold text-[#00529C]">
                 {canApprove
                   ? "Approval"
                   : "Monitoring"}
@@ -2526,7 +2526,7 @@ function exportPettyCashPDF() {
 
             <div className="flex items-center gap-2.5">
 
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF6FB] text-[#0066B3]">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF6FB] text-[#00529C]">
                 <CreditCard size={14} />
               </div>
 
@@ -2552,7 +2552,7 @@ function exportPettyCashPDF() {
 
             <div className="flex items-center gap-2.5">
 
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF8F1] text-[#087A56]">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF8F1] text-[#006BBA]">
                 <Check size={14} />
               </div>
 
@@ -2568,7 +2568,7 @@ function exportPettyCashPDF() {
 
             </div>
 
-            <span className="text-[9px] font-semibold text-[#087A56]">
+            <span className="text-[9px] font-semibold text-[#006BBA]">
               selesai
             </span>
 
@@ -2616,7 +2616,7 @@ function exportPettyCashPDF() {
 
               <div className="flex items-center gap-3">
 
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#0066B3] to-[#0A87C9] text-white shadow-[0_6px_16px_rgba(0,102,179,0.16)]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#00529C] to-[#0A87C9] text-white shadow-[0_6px_16px_rgba(0,102,179,0.16)]">
 
                   <CreditCard size={17} />
 
@@ -2630,7 +2630,7 @@ function exportPettyCashPDF() {
                       Rekening Koran
                     </h2>
 
-                    <span className="rounded-full border border-[#CFE1EC] bg-[#EFF7FB] px-2.5 py-1 text-[8px] font-bold tracking-wide text-[#0066B3]">
+                    <span className="rounded-full border border-[#CFE1EC] bg-[#EFF7FB] px-2.5 py-1 text-[8px] font-bold tracking-wide text-[#00529C]">
                       {filteredTransactions.length} MUTASI
                     </span>
 
@@ -2650,7 +2650,7 @@ function exportPettyCashPDF() {
 
                   <SlidersHorizontal
                     size={12}
-                    className="text-[#0066B3]"
+                    className="text-[#00529C]"
                   />
 
                   Filter mutasi
@@ -2668,7 +2668,7 @@ function exportPettyCashPDF() {
                     filteredTransactions.length ===
                       0
                   }
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#C7DBE7] bg-white px-3.5 text-[9px] font-bold text-[#0066B3] shadow-sm transition hover:border-[#94BAD0] hover:bg-[#F0F7FB] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#C7DBE7] bg-white px-3.5 text-[9px] font-bold text-[#00529C] shadow-sm transition hover:border-[#94BAD0] hover:bg-[#F0F7FB] disabled:cursor-not-allowed disabled:opacity-50"
                 >
 
                   <FileDown
@@ -2707,7 +2707,7 @@ function exportPettyCashPDF() {
                       )
                     }
                     placeholder="Cari nomor, keterangan, kategori, referensi..."
-                    className="h-10 w-full rounded-lg border border-[#C9DCE8] bg-white pl-9 pr-3 text-[10px] font-medium text-[#344B5B] outline-none transition placeholder:text-[#9AAAB5] focus:border-[#0066B3] focus:ring-4 focus:ring-[#0066B3]/10"
+                    className="h-10 w-full rounded-lg border border-[#C9DCE8] bg-white pl-9 pr-3 text-[10px] font-medium text-[#344B5B] outline-none transition placeholder:text-[#9AAAB5] focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                   />
 
                 </div>
@@ -2725,7 +2725,7 @@ function exportPettyCashPDF() {
                         e.target.value
                       )
                     }
-                    className="h-10 w-full appearance-none rounded-lg border border-[#C9DCE8] bg-white px-3 pr-8 text-[10px] font-semibold text-[#4D6271] outline-none transition focus:border-[#0066B3] focus:ring-4 focus:ring-[#0066B3]/10"
+                    className="h-10 w-full appearance-none rounded-lg border border-[#C9DCE8] bg-white px-3 pr-8 text-[10px] font-semibold text-[#4D6271] outline-none transition focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                   >
 
                     <option value="ALL">
@@ -2772,7 +2772,7 @@ function exportPettyCashPDF() {
                         e.target.value
                       )
                     }
-                    className="h-10 w-full rounded-lg border border-[#C9DCE8] bg-white pl-9 pr-2 text-[10px] font-medium text-[#4D6271] outline-none transition focus:border-[#0066B3] focus:ring-4 focus:ring-[#0066B3]/10"
+                    className="h-10 w-full rounded-lg border border-[#C9DCE8] bg-white pl-9 pr-2 text-[10px] font-medium text-[#4D6271] outline-none transition focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                   />
 
                 </div>
@@ -2796,7 +2796,7 @@ function exportPettyCashPDF() {
                         e.target.value
                       )
                     }
-                    className="h-10 w-full rounded-lg border border-[#C9DCE8] bg-white pl-9 pr-2 text-[10px] font-medium text-[#4D6271] outline-none transition focus:border-[#0066B3] focus:ring-4 focus:ring-[#0066B3]/10"
+                    className="h-10 w-full rounded-lg border border-[#C9DCE8] bg-white pl-9 pr-2 text-[10px] font-medium text-[#4D6271] outline-none transition focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                   />
 
                 </div>
@@ -2815,7 +2815,7 @@ function exportPettyCashPDF() {
                     onClick={
                       resetFilter
                     }
-                    className="h-10 rounded-lg border border-[#C7DBE7] bg-white px-3.5 text-[9px] font-bold text-[#0066B3] transition hover:bg-[#EAF5FB]"
+                    className="h-10 rounded-lg border border-[#C7DBE7] bg-white px-3.5 text-[9px] font-bold text-[#00529C] transition hover:bg-[#EAF5FB]"
                   >
                     Reset Filter
                   </button>
@@ -2835,7 +2835,7 @@ function exportPettyCashPDF() {
 
             <div className="flex items-center gap-2.5">
 
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#CFE0E9] bg-white text-[#0066B3] shadow-sm">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#CFE0E9] bg-white text-[#00529C] shadow-sm">
 
                 {selectedLocationId ===
                 null ? (
@@ -2866,7 +2866,7 @@ function exportPettyCashPDF() {
 
                 Menampilkan{" "}
 
-                <span className="font-extrabold text-[#0066B3]">
+                <span className="font-extrabold text-[#00529C]">
                   {filteredTransactions.length}
                 </span>{" "}
 
@@ -2884,7 +2884,7 @@ function exportPettyCashPDF() {
                 "ALL" ||
               tanggalMulai ||
               tanggalSelesai ? (
-                <span className="rounded-full bg-[#EAF5FB] px-2.5 py-1 text-[8px] font-bold text-[#0066B3]">
+                <span className="rounded-full bg-[#EAF5FB] px-2.5 py-1 text-[8px] font-bold text-[#00529C]">
                   Filter aktif
                 </span>
               ) : null}
@@ -2964,7 +2964,7 @@ function exportPettyCashPDF() {
 
                         <div className="relative">
 
-                          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EAF4F9] text-[#0066B3]">
+                          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EAF4F9] text-[#00529C]">
                             <RefreshCw
                               size={21}
                               className="animate-spin"
@@ -3021,7 +3021,7 @@ function exportPettyCashPDF() {
                             onClick={
                               resetFilter
                             }
-                            className="mt-4 rounded-lg border border-[#C7DBE7] bg-white px-3.5 py-2 text-[9px] font-bold text-[#0066B3] shadow-sm transition hover:bg-[#EAF5FB]"
+                            className="mt-4 rounded-lg border border-[#C7DBE7] bg-white px-3.5 py-2 text-[9px] font-bold text-[#00529C] shadow-sm transition hover:bg-[#EAF5FB]"
                           >
                             Hapus Filter
                           </button>
@@ -3140,7 +3140,7 @@ function exportPettyCashPDF() {
 
                           <td className="px-4 py-4 align-middle">
 
-                            <div className="text-[10px] font-extrabold text-[#0066B3]">
+                            <div className="text-[10px] font-extrabold text-[#00529C]">
                               {transaction.number ||
                                 "-"}
                             </div>
@@ -3175,7 +3175,7 @@ function exportPettyCashPDF() {
                                 className={
                                   "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border shadow-sm " +
                                   (moneyIn
-                                    ? "border-[#CBE4EF] bg-[#EFF8FC] text-[#0066B3]"
+                                    ? "border-[#CBE4EF] bg-[#EFF8FC] text-[#00529C]"
                                     : "border-[#E6D8D8] bg-[#FFF7F7] text-[#C62828]")
                                 }
                               >
@@ -3249,7 +3249,7 @@ function exportPettyCashPDF() {
 
                             {transaction.category ===
                             "LALAMOVE" ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#C7DDE9] bg-[#EFF7FB] px-2.5 py-1.5 text-[8px] font-extrabold tracking-wide text-[#0066B3]">
+                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#C7DDE9] bg-[#EFF7FB] px-2.5 py-1.5 text-[8px] font-extrabold tracking-wide text-[#00529C]">
 
                                 <Truck size={10} />
 
@@ -3314,7 +3314,7 @@ function exportPettyCashPDF() {
                                     "text-[10px] font-extrabold tabular-nums " +
                                     (transaction.status ===
                                     "APPROVED"
-                                      ? "text-[#087A56]"
+                                      ? "text-[#006BBA]"
                                       : "text-[#A7B6C0]")
                                   }
                                 >
@@ -3405,7 +3405,7 @@ function exportPettyCashPDF() {
                                       transaction
                                     )
                                   }
-                                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0066B3] px-2.5 text-[8px] font-extrabold text-white shadow-sm transition hover:bg-[#005596] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00529C] px-2.5 text-[8px] font-extrabold text-white shadow-sm transition hover:bg-[#005596] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
                                 >
 
                                   {isApproving ? (
@@ -3487,7 +3487,7 @@ function exportPettyCashPDF() {
 
                 <div className="flex items-center gap-2">
 
-                  <div className="h-2 w-2 rounded-full bg-[#0066B3]" />
+                  <div className="h-2 w-2 rounded-full bg-[#00529C]" />
 
                   <span className="text-[8px] font-medium text-[#718B9C]">
                     Data transaksi berdasarkan tanggal transaksi
@@ -3502,7 +3502,7 @@ function exportPettyCashPDF() {
                 <div className="flex items-center gap-4 text-[8px]">
 
                   <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-[#087A56]" />
+                    <span className="h-2 w-2 rounded-full bg-[#006BBA]" />
                     <span className="font-semibold text-[#718B9C]">
                       Masuk
                     </span>
@@ -3516,7 +3516,7 @@ function exportPettyCashPDF() {
                   </span>
 
                   <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-[#0066B3]" />
+                    <span className="h-2 w-2 rounded-full bg-[#00529C]" />
                     <span className="font-semibold text-[#718B9C]">
                       Pending
                     </span>
@@ -3554,13 +3554,13 @@ function exportPettyCashPDF() {
 
             <div className="relative overflow-hidden border-b border-[#D9E6ED] bg-gradient-to-br from-[#F1F8FC] via-white to-[#F8FBFD] px-6 py-5">
 
-              <div className="absolute -right-10 -top-16 h-40 w-40 rounded-full bg-[#0066B3]/[0.04]" />
+              <div className="absolute -right-10 -top-16 h-40 w-40 rounded-full bg-[#00529C]/[0.04]" />
 
               <div className="relative flex items-center justify-between">
 
                 <div className="flex items-center gap-3">
 
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF5FB] text-[#0066B3] shadow-sm">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF5FB] text-[#00529C] shadow-sm">
                     <ArrowUpRight size={19} />
                   </div>
 
@@ -3607,7 +3607,7 @@ function exportPettyCashPDF() {
 
                 <div className="flex items-center gap-3 rounded-xl border border-[#D2E1E9] bg-[#F5F9FC] px-3.5 py-3">
 
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[#0066B3] shadow-sm">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[#00529C] shadow-sm">
 
                     {selectedLocationId ===
                     null ? (
@@ -3644,13 +3644,13 @@ function exportPettyCashPDF() {
 
                 <div className="flex items-center gap-3 rounded-xl border border-[#CBE0EB] bg-[#F0F8FC] px-3.5 py-3">
 
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[#0066B3] shadow-sm">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[#00529C] shadow-sm">
                     <ArrowUpRight size={15} />
                   </div>
 
                   <div>
 
-                    <div className="text-[10px] font-extrabold text-[#0066B3]">
+                    <div className="text-[10px] font-extrabold text-[#00529C]">
                       KELUAR
                     </div>
 
@@ -3683,7 +3683,7 @@ function exportPettyCashPDF() {
                         e.target.value
                       )
                     }
-                    className="h-11 w-full appearance-none rounded-xl border border-[#D0E0E8] bg-white px-3.5 pr-10 text-[10px] font-semibold text-[#465B69] outline-none transition focus:border-[#0066B3] focus:ring-4 focus:ring-[#0066B3]/10"
+                    className="h-11 w-full appearance-none rounded-xl border border-[#D0E0E8] bg-white px-3.5 pr-10 text-[10px] font-semibold text-[#465B69] outline-none transition focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                   >
 
                     <option value="LALAMOVE">
@@ -3759,7 +3759,7 @@ function exportPettyCashPDF() {
                       );
                     }}
                     placeholder="0"
-                    className="h-12 w-full rounded-xl border border-[#D0E0E8] bg-white pl-10 pr-4 text-[17px] font-extrabold tracking-tight text-[#123B5D] outline-none transition placeholder:text-[#C2CDD4] focus:border-[#0066B3] focus:ring-4 focus:ring-[#0066B3]/10"
+                    className="h-12 w-full rounded-xl border border-[#D0E0E8] bg-white pl-10 pr-4 text-[17px] font-extrabold tracking-tight text-[#123B5D] outline-none transition placeholder:text-[#C2CDD4] focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                   />
 
                 </div>
@@ -3767,7 +3767,7 @@ function exportPettyCashPDF() {
                 {manualAmount && (
                   <div className="mt-1.5 text-[8px] font-medium text-[#8297A4]">
                     Nilai transaksi:{" "}
-                    <span className="font-bold text-[#0066B3]">
+                    <span className="font-bold text-[#00529C]">
                       Rp{" "}
                       {formatRupiah(
                         parseRupiah(
@@ -3807,7 +3807,7 @@ function exportPettyCashPDF() {
                           e.target.value
                         )
                       }
-                      className="h-11 w-full rounded-xl border border-[#D0E0E8] bg-white pl-10 pr-3 text-[10px] font-semibold text-[#465B69] outline-none transition focus:border-[#0066B3] focus:ring-4 focus:ring-[#0066B3]/10"
+                      className="h-11 w-full rounded-xl border border-[#D0E0E8] bg-white pl-10 pr-3 text-[10px] font-semibold text-[#465B69] outline-none transition focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                     />
 
                   </div>
@@ -3835,7 +3835,7 @@ function exportPettyCashPDF() {
                       )
                     }
                     placeholder="Contoh: LLMV-001"
-                    className="h-11 w-full rounded-xl border border-[#D0E0E8] bg-white px-3.5 text-[10px] font-medium text-[#465B69] outline-none transition focus:border-[#0066B3] focus:ring-4 focus:ring-[#0066B3]/10"
+                    className="h-11 w-full rounded-xl border border-[#D0E0E8] bg-white px-3.5 text-[10px] font-medium text-[#465B69] outline-none transition focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                   />
 
                 </div>
@@ -3866,7 +3866,7 @@ function exportPettyCashPDF() {
                       ? "Contoh: Ongkir Lalamove pengiriman barang..."
                       : "Keterangan transaksi..."
                   }
-                  className="w-full resize-none rounded-xl border border-[#D0E0E8] bg-white px-3.5 py-3 text-[10px] font-medium leading-5 text-[#465B69] outline-none transition placeholder:text-[#A3B1BA] focus:border-[#0066B3] focus:ring-4 focus:ring-[#0066B3]/10"
+                  className="w-full resize-none rounded-xl border border-[#D0E0E8] bg-white px-3.5 py-3 text-[10px] font-medium leading-5 text-[#465B69] outline-none transition placeholder:text-[#A3B1BA] focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                 />
 
               </div>
@@ -3875,13 +3875,13 @@ function exportPettyCashPDF() {
 
               <div className="flex gap-3 rounded-xl border border-[#CDE1EC] bg-gradient-to-r from-[#EFF8FC] to-[#F8FBFD] px-4 py-3.5">
 
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[#0066B3] shadow-sm">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[#00529C] shadow-sm">
                   <Clock3 size={13} />
                 </div>
 
                 <div className="text-[9px] leading-5 text-[#637B8B]">
 
-                  <span className="font-extrabold text-[#0066B3]">
+                  <span className="font-extrabold text-[#00529C]">
                     Menunggu approval.
                   </span>{" "}
                   Transaksi ini akan dibuat sebagai{" "}
@@ -3924,7 +3924,7 @@ function exportPettyCashPDF() {
                 onClick={
                   submitManualTransaction
                 }
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#0066B3] to-[#087CC1] px-5 text-[9px] font-extrabold text-white shadow-[0_7px_18px_rgba(0,102,179,0.18)] transition hover:shadow-[0_9px_22px_rgba(0,102,179,0.24)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00529C] to-[#087CC1] px-5 text-[9px] font-extrabold text-white shadow-[0_7px_18px_rgba(0,102,179,0.18)] transition hover:shadow-[0_9px_22px_rgba(0,102,179,0.24)] disabled:cursor-not-allowed disabled:opacity-50"
               >
 
                 {savingManual ? (
@@ -3974,13 +3974,13 @@ function exportPettyCashPDF() {
 
             <div className="relative overflow-hidden border-b border-[#D9E6ED] bg-gradient-to-br from-[#EFFAF5] via-white to-[#F8FCFA] px-6 py-5">
 
-              <div className="absolute -right-10 -top-16 h-40 w-40 rounded-full bg-[#087A56]/[0.04]" />
+              <div className="absolute -right-10 -top-16 h-40 w-40 rounded-full bg-[#006BBA]/[0.04]" />
 
               <div className="relative flex items-center justify-between">
 
                 <div className="flex items-center gap-3">
 
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF8F1] text-[#087A56] shadow-sm">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF8F1] text-[#006BBA] shadow-sm">
                     <Wallet size={19} />
                   </div>
 
@@ -4029,7 +4029,7 @@ function exportPettyCashPDF() {
 
                 <div className="flex items-center gap-3 rounded-xl border border-[#D2E1E9] bg-[#F5F9FC] px-3.5 py-3">
 
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[#087A56] shadow-sm">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[#006BBA] shadow-sm">
 
                     {selectedLocationId ===
                     null ? (
@@ -4094,7 +4094,7 @@ function exportPettyCashPDF() {
                       );
                     }}
                     placeholder="0"
-                    className="h-12 w-full rounded-xl border border-[#D0E0E8] bg-white pl-10 pr-4 text-[17px] font-extrabold tracking-tight text-[#123B5D] outline-none transition placeholder:text-[#C2CDD4] focus:border-[#087A56] focus:ring-4 focus:ring-[#087A56]/10"
+                    className="h-12 w-full rounded-xl border border-[#D0E0E8] bg-white pl-10 pr-4 text-[17px] font-extrabold tracking-tight text-[#123B5D] outline-none transition placeholder:text-[#C2CDD4] focus:border-[#006BBA] focus:ring-4 focus:ring-[#006BBA]/10"
                   />
 
                 </div>
@@ -4102,7 +4102,7 @@ function exportPettyCashPDF() {
                 {topUpAmount && (
                   <div className="mt-1.5 text-[8px] font-medium text-[#8297A4]">
                     Nilai top up:{" "}
-                    <span className="font-bold text-[#087A56]">
+                    <span className="font-bold text-[#006BBA]">
                       Rp{" "}
                       {formatRupiah(
                         parseRupiah(
@@ -4142,7 +4142,7 @@ function exportPettyCashPDF() {
                           e.target.value
                         )
                       }
-                      className="h-11 w-full rounded-xl border border-[#D0E0E8] bg-white pl-10 pr-3 text-[10px] font-semibold text-[#465B69] outline-none transition focus:border-[#087A56] focus:ring-4 focus:ring-[#087A56]/10"
+                      className="h-11 w-full rounded-xl border border-[#D0E0E8] bg-white pl-10 pr-3 text-[10px] font-semibold text-[#465B69] outline-none transition focus:border-[#006BBA] focus:ring-4 focus:ring-[#006BBA]/10"
                     />
 
                   </div>
@@ -4170,7 +4170,7 @@ function exportPettyCashPDF() {
                       )
                     }
                     placeholder="Contoh: TOPUP-001"
-                    className="h-11 w-full rounded-xl border border-[#D0E0E8] bg-white px-3.5 text-[10px] font-medium text-[#465B69] outline-none transition focus:border-[#087A56] focus:ring-4 focus:ring-[#087A56]/10"
+                    className="h-11 w-full rounded-xl border border-[#D0E0E8] bg-white px-3.5 text-[10px] font-medium text-[#465B69] outline-none transition focus:border-[#006BBA] focus:ring-4 focus:ring-[#006BBA]/10"
                   />
 
                 </div>
@@ -4196,7 +4196,7 @@ function exportPettyCashPDF() {
                   }
                   rows={3}
                   placeholder="Keterangan Top Up..."
-                  className="w-full resize-none rounded-xl border border-[#D0E0E8] bg-white px-3.5 py-3 text-[10px] font-medium leading-5 text-[#465B69] outline-none transition placeholder:text-[#A3B1BA] focus:border-[#087A56] focus:ring-4 focus:ring-[#087A56]/10"
+                  className="w-full resize-none rounded-xl border border-[#D0E0E8] bg-white px-3.5 py-3 text-[10px] font-medium leading-5 text-[#465B69] outline-none transition placeholder:text-[#A3B1BA] focus:border-[#006BBA] focus:ring-4 focus:ring-[#006BBA]/10"
                 />
 
               </div>
@@ -4205,17 +4205,17 @@ function exportPettyCashPDF() {
 
               <div className="flex gap-3 rounded-xl border border-[#CDE7DB] bg-gradient-to-r from-[#EFFBF5] to-[#F8FCFA] px-4 py-3.5">
 
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[#087A56] shadow-sm">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[#006BBA] shadow-sm">
                   <Check size={13} />
                 </div>
 
                 <div className="text-[9px] leading-5 text-[#637B70]">
 
-                  <span className="font-extrabold text-[#087A56]">
+                  <span className="font-extrabold text-[#006BBA]">
                     Top Up langsung approved.
                   </span>{" "}
                   Transaksi akan dibuat sebagai{" "}
-                  <span className="font-bold text-[#087A56]">
+                  <span className="font-bold text-[#006BBA]">
                     IN / APPROVED
                   </span>{" "}
                   dan menambah saldo rekening Petty Cash.
@@ -4254,7 +4254,7 @@ function exportPettyCashPDF() {
                 onClick={
                   submitTopUp
                 }
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#087A56] to-[#0B966B] px-5 text-[9px] font-extrabold text-white shadow-[0_7px_18px_rgba(8,122,86,0.18)] transition hover:shadow-[0_9px_22px_rgba(8,122,86,0.24)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#006BBA] to-[#0088D1] px-5 text-[9px] font-extrabold text-white shadow-[0_7px_18px_rgba(8,122,86,0.18)] transition hover:shadow-[0_9px_22px_rgba(8,122,86,0.24)] disabled:cursor-not-allowed disabled:opacity-50"
               >
 
                 {savingTopUp ? (

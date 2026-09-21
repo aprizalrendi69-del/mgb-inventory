@@ -24,38 +24,34 @@ async function getCurrentUser() {
   // DATABASE SESSION
   // ===================================================
 
-  const dbSession =
-    await prisma.session.findUnique({
-      where: {
-        token: sessionCookie.value,
-      },
+  const dbSession = await prisma.session.findUnique({
+    where: {
+      token: sessionCookie.value,
+    },
 
-      include: {
-        user: {
-          select: {
-            id: true,
-            fullname: true,
-            role: true,
-            active: true,
-            outletId: true,
+    include: {
+      user: {
+        select: {
+          id: true,
+          fullname: true,
+          role: true,
+          active: true,
+          outletId: true,
 
-            outlet: {
-              select: {
-                id: true,
-                code: true,
-                name: true,
-              },
+          outlet: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
             },
           },
         },
       },
-    });
+    },
+  });
 
   if (dbSession) {
-    if (
-      dbSession.expiresAt <
-      new Date()
-    ) {
+    if (dbSession.expiresAt < new Date()) {
       return null;
     }
 
@@ -63,18 +59,14 @@ async function getCurrentUser() {
       return null;
     }
 
-    userId =
-      dbSession.user.id;
+    userId = dbSession.user.id;
   } else {
     // =================================================
     // JSON SESSION
     // =================================================
 
     try {
-      const parsed =
-        JSON.parse(
-          sessionCookie.value
-        );
+      const parsed = JSON.parse(sessionCookie.value);
 
       userId = Number(
         parsed?.user?.id ??
@@ -97,28 +89,27 @@ async function getCurrentUser() {
   // USER
   // ===================================================
 
-  const user =
-    await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
+  const user = await prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
 
-      select: {
-        id: true,
-        fullname: true,
-        role: true,
-        active: true,
-        outletId: true,
+    select: {
+      id: true,
+      fullname: true,
+      role: true,
+      active: true,
+      outletId: true,
 
-        outlet: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
+      outlet: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
         },
       },
-    });
+    },
+  });
 
   if (!user) {
     return null;
@@ -134,28 +125,8 @@ async function getCurrentUser() {
 // =====================================================
 // ROLE ACCESS
 // =====================================================
-//
-// ADMIN
-// -> Admin pusat
-// -> boleh semua outlet
-//
-// MANAGER
-// -> boleh semua outlet
-//
-// PURCHASING
-// -> boleh semua Purchase Outlet
-// -> tidak harus memiliki outletId
-//
-// OUTLET_ADMIN
-// -> hanya outlet sendiri
-//
-// ROLE LAIN
-// -> tidak boleh akses endpoint
-// =====================================================
 
-function canAccessPurchase(
-  role: Role
-) {
+function canAccessPurchase(role: Role) {
   return (
     role === Role.ADMIN ||
     role === Role.MANAGER ||
@@ -168,9 +139,7 @@ function canAccessPurchase(
 // CENTRAL ROLE
 // =====================================================
 
-function isCentralPurchaseRole(
-  role: Role
-) {
+function isCentralPurchaseRole(role: Role) {
   return (
     role === Role.ADMIN ||
     role === Role.MANAGER ||
@@ -186,25 +155,15 @@ function getOutletFilter(user: {
   role: Role;
   outletId: number | null;
 }) {
-  // OUTLET ADMIN
-  // hanya boleh melihat outlet miliknya
-
-  if (
-    user.role ===
-    Role.OUTLET_ADMIN
-  ) {
+  if (user.role === Role.OUTLET_ADMIN) {
     if (!user.outletId) {
       return null;
     }
 
     return {
-      outletId:
-        user.outletId,
+      outletId: user.outletId,
     };
   }
-
-  // ADMIN / MANAGER / PURCHASING
-  // boleh semua outlet
 
   return {};
 }
@@ -213,9 +172,7 @@ function getOutletFilter(user: {
 // VALIDATE PURCHASE ID
 // =====================================================
 
-function getPurchaseId(
-  value: string
-) {
+function getPurchaseId(value: string) {
   const id = Number(value);
 
   if (
@@ -232,9 +189,7 @@ function getPurchaseId(
 // VALIDATE OUTLET
 // =====================================================
 
-async function validateOutlet(
-  outletId: number
-) {
+async function validateOutlet(outletId: number) {
   if (
     !Number.isInteger(outletId) ||
     outletId <= 0
@@ -242,18 +197,17 @@ async function validateOutlet(
     return null;
   }
 
-  const outlet =
-    await prisma.outlet.findUnique({
-      where: {
-        id: outletId,
-      },
+  const outlet = await prisma.outlet.findUnique({
+    where: {
+      id: outletId,
+    },
 
-      select: {
-        id: true,
-        code: true,
-        name: true,
-      },
-    });
+    select: {
+      id: true,
+      code: true,
+      name: true,
+    },
+  });
 
   return outlet;
 }
@@ -262,18 +216,22 @@ async function validateOutlet(
 // GET LAST PURCHASE PRICE
 // =====================================================
 //
-// Mencari harga pembelian terakhir untuk kombinasi:
+// Mencari harga pembelian terakhir untuk:
 //
 // outletId + barangId
 //
-// HANYA transaksi:
+// Tidak mengambil Purchase saat ini.
+//
+// Hanya:
 //
 // APPROVED
 // RECEIVED
 //
-// Purchase saat ini dikecualikan.
-//
 // Harga harus > 0.
+//
+// Digunakan untuk:
+// - informasi perubahan harga
+// - fallback effective price
 //
 // =====================================================
 
@@ -283,73 +241,65 @@ async function getLastPurchasePrice(
   excludePurchaseId: number
 ) {
   const purchases =
-    await prisma.outletPurchase.findMany(
-      {
-        where: {
-          outletId,
+    await prisma.outletPurchase.findMany({
+      where: {
+        outletId,
 
-          id: {
-            not: excludePurchaseId,
-          },
-
-          status: {
-            in: [
-              "APPROVED",
-              "RECEIVED",
-            ],
-          },
-
-          items: {
-            some: {
-              barangId,
-            },
-          },
+        id: {
+          not: excludePurchaseId,
         },
 
-        select: {
-          id: true,
-          number: true,
-          purchaseDate: true,
-
-          items: {
-            where: {
-              barangId,
-            },
-
-            select: {
-              barangId: true,
-              price: true,
-            },
-          },
+        status: {
+          in: [
+            "APPROVED",
+            "RECEIVED",
+          ],
         },
 
-        orderBy: [
-          {
-            purchaseDate:
-              "desc",
+        items: {
+          some: {
+            barangId,
           },
-          {
-            id: "desc",
+        },
+      },
+
+      select: {
+        id: true,
+        number: true,
+        purchaseDate: true,
+
+        items: {
+          where: {
+            barangId,
           },
-        ],
 
-        /*
-         * Tidak perlu mengambil seluruh histori.
-         * Beberapa transaksi terbaru cukup untuk
-         * menemukan harga valid pertama.
-         */
-        take: 20,
-      }
-    );
+          select: {
+            barangId: true,
+            price: true,
+          },
+        },
+      },
 
-  for (
-    const purchase of purchases
-  ) {
-    for (
-      const item of purchase.items
-    ) {
-      const price =
-        Number(item.price);
+      orderBy: [
+        {
+          purchaseDate: "desc",
+        },
+        {
+          id: "desc",
+        },
+      ],
+
+      /*
+       * Ambil beberapa transaksi terakhir.
+       * Kita tetap melakukan validasi harga > 0
+       * sebelum menentukan histori yang digunakan.
+       */
+      take: 20,
+    });
+
+  for (const purchase of purchases) {
+    for (const item of purchase.items) {
+      const price = Number(item.price);
 
       if (
         Number.isFinite(price) &&
@@ -372,6 +322,102 @@ async function getLastPurchasePrice(
   }
 
   return null;
+}
+
+// =====================================================
+// PRICE CHANGE CALCULATION
+// =====================================================
+
+function calculatePriceChange(
+  currentPrice: number,
+  lastPurchasePrice: number | null
+) {
+  const current =
+    Number(currentPrice);
+
+  const previous =
+    lastPurchasePrice === null
+      ? null
+      : Number(lastPurchasePrice);
+
+  if (
+    !Number.isFinite(current) ||
+    current <= 0
+  ) {
+    return {
+      hasPriceChange: false,
+
+      priceChange: null,
+
+      priceChangePercent: null,
+
+      priceChangeDirection:
+        "NO_CURRENT_PRICE" as const,
+    };
+  }
+
+  if (
+    previous === null ||
+    !Number.isFinite(previous) ||
+    previous <= 0
+  ) {
+    return {
+      hasPriceChange: false,
+
+      priceChange: null,
+
+      priceChangePercent: null,
+
+      priceChangeDirection:
+        "NO_HISTORY" as const,
+    };
+  }
+
+  const difference =
+    current - previous;
+
+  const percentage =
+    (difference / previous) *
+    100;
+
+  if (difference > 0) {
+    return {
+      hasPriceChange: true,
+
+      priceChange: difference,
+
+      priceChangePercent:
+        percentage,
+
+      priceChangeDirection:
+        "INCREASE" as const,
+    };
+  }
+
+  if (difference < 0) {
+    return {
+      hasPriceChange: true,
+
+      priceChange: difference,
+
+      priceChangePercent:
+        percentage,
+
+      priceChangeDirection:
+        "DECREASE" as const,
+    };
+  }
+
+  return {
+    hasPriceChange: false,
+
+    priceChange: 0,
+
+    priceChangePercent: 0,
+
+    priceChangeDirection:
+      "UNCHANGED" as const,
+  };
 }
 
 // =====================================================
@@ -398,8 +444,7 @@ export async function GET(
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Tidak login",
+          message: "Tidak login",
         },
         {
           status: 401,
@@ -499,30 +544,28 @@ export async function GET(
     // =================================================
 
     const purchase =
-      await prisma.outletPurchase.findFirst(
-        {
-          where: {
-            id: purchaseId,
-            ...outletFilter,
-          },
+      await prisma.outletPurchase.findFirst({
+        where: {
+          id: purchaseId,
+          ...outletFilter,
+        },
 
-          include: {
-            outlet: true,
+        include: {
+          outlet: true,
 
-            supplier: true,
+          supplier: true,
 
-            items: {
-              include: {
-                barang: true,
-              },
+          items: {
+            include: {
+              barang: true,
+            },
 
-              orderBy: {
-                id: "asc",
-              },
+            orderBy: {
+              id: "asc",
             },
           },
-        }
-      );
+        },
+      });
 
     if (!purchase) {
       return NextResponse.json(
@@ -538,15 +581,24 @@ export async function GET(
     }
 
     // =================================================
-    // HITUNG HARGA EFEKTIF
+    // HITUNG HARGA
     // =================================================
     //
-    // PRIORITAS:
+    // PENTING:
     //
-    // 1. Harga item PO saat ini
-    // 2. Harga pembelian outlet terakhir
-    // 3. Barang.purchasePrice Master Central
-    // 4. 0
+    // Harga histori sekarang SELALU dicari.
+    //
+    // Sebelumnya histori hanya dicari kalau
+    // current price kosong/0.
+    //
+    // Sekarang histori digunakan juga untuk:
+    //
+    // - deteksi harga naik
+    // - deteksi harga turun
+    // - menampilkan harga terakhir
+    // - menghitung persentase perubahan
+    //
+    // Tetapi price database TIDAK diubah.
     //
     // =================================================
 
@@ -569,19 +621,12 @@ export async function GET(
             // HARGA HISTORI
             // =========================================
 
-            let lastPurchase =
-              null;
-
-            if (
-              !validCurrentPrice
-            ) {
-              lastPurchase =
-                await getLastPurchasePrice(
-                  purchase.outletId,
-                  item.barangId,
-                  purchase.id
-                );
-            }
+            const lastPurchase =
+              await getLastPurchasePrice(
+                purchase.outletId,
+                item.barangId,
+                purchase.id
+              );
 
             // =========================================
             // HARGA MASTER CENTRAL
@@ -604,8 +649,7 @@ export async function GET(
             // HARGA EFEKTIF
             // =========================================
 
-            let effectivePrice =
-              0;
+            let effectivePrice = 0;
 
             let priceSource =
               "NONE";
@@ -637,7 +681,18 @@ export async function GET(
             }
 
             // =========================================
-            // SUBTOTAL
+            // PRICE CHANGE
+            // =========================================
+
+            const priceChange =
+              calculatePriceChange(
+                currentPrice,
+                lastPurchase?.price ??
+                  null
+              );
+
+            // =========================================
+            // QTY
             // =========================================
 
             const qty =
@@ -650,6 +705,10 @@ export async function GET(
                 qty
               ) &&
               qty >= 0;
+
+            // =========================================
+            // SUBTOTAL
+            // =========================================
 
             const effectiveSubtotal =
               validQty
@@ -665,25 +724,20 @@ export async function GET(
               ...item,
 
               /*
-               * PENTING:
+               * Harga yang disimpan pada
+               * Purchase Outlet tetap menjadi
+               * harga utama.
                *
-               * price dikembalikan sebagai harga
-               * efektif supaya frontend lama yang
-               * hanya membaca item.price langsung
-               * tetap bisa menampilkan harga.
-               *
-               * Kalau harga PO memang sudah ada,
-               * nilainya tidak diubah.
-               *
-               * Kalau 0/kosong,
-               * otomatis menggunakan histori/master.
+               * Kalau harga PO 0/kosong,
+               * frontend lama tetap mendapatkan
+               * harga efektif sebagai fallback.
                */
               price:
                 effectivePrice,
 
               /*
                * Harga asli yang tersimpan
-               * di PO.
+               * di database.
                */
               originalPrice:
                 Number.isFinite(
@@ -698,7 +752,7 @@ export async function GET(
               effectivePrice,
 
               /*
-               * Source harga.
+               * Source harga efektif.
                */
               priceSource,
 
@@ -726,6 +780,21 @@ export async function GET(
                 null,
 
               /*
+               * Informasi perubahan harga.
+               */
+              hasPriceChange:
+                priceChange.hasPriceChange,
+
+              priceChange:
+                priceChange.priceChange,
+
+              priceChangePercent:
+                priceChange.priceChangePercent,
+
+              priceChangeDirection:
+                priceChange.priceChangeDirection,
+
+              /*
                * Harga master central.
                */
               masterPurchasePrice:
@@ -745,8 +814,7 @@ export async function GET(
                 ...item.barang,
 
                 /*
-                 * Alias harga pembelian
-                 * supaya frontend mudah.
+                 * Harga master central.
                  */
                 purchasePrice:
                   validMasterPrice
@@ -755,8 +823,37 @@ export async function GET(
                         ?.purchasePrice ??
                       0,
 
+                /*
+                 * Alias harga efektif.
+                 */
                 hargaPembelian:
                   effectivePrice,
+
+                /*
+                 * Harga histori.
+                 */
+                lastPurchasePrice:
+                  lastPurchase?.price ??
+                  null,
+
+                /*
+                 * Informasi perubahan
+                 * pada object barang juga,
+                 * agar frontend yang membaca
+                 * item.barang tetap bisa
+                 * menggunakan data ini.
+                 */
+                priceChange:
+                  priceChange.priceChange,
+
+                priceChangePercent:
+                  priceChange.priceChangePercent,
+
+                priceChangeDirection:
+                  priceChange.priceChangeDirection,
+
+                hasPriceChange:
+                  priceChange.hasPriceChange,
               },
             };
           }
@@ -765,13 +862,6 @@ export async function GET(
 
     // =================================================
     // TOTAL EFEKTIF
-    // =================================================
-    //
-    // Jangan mengubah total database.
-    //
-    // Hanya memberikan total efektif tambahan
-    // untuk kebutuhan tampilan.
-    //
     // =================================================
 
     const effectiveTotal =
@@ -795,6 +885,65 @@ export async function GET(
       );
 
     // =================================================
+    // PRICE CHANGE SUMMARY
+    // =================================================
+
+    const priceChangeSummary =
+      formattedItems.reduce(
+        (
+          summary,
+          item
+        ) => {
+          const direction =
+            item.priceChangeDirection;
+
+          if (
+            direction ===
+            "INCREASE"
+          ) {
+            summary.increaseCount +=
+              1;
+
+            summary.increaseAmount +=
+              Math.abs(
+                Number(
+                  item.priceChange ??
+                    0
+                )
+              );
+          }
+
+          if (
+            direction ===
+            "DECREASE"
+          ) {
+            summary.decreaseCount +=
+              1;
+
+            summary.decreaseAmount +=
+              Math.abs(
+                Number(
+                  item.priceChange ??
+                    0
+                )
+              );
+          }
+
+          return summary;
+        },
+        {
+          increaseCount: 0,
+          decreaseCount: 0,
+          increaseAmount: 0,
+          decreaseAmount: 0,
+        }
+      );
+
+    const changedCount =
+      priceChangeSummary.increaseCount +
+      priceChangeSummary.decreaseCount;
+
+    // =================================================
     // RESPONSE
     // =================================================
 
@@ -805,16 +954,15 @@ export async function GET(
         ...purchase,
 
         /*
-         * Items sudah diperkaya dengan
-         * harga efektif.
+         * Items diperkaya.
          */
         items:
           formattedItems,
 
         /*
-         * Total asli dari database.
+         * Total asli database.
          *
-         * Tidak diubah.
+         * TIDAK DIUBAH.
          */
         originalTotal:
           Number(
@@ -822,12 +970,28 @@ export async function GET(
           ),
 
         /*
-         * Total hasil harga efektif.
-         *
-         * Dipakai hanya jika frontend
-         * membutuhkan fallback.
+         * Total efektif.
          */
         effectiveTotal,
+
+        /*
+         * Ringkasan perubahan harga.
+         */
+        priceChangeSummary: {
+          changedCount,
+
+          increaseCount:
+            priceChangeSummary.increaseCount,
+
+          decreaseCount:
+            priceChangeSummary.decreaseCount,
+
+          increaseAmount:
+            priceChangeSummary.increaseAmount,
+
+          decreaseAmount:
+            priceChangeSummary.decreaseAmount,
+        },
       },
 
       access: {
@@ -844,25 +1008,47 @@ export async function GET(
       },
 
       pricePolicy: {
-        priority:
-          [
-            "CURRENT_PURCHASE",
-            "LAST_OUTLET_PURCHASE",
-            "CENTRAL_MASTER_PURCHASE_PRICE",
-            "NONE",
-          ],
+        priority: [
+          "CURRENT_PURCHASE",
+          "LAST_OUTLET_PURCHASE",
+          "CENTRAL_MASTER_PURCHASE_PRICE",
+          "NONE",
+        ],
 
         description:
-          "Harga item menggunakan harga Purchase saat ini jika tersedia. Jika kosong/0, menggunakan harga pembelian outlet terakhir dari Purchase APPROVED/RECEIVED. Jika belum ada, menggunakan Barang.purchasePrice dari Master Barang Central.",
+          "Harga Purchase saat ini digunakan sebagai harga utama. Histori Purchase Outlet APPROVED/RECEIVED terbaru digunakan sebagai pembanding perubahan harga. Jika harga Purchase kosong/0, histori digunakan sebagai fallback. Jika histori tidak tersedia, Barang.purchasePrice dari Master Barang Central digunakan sebagai fallback.",
 
         currentPurchase:
           "OutletPurchaseItem.price",
 
         lastOutletPurchase:
-          "OutletPurchaseItem.price pada OutletPurchase APPROVED atau RECEIVED terbaru.",
+          "OutletPurchaseItem.price pada OutletPurchase APPROVED atau RECEIVED terbaru untuk outlet dan barang yang sama.",
 
         masterPurchase:
           "Barang.purchasePrice",
+
+        priceChange:
+          "currentPurchase - lastOutletPurchase",
+
+        priceChangePercent:
+          "((currentPurchase - lastOutletPurchase) / lastOutletPurchase) * 100",
+
+        directions: {
+          INCREASE:
+            "Harga Purchase saat ini lebih tinggi dari harga Purchase Outlet sebelumnya.",
+
+          DECREASE:
+            "Harga Purchase saat ini lebih rendah dari harga Purchase Outlet sebelumnya.",
+
+          UNCHANGED:
+            "Harga Purchase saat ini sama dengan harga Purchase Outlet sebelumnya.",
+
+          NO_HISTORY:
+            "Belum tersedia histori Purchase Outlet yang dapat digunakan sebagai pembanding.",
+
+          NO_CURRENT_PRICE:
+            "Harga Purchase saat ini kosong atau tidak valid.",
+        },
       },
     });
   } catch (error: any) {
@@ -1130,22 +1316,20 @@ export async function PATCH(
     // =================================================
 
     const existing =
-      await prisma.outletPurchase.findFirst(
-        {
-          where: {
-            id: purchaseId,
-            ...outletFilter,
-          },
+      await prisma.outletPurchase.findFirst({
+        where: {
+          id: purchaseId,
+          ...outletFilter,
+        },
 
-          include: {
-            outlet: true,
+        include: {
+          outlet: true,
 
-            supplier: true,
+          supplier: true,
 
-            items: true,
-          },
-        }
-      );
+          items: true,
+        },
+      });
 
     if (!existing) {
       return NextResponse.json(
@@ -1155,7 +1339,7 @@ export async function PATCH(
             "Purchase Outlet tidak ditemukan",
         },
         {
-          status: 404
+          status: 404,
         }
       );
     }
@@ -1175,7 +1359,7 @@ export async function PATCH(
             "Purchase Outlet hanya dapat diedit jika status masih DRAFT",
         },
         {
-          status: 400
+          status: 400,
         }
       );
     }
@@ -1197,7 +1381,7 @@ export async function PATCH(
             "Outlet Admin hanya dapat mengubah Purchase Outlet milik outlet sendiri",
         },
         {
-          status: 403
+          status: 403,
         }
       );
     }
@@ -1219,7 +1403,7 @@ export async function PATCH(
             "Outlet tidak ditemukan",
         },
         {
-          status: 404
+          status: 404,
         }
       );
     }
@@ -1229,18 +1413,16 @@ export async function PATCH(
     // =================================================
 
     const supplier =
-      await prisma.supplier.findUnique(
-        {
-          where: {
-            id: supplierId,
-          },
+      await prisma.supplier.findUnique({
+        where: {
+          id: supplierId,
+        },
 
-          select: {
-            id: true,
-            name: true,
-          },
-        }
-      );
+        select: {
+          id: true,
+          name: true,
+        },
+      });
 
     if (!supplier) {
       return NextResponse.json(
@@ -1250,7 +1432,7 @@ export async function PATCH(
             "Supplier tidak ditemukan",
         },
         {
-          status: 404
+          status: 404,
         }
       );
     }
@@ -1306,7 +1488,7 @@ export async function PATCH(
               "Barang tidak valid",
           },
           {
-            status: 400
+            status: 400,
           }
         );
       }
@@ -1327,7 +1509,7 @@ export async function PATCH(
               `Barang ID ${barangId} tidak boleh muncul lebih dari satu kali`,
           },
           {
-            status: 400
+            status: 400,
           }
         );
       }
@@ -1353,7 +1535,7 @@ export async function PATCH(
               `Qty barang ID ${barangId} tidak valid`,
           },
           {
-            status: 400
+            status: 400,
           }
         );
       }
@@ -1375,7 +1557,7 @@ export async function PATCH(
               `Harga barang ID ${barangId} tidak valid`,
           },
           {
-            status: 400
+            status: 400,
           }
         );
       }
@@ -1385,19 +1567,17 @@ export async function PATCH(
       // ===============================================
 
       const barang =
-        await prisma.barang.findUnique(
-          {
-            where: {
-              id: barangId,
-            },
+        await prisma.barang.findUnique({
+          where: {
+            id: barangId,
+          },
 
-            select: {
-              id: true,
-              name: true,
-              active: true,
-            },
-          }
-        );
+          select: {
+            id: true,
+            name: true,
+            active: true,
+          },
+        });
 
       if (!barang) {
         return NextResponse.json(
@@ -1407,7 +1587,7 @@ export async function PATCH(
               `Barang ID ${barangId} tidak ditemukan`,
           },
           {
-            status: 404
+            status: 404,
           }
         );
       }
@@ -1423,7 +1603,7 @@ export async function PATCH(
               `Barang ${barang.name} sudah tidak aktif`,
           },
           {
-            status: 400
+            status: 400,
           }
         );
       }
@@ -1448,7 +1628,7 @@ export async function PATCH(
               `Subtotal barang ${barang.name} tidak valid`,
           },
           {
-            status: 400
+            status: 400,
           }
         );
       }
@@ -1481,7 +1661,7 @@ export async function PATCH(
             "Total Purchase Outlet tidak valid",
         },
         {
-          status: 400
+          status: 400,
         }
       );
     }
@@ -1498,20 +1678,18 @@ export async function PATCH(
           // ===========================================
 
           const current =
-            await tx.outletPurchase.findUnique(
-              {
-                where: {
-                  id: purchaseId,
-                },
+            await tx.outletPurchase.findUnique({
+              where: {
+                id: purchaseId,
+              },
 
-                select: {
-                  id: true,
-                  number: true,
-                  outletId: true,
-                  status: true,
-                },
-              }
-            );
+              select: {
+                id: true,
+                number: true,
+                outletId: true,
+                status: true,
+              },
+            });
 
           if (!current) {
             throw new Error(
@@ -1568,60 +1746,62 @@ export async function PATCH(
           // ===========================================
           // DELETE ITEM LAMA
           // ===========================================
+          //
+          // Hanya item dari Purchase DRAFT ini.
+          // Tidak menyentuh stok, batch, history,
+          // atau Purchase lain.
+          //
+          // ===========================================
 
-          await tx.outletPurchaseItem.deleteMany(
-            {
-              where: {
-                purchaseId,
-              },
-            }
-          );
+          await tx.outletPurchaseItem.deleteMany({
+            where: {
+              purchaseId,
+            },
+          });
 
           // ===========================================
           // UPDATE PURCHASE
           // ===========================================
 
           const updated =
-            await tx.outletPurchase.update(
-              {
-                where: {
-                  id: purchaseId,
+            await tx.outletPurchase.update({
+              where: {
+                id: purchaseId,
+              },
+
+              data: {
+                outletId:
+                  finalOutletId,
+
+                supplierId,
+
+                remarks:
+                  remarks || null,
+
+                total,
+
+                items: {
+                  create:
+                    normalizedItems,
                 },
+              },
 
-                data: {
-                  outletId:
-                    finalOutletId,
+              include: {
+                outlet: true,
 
-                  supplierId,
+                supplier: true,
 
-                  remarks:
-                    remarks || null,
+                items: {
+                  include: {
+                    barang: true,
+                  },
 
-                  total,
-
-                  items: {
-                    create:
-                      normalizedItems,
+                  orderBy: {
+                    id: "asc",
                   },
                 },
-
-                include: {
-                  outlet: true,
-
-                  supplier: true,
-
-                  items: {
-                    include: {
-                      barang: true,
-                    },
-
-                    orderBy: {
-                      id: "asc",
-                    },
-                  },
-                },
-              }
-            );
+              },
+            });
 
           // ===========================================
           // HISTORY
@@ -1647,6 +1827,10 @@ export async function PATCH(
         }
       );
 
+    // =================================================
+    // RESPONSE
+    // =================================================
+
     return NextResponse.json({
       success: true,
 
@@ -1671,7 +1855,7 @@ export async function PATCH(
           "Gagal mengubah Purchase Outlet",
       },
       {
-        status: 500
+        status: 500,
       }
     );
   }
@@ -1705,7 +1889,7 @@ export async function DELETE(
             "Tidak login",
         },
         {
-          status: 401
+          status: 401,
         }
       );
     }
@@ -1726,7 +1910,7 @@ export async function DELETE(
             "Anda tidak memiliki akses menghapus Purchase Outlet",
         },
         {
-          status: 403
+          status: 403,
         }
       );
     }
@@ -1747,7 +1931,7 @@ export async function DELETE(
             "User Outlet Admin belum terhubung dengan outlet",
         },
         {
-          status: 403
+          status: 403,
         }
       );
     }
@@ -1770,7 +1954,7 @@ export async function DELETE(
             "ID Purchase Outlet tidak valid",
         },
         {
-          status: 400
+          status: 400,
         }
       );
     }
@@ -1792,7 +1976,7 @@ export async function DELETE(
             "User tidak memiliki outlet",
         },
         {
-          status: 403
+          status: 403,
         }
       );
     }
@@ -1802,18 +1986,16 @@ export async function DELETE(
     // =================================================
 
     const existing =
-      await prisma.outletPurchase.findFirst(
-        {
-          where: {
-            id: purchaseId,
-            ...outletFilter,
-          },
+      await prisma.outletPurchase.findFirst({
+        where: {
+          id: purchaseId,
+          ...outletFilter,
+        },
 
-          include: {
-            outlet: true,
-          },
-        }
-      );
+        include: {
+          outlet: true,
+        },
+      });
 
     if (!existing) {
       return NextResponse.json(
@@ -1823,7 +2005,7 @@ export async function DELETE(
             "Purchase Outlet tidak ditemukan",
         },
         {
-          status: 404
+          status: 404,
         }
       );
     }
@@ -1843,7 +2025,7 @@ export async function DELETE(
             "Purchase Outlet hanya dapat dihapus jika status masih DRAFT",
         },
         {
-          status: 400
+          status: 400,
         }
       );
     }
@@ -1859,20 +2041,18 @@ export async function DELETE(
         // =============================================
 
         const current =
-          await tx.outletPurchase.findUnique(
-            {
-              where: {
-                id: purchaseId,
-              },
+          await tx.outletPurchase.findUnique({
+            where: {
+              id: purchaseId,
+            },
 
-              select: {
-                id: true,
-                number: true,
-                outletId: true,
-                status: true,
-              },
-            }
-          );
+            select: {
+              id: true,
+              number: true,
+              outletId: true,
+              status: true,
+            },
+          });
 
         if (!current) {
           throw new Error(
@@ -1911,14 +2091,23 @@ export async function DELETE(
         // =============================================
         // HAPUS ITEM
         // =============================================
+        //
+        // Hanya item milik Purchase DRAFT.
+        //
+        // Tidak menyentuh:
+        // - stok
+        // - batch
+        // - kartu stok
+        // - Purchase lain
+        // - history
+        //
+        // =============================================
 
-        await tx.outletPurchaseItem.deleteMany(
-          {
-            where: {
-              purchaseId,
-            },
-          }
-        );
+        await tx.outletPurchaseItem.deleteMany({
+          where: {
+            purchaseId,
+          },
+        });
 
         // =============================================
         // HISTORY SEBELUM DELETE
@@ -1952,6 +2141,10 @@ export async function DELETE(
       }
     );
 
+    // =================================================
+    // RESPONSE
+    // =================================================
+
     return NextResponse.json({
       success: true,
 
@@ -1973,7 +2166,7 @@ export async function DELETE(
           "Gagal menghapus Purchase Outlet",
       },
       {
-        status: 500
+        status: 500,
       }
     );
   }

@@ -8,28 +8,29 @@ datasource db {
 }
 
 model User {
-  id                Int                @id @default(autoincrement())
-  username          String             @unique
-  password          String
-  fullname          String
-  photo             String?
-  role              Role
-  outletId          Int?
-  active            Boolean            @default(true)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  lastSeen          DateTime?
-  chatMessages      ChatMessage[]
-  chatParticipants  ChatParticipant[]
-  deliveryItemVoids DeliveryItem[]     @relation("DeliveryItemVoidedBy")
-  histories         History[]
-  manufactureOrders ManufactureOrder[]
-  outletSales       OutletSale[]
-  outletStockOuts   OutletStockOut[]
-  purchaseComments  PurchaseComment[]
-  sessions          Session[]
-  stockWastes       StockWaste[]
-  outlet            Outlet?            @relation(fields: [outletId], references: [id])
+  id                      Int                      @id @default(autoincrement())
+  username                String                   @unique
+  password                String
+  fullname                String
+  photo                   String?
+  role                    Role
+  outletId                Int?
+  active                  Boolean                  @default(true)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  lastSeen                DateTime?
+  chatMessages            ChatMessage[]
+  chatParticipants        ChatParticipant[]
+  deliveryItemVoids       DeliveryItem[]           @relation("DeliveryItemVoidedBy")
+  histories               History[]
+  manufactureOrders       ManufactureOrder[]
+  outletSales             OutletSale[]
+  outletStockOuts         OutletStockOut[]
+  purchaseComments        PurchaseComment[]
+  purchaseCommentMentions PurchaseCommentMention[] @relation("PurchaseCommentMentions")
+  sessions                Session[]
+  stockWastes             StockWaste[]
+  outlet                  Outlet?                  @relation(fields: [outletId], references: [id])
 }
 
 model Outlet {
@@ -119,17 +120,32 @@ model Session {
 }
 
 model Supplier {
-  id               Int               @id @default(autoincrement())
-  code             String            @unique
-  name             String
-  address          String?
-  city             String?
-  phone            String?
-  email            String?
-  contactPerson    String?
-  tempoDays        Int               @default(30)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  id            Int     @id @default(autoincrement())
+  code          String  @unique
+  name          String
+  address       String?
+  city          String?
+  phone         String?
+  email         String?
+  contactPerson String?
+
+  // =====================================================
+  // INFORMASI REKENING SUPPLIER
+  // =====================================================
+
+  noRekening    String?
+  namaRekening  String?
+  jenisRekening String?
+
+  // =====================================================
+  // TEMPO PEMBAYARAN
+  // =====================================================
+
+  tempoDays Int @default(30)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   MasterHarga      MasterHarga[]
   outletPurchases  OutletPurchase[]
   outletReceipts   OutletReceipt[]
@@ -294,20 +310,39 @@ model OutletPurchaseItem {
 }
 
 model PurchaseComment {
-  id               Int             @id @default(autoincrement())
+  id               Int      @id @default(autoincrement())
   purchaseId       Int?
   outletPurchaseId Int?
   userId           Int
   comment          String
-  createdAt        DateTime        @default(now())
-  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  outletPurchase   OutletPurchase? @relation("OutletPurchaseComments", fields: [outletPurchaseId], references: [id], onDelete: Cascade)
-  purchase         Purchase?       @relation("PurchaseComments", fields: [purchaseId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+
+  user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  outletPurchase OutletPurchase?          @relation("OutletPurchaseComments", fields: [outletPurchaseId], references: [id], onDelete: Cascade)
+  purchase       Purchase?                @relation("PurchaseComments", fields: [purchaseId], references: [id], onDelete: Cascade)
+  mentions       PurchaseCommentMention[]
 
   @@index([purchaseId])
   @@index([outletPurchaseId])
   @@index([userId])
   @@index([createdAt])
+}
+
+model PurchaseCommentMention {
+  id        Int            @id @default(autoincrement())
+  commentId Int
+  userId    Int
+  createdAt DateTime       @default(now())
+  readAt    DateTime?
+
+  comment PurchaseComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User            @relation("PurchaseCommentMentions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([commentId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([userId, readAt, createdAt])
 }
 
 model Payment {
@@ -1191,6 +1226,9 @@ enum StockOpnameType {
 enum PaymentMethod {
   CASH
   TRANSFER
+  TRANSFER_FINANCE
+  TRANSFER_CREDIT_CARD
+  TRANSFER_PETTY_CASH_CENTER
   COD
   CBD
   TEMPO

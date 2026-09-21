@@ -373,6 +373,14 @@ export async function GET(
         approvalType: "MONTHLY",
         weeklyRequiresApproval: false,
         adminCanDeleteAll: true,
+
+        // =================================================
+        // REPORT LEDGER
+        // =================================================
+        stockOpnameOutboundLedger:
+          "STOCK_OPNAME_OUT",
+        stockOpnameInboundLedger:
+          "STOCK_OPNAME_IN",
       },
     });
   } catch (error: any) {
@@ -406,6 +414,16 @@ export async function GET(
 //   ↓
 // outletStock.stock = physicalQty
 //
+// SEKALIGUS:
+// physicalQty < stockBefore
+//   -> STOCK_OPNAME_OUT
+//
+// physicalQty > stockBefore
+//   -> STOCK_OPNAME_IN
+//
+// physicalQty === stockBefore
+//   -> tidak membuat movement
+//
 // WEEKLY
 //   ↓
 // TIDAK BOLEH APPROVE
@@ -431,8 +449,35 @@ export async function POST(
 
     const {
       user,
+      role,
       isOutletAdmin,
     } = login;
+
+    // =================================================
+    // APPROVAL STOCK OPNAME MONTHLY
+    //
+    // Tetap mengikuti rule existing:
+    // ADMIN / MANAGER / OUTLET_ADMIN
+    // dapat melakukan endpoint approval sesuai
+    // security outlet yang berlaku.
+    // =================================================
+
+    if (
+      role !== "ADMIN" &&
+      role !== "MANAGER" &&
+      role !== "OUTLET_ADMIN"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Anda tidak memiliki akses approve stock opname",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
 
     // =================================================
     // BODY
@@ -771,6 +816,16 @@ export async function POST(
             );
           }
 
+          if (!currentOpname.outlet) {
+            throw new Error(
+              "Outlet stock opname tidak ditemukan"
+            );
+          }
+
+          // =========================================
+          // SECURITY OUTLET
+          // =========================================
+
           if (
             isOutletAdmin &&
             Number(user.outletId) !==
@@ -783,6 +838,10 @@ export async function POST(
             );
           }
 
+          // =========================================
+          // TYPE
+          // =========================================
+
           if (
             String(
               currentOpname.type
@@ -793,6 +852,10 @@ export async function POST(
               "Stock Opname Mingguan tidak memerlukan approval"
             );
           }
+
+          // =========================================
+          // STATUS
+          // =========================================
 
           if (
             String(
@@ -805,6 +868,10 @@ export async function POST(
             );
           }
 
+          // =========================================
+          // ITEMS
+          // =========================================
+
           if (
             !currentOpname.items ||
             currentOpname.items.length === 0
@@ -816,7 +883,27 @@ export async function POST(
 
           // =========================================
           // UPDATE STOCK OUTLET
+          //
+          // PENTING:
+          // stockBefore harus dibaca SEBELUM stock
+          // diganti menjadi physicalQty.
+          //
+          // Ini menjadi dasar ledger:
+          //
+          // stockBefore > physicalQty
+          // -> STOCK_OPNAME_OUT
+          //
+          // stockBefore < physicalQty
+          // -> STOCK_OPNAME_IN
           // =========================================
+
+          const movementSummary = {
+            totalOut: 0,
+            totalIn: 0,
+            outCount: 0,
+            inCount: 0,
+            unchangedCount: 0,
+          };
 
           for (
             const item of currentOpname.items
@@ -832,6 +919,10 @@ export async function POST(
                 )
               );
 
+            // =======================================
+            // AMBIL STOCK TERKINI
+            // =======================================
+
             const outletStock =
               await tx.outletStock.findUnique({
                 where: {
@@ -844,6 +935,15 @@ export async function POST(
                   },
                 },
               });
+
+            // =======================================
+            // STOCK BELUM ADA
+            //
+            // Tidak ada stockBefore yang bisa
+            // dianggap sebagai outbound.
+            //
+            // Stock langsung dibuat sesuai fisik.
+            // =======================================
 
             if (!outletStock) {
               await tx.outletStock.create({
@@ -859,8 +959,330 @@ export async function POST(
                 },
               });
 
+              if (physicalQty > 0) {
+                movementSummary.totalIn +=
+                  physicalQty;
+
+                movementSummary.inCount += 1;
+
+                // =================================
+                // STOCK OPNAME IN
+                // =================================
+
+                await tx.stockCard.create({
+                  data: {
+                    barangId,
+                    trxDate:
+                      currentOpname.date ??
+                      new Date(),
+
+                    trxType:
+                      "STOCK_OPNAME_IN",
+
+                    trxNumber:
+                      currentOpname.code,
+
+                    referenceId:
+                      currentOpname.id,
+
+                    warehouse:
+                      `OUTLET:${currentOpname.outlet.code}`,
+
+                    qtyIn:
+                      physicalQty,
+
+                    qtyOut: 0,
+
+                    balance:
+                      physicalQty,
+
+                    unitPrice: 0,
+
+                    totalValue: 0,
+
+                    note:
+                      `Stock Opname Bulanan ${currentOpname.code} - penyesuaian stock awal outlet`,
+                  },
+                });
+              } else {
+                movementSummary.unchangedCount +=
+                  1;
+              }
+
               continue;
             }
+
+            // =======================================
+            // STOCK BEFORE
+            // =======================================
+
+            const stockBefore =
+              Number(
+                outletStock.stock ?? 0
+              );
+
+            if (
+              !Number.isFinite(stockBefore) ||
+              stockBefore < 0
+            ) {
+              throw new Error(
+                `Stock outlet tidak valid untuk barang ${item.barang?.name || barangId}`
+              );
+            }
+
+            // =======================================
+            // SELISIH STOCK OPNAME
+            // =======================================
+
+            const difference =
+              physicalQty -
+              stockBefore;
+
+            // =======================================
+            // OUTBOUND
+            //
+            // physical < stockBefore
+            //
+            // Contoh:
+            // stockBefore = 100
+            // physical    = 92
+            // difference  = -8
+            //
+            // Maka:
+            // STOCK_OPNAME_OUT = 8
+            // =======================================
+
+            if (difference < 0) {
+              const qtyOut =
+                Math.abs(difference);
+
+              const averageCost =
+                Number(
+                  outletStock.averageCost ??
+                    0
+                );
+
+              const totalValue =
+                qtyOut *
+                (Number.isFinite(
+                  averageCost
+                )
+                  ? averageCost
+                  : 0);
+
+              movementSummary.totalOut +=
+                qtyOut;
+
+              movementSummary.outCount +=
+                1;
+
+              // =====================================
+              // STOCK CARD OUT
+              // =====================================
+
+              await tx.stockCard.create({
+                data: {
+                  barangId,
+
+                  trxDate:
+                    currentOpname.date ??
+                    new Date(),
+
+                  trxType:
+                    "STOCK_OPNAME_OUT",
+
+                  trxNumber:
+                    currentOpname.code,
+
+                  referenceId:
+                    currentOpname.id,
+
+                  warehouse:
+                    `OUTLET:${currentOpname.outlet.code}`,
+
+                  qtyIn: 0,
+
+                  qtyOut,
+
+                  balance:
+                    physicalQty,
+
+                  unitPrice:
+                    Number.isFinite(
+                      averageCost
+                    )
+                      ? averageCost
+                      : 0,
+
+                  totalValue,
+
+                  note:
+                    `Stock Opname Bulanan ${currentOpname.code} - selisih fisik (${stockBefore} → ${physicalQty})`,
+                },
+              });
+
+              // =====================================
+              // STOCK MUTATION
+              //
+              // Dipakai sebagai audit tambahan.
+              // Qty tetap tidak digunakan sebagai
+              // sumber utama report agar tidak
+              // double-count dengan StockCard.
+              // =====================================
+
+              await tx.stockMutation.create({
+                data: {
+                  outletId:
+                    Number(
+                      currentOpname.outletId
+                    ),
+
+                  barangId,
+
+                  type:
+                    "ADJUSTMENT_OUT",
+
+                  qty: qtyOut,
+
+                  stockBefore,
+
+                  stockAfter:
+                    physicalQty,
+
+                  reference:
+                    currentOpname.code,
+
+                  description:
+                    `Stock Opname Bulanan OUT - ${stockBefore} → ${physicalQty}`,
+                },
+              });
+            }
+
+            // =======================================
+            // INBOUND
+            //
+            // physical > stockBefore
+            //
+            // Contoh:
+            // stockBefore = 92
+            // physical    = 100
+            //
+            // STOCK_OPNAME_IN = 8
+            // =======================================
+
+            else if (difference > 0) {
+              const qtyIn =
+                difference;
+
+              const currentAverageCost =
+                Number(
+                  outletStock.averageCost ??
+                    0
+                );
+
+              const safeAverageCost =
+                Number.isFinite(
+                  currentAverageCost
+                )
+                  ? currentAverageCost
+                  : 0;
+
+              movementSummary.totalIn +=
+                qtyIn;
+
+              movementSummary.inCount +=
+                1;
+
+              // =====================================
+              // STOCK CARD IN
+              // =====================================
+
+              await tx.stockCard.create({
+                data: {
+                  barangId,
+
+                  trxDate:
+                    currentOpname.date ??
+                    new Date(),
+
+                  trxType:
+                    "STOCK_OPNAME_IN",
+
+                  trxNumber:
+                    currentOpname.code,
+
+                  referenceId:
+                    currentOpname.id,
+
+                  warehouse:
+                    `OUTLET:${currentOpname.outlet.code}`,
+
+                  qtyIn,
+
+                  qtyOut: 0,
+
+                  balance:
+                    physicalQty,
+
+                  unitPrice:
+                    safeAverageCost,
+
+                  totalValue:
+                    qtyIn *
+                    safeAverageCost,
+
+                  note:
+                    `Stock Opname Bulanan ${currentOpname.code} - selisih fisik (${stockBefore} → ${physicalQty})`,
+                },
+              });
+
+              // =====================================
+              // STOCK MUTATION
+              //
+              // Audit tambahan.
+              // Tidak dijadikan sumber utama report.
+              // =====================================
+
+              await tx.stockMutation.create({
+                data: {
+                  outletId:
+                    Number(
+                      currentOpname.outletId
+                    ),
+
+                  barangId,
+
+                  type:
+                    "ADJUSTMENT_IN",
+
+                  qty: qtyIn,
+
+                  stockBefore,
+
+                  stockAfter:
+                    physicalQty,
+
+                  reference:
+                    currentOpname.code,
+
+                  description:
+                    `Stock Opname Bulanan IN - ${stockBefore} → ${physicalQty}`,
+                },
+              });
+            }
+
+            // =======================================
+            // TIDAK ADA SELISIH
+            // =======================================
+
+            else {
+              movementSummary.unchangedCount +=
+                1;
+            }
+
+            // =======================================
+            // UPDATE STOCK
+            // =======================================
 
             await tx.outletStock.update({
               where: {
@@ -877,39 +1299,45 @@ export async function POST(
           // APPROVED
           // =========================================
 
-          return await tx.stockOpname.update({
-            where: {
-              id: currentOpname.id,
-            },
-
-            data: {
-              status: "APPROVED",
-              approvedBy: user.id,
-            },
-
-            include: {
-              outlet: {
-                select: {
-                  id: true,
-                  code: true,
-                  name: true,
-                },
+          const approved =
+            await tx.stockOpname.update({
+              where: {
+                id: currentOpname.id,
               },
 
-              items: {
-                include: {
-                  barang: {
-                    select: {
-                      id: true,
-                      code: true,
-                      name: true,
-                      unit: true,
+              data: {
+                status: "APPROVED",
+                approvedBy: user.id,
+              },
+
+              include: {
+                outlet: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                  },
+                },
+
+                items: {
+                  include: {
+                    barang: {
+                      select: {
+                        id: true,
+                        code: true,
+                        name: true,
+                        unit: true,
+                      },
                     },
                   },
                 },
               },
-            },
-          });
+            });
+
+          return {
+            opname: approved,
+            movementSummary,
+          };
         }
       );
 
@@ -919,15 +1347,34 @@ export async function POST(
       message:
         "Stock Opname Bulanan berhasil disetujui dan stock outlet telah diperbarui",
 
-      data: result,
+      data: result.opname,
 
-      outlet: result.outlet,
+      outlet:
+        result.opname.outlet,
 
       meta: {
         type: "MONTHLY",
         status: "APPROVED",
+
         stockChanged: true,
         centralStockChanged: false,
+
+        // =================================================
+        // LEDGER
+        // =================================================
+
+        outboundLedger:
+          "STOCK_OPNAME_OUT",
+
+        inboundLedger:
+          "STOCK_OPNAME_IN",
+
+        // =================================================
+        // SUMMARY
+        // =================================================
+
+        movementSummary:
+          result.movementSummary,
       },
     });
   } catch (error: any) {
@@ -961,6 +1408,12 @@ export async function POST(
 // -> APPROVED
 //
 // DELETE TIDAK MENGUBAH STOCK OUTLET
+//
+// CATATAN:
+// Jika APPROVED sudah membuat StockCard,
+// penghapusan StockOpname tidak otomatis
+// menghapus StockCard karena StockCard adalah
+// historical ledger.
 // =====================================================
 
 export async function DELETE(
@@ -1063,7 +1516,7 @@ export async function DELETE(
     // =================================================
     // DELETE
     //
-    // TIDAK ADA LAGI PEMBATASAN STATUS.
+    // Tetap mengikuti business rule existing:
     //
     // ADMIN PUSAT BOLEH HAPUS:
     // COUNTING
@@ -1071,6 +1524,9 @@ export async function DELETE(
     // APPROVED
     //
     // Stock outlet tidak disentuh.
+    //
+    // IMPORTANT:
+    // StockCard historical ledger tetap ada.
     // =================================================
 
     await prisma.stockOpname.delete({
@@ -1088,6 +1544,11 @@ export async function DELETE(
 
       message:
         `Stock Opname ${opname.code} berhasil dihapus`,
+
+      meta: {
+        stockChanged: false,
+        ledgerChanged: false,
+      },
     });
   } catch (error: any) {
     console.error(

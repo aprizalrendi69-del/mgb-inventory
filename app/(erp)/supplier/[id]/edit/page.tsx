@@ -16,6 +16,8 @@ import {
   RotateCcw,
   Loader2,
   AlertCircle,
+  CreditCard,
+  WalletCards,
 } from "lucide-react";
 
 type SupplierForm = {
@@ -26,6 +28,9 @@ type SupplierForm = {
   phone: string;
   email: string;
   contactPerson: string;
+  noRekening: string;
+  namaRekening: string;
+  jenisRekening: string;
   tempoDays: number;
 };
 
@@ -37,26 +42,57 @@ const DEFAULT_FORM: SupplierForm = {
   phone: "",
   email: "",
   contactPerson: "",
+  noRekening: "",
+  namaRekening: "",
+  jenisRekening: "",
   tempoDays: 30,
 };
+
+const INPUT_CLASS = `
+  w-full rounded-xl
+  border border-slate-200
+  bg-white
+  py-3 pl-10 pr-3
+  text-sm text-slate-900
+  outline-none
+  transition
+  placeholder:text-slate-400
+  hover:border-slate-300
+  focus:border-[#497F70]
+  focus:ring-4
+  focus:ring-[#497F70]/10
+  disabled:cursor-not-allowed
+  disabled:bg-slate-50
+`;
+
+const SELECT_CLASS = `
+  w-full rounded-xl
+  border border-slate-200
+  bg-white
+  py-3 pl-10 pr-10
+  text-sm text-slate-900
+  outline-none
+  transition
+  hover:border-slate-300
+  focus:border-[#497F70]
+  focus:ring-4
+  focus:ring-[#497F70]/10
+  disabled:cursor-not-allowed
+  disabled:bg-slate-50
+`;
 
 export default function EditSupplierPage() {
   const router = useRouter();
   const params = useParams();
-
   const id = String(params.id ?? "");
 
-  const [form, setForm] =
-    useState<SupplierForm>(DEFAULT_FORM);
-
+  const [form, setForm] = useState<SupplierForm>(DEFAULT_FORM);
   const [originalForm, setOriginalForm] =
     useState<SupplierForm>(DEFAULT_FORM);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  const [errorMessage, setErrorMessage] =
-    useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   // =====================================================
   // HAS CHANGES
@@ -70,8 +106,10 @@ export default function EditSupplierPage() {
       form.city !== originalForm.city ||
       form.phone !== originalForm.phone ||
       form.email !== originalForm.email ||
-      form.contactPerson !==
-        originalForm.contactPerson ||
+      form.contactPerson !== originalForm.contactPerson ||
+      form.noRekening !== originalForm.noRekening ||
+      form.namaRekening !== originalForm.namaRekening ||
+      form.jenisRekening !== originalForm.jenisRekening ||
       form.tempoDays !== originalForm.tempoDays
     );
   }, [form, originalForm]);
@@ -91,19 +129,15 @@ export default function EditSupplierPage() {
       setLoading(true);
       setErrorMessage("");
 
-      const res = await fetch(
-        `/api/supplier/${id}`,
-        {
-          cache: "no-store",
-        }
-      );
+      const res = await fetch(`/api/supplier/${id}`, {
+        cache: "no-store",
+      });
 
       const json = await res.json();
 
       if (!res.ok) {
         const message =
-          json.message ||
-          "Gagal mengambil data supplier";
+          json.message || "Gagal mengambil data supplier";
 
         setErrorMessage(message);
         return;
@@ -118,12 +152,12 @@ export default function EditSupplierPage() {
         city: data.city ?? "",
         phone: data.phone ?? "",
         email: data.email ?? "",
-        contactPerson:
-          data.contactPerson ?? "",
+        contactPerson: data.contactPerson ?? "",
+        noRekening: data.noRekening ?? "",
+        namaRekening: data.namaRekening ?? "",
+        jenisRekening: data.jenisRekening ?? "",
         tempoDays:
-          Number.isInteger(
-            Number(data.tempoDays)
-          )
+          Number.isInteger(Number(data.tempoDays))
             ? Number(data.tempoDays)
             : 30,
       };
@@ -131,14 +165,9 @@ export default function EditSupplierPage() {
       setForm(loadedForm);
       setOriginalForm(loadedForm);
     } catch (error) {
-      console.error(
-        "LOAD SUPPLIER ERROR:",
-        error
-      );
+      console.error("LOAD SUPPLIER ERROR:", error);
 
-      setErrorMessage(
-        "Gagal mengambil data supplier."
-      );
+      setErrorMessage("Gagal mengambil data supplier.");
     } finally {
       setLoading(false);
     }
@@ -150,14 +179,13 @@ export default function EditSupplierPage() {
 
   function change(
     e: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
     >
   ) {
     const { name, value } = e.target;
 
     setForm((prev) => ({
       ...prev,
-
       [name]:
         name === "tempoDays"
           ? value === ""
@@ -203,16 +231,12 @@ export default function EditSupplierPage() {
 
   function validate(): boolean {
     if (!form.code.trim()) {
-      setErrorMessage(
-        "Kode supplier wajib diisi."
-      );
+      setErrorMessage("Kode supplier wajib diisi.");
       return false;
     }
 
     if (!form.name.trim()) {
-      setErrorMessage(
-        "Nama supplier wajib diisi."
-      );
+      setErrorMessage("Nama supplier wajib diisi.");
       return false;
     }
 
@@ -265,41 +289,42 @@ export default function EditSupplierPage() {
         id: Number(id),
 
         code: form.code.trim(),
-
         name: form.name.trim(),
 
-        address:
-          form.address.trim() || null,
-
-        city:
-          form.city.trim() || null,
-
-        phone:
-          form.phone.trim() || null,
-
-        email:
-          form.email.trim() || null,
-
+        address: form.address.trim() || null,
+        city: form.city.trim() || null,
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
         contactPerson:
-          form.contactPerson.trim() ||
-          null,
+          form.contactPerson.trim() || null,
+
+        // =================================================
+        // BANK ACCOUNT
+        // =================================================
+
+        noRekening:
+          form.noRekening.trim() || null,
+
+        namaRekening:
+          form.namaRekening.trim() || null,
+
+        jenisRekening:
+          form.jenisRekening.trim() || null,
+
+        // =================================================
+        // PAYMENT TERM
+        // =================================================
 
         tempoDays: form.tempoDays,
       };
 
-      const res = await fetch(
-        `/api/supplier/${id}`,
-        {
-          method: "PATCH",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-
-          body: JSON.stringify(payload),
-        }
-      );
+      const res = await fetch(`/api/supplier/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
       const json = await res.json();
 
@@ -313,6 +338,7 @@ export default function EditSupplierPage() {
 
       const savedForm: SupplierForm = {
         ...form,
+
         code: form.code.trim(),
         name: form.name.trim(),
         address: form.address.trim(),
@@ -321,22 +347,28 @@ export default function EditSupplierPage() {
         email: form.email.trim(),
         contactPerson:
           form.contactPerson.trim(),
+
+        noRekening:
+          form.noRekening.trim(),
+
+        namaRekening:
+          form.namaRekening.trim(),
+
+        jenisRekening:
+          form.jenisRekening.trim(),
+
+        tempoDays: form.tempoDays,
       };
 
       setForm(savedForm);
       setOriginalForm(savedForm);
 
-      alert(
-        "Supplier berhasil diperbarui."
-      );
+      alert("Supplier berhasil diperbarui.");
 
       router.push("/supplier");
       router.refresh();
     } catch (error) {
-      console.error(
-        "SAVE SUPPLIER ERROR:",
-        error
-      );
+      console.error("SAVE SUPPLIER ERROR:", error);
 
       setErrorMessage(
         "Terjadi kesalahan saat memperbarui supplier."
@@ -368,6 +400,7 @@ export default function EditSupplierPage() {
                 <div className="h-20 animate-pulse rounded-2xl bg-slate-100" />
               </div>
 
+              <div className="h-28 animate-pulse rounded-2xl bg-slate-100" />
               <div className="h-28 animate-pulse rounded-2xl bg-slate-100" />
               <div className="h-28 animate-pulse rounded-2xl bg-slate-100" />
             </div>
@@ -437,13 +470,14 @@ export default function EditSupplierPage() {
               </div>
 
               <p className="mt-1 text-sm text-slate-500">
-                Perbarui seluruh informasi dan
-                ketentuan pembayaran supplier.
+                Perbarui seluruh informasi, rekening,
+                dan ketentuan pembayaran supplier.
               </p>
             </div>
           </div>
 
           {/* STATUS */}
+
           <div className="hidden shrink-0 md:block">
             {hasChanges ? (
               <div
@@ -515,7 +549,14 @@ export default function EditSupplierPage() {
             FORM CARD
         ================================================= */}
 
-        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_10px_35px_rgba(15,23,42,0.05)]">
+        <div
+          className="
+            overflow-hidden rounded-3xl
+            border border-slate-200
+            bg-white
+            shadow-[0_10px_35px_rgba(15,23,42,0.05)]
+          "
+        >
 
           {/* =================================================
               CARD HEADER
@@ -523,6 +564,7 @@ export default function EditSupplierPage() {
 
           <div className="border-b border-slate-100 px-6 py-5 md:px-8">
             <div className="flex items-center gap-3">
+
               <div
                 className="
                   flex h-10 w-10
@@ -547,6 +589,7 @@ export default function EditSupplierPage() {
                   sesuai sebelum menyimpan.
                 </p>
               </div>
+
             </div>
           </div>
 
@@ -554,7 +597,7 @@ export default function EditSupplierPage() {
               FORM BODY
           ================================================= */}
 
-          <div className="space-y-7 p-6 md:p-8">
+          <div className="space-y-8 p-6 md:p-8">
 
             {/* =================================================
                 IDENTITAS
@@ -575,6 +618,7 @@ export default function EditSupplierPage() {
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
 
                 {/* KODE */}
+
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">
                     Kode Supplier
@@ -601,27 +645,13 @@ export default function EditSupplierPage() {
                       placeholder="Contoh: SUP-001"
                       autoComplete="off"
                       disabled={saving}
-                      className="
-                        w-full rounded-xl
-                        border border-slate-200
-                        bg-white
-                        py-3 pl-10 pr-3
-                        text-sm text-slate-900
-                        outline-none
-                        transition
-                        placeholder:text-slate-400
-                        hover:border-slate-300
-                        focus:border-[#497F70]
-                        focus:ring-4
-                        focus:ring-[#497F70]/10
-                        disabled:cursor-not-allowed
-                        disabled:bg-slate-50
-                      "
+                      className={INPUT_CLASS}
                     />
                   </div>
                 </div>
 
                 {/* NAMA */}
+
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">
                     Nama Supplier
@@ -648,22 +678,7 @@ export default function EditSupplierPage() {
                       placeholder="Nama lengkap supplier"
                       autoComplete="organization"
                       disabled={saving}
-                      className="
-                        w-full rounded-xl
-                        border border-slate-200
-                        bg-white
-                        py-3 pl-10 pr-3
-                        text-sm text-slate-900
-                        outline-none
-                        transition
-                        placeholder:text-slate-400
-                        hover:border-slate-300
-                        focus:border-[#497F70]
-                        focus:ring-4
-                        focus:ring-[#497F70]/10
-                        disabled:cursor-not-allowed
-                        disabled:bg-slate-50
-                      "
+                      className={INPUT_CLASS}
                     />
                   </div>
                 </div>
@@ -690,6 +705,7 @@ export default function EditSupplierPage() {
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
 
                 {/* CONTACT PERSON */}
+
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">
                     Contact Person
@@ -708,34 +724,18 @@ export default function EditSupplierPage() {
 
                     <input
                       name="contactPerson"
-                      value={
-                        form.contactPerson
-                      }
+                      value={form.contactPerson}
                       onChange={change}
                       placeholder="Nama contact person"
                       autoComplete="name"
                       disabled={saving}
-                      className="
-                        w-full rounded-xl
-                        border border-slate-200
-                        bg-white
-                        py-3 pl-10 pr-3
-                        text-sm text-slate-900
-                        outline-none
-                        transition
-                        placeholder:text-slate-400
-                        hover:border-slate-300
-                        focus:border-[#497F70]
-                        focus:ring-4
-                        focus:ring-[#497F70]/10
-                        disabled:cursor-not-allowed
-                        disabled:bg-slate-50
-                      "
+                      className={INPUT_CLASS}
                     />
                   </div>
                 </div>
 
                 {/* PHONE */}
+
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">
                     Telepon
@@ -760,27 +760,13 @@ export default function EditSupplierPage() {
                       autoComplete="tel"
                       inputMode="tel"
                       disabled={saving}
-                      className="
-                        w-full rounded-xl
-                        border border-slate-200
-                        bg-white
-                        py-3 pl-10 pr-3
-                        text-sm text-slate-900
-                        outline-none
-                        transition
-                        placeholder:text-slate-400
-                        hover:border-slate-300
-                        focus:border-[#497F70]
-                        focus:ring-4
-                        focus:ring-[#497F70]/10
-                        disabled:cursor-not-allowed
-                        disabled:bg-slate-50
-                      "
+                      className={INPUT_CLASS}
                     />
                   </div>
                 </div>
 
                 {/* EMAIL */}
+
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">
                     Email
@@ -805,27 +791,13 @@ export default function EditSupplierPage() {
                       placeholder="email@supplier.com"
                       autoComplete="email"
                       disabled={saving}
-                      className="
-                        w-full rounded-xl
-                        border border-slate-200
-                        bg-white
-                        py-3 pl-10 pr-3
-                        text-sm text-slate-900
-                        outline-none
-                        transition
-                        placeholder:text-slate-400
-                        hover:border-slate-300
-                        focus:border-[#497F70]
-                        focus:ring-4
-                        focus:ring-[#497F70]/10
-                        disabled:cursor-not-allowed
-                        disabled:bg-slate-50
-                      "
+                      className={INPUT_CLASS}
                     />
                   </div>
                 </div>
 
                 {/* CITY */}
+
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">
                     Kota
@@ -849,26 +821,181 @@ export default function EditSupplierPage() {
                       placeholder="Kota supplier"
                       autoComplete="address-level2"
                       disabled={saving}
-                      className="
-                        w-full rounded-xl
-                        border border-slate-200
-                        bg-white
-                        py-3 pl-10 pr-3
-                        text-sm text-slate-900
-                        outline-none
-                        transition
-                        placeholder:text-slate-400
-                        hover:border-slate-300
-                        focus:border-[#497F70]
-                        focus:ring-4
-                        focus:ring-[#497F70]/10
-                        disabled:cursor-not-allowed
-                        disabled:bg-slate-50
-                      "
+                      className={INPUT_CLASS}
                     />
                   </div>
                 </div>
 
+              </div>
+            </section>
+
+            {/* =================================================
+                BANK ACCOUNT
+            ================================================= */}
+
+            <section>
+              <div className="mb-4">
+                <div className="flex items-center gap-3">
+
+                  <div
+                    className="
+                      flex h-10 w-10
+                      items-center justify-center
+                      rounded-xl
+                      bg-[#EEF6F3]
+                    "
+                  >
+                    <CreditCard
+                      size={19}
+                      className="text-[#497F70]"
+                    />
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#18352D]">
+                      Informasi Rekening
+                    </h3>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Data rekening supplier untuk kebutuhan
+                      pembayaran dan administrasi.
+                    </p>
+                  </div>
+
+                </div>
+              </div>
+
+              <div
+                className="
+                  rounded-2xl
+                  border border-[#D7E9E2]
+                  bg-[#F7FBF9]
+                  p-5
+                "
+              >
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+                  {/* NO REKENING */}
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      No. Rekening
+                    </label>
+
+                    <div className="relative">
+                      <CreditCard
+                        size={17}
+                        className="
+                          pointer-events-none
+                          absolute left-3.5 top-1/2
+                          -translate-y-1/2
+                          text-slate-400
+                        "
+                      />
+
+                      <input
+                        name="noRekening"
+                        value={form.noRekening}
+                        onChange={change}
+                        placeholder="Contoh: 1234567890"
+                        autoComplete="off"
+                        inputMode="numeric"
+                        disabled={saving}
+                        className={INPUT_CLASS}
+                      />
+                    </div>
+
+                    <p className="mt-1.5 text-[11px] text-slate-400">
+                      Nomor rekening bank supplier.
+                    </p>
+                  </div>
+
+                  {/* NAMA REKENING */}
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Nama Rekening
+                    </label>
+
+                    <div className="relative">
+                      <UserRound
+                        size={17}
+                        className="
+                          pointer-events-none
+                          absolute left-3.5 top-1/2
+                          -translate-y-1/2
+                          text-slate-400
+                        "
+                      />
+
+                      <input
+                        name="namaRekening"
+                        value={form.namaRekening}
+                        onChange={change}
+                        placeholder="Nama pemilik rekening"
+                        autoComplete="off"
+                        disabled={saving}
+                        className={INPUT_CLASS}
+                      />
+                    </div>
+
+                    <p className="mt-1.5 text-[11px] text-slate-400">
+                      Nama yang terdaftar pada rekening.
+                    </p>
+                  </div>
+
+                  {/* JENIS REKENING */}
+
+                  <div className="md:col-span-2">
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Jenis Rekening
+                    </label>
+
+                    <div className="relative">
+                      <WalletCards
+                        size={17}
+                        className="
+                          pointer-events-none
+                          absolute left-3.5 top-1/2
+                          -translate-y-1/2
+                          text-slate-400
+                        "
+                      />
+
+                      <select
+                        name="jenisRekening"
+                        value={form.jenisRekening}
+                        onChange={change}
+                        disabled={saving}
+                        className={SELECT_CLASS}
+                      >
+                        <option value="">
+                          Pilih jenis rekening
+                        </option>
+                        <option value="BANK">
+                          Bank
+                        </option>
+                        <option value="GIRO">
+                          Giro
+                        </option>
+                        <option value="REKENING_PRIBADI">
+                          Rekening Pribadi
+                        </option>
+                        <option value="REKENING_PERUSAHAAN">
+                          Rekening Perusahaan
+                        </option>
+                        <option value="LAINNYA">
+                          Lainnya
+                        </option>
+                      </select>
+                    </div>
+
+                    <p className="mt-1.5 text-[11px] text-slate-400">
+                      Jenis rekening yang digunakan supplier.
+                    </p>
+                  </div>
+
+                </div>
               </div>
             </section>
 
@@ -939,7 +1066,6 @@ export default function EditSupplierPage() {
                 "
               >
                 <div className="p-5 md:p-6">
-
                   <div className="flex items-start gap-4">
 
                     <div
@@ -978,14 +1104,13 @@ export default function EditSupplierPage() {
                           </label>
 
                           <div className="flex items-center gap-2">
+
                             <input
                               type="number"
                               min={0}
                               step={1}
                               name="tempoDays"
-                              value={
-                                form.tempoDays
-                              }
+                              value={form.tempoDays}
                               onChange={change}
                               disabled={saving}
                               className="
@@ -1008,6 +1133,7 @@ export default function EditSupplierPage() {
                             <span className="pb-3 text-sm text-slate-600">
                               hari
                             </span>
+
                           </div>
                         </div>
 
@@ -1022,12 +1148,15 @@ export default function EditSupplierPage() {
                         "
                       >
                         <p className="text-xs leading-5 text-slate-600">
+
                           {form.tempoDays === 0 ? (
                             <>
                               <span className="font-semibold text-[#18352D]">
                                 COD / Hari Ini
                               </span>
+
                               {" — "}
+
                               Pembayaran jatuh tempo
                               pada hari penerimaan barang.
                             </>
@@ -1036,12 +1165,15 @@ export default function EditSupplierPage() {
                               <span className="font-semibold text-[#18352D]">
                                 Tempo {form.tempoDays} hari
                               </span>
+
                               {" — "}
-                              Jatuh tempo dihitung
-                              {` ${form.tempoDays} hari `}
+
+                              Jatuh tempo dihitung{" "}
+                              {form.tempoDays} hari{" "}
                               setelah barang diterima.
                             </>
                           )}
+
                         </p>
                       </div>
 
@@ -1072,6 +1204,7 @@ export default function EditSupplierPage() {
           >
 
             <div className="flex items-center gap-2 text-xs text-slate-500">
+
               {hasChanges ? (
                 <>
                   <span className="h-2 w-2 rounded-full bg-amber-500" />
@@ -1086,17 +1219,17 @@ export default function EditSupplierPage() {
                   Tidak ada perubahan
                 </>
               )}
+
             </div>
 
             <div className="flex w-full gap-3 sm:w-auto">
 
               {/* RESET */}
+
               <button
                 type="button"
                 onClick={resetForm}
-                disabled={
-                  saving || !hasChanges
-                }
+                disabled={saving || !hasChanges}
                 className="
                   inline-flex flex-1
                   items-center justify-center
@@ -1120,6 +1253,7 @@ export default function EditSupplierPage() {
               </button>
 
               {/* CANCEL */}
+
               <button
                 type="button"
                 onClick={goBack}
@@ -1143,12 +1277,11 @@ export default function EditSupplierPage() {
               </button>
 
               {/* SAVE */}
+
               <button
                 type="button"
                 onClick={save}
-                disabled={
-                  saving || !hasChanges
-                }
+                disabled={saving || !hasChanges}
                 className="
                   inline-flex flex-1
                   items-center justify-center

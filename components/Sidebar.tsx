@@ -66,12 +66,25 @@ type BadgeKey =
   | "approvalWasteOutlet"
   | "approvalStockOpname";
 
+type IconTone =
+  | "emerald"
+  | "teal"
+  | "cyan"
+  | "sky"
+  | "violet"
+  | "amber"
+  | "orange"
+  | "rose"
+  | "indigo"
+  | "slate";
+
 interface Menu {
   title: string;
   url?: string;
   roles?: Role[];
   header?: boolean;
   icon?: ElementType;
+  iconTone?: IconTone;
   badgeKey?: BadgeKey;
 }
 
@@ -97,30 +110,124 @@ const EMPTY_PENDING_COUNTS: PendingCounts = {
   approvalStockOpname: 0,
 };
 
+const ICON_TONES: Record<
+  IconTone,
+  {
+    icon: string;
+    bg: string;
+    border: string;
+    glow: string;
+  }
+> = {
+  emerald: {
+    icon: "text-emerald-300 group-hover:text-emerald-200",
+    bg: "bg-emerald-400/[0.075] group-hover:bg-emerald-400/[0.115]",
+    border:
+      "border-emerald-300/[0.08] group-hover:border-emerald-300/[0.13]",
+    glow: "bg-emerald-400/[0.12]",
+  },
+
+  teal: {
+    icon: "text-teal-300 group-hover:text-teal-200",
+    bg: "bg-teal-400/[0.075] group-hover:bg-teal-400/[0.115]",
+    border:
+      "border-teal-300/[0.08] group-hover:border-teal-300/[0.13]",
+    glow: "bg-teal-400/[0.12]",
+  },
+
+  cyan: {
+    icon: "text-cyan-300 group-hover:text-cyan-200",
+    bg: "bg-cyan-400/[0.075] group-hover:bg-cyan-400/[0.115]",
+    border:
+      "border-cyan-300/[0.08] group-hover:border-cyan-300/[0.13]",
+    glow: "bg-cyan-400/[0.12]",
+  },
+
+  sky: {
+    icon: "text-sky-300 group-hover:text-sky-200",
+    bg: "bg-sky-400/[0.07] group-hover:bg-sky-400/[0.11]",
+    border:
+      "border-sky-300/[0.08] group-hover:border-sky-300/[0.13]",
+    glow: "bg-sky-400/[0.11]",
+  },
+
+  violet: {
+    icon: "text-violet-300 group-hover:text-violet-200",
+    bg: "bg-violet-400/[0.075] group-hover:bg-violet-400/[0.115]",
+    border:
+      "border-violet-300/[0.08] group-hover:border-violet-300/[0.13]",
+    glow: "bg-violet-400/[0.12]",
+  },
+
+  amber: {
+    icon: "text-amber-300 group-hover:text-amber-200",
+    bg: "bg-amber-400/[0.075] group-hover:bg-amber-400/[0.115]",
+    border:
+      "border-amber-300/[0.08] group-hover:border-amber-300/[0.13]",
+    glow: "bg-amber-400/[0.12]",
+  },
+
+  orange: {
+    icon: "text-orange-300 group-hover:text-orange-200",
+    bg: "bg-orange-400/[0.075] group-hover:bg-orange-400/[0.115]",
+    border:
+      "border-orange-300/[0.08] group-hover:border-orange-300/[0.13]",
+    glow: "bg-orange-400/[0.12]",
+  },
+
+  rose: {
+    icon: "text-rose-300 group-hover:text-rose-200",
+    bg: "bg-rose-400/[0.075] group-hover:bg-rose-400/[0.115]",
+    border:
+      "border-rose-300/[0.08] group-hover:border-rose-300/[0.13]",
+    glow: "bg-rose-400/[0.12]",
+  },
+
+  indigo: {
+    icon: "text-indigo-300 group-hover:text-indigo-200",
+    bg: "bg-indigo-400/[0.075] group-hover:bg-indigo-400/[0.115]",
+    border:
+      "border-indigo-300/[0.08] group-hover:border-indigo-300/[0.13]",
+    glow: "bg-indigo-400/[0.12]",
+  },
+
+  slate: {
+    icon: "text-slate-300 group-hover:text-slate-200",
+    bg: "bg-slate-300/[0.055] group-hover:bg-slate-300/[0.09]",
+    border:
+      "border-slate-300/[0.07] group-hover:border-slate-300/[0.11]",
+    glow: "bg-slate-300/[0.08]",
+  },
+};
+
 const menus: Menu[] = [
   {
     title: "Dashboard",
     url: "/dashboard",
     roles: ["ADMIN", "MANAGER", "PURCHASING", "GUDANG"],
     icon: LayoutDashboard,
+    iconTone: "emerald",
   },
   {
     title: "Dashboard Outlet",
     url: "/outlet/dashboard",
     roles: ["OUTLET_ADMIN"],
     icon: LayoutDashboard,
+    iconTone: "teal",
   },
   {
     title: "Attendance",
     url: "/attendance",
     roles: ["ADMIN", "MANAGER", "GUDANG"],
     icon: CalendarCheck,
+    iconTone: "sky",
   },
   {
     title: "Riwayat Absensi",
     url: "/attendance/history",
     roles: ["ADMIN", "MANAGER", "GUDANG"],
     icon: History,
+    iconTone: "violet",
   },
 
   {
@@ -132,36 +239,42 @@ const menus: Menu[] = [
     url: "/master-barang",
     roles: ["ADMIN", "PURCHASING"],
     icon: Package,
+    iconTone: "emerald",
   },
   {
     title: "Master Supplier",
     url: "/supplier",
     roles: ["ADMIN", "PURCHASING"],
     icon: Truck,
+    iconTone: "cyan",
   },
   {
     title: "Master Customer",
     url: "/customer",
     roles: ["ADMIN"],
     icon: Users,
+    iconTone: "violet",
   },
   {
     title: "Master User",
     url: "/master/user",
     roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: UserCog,
+    iconTone: "indigo",
   },
   {
     title: "Master Outlet",
     url: "/master/outlet",
     roles: ["ADMIN"],
     icon: Warehouse,
+    iconTone: "amber",
   },
   {
     title: "Master Karyawan",
     url: "/employee",
     roles: ["ADMIN", "MANAGER"],
     icon: UserRound,
+    iconTone: "rose",
   },
 
   {
@@ -173,18 +286,21 @@ const menus: Menu[] = [
     url: "/purchase",
     roles: ["ADMIN"],
     icon: ShoppingCart,
+    iconTone: "emerald",
   },
   {
     title: "Master Harga",
     url: "/master-harga",
     roles: ["ADMIN", "MANAGER", "PURCHASING"],
     icon: Tag,
+    iconTone: "amber",
   },
   {
     title: "Approval Purchase",
     url: "/purchase/approve",
     roles: ["ADMIN", "MANAGER", "PURCHASING"],
     icon: ClipboardCheck,
+    iconTone: "violet",
     badgeKey: "approvalPurchase",
   },
   {
@@ -192,6 +308,7 @@ const menus: Menu[] = [
     url: "/barang-masuk",
     roles: ["ADMIN", "GUDANG"],
     icon: ArrowDownToLine,
+    iconTone: "teal",
     badgeKey: "barangMasuk",
   },
 
@@ -204,54 +321,63 @@ const menus: Menu[] = [
     url: "/stock",
     roles: ["ADMIN", "GUDANG"],
     icon: Warehouse,
+    iconTone: "emerald",
   },
   {
     title: "Kartu Stok",
     url: "/gudang/stock-card",
     roles: ["ADMIN", "GUDANG"],
     icon: Warehouse,
+    iconTone: "cyan",
   },
   {
     title: "Expired Barang",
     url: "/expired",
     roles: ["ADMIN", "GUDANG"],
     icon: Package,
+    iconTone: "rose",
   },
   {
     title: "Barang Keluar",
     url: "/barang-keluar",
     roles: ["ADMIN", "GUDANG"],
     icon: PackageMinus,
+    iconTone: "orange",
   },
   {
     title: "Stock Card",
     url: "/stock-card",
     roles: ["ADMIN", "GUDANG"],
     icon: Boxes,
+    iconTone: "teal",
   },
   {
     title: "Mutasi Stock",
     url: "/mutasi-stock",
     roles: ["ADMIN", "GUDANG"],
     icon: ArrowLeftRight,
+    iconTone: "indigo",
   },
   {
     title: "Stock Opname",
     url: "/stock-opname",
     roles: ["ADMIN", "GUDANG"],
     icon: ClipboardList,
+    iconTone: "violet",
   },
   {
     title: "Adjustment Stock",
     url: "/adjustment",
     roles: ["ADMIN", "GUDANG"],
     icon: SlidersHorizontal,
+    iconTone: "amber",
   },
   {
     title: "History Stock",
     url: "/history",
     roles: ["ADMIN", "GUDANG"],
     icon: FileClock,
+    iconTone: "slate",
   },
 
   {
@@ -263,12 +389,14 @@ const menus: Menu[] = [
     url: "/waste",
     roles: ["ADMIN", "GUDANG"],
     icon: Trash2,
+    iconTone: "rose",
   },
   {
     title: "Approval Waste Pusat",
     url: "/waste/approval",
     roles: ["ADMIN", "MANAGER"],
     icon: ClipboardCheck,
+    iconTone: "violet",
     badgeKey: "approvalWastePusat",
   },
 
@@ -281,6 +409,7 @@ const menus: Menu[] = [
     url: "/pengiriman",
     roles: ["ADMIN"],
     icon: Send,
+    iconTone: "cyan",
     badgeKey: "deliveryOrder",
   },
   {
@@ -288,6 +417,7 @@ const menus: Menu[] = [
     url: "/surat-jalan",
     roles: ["ADMIN", "GUDANG"],
     icon: FileText,
+    iconTone: "sky",
     badgeKey: "suratJalan",
   },
 
@@ -300,18 +430,21 @@ const menus: Menu[] = [
     url: "/menu",
     roles: ["ADMIN", "MANAGER"],
     icon: Utensils,
+    iconTone: "amber",
   },
   {
     title: "Manufacture",
     url: "/manufacture",
     roles: ["ADMIN", "MANAGER", "GUDANG", "OUTLET_ADMIN"],
     icon: Factory,
+    iconTone: "orange",
   },
   {
     title: "Inventory",
     url: "/inventory",
     roles: ["ADMIN", "MANAGER", "GUDANG"],
     icon: Boxes,
+    iconTone: "emerald",
   },
 
   {
@@ -323,6 +456,7 @@ const menus: Menu[] = [
     url: "/cost-control",
     roles: ["ADMIN", "MANAGER", "OUTLET_ADMIN"],
     icon: TrendingUp,
+    iconTone: "teal",
   },
 
   {
@@ -334,24 +468,28 @@ const menus: Menu[] = [
     url: "/payment",
     roles: ["ADMIN", "MANAGER"],
     icon: CreditCard,
+    iconTone: "sky",
   },
   {
     title: "Master Account",
     url: "/petty-cash/accounts",
     roles: ["ADMIN"],
     icon: WalletCards,
+    iconTone: "violet",
   },
   {
     title: "Purchase Payable / Hutang",
     url: "/purchase-payable",
     roles: ["ADMIN", "MANAGER", "OUTLET_ADMIN"],
     icon: FileClock,
+    iconTone: "amber",
   },
   {
     title: "Petty Cash",
     url: "/petty-cash",
     roles: ["ADMIN", "MANAGER", "OUTLET_ADMIN"],
     icon: WalletCards,
+    iconTone: "emerald",
   },
 
   {
@@ -363,88 +501,106 @@ const menus: Menu[] = [
     url: "/outlet/master-barang",
     roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: Package,
+    iconTone: "teal",
   },
   {
     title: "Purchase Outlet",
     url: "/outlet/purchase",
     roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: ShoppingCart,
-  },
-  {
-    title: "Barang Masuk Outlet",
-    url: "/outlet/barang-masuk",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: ArrowDownToLine,
-    badgeKey: "barangMasukOutlet",
+    iconTone: "emerald",
   },
   {
     title: "Transfer Outlet",
     url: "/outlet/transfer",
     roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: ArrowLeftRight,
+    iconTone: "indigo",
   },
+
   {
-    title: "POS Outlet",
-    url: "/outlet/pos",
-    roles: ["ADMIN", "KASIR"],
-    icon: ShoppingCart,
-  },
-  {
-    title: "Barang Keluar Outlet",
-    url: "/outlet/barang-keluar",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: ArrowDownCircle,
-  },
-  {
-    title: "Waste Outlet",
-    url: "/outlet/waste",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: Trash2,
-  },
-  {
-    title: "Approval Waste Outlet",
-    url: "/outlet/waste/approval",
-    roles: ["ADMIN", "MANAGER"],
-    icon: ClipboardCheck,
-    badgeKey: "approvalWasteOutlet",
+    title: "OUTLET STOCK ACTIVITY",
+    header: true,
   },
   {
     title: "Stock Outlet",
     url: "/outlet/stock",
     roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: Boxes,
+    iconTone: "emerald",
+  },
+  {
+    title: "Barang Masuk Outlet",
+    url: "/outlet/barang-masuk",
+    roles: ["ADMIN", "OUTLET_ADMIN"],
+    icon: ArrowDownToLine,
+    iconTone: "teal",
+    badgeKey: "barangMasukOutlet",
+  },
+  {
+    title: "Barang Keluar Outlet",
+    url: "/outlet/barang-keluar",
+    roles: ["ADMIN", "OUTLET_ADMIN"],
+    icon: ArrowDownCircle,
+    iconTone: "orange",
+  },
+  {
+    title: "POS Outlet",
+    url: "/outlet/pos",
+    roles: ["ADMIN", "KASIR"],
+    icon: ShoppingCart,
+    iconTone: "violet",
+  },
+  {
+    title: "Waste Outlet",
+    url: "/outlet/waste",
+    roles: ["ADMIN", "OUTLET_ADMIN"],
+    icon: Trash2,
+    iconTone: "rose",
+  },
+  {
+    title: "Approval Waste Outlet",
+    url: "/outlet/waste/approval",
+    roles: ["ADMIN", "MANAGER"],
+    icon: ClipboardCheck,
+    iconTone: "violet",
+    badgeKey: "approvalWasteOutlet",
   },
   {
     title: "History Stock Outlet",
     url: "/outlet/history-stock",
     roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: FileClock,
+    iconTone: "slate",
   },
   {
     title: "Stock Awal Outlet",
     url: "/outlet/stock-awal",
     roles: ["ADMIN"],
     icon: Warehouse,
+    iconTone: "amber",
   },
   {
     title: "Stock Opname Outlet",
     url: "/outlet/stock-opname",
     roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: ClipboardList,
+    iconTone: "violet",
   },
   {
     title: "Approval Stock Opname",
     url: "/outlet/stock-opname/approval",
     roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: ClipboardCheck,
+    iconTone: "cyan",
     badgeKey: "approvalStockOpname",
   },
-
   {
     title: "Adjustment Outlet",
     url: "/outlet/adjustment",
     roles: ["ADMIN", "MANAGER", "OUTLET_ADMIN"],
     icon: SlidersHorizontal,
+    iconTone: "amber",
   },
 
   {
@@ -456,24 +612,41 @@ const menus: Menu[] = [
     url: "/outlet/laporan/barang-masuk",
     roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: FileText,
+    iconTone: "teal",
   },
   {
     title: "Laporan Purchase Outlet",
     url: "/outlet/laporan/purchase",
     roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: FileText,
+    iconTone: "emerald",
   },
+
+  // =====================================================
+  // TAMBAHAN BARU
+  // LAPORAN SEMUA BARANG KELUAR OUTLET
+  // =====================================================
+  {
+    title: "Laporan Barang Keluar Outlet",
+    url: "/outlet/laporan/barang-keluar",
+    roles: ["ADMIN", "OUTLET_ADMIN"],
+    icon: PackageMinus,
+    iconTone: "orange",
+  },
+
   {
     title: "Laporan Delivery Outlet",
     url: "/outlet/laporan/delivery",
     roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: FileText,
+    iconTone: "cyan",
   },
   {
     title: "Laporan Stock Outlet",
     url: "/outlet/laporan/stock",
     roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: FileText,
+    iconTone: "violet",
   },
 
   {
@@ -485,48 +658,56 @@ const menus: Menu[] = [
     url: "/laporan/purchase",
     roles: ["ADMIN", "MANAGER", "PURCHASING"],
     icon: FileText,
+    iconTone: "emerald",
   },
   {
     title: "Laporan Barang Masuk",
     url: "/laporan/barang-masuk",
     roles: ["ADMIN", "MANAGER", "GUDANG"],
     icon: FileText,
+    iconTone: "teal",
   },
   {
     title: "Laporan Barang Keluar",
     url: "/laporan/barang-keluar",
     roles: ["ADMIN", "MANAGER", "GUDANG"],
     icon: FileText,
+    iconTone: "orange",
   },
   {
     title: "Laporan Inventory",
     url: "/laporan/inventory",
     roles: ["ADMIN", "MANAGER"],
     icon: FileText,
+    iconTone: "emerald",
   },
   {
     title: "Laporan Supplier",
     url: "/laporan/supplier",
     roles: ["ADMIN", "MANAGER", "PURCHASING"],
     icon: FileText,
+    iconTone: "cyan",
   },
   {
     title: "Laporan Customer",
     url: "/laporan/customer",
     roles: ["ADMIN", "MANAGER", "PURCHASING"],
     icon: FileText,
+    iconTone: "violet",
   },
   {
     title: "Laporan Attendance",
     url: "/laporan/attendance",
     roles: ["ADMIN", "MANAGER"],
     icon: FileText,
+    iconTone: "sky",
   },
   {
     title: "Laporan Stock Opname",
     url: "/laporan/stock-opname",
     roles: ["ADMIN", "MANAGER", "GUDANG"],
     icon: FileText,
+    iconTone: "amber",
   },
 
   {
@@ -538,6 +719,7 @@ const menus: Menu[] = [
     url: "/pengaturan",
     roles: ["ADMIN"],
     icon: Settings,
+    iconTone: "slate",
   },
 ];
 
@@ -778,8 +960,6 @@ export default function Sidebar({
 
   return (
     <>
-      {/* OVERLAY */}
-
       {open && (
         <button
           type="button"
@@ -791,12 +971,10 @@ export default function Sidebar({
             z-40
             cursor-default
             bg-slate-950/55
-            backdrop-blur-[4px]
+            backdrop-blur-[5px]
           "
         />
       )}
-
-      {/* SIDEBAR */}
 
       <aside
         className={`
@@ -811,10 +989,10 @@ export default function Sidebar({
           flex-col
           overflow-hidden
           border-r
-          border-white/[0.07]
+          border-white/[0.075]
           bg-[#041c17]
           text-white
-          shadow-[18px_0_70px_rgba(0,0,0,0.32)]
+          shadow-[20px_0_80px_rgba(0,0,0,0.38)]
           transition-transform
           duration-300
           ease-out
@@ -825,45 +1003,45 @@ export default function Sidebar({
           }
         `}
       >
-        {/* PREMIUM BACKGROUND */}
+        {/* PREMIUM ATMOSPHERE */}
 
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div
             className="
               absolute
-              -left-36
-              -top-32
-              h-96
-              w-96
+              -left-40
+              -top-36
+              h-[420px]
+              w-[420px]
               rounded-full
-              bg-emerald-400/[0.09]
-              blur-[120px]
+              bg-emerald-400/[0.085]
+              blur-[125px]
             "
           />
 
           <div
             className="
               absolute
-              -right-32
-              top-[35%]
-              h-80
-              w-80
+              -right-36
+              top-[30%]
+              h-[350px]
+              w-[350px]
               rounded-full
               bg-teal-300/[0.045]
-              blur-[110px]
+              blur-[115px]
             "
           />
 
           <div
             className="
               absolute
-              -bottom-40
-              -left-20
-              h-96
-              w-96
+              -bottom-44
+              -left-28
+              h-[420px]
+              w-[420px]
               rounded-full
               bg-emerald-500/[0.045]
-              blur-[120px]
+              blur-[130px]
             "
           />
 
@@ -871,7 +1049,7 @@ export default function Sidebar({
             className="
               absolute
               inset-0
-              bg-[radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.045),transparent_25%)]
+              bg-[radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.055),transparent_26%)]
             "
           />
 
@@ -880,9 +1058,9 @@ export default function Sidebar({
               absolute
               inset-0
               bg-gradient-to-b
-              from-emerald-950/[0.16]
+              from-emerald-950/[0.18]
               via-transparent
-              to-black/[0.10]
+              to-black/[0.12]
             "
           />
         </div>
@@ -913,19 +1091,32 @@ export default function Sidebar({
                 overflow-hidden
                 rounded-[14px]
                 border
-                border-white/[0.10]
-                bg-white/[0.045]
-                shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_10px_30px_rgba(0,0,0,0.12)]
+                border-emerald-200/[0.12]
+                bg-gradient-to-br
+                from-emerald-300/[0.14]
+                via-white/[0.045]
+                to-transparent
+                shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_10px_30px_rgba(0,0,0,0.18)]
               "
             >
               <div
                 className="
                   absolute
                   inset-0
-                  bg-gradient-to-br
-                  from-emerald-300/[0.15]
-                  via-transparent
-                  to-transparent
+                  bg-[radial-gradient(circle_at_30%_20%,rgba(110,231,183,0.20),transparent_45%)]
+                "
+              />
+
+              <div
+                className="
+                  absolute
+                  bottom-0
+                  right-0
+                  h-6
+                  w-6
+                  rounded-full
+                  bg-emerald-400/[0.08]
+                  blur-xl
                 "
               />
 
@@ -934,7 +1125,7 @@ export default function Sidebar({
                   relative
                   text-[10px]
                   font-black
-                  tracking-[-0.06em]
+                  tracking-[-0.07em]
                   text-white
                 "
               >
@@ -966,7 +1157,7 @@ export default function Sidebar({
                       animate-ping
                       rounded-full
                       bg-emerald-400
-                      opacity-30
+                      opacity-25
                     "
                   />
 
@@ -977,7 +1168,7 @@ export default function Sidebar({
                       w-1.5
                       rounded-full
                       bg-emerald-400
-                      shadow-[0_0_9px_rgba(52,211,153,0.8)]
+                      shadow-[0_0_10px_rgba(52,211,153,0.85)]
                     "
                   />
                 </span>
@@ -1016,8 +1207,9 @@ export default function Sidebar({
                 text-slate-400
                 transition-all
                 duration-200
-                hover:border-white/[0.12]
-                hover:bg-white/[0.06]
+                hover:-rotate-90
+                hover:border-emerald-300/[0.14]
+                hover:bg-emerald-400/[0.06]
                 hover:text-white
               "
             >
@@ -1028,7 +1220,7 @@ export default function Sidebar({
             </button>
           </div>
 
-          {/* USER CARD */}
+          {/* USER PROFILE */}
 
           <div
             className="
@@ -1041,11 +1233,11 @@ export default function Sidebar({
               border-white/[0.075]
               bg-white/[0.035]
               p-3
-              shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_12px_32px_rgba(0,0,0,0.10)]
+              shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_14px_34px_rgba(0,0,0,0.12)]
               backdrop-blur-xl
               transition-all
               duration-300
-              hover:border-white/[0.11]
+              hover:border-emerald-200/[0.10]
               hover:bg-white/[0.045]
             "
           >
@@ -1053,12 +1245,12 @@ export default function Sidebar({
               className="
                 pointer-events-none
                 absolute
-                -left-10
-                -top-10
-                h-28
-                w-28
+                -left-12
+                -top-12
+                h-32
+                w-32
                 rounded-full
-                bg-emerald-400/[0.07]
+                bg-emerald-400/[0.075]
                 blur-3xl
               "
             />
@@ -1072,7 +1264,7 @@ export default function Sidebar({
                 h-px
                 bg-gradient-to-r
                 from-transparent
-                via-white/[0.08]
+                via-emerald-300/[0.10]
                 to-transparent
               "
             />
@@ -1092,6 +1284,7 @@ export default function Sidebar({
                     from-emerald-300/[0.16]
                     via-white/[0.04]
                     to-transparent
+                    shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]
                   "
                 >
                   {user?.photo ? (
@@ -1108,6 +1301,7 @@ export default function Sidebar({
                         w-full
                         items-center
                         justify-center
+                        bg-[radial-gradient(circle_at_35%_25%,rgba(110,231,183,0.16),transparent_55%)]
                         text-[10px]
                         font-black
                         tracking-wide
@@ -1130,7 +1324,7 @@ export default function Sidebar({
                     border-2
                     border-[#09261f]
                     bg-emerald-400
-                    shadow-[0_0_8px_rgba(52,211,153,0.8)]
+                    shadow-[0_0_9px_rgba(52,211,153,0.85)]
                   "
                 />
               </div>
@@ -1174,13 +1368,35 @@ export default function Sidebar({
                   gap-1.5
                   rounded-full
                   border
-                  border-white/[0.08]
-                  bg-white/[0.035]
+                  border-emerald-300/[0.08]
+                  bg-emerald-300/[0.035]
                   px-2
                   py-1
                 "
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_7px_rgba(52,211,153,0.7)]" />
+                <span className="relative flex h-1.5 w-1.5">
+                  <span
+                    className="
+                      absolute
+                      inset-0
+                      animate-ping
+                      rounded-full
+                      bg-emerald-400
+                      opacity-20
+                    "
+                  />
+
+                  <span
+                    className="
+                      relative
+                      h-1.5
+                      w-1.5
+                      rounded-full
+                      bg-emerald-400
+                      shadow-[0_0_7px_rgba(52,211,153,0.75)]
+                    "
+                  />
+                </span>
 
                 <span
                   className="
@@ -1210,7 +1426,7 @@ export default function Sidebar({
             [&::-webkit-scrollbar]:w-1
             [&::-webkit-scrollbar-track]:bg-transparent
             [&::-webkit-scrollbar-thumb]:rounded-full
-            [&::-webkit-scrollbar-thumb]:bg-white/[0.07]
+            [&::-webkit-scrollbar-thumb]:bg-white/[0.065]
             hover:[&::-webkit-scrollbar-thumb]:bg-white/[0.12]
           "
         >
@@ -1234,7 +1450,9 @@ export default function Sidebar({
                       className="
                         h-px
                         w-3
-                        bg-emerald-400/[0.25]
+                        bg-gradient-to-r
+                        from-emerald-400/[0.38]
+                        to-transparent
                       "
                     />
 
@@ -1275,6 +1493,11 @@ export default function Sidebar({
 
               const Icon =
                 menu.icon || Package;
+
+              const tone =
+                ICON_TONES[
+                  menu.iconTone || "emerald"
+                ];
 
               const badgeValue =
                 getBadgeValue(
@@ -1318,13 +1541,13 @@ export default function Sidebar({
                       active
                         ? `
                           border
-                          border-white/[0.09]
+                          border-emerald-200/[0.09]
                           bg-gradient-to-r
                           from-white/[0.085]
                           via-emerald-400/[0.065]
                           to-transparent
                           text-white
-                          shadow-[0_8px_25px_rgba(0,0,0,0.10)]
+                          shadow-[0_8px_25px_rgba(0,0,0,0.12)]
                         `
                         : `
                           border
@@ -1349,7 +1572,7 @@ export default function Sidebar({
                           -translate-y-1/2
                           rounded-r-full
                           bg-emerald-300
-                          shadow-[0_0_14px_rgba(52,211,153,0.75)]
+                          shadow-[0_0_15px_rgba(52,211,153,0.80)]
                         "
                       />
 
@@ -1357,10 +1580,10 @@ export default function Sidebar({
                         className="
                           pointer-events-none
                           absolute
-                          -right-7
+                          -right-8
                           top-1/2
-                          h-20
-                          w-20
+                          h-24
+                          w-24
                           -translate-y-1/2
                           rounded-full
                           bg-emerald-400/[0.07]
@@ -1376,15 +1599,13 @@ export default function Sidebar({
                           top-0
                           h-px
                           bg-gradient-to-r
-                          from-white/[0.10]
-                          via-emerald-300/[0.08]
+                          from-white/[0.11]
+                          via-emerald-300/[0.09]
                           to-transparent
                         "
                       />
                     </>
                   )}
-
-                  {/* ICON */}
 
                   <span
                     className={`
@@ -1395,32 +1616,76 @@ export default function Sidebar({
                       shrink-0
                       items-center
                       justify-center
+                      overflow-hidden
                       rounded-lg
+                      border
                       transition-all
                       duration-200
 
                       ${
                         active
                           ? `
-                            bg-white/[0.055]
-                            text-emerald-300
-                            shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]
+                            border-emerald-200/[0.10]
+                            bg-gradient-to-br
+                            from-emerald-300/[0.13]
+                            via-white/[0.045]
+                            to-transparent
+                            text-emerald-200
+                            shadow-[inset_0_1px_0_rgba(255,255,255,0.055),0_4px_14px_rgba(0,0,0,0.10)]
                           `
                           : `
-                            text-slate-500
-                            group-hover:bg-white/[0.035]
-                            group-hover:text-emerald-300
+                            ${tone.bg}
+                            ${tone.border}
+                            ${tone.icon}
                           `
                       }
                     `}
                   >
+                    {!active && (
+                      <>
+                        <span
+                          className={`
+                            pointer-events-none
+                            absolute
+                            -right-2
+                            -top-2
+                            h-5
+                            w-5
+                            rounded-full
+                            ${tone.glow}
+                            blur-md
+                            opacity-70
+                          `}
+                        />
+
+                        <span
+                          className="
+                            pointer-events-none
+                            absolute
+                            inset-0
+                            bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.09),transparent_42%)]
+                          "
+                        />
+                      </>
+                    )}
+
+                    {active && (
+                      <span
+                        className="
+                          pointer-events-none
+                          absolute
+                          inset-0
+                          bg-[radial-gradient(circle_at_30%_20%,rgba(110,231,183,0.18),transparent_55%)]
+                        "
+                      />
+                    )}
+
                     <Icon
-                      size={16}
-                      strokeWidth={1.8}
+                      className="relative z-10"
+                      size={16.5}
+                      strokeWidth={1.85}
                     />
                   </span>
-
-                  {/* TITLE */}
 
                   <span
                     className={`
@@ -1441,8 +1706,6 @@ export default function Sidebar({
                     {menu.title}
                   </span>
 
-                  {/* PREMIUM WHITE COUNT */}
-
                   {hasBadge && (
                     <span
                       aria-label={`${badgeValue} pending`}
@@ -1455,6 +1718,7 @@ export default function Sidebar({
                         shrink-0
                         items-center
                         justify-center
+                        overflow-hidden
                         rounded-full
                         border
                         border-white/[0.22]
@@ -1486,12 +1750,11 @@ export default function Sidebar({
                           w-1.5
                           rounded-full
                           bg-emerald-300
+                          shadow-[0_0_5px_rgba(52,211,153,0.6)]
                         "
                       />
                     </span>
                   )}
-
-                  {/* ARROW */}
 
                   <span
                     className={`
@@ -1551,7 +1814,7 @@ export default function Sidebar({
               h-px
               bg-gradient-to-r
               from-transparent
-              via-white/[0.08]
+              via-emerald-300/[0.08]
               to-transparent
             "
           />
@@ -1561,11 +1824,12 @@ export default function Sidebar({
               <div className="flex items-center gap-2">
                 <span
                   className="
+                    relative
                     h-1.5
                     w-1.5
                     rounded-full
                     bg-emerald-400
-                    shadow-[0_0_8px_rgba(52,211,153,0.8)]
+                    shadow-[0_0_9px_rgba(52,211,153,0.8)]
                   "
                 />
 
@@ -1602,8 +1866,8 @@ export default function Sidebar({
                 gap-1.5
                 rounded-full
                 border
-                border-white/[0.08]
-                bg-white/[0.035]
+                border-emerald-300/[0.08]
+                bg-emerald-300/[0.035]
                 px-2.5
                 py-1.5
               "

@@ -30,6 +30,25 @@ function parseTempoDays(value: unknown) {
 }
 
 // =====================================================
+// PARSE OPTIONAL STRING
+// =====================================================
+
+function parseOptionalString(
+  value: unknown
+): string | null {
+  if (
+    value === undefined ||
+    value === null
+  ) {
+    return null;
+  }
+
+  const result = String(value).trim();
+
+  return result || null;
+}
+
+// =====================================================
 // GET SUPPLIER
 // =====================================================
 
@@ -137,6 +156,25 @@ export async function POST(
     }
 
     // -------------------------------------------------
+    // BANK / REKENING
+    // -------------------------------------------------
+
+    const noRekening =
+      parseOptionalString(
+        body.noRekening
+      );
+
+    const namaRekening =
+      parseOptionalString(
+        body.namaRekening
+      );
+
+    const jenisRekening =
+      parseOptionalString(
+        body.jenisRekening
+      );
+
+    // -------------------------------------------------
     // CREATE
     // -------------------------------------------------
 
@@ -147,24 +185,37 @@ export async function POST(
           name,
 
           address:
-            body.address ??
-            null,
+            parseOptionalString(
+              body.address
+            ),
 
           city:
-            body.city ??
-            null,
+            parseOptionalString(
+              body.city
+            ),
 
           phone:
-            body.phone ??
-            null,
+            parseOptionalString(
+              body.phone
+            ),
 
           email:
-            body.email ??
-            null,
+            parseOptionalString(
+              body.email
+            ),
 
           contactPerson:
-            body.contactPerson ??
-            null,
+            parseOptionalString(
+              body.contactPerson
+            ),
+
+          // ===========================================
+          // INFORMASI REKENING SUPPLIER
+          // ===========================================
+
+          noRekening,
+          namaRekening,
+          jenisRekening,
 
           // ===========================================
           // TEMPO PEMBAYARAN
@@ -342,6 +393,39 @@ export async function PATCH(
     }
 
     // -------------------------------------------------
+    // BANK / REKENING
+    // -------------------------------------------------
+    //
+    // Jika field dikirim:
+    //   "" -> null
+    //   "123" -> "123"
+    //
+    // Jika field tidak dikirim:
+    //   pertahankan nilai existing.
+    // -------------------------------------------------
+
+    const noRekening =
+      body.noRekening !== undefined
+        ? parseOptionalString(
+            body.noRekening
+          )
+        : existing.noRekening;
+
+    const namaRekening =
+      body.namaRekening !== undefined
+        ? parseOptionalString(
+            body.namaRekening
+          )
+        : existing.namaRekening;
+
+    const jenisRekening =
+      body.jenisRekening !== undefined
+        ? parseOptionalString(
+            body.jenisRekening
+          )
+        : existing.jenisRekening;
+
+    // -------------------------------------------------
     // UPDATE
     // -------------------------------------------------
 
@@ -356,24 +440,47 @@ export async function PATCH(
           name,
 
           address:
-            body.address ??
-            null,
+            body.address !== undefined
+              ? parseOptionalString(
+                  body.address
+                )
+              : existing.address,
 
           city:
-            body.city ??
-            null,
+            body.city !== undefined
+              ? parseOptionalString(
+                  body.city
+                )
+              : existing.city,
 
           phone:
-            body.phone ??
-            null,
+            body.phone !== undefined
+              ? parseOptionalString(
+                  body.phone
+                )
+              : existing.phone,
 
           email:
-            body.email ??
-            null,
+            body.email !== undefined
+              ? parseOptionalString(
+                  body.email
+                )
+              : existing.email,
 
           contactPerson:
-            body.contactPerson ??
-            null,
+            body.contactPerson !== undefined
+              ? parseOptionalString(
+                  body.contactPerson
+                )
+              : existing.contactPerson,
+
+          // ===========================================
+          // INFORMASI REKENING SUPPLIER
+          // ===========================================
+
+          noRekening,
+          namaRekening,
+          jenisRekening,
 
           // ===========================================
           // UPDATE TEMPO

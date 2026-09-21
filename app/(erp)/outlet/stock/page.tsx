@@ -35,6 +35,17 @@ import {
   CircleX,
   SlidersHorizontal,
   ChevronRight,
+  WalletCards,
+  ArrowLeftRight,
+  Truck,
+  Receipt,
+  Trash2,
+  Wrench,
+  ShoppingCart,
+  Factory,
+  FileCheck2,
+  PackagePlus,
+  PackageMinus,
 } from "lucide-react";
 
 type Outlet = {
@@ -161,18 +172,23 @@ type HistoryBarang = {
 
 type HistoryRow = {
   id: string;
+
   date: string;
+
   type: string;
+
   direction: "IN" | "OUT" | "INFO";
 
   number: string | null;
 
   outletId: number | null;
+
   barangId: number;
 
   qty: number;
 
   stockBefore: number | null;
+
   stockAfter: number | null;
 
   status: string | null;
@@ -182,10 +198,35 @@ type HistoryRow = {
   source: string;
 
   barang: HistoryBarang | null;
+
+  user?: {
+    id: number;
+    name?: string | null;
+    username?: string | null;
+  } | null;
+
+  outlet?: {
+    id: number;
+    code: string;
+    name: string;
+  } | null;
+
+  fromOutlet?: {
+    id: number;
+    code: string;
+    name: string;
+  } | null;
+
+  toOutlet?: {
+    id: number;
+    code: string;
+    name: string;
+  } | null;
 };
 
 type HistoryResponse = {
   success: boolean;
+
   data: HistoryRow[];
 
   summary?: {
@@ -200,15 +241,21 @@ type HistoryResponse = {
 
 export default function OutletStockPage() {
   const [data, setData] = useState<Stock[]>([]);
-  const [outlets, setOutlets] = useState<Outlet[]>([]);
-  const [outletId, setOutletId] = useState("");
+
+  const [outlets, setOutlets] =
+    useState<Outlet[]>([]);
+
+  const [outletId, setOutletId] =
+    useState("");
+
   const [currentUser, setCurrentUser] =
     useState<CurrentUser | null>(null);
 
   const [loadingUser, setLoadingUser] =
     useState(true);
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] =
+    useState("");
 
   const [loading, setLoading] =
     useState(true);
@@ -216,7 +263,8 @@ export default function OutletStockPage() {
   const [loadingOutlet, setLoadingOutlet] =
     useState(true);
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
 
   const [selectedHistory, setSelectedHistory] =
     useState<Stock | null>(null);
@@ -242,9 +290,7 @@ export default function OutletStockPage() {
   // ROLE
   // =====================================================
 
-  function normalizeRole(
-    role: unknown
-  ) {
+  function normalizeRole(role: unknown) {
     return String(role || "")
       .trim()
       .toUpperCase()
@@ -254,9 +300,7 @@ export default function OutletStockPage() {
   function isOutletAdmin(
     user: CurrentUser | null = currentUser
   ) {
-    const role = normalizeRole(
-      user?.role
-    );
+    const role = normalizeRole(user?.role);
 
     return (
       role === "ADMIN_OUTLET" ||
@@ -283,6 +327,18 @@ export default function OutletStockPage() {
       "id-ID",
       {
         maximumFractionDigits: 4,
+      }
+    );
+  }
+
+  function formatCurrency(value: number) {
+    return Number(value ?? 0).toLocaleString(
+      "id-ID",
+      {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
       }
     );
   }
@@ -342,25 +398,6 @@ export default function OutletStockPage() {
         );
       }
 
-      /*
-       * /api/me mengembalikan:
-       *
-       * {
-       *   success: true,
-       *   user: {
-       *     id,
-       *     role,
-       *     outletId,
-       *     outlet
-       *   }
-       * }
-       *
-       * Jadi user HARUS diambil dari result.user.
-       *
-       * Fallback tetap dipertahankan agar frontend
-       * kompatibel jika response API berubah menjadi
-       * result.data atau langsung object user.
-       */
       const user =
         result?.user ??
         result?.data?.user ??
@@ -370,9 +407,7 @@ export default function OutletStockPage() {
       const normalizedUser: CurrentUser = {
         id: Number(user?.id || 0),
 
-        role: String(
-          user?.role || ""
-        )
+        role: String(user?.role || "")
           .trim()
           .toUpperCase()
           .replace(/\s+/g, "_"),
@@ -385,9 +420,7 @@ export default function OutletStockPage() {
 
         outlet: user?.outlet
           ? {
-              id: Number(
-                user.outlet.id
-              ),
+              id: Number(user.outlet.id),
               code: String(
                 user.outlet.code || ""
               ),
@@ -408,19 +441,13 @@ export default function OutletStockPage() {
         role === "ADMIN_OUTLET" ||
         role === "OUTLET_ADMIN";
 
-      // ===================================================
-      // HARD LOCK OUTLET SESUAI AKUN
-      // ===================================================
-
       if (
         isAdminOutlet &&
         normalizedUser.outletId !== null &&
         normalizedUser.outletId !== undefined
       ) {
         setOutletId(
-          String(
-            normalizedUser.outletId
-          )
+          String(normalizedUser.outletId)
         );
       }
     } catch (error) {
@@ -487,10 +514,6 @@ export default function OutletStockPage() {
       setError("");
 
       let targetOutlet = selectedOutlet;
-
-      // =================================================
-      // HARD LOCK ADMIN OUTLET / OUTLET ADMIN
-      // =================================================
 
       if (
         isOutletAdmin(currentUser) &&
@@ -560,11 +583,6 @@ export default function OutletStockPage() {
   useEffect(() => {
     if (loadingUser) return;
 
-    // ===================================================
-    // ADMIN OUTLET / OUTLET ADMIN
-    // SELALU KE OUTLET AKUN
-    // ===================================================
-
     if (
       isOutletAdmin(currentUser) &&
       currentUser?.outletId !== null &&
@@ -579,11 +597,6 @@ export default function OutletStockPage() {
 
       return;
     }
-
-    // ===================================================
-    // ROLE LAIN
-    // DEFAULT SEMUA OUTLET
-    // ===================================================
 
     setOutletId("");
     loadStock("");
@@ -600,11 +613,6 @@ export default function OutletStockPage() {
   function handleOutletChange(
     value: string
   ) {
-    // ===================================================
-    // HARD LOCK
-    // ADMIN_OUTLET / OUTLET_ADMIN
-    // ===================================================
-
     if (isOutletAdmin(currentUser)) {
       const accountOutletId =
         currentUser?.outletId;
@@ -625,20 +633,11 @@ export default function OutletStockPage() {
       const lockedId =
         String(accountOutletId);
 
-      // Selalu paksa kembali ke outlet akun
       setOutletId(lockedId);
-
-      // Jangan pernah gunakan value
-      // dari dropdown untuk role outlet
       loadStock(lockedId);
 
       return;
     }
-
-    // ===================================================
-    // ROLE LAIN
-    // BOLEH MEMILIH OUTLET
-    // ===================================================
 
     setOutletId(value);
     loadStock(value);
@@ -755,72 +754,217 @@ export default function OutletStockPage() {
   }
 
   // =====================================================
-  // HISTORY TYPE
+  // ALL HISTORY TYPE
   // =====================================================
 
   function getHistoryType(type: string) {
-    switch (
-      String(type || "").toUpperCase()
-    ) {
+    const value = String(type || "")
+      .trim()
+      .toUpperCase();
+
+    switch (value) {
+      // =================================================
+      // PURCHASE / SUPPLIER
+      // =================================================
+
+      case "PURCHASE":
+      case "PURCHASE_ORDER":
+      case "OUTLET_PURCHASE":
+      case "PO":
+        return {
+          text: "Purchase Order",
+          icon: ShoppingCart,
+          className:
+            "border-indigo-200 bg-indigo-50 text-indigo-700",
+        };
+
+      case "GOODS_RECEIPT":
+      case "RECEIPT":
       case "OUTLET_RECEIPT":
+      case "PURCHASE_RECEIPT":
+      case "BARANG_MASUK":
         return {
           text: "Barang Masuk Supplier",
+          icon: PackagePlus,
           className:
             "border-emerald-200 bg-emerald-50 text-emerald-700",
         };
 
-      case "TRANSFER_IN":
+      // =================================================
+      // CENTRAL / WAREHOUSE
+      // =================================================
+
+      case "WAREHOUSE_TRANSFER_IN":
+      case "TRANSFER_FROM_WAREHOUSE":
+      case "GUDANG_TRANSFER_IN":
+      case "PUSAT_TRANSFER_IN":
         return {
-          text: "Transfer Masuk",
+          text: "Masuk dari Gudang Pusat",
+          icon: Warehouse,
+          className:
+            "border-blue-200 bg-blue-50 text-blue-700",
+        };
+
+      case "WAREHOUSE_TRANSFER_OUT":
+      case "TRANSFER_TO_WAREHOUSE":
+      case "GUDANG_TRANSFER_OUT":
+      case "PUSAT_TRANSFER_OUT":
+        return {
+          text: "Keluar ke Gudang Pusat",
+          icon: Warehouse,
+          className:
+            "border-orange-200 bg-orange-50 text-orange-700",
+        };
+
+      // =================================================
+      // ANTAR OUTLET
+      // =================================================
+
+      case "TRANSFER_IN":
+      case "OUTLET_TRANSFER_IN":
+      case "TRANSFER_ANTAR_OUTLET_IN":
+        return {
+          text: "Transfer Masuk Antar Outlet",
+          icon: ArrowLeftRight,
           className:
             "border-blue-200 bg-blue-50 text-blue-700",
         };
 
       case "TRANSFER_OUT":
+      case "OUTLET_TRANSFER_OUT":
+      case "TRANSFER_ANTAR_OUTLET_OUT":
         return {
-          text: "Transfer Keluar",
+          text: "Transfer Keluar Antar Outlet",
+          icon: ArrowLeftRight,
           className:
             "border-orange-200 bg-orange-50 text-orange-700",
         };
 
+      // =================================================
+      // DELIVERY
+      // =================================================
+
       case "DELIVERY_IN":
+      case "DELIVERY_RECEIPT":
+      case "DELIVERY_RECEIVED":
         return {
           text: "Delivery Masuk",
+          icon: Truck,
           className:
-            "border-blue-200 bg-blue-50 text-blue-700",
+            "border-cyan-200 bg-cyan-50 text-cyan-700",
         };
 
-      case "POS_OUT":
+      case "DELIVERY_OUT":
+      case "DELIVERY":
+      case "DELIVERY_SENT":
         return {
-          text: "Pemakaian POS",
+          text: "Delivery Keluar",
+          icon: Truck,
+          className:
+            "border-orange-200 bg-orange-50 text-orange-700",
+        };
+
+      // =================================================
+      // ADJUSTMENT
+      // =================================================
+
+      case "ADJUSTMENT_IN":
+      case "STOCK_ADJUSTMENT_IN":
+        return {
+          text: "Adjustment Masuk",
+          icon: Wrench,
+          className:
+            "border-emerald-200 bg-emerald-50 text-emerald-700",
+        };
+
+      case "ADJUSTMENT_OUT":
+      case "STOCK_ADJUSTMENT_OUT":
+        return {
+          text: "Adjustment Keluar",
+          icon: Wrench,
           className:
             "border-red-200 bg-red-50 text-red-700",
         };
 
+      case "ADJUSTMENT":
+      case "STOCK_ADJUSTMENT":
+        return {
+          text: "Adjustment Stock",
+          icon: Wrench,
+          className:
+            "border-violet-200 bg-violet-50 text-violet-700",
+        };
+
+      // =================================================
+      // WASTE / STOCK OUT
+      // =================================================
+
+      case "WASTE":
+      case "OUTLET_WASTE":
+      case "STOCK_WASTE":
+        return {
+          text: "Waste",
+          icon: Trash2,
+          className:
+            "border-red-200 bg-red-50 text-red-700",
+        };
+
+      case "STOCK_OUT":
+      case "BARANG_KELUAR":
+      case "OUTLET_STOCK_OUT":
+      case "TRANSFER_OUTLET":
+        return {
+          text: "Pemakaian / Barang Keluar",
+          icon: PackageMinus,
+          className:
+            "border-red-200 bg-red-50 text-red-700",
+        };
+
+      // =================================================
+      // POS
+      // =================================================
+
+      case "POS_OUT":
+      case "POS_SALE":
+      case "POS_CONSUMPTION":
+      case "POS_CONSUME":
+        return {
+          text: "Pemakaian POS",
+          icon: Receipt,
+          className:
+            "border-rose-200 bg-rose-50 text-rose-700",
+        };
+
+      // =================================================
+      // MANUFACTURE
+      // =================================================
+
       case "MANUFACTURE_CONSUME":
+      case "MANUFACTURING_CONSUME":
         return {
           text: "Konsumsi Manufacture",
+          icon: Factory,
           className:
             "border-orange-200 bg-orange-50 text-orange-700",
         };
 
       case "MANUFACTURE_OUTPUT":
+      case "MANUFACTURING_OUTPUT":
         return {
           text: "Hasil Manufacture",
+          icon: Factory,
           className:
             "border-emerald-200 bg-emerald-50 text-emerald-700",
         };
 
-      case "STOCK_OUT":
-        return {
-          text: "Pemakaian / Waste",
-          className:
-            "border-red-200 bg-red-50 text-red-700",
-        };
+      // =================================================
+      // STOCK OPNAME
+      // =================================================
 
       case "STOCK_OPNAME":
         return {
           text: "Stock Opname",
+          icon: ClipboardCheck,
           className:
             "border-purple-200 bg-purple-50 text-purple-700",
         };
@@ -828,37 +972,137 @@ export default function OutletStockPage() {
       case "STOCK_OPNAME_HISTORY":
         return {
           text: "History Stock Opname",
+          icon: FileCheck2,
           className:
             "border-purple-200 bg-purple-50 text-purple-700",
         };
 
-      case "OUTLET_PURCHASE":
-        return {
-          text: "Purchase Order",
-          className:
-            "border-gray-200 bg-gray-50 text-gray-700",
-        };
+      // =================================================
+      // INVENTORY / MUTATION
+      // =================================================
 
-      case "ADJUSTMENT_IN":
+      case "STOCK_IN":
         return {
-          text: "Adjustment Masuk",
+          text: "Stock Masuk",
+          icon: ArrowDownCircle,
           className:
             "border-emerald-200 bg-emerald-50 text-emerald-700",
         };
 
-      case "ADJUSTMENT_OUT":
+      case "STOCK_MOVEMENT":
+      case "INVENTORY_MOVEMENT":
         return {
-          text: "Adjustment Keluar",
+          text: "Pergerakan Stock",
+          icon: Activity,
+          className:
+            "border-slate-200 bg-slate-50 text-slate-700",
+        };
+
+      // =================================================
+      // RECEIVING / PURCHASE OUTLET ALIASES
+      // =================================================
+
+      case "PURCHASE_RECEIVED":
+      case "PURCHASE_IN":
+      case "RECEIVE_PURCHASE":
+      case "OUTLET_PURCHASE_RECEIVED":
+      case "PURCHASE_RECEIPT_IN":
+        return {
+          text: "Barang Masuk Purchase / Receipt",
+          icon: PackagePlus,
+          className:
+            "border-emerald-200 bg-emerald-50 text-emerald-700",
+        };
+
+      // =================================================
+      // USAGE / WASTE ALIASES
+      // =================================================
+
+      case "USAGE":
+      case "PEMAKAIAN":
+      case "CONSUMPTION":
+      case "WASTE_OUT":
+        return {
+          text: "Pemakaian / Waste",
+          icon: PackageMinus,
           className:
             "border-red-200 bg-red-50 text-red-700",
         };
 
+      // =================================================
+      // FALLBACK
+      // =================================================
+
       default:
         return {
-          text: type || "-",
+          text:
+            value
+              .replace(/_/g, " ")
+              .replace(/\b\w/g, (char) =>
+                char.toUpperCase()
+              ) || "-",
+          icon: History,
           className:
             "border-gray-200 bg-gray-50 text-gray-600",
         };
+    }
+  }
+
+  // =====================================================
+  // HISTORY SOURCE LABEL
+  // =====================================================
+
+  function getHistorySourceLabel(
+    source?: string | null
+  ) {
+    const value = String(source || "")
+      .trim()
+      .toUpperCase();
+
+    if (!value) return "SYSTEM";
+
+    switch (value) {
+      case "PURCHASE":
+      case "PURCHASE_ORDER":
+        return "PURCHASE";
+
+      case "GOODS_RECEIPT":
+      case "RECEIPT":
+        return "GOODS RECEIPT";
+
+      case "WAREHOUSE":
+      case "GUDANG":
+      case "CENTRAL":
+      case "PUSAT":
+        return "GUDANG PUSAT";
+
+      case "TRANSFER":
+      case "OUTLET_TRANSFER":
+        return "TRANSFER OUTLET";
+
+      case "DELIVERY":
+        return "DELIVERY";
+
+      case "ADJUSTMENT":
+        return "ADJUSTMENT";
+
+      case "WASTE":
+        return "WASTE";
+
+      case "POS":
+        return "POS";
+
+      case "MANUFACTURE":
+        return "MANUFACTURE";
+
+      case "STOCK_OPNAME":
+        return "STOCK OPNAME";
+
+      case "SYSTEM":
+        return "SYSTEM";
+
+      default:
+        return value.replace(/_/g, " ");
     }
   }
 
@@ -881,6 +1125,26 @@ export default function OutletStockPage() {
         Number(
           item.convertedStockQty || 0
         ),
+      0
+    );
+  }, [filteredData]);
+
+  const totalStockValue = useMemo(() => {
+    return filteredData.reduce(
+      (total, item) => {
+        const stock = Number(
+          item.stock || 0
+        );
+
+        const purchasePrice = Number(
+          item.barang?.purchasePrice || 0
+        );
+
+        return (
+          total +
+          stock * purchasePrice
+        );
+      },
       0
     );
   }, [filteredData]);
@@ -964,7 +1228,7 @@ export default function OutletStockPage() {
     null;
 
   // =====================================================
-  // HISTORY
+  // ALL STOCK HISTORY
   // =====================================================
 
   async function openHistory(
@@ -972,8 +1236,18 @@ export default function OutletStockPage() {
   ) {
     try {
       setSelectedHistory(stock);
+
       setHistoryData([]);
+
       setHistoryError("");
+
+      setHistorySummary({
+        total: 0,
+        stockIn: 0,
+        stockOut: 0,
+        informational: 0,
+      });
+
       setHistoryLoading(true);
 
       const params =
@@ -999,6 +1273,46 @@ export default function OutletStockPage() {
         String(stock.barangId)
       );
 
+      /*
+       * ===================================================
+       * IMPORTANT
+       *
+       * scope=ALL meminta backend mengembalikan seluruh
+       * pergerakan stock untuk barang + outlet ini.
+       *
+       * Termasuk:
+       * - Purchase / PO
+       * - Goods Receipt / Barang Masuk
+       * - Gudang Pusat
+       * - Transfer Antar Outlet
+       * - Delivery
+       * - Adjustment
+       * - Waste
+       * - Barang Keluar / Pemakaian
+       * - POS
+       * - Manufacture
+       * - Stock Opname
+       * - dan movement stock lainnya.
+       * ===================================================
+       */
+
+      params.set(
+        "scope",
+        "ALL"
+      );
+
+      params.set(
+        "includeAll",
+        "true"
+      );
+
+      // Minta seluruh sumber dan seluruh arah mutasi stock.
+      // Parameter tambahan tetap aman untuk backend yang belum memakainya.
+      params.set("includeAllSources", "true");
+      params.set("includeAllTypes", "true");
+      params.set("direction", "ALL");
+      params.set("limit", "1000");
+
       const res = await fetch(
         `/api/outlet/stock/history?${params.toString()}`,
         {
@@ -1015,26 +1329,48 @@ export default function OutletStockPage() {
       ) {
         throw new Error(
           result.message ||
-            "Gagal mengambil history stock"
+            "Gagal mengambil seluruh history stock"
         );
       }
 
-      setHistoryData(
-        Array.isArray(result.data)
-          ? result.data
-          : []
-      );
+      const rows = Array.isArray(
+        result.data
+      )
+        ? result.data
+        : [];
+
+      /*
+       * Safety sorting di frontend.
+       * History terbaru berada paling atas.
+       */
+      const sortedRows = [
+        ...rows,
+      ].sort((a, b) => {
+        const dateA =
+          new Date(a.date).getTime();
+
+        const dateB =
+          new Date(b.date).getTime();
+
+        return dateB - dateA;
+      });
+
+      setHistoryData(sortedRows);
 
       setHistorySummary({
         total: Number(
-          result.summary?.total || 0
+          result.summary?.total ??
+            sortedRows.length
         ),
+
         stockIn: Number(
           result.summary?.stockIn || 0
         ),
+
         stockOut: Number(
           result.summary?.stockOut || 0
         ),
+
         informational: Number(
           result.summary?.informational ||
             0
@@ -1042,7 +1378,7 @@ export default function OutletStockPage() {
       });
     } catch (error: any) {
       console.error(
-        "LOAD HISTORY ERROR:",
+        "LOAD ALL STOCK HISTORY ERROR:",
         error
       );
 
@@ -1050,7 +1386,7 @@ export default function OutletStockPage() {
 
       setHistoryError(
         error?.message ||
-          "Gagal mengambil history stock"
+          "Gagal mengambil seluruh history stock"
       );
     } finally {
       setHistoryLoading(false);
@@ -1059,9 +1395,19 @@ export default function OutletStockPage() {
 
   function closeHistory() {
     setSelectedHistory(null);
+
     setHistoryData([]);
+
     setHistoryError("");
+
     setHistoryLoading(false);
+
+    setHistorySummary({
+      total: 0,
+      stockIn: 0,
+      stockOut: 0,
+      informational: 0,
+    });
   }
 
   // =====================================================
@@ -1071,9 +1417,7 @@ export default function OutletStockPage() {
   return (
     <div className="min-h-full bg-[#F3F7F5] p-4 md:p-6 lg:p-8">
 
-      {/* =================================================
-          PREMIUM BACKGROUND
-      ================================================= */}
+      {/* PREMIUM BACKGROUND */}
 
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
 
@@ -1094,8 +1438,6 @@ export default function OutletStockPage() {
           <div className="absolute right-0 top-0 h-48 w-48 rounded-full bg-white/5 blur-3xl" />
 
           <div className="relative flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-
-            {/* BRAND */}
 
             <div className="flex items-center gap-4">
 
@@ -1129,14 +1471,13 @@ export default function OutletStockPage() {
                 <p className="mt-1.5 max-w-2xl text-xs leading-5 text-white/60 md:text-sm">
                   Monitoring persediaan outlet,
                   stock opname, konversi satuan,
-                  dan seluruh pergerakan barang.
+                  harga terakhir, nilai persediaan,
+                  dan seluruh pergerakan stock.
                 </p>
 
               </div>
 
             </div>
-
-            {/* HEADER RIGHT */}
 
             <div className="flex flex-wrap items-center gap-3">
 
@@ -1224,7 +1565,7 @@ export default function OutletStockPage() {
 
           {/* MINI STATUS BAR */}
 
-          <div className="relative mt-5 grid grid-cols-2 gap-2 md:grid-cols-4">
+          <div className="relative mt-5 grid grid-cols-2 gap-2 md:grid-cols-5">
 
             <div className="rounded-2xl border border-white/10 bg-black/10 px-4 py-3">
 
@@ -1282,6 +1623,20 @@ export default function OutletStockPage() {
 
             </div>
 
+            <div className="col-span-2 rounded-2xl border border-emerald-300/15 bg-emerald-400/10 px-4 py-3 md:col-span-1">
+
+              <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-200/50">
+                Nilai Stock
+              </p>
+
+              <p className="mt-1 truncate text-sm font-black text-emerald-200">
+                {formatCurrency(
+                  totalStockValue
+                )}
+              </p>
+
+            </div>
+
           </div>
 
         </div>
@@ -1329,7 +1684,7 @@ export default function OutletStockPage() {
               <p className="mt-1 text-xs leading-5 text-[#56766B]">
                 {outletLocked
                   ? "Akun Admin Outlet hanya dapat melihat stock dari outlet yang terhubung dengan akun."
-                  : "Stock utama menggunakan satuan Master Barang. Konversi hanya ditampilkan sebagai informasi tambahan."}
+                  : "Stock utama menggunakan satuan Master Barang. Harga terakhir dihitung berdasarkan purchase price Master Barang."}
               </p>
 
               {userOutlet && (
@@ -1360,13 +1715,14 @@ export default function OutletStockPage() {
             <div>
 
               <p className="text-sm font-bold text-[#18352D]">
-                Kontrol satuan & konversi
+                Kontrol satuan & nilai
               </p>
 
               <p className="mt-1 text-xs leading-5 text-gray-500">
                 Qty utama tetap mengikuti
-                satuan barang. Nilai konversi
-                tidak mengubah stock sistem.
+                satuan barang. Harga terakhir
+                digunakan untuk menghitung
+                estimasi nilai persediaan.
               </p>
 
               <div className="mt-3 flex flex-wrap gap-2">
@@ -1380,7 +1736,11 @@ export default function OutletStockPage() {
                 </span>
 
                 <span className="rounded-lg bg-[#F5F8F6] px-2.5 py-1 text-[10px] font-semibold text-[#56766B]">
-                  Stock Opname
+                  Harga Terakhir
+                </span>
+
+                <span className="rounded-lg bg-[#F5F8F6] px-2.5 py-1 text-[10px] font-semibold text-[#56766B]">
+                  Nilai Stock
                 </span>
 
               </div>
@@ -1393,9 +1753,7 @@ export default function OutletStockPage() {
 
       </div>
 
-      {/* =================================================
-          ERROR
-      ================================================= */}
+      {/* ERROR */}
 
       {error && (
         <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700 shadow-sm">
@@ -1462,10 +1820,6 @@ export default function OutletStockPage() {
 
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[0.8fr_1.2fr]">
 
-          {/* =================================================
-              OUTLET
-          ================================================= */}
-
           <div>
 
             <div className="mb-1.5 flex items-center justify-between">
@@ -1486,44 +1840,19 @@ export default function OutletStockPage() {
 
             </div>
 
-            {/* =================================================
-                SELECT OUTLET
-
-                ADMIN_OUTLET / OUTLET_ADMIN:
-                - TIDAK merender <select>
-                - benar-benar tidak bisa dibuka
-                - tidak bisa memilih outlet lain
-                - tidak ada "Semua Outlet"
-            ================================================= */}
-
             <div className="relative">
 
               <Warehouse
                 size={16}
-                className={`
-                  pointer-events-none
-                  absolute
-                  left-3.5
-                  top-1/2
-                  z-10
-                  -translate-y-1/2
-                  ${
-                    outletLocked
-                      ? "text-gray-400"
-                      : "text-[#497F70]"
-                  }
-                `}
+                className={`pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 ${
+                  outletLocked
+                    ? "text-gray-400"
+                    : "text-[#497F70]"
+                }`}
               />
 
               {outletLocked ? (
 
-                /*
-                 * PENTING:
-                 * Untuk outlet admin TIDAK ADA <select>.
-                 *
-                 * Jadi browser tidak mungkin membuka
-                 * native dropdown meskipun diklik.
-                 */
                 <div
                   aria-disabled="true"
                   className="
@@ -1654,18 +1983,12 @@ export default function OutletStockPage() {
             ) : (
 
               <div className="mt-1.5 text-[10px] font-medium text-gray-400">
-
                 Admin pusat dapat memilih outlet
-
               </div>
 
             )}
 
           </div>
-
-          {/* =================================================
-              SEARCH
-          ================================================= */}
 
           <div>
 
@@ -1723,8 +2046,6 @@ export default function OutletStockPage() {
 
         </div>
 
-        {/* ACTIVE FILTER */}
-
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#EEF3F0] pt-4">
 
           <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
@@ -1779,16 +2100,12 @@ export default function OutletStockPage() {
       </div>
 
       {/* =================================================
-          KPI CARDS
+          KPI
       ================================================= */}
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-
-        {/* BARANG */}
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
 
         <div className="group relative overflow-hidden rounded-2xl border border-[#DCE8E3] bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:p-5">
-
-          <div className="absolute right-0 top-0 h-20 w-20 rounded-full bg-[#497F70]/5 blur-2xl transition group-hover:bg-[#497F70]/10" />
 
           <div className="relative flex items-start justify-between">
 
@@ -1817,8 +2134,6 @@ export default function OutletStockPage() {
           </div>
 
         </div>
-
-        {/* STOCK */}
 
         <div className="group relative overflow-hidden rounded-2xl border border-[#DCE8E3] bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:p-5">
 
@@ -1850,8 +2165,6 @@ export default function OutletStockPage() {
 
         </div>
 
-        {/* OPNAME */}
-
         <div className="group relative overflow-hidden rounded-2xl border border-[#DCE8E3] bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:p-5">
 
           <div className="relative flex items-start justify-between">
@@ -1869,12 +2182,10 @@ export default function OutletStockPage() {
               </p>
 
               <p className="mt-1 text-[10px] text-gray-400">
-
                 {formatNumber(
                   totalWithoutOpname
                 )}{" "}
                 belum SO
-
               </p>
 
             </div>
@@ -1886,8 +2197,6 @@ export default function OutletStockPage() {
           </div>
 
         </div>
-
-        {/* DIFFERENCE */}
 
         <div className="group relative overflow-hidden rounded-2xl border border-[#DCE8E3] bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:p-5">
 
@@ -1949,6 +2258,36 @@ export default function OutletStockPage() {
 
         </div>
 
+        <div className="group relative col-span-2 overflow-hidden rounded-2xl border border-[#CFE3DA] bg-gradient-to-br from-[#173B31] to-[#245447] p-4 shadow-[0_10px_30px_rgba(23,59,49,0.15)] transition hover:-translate-y-0.5 hover:shadow-lg lg:col-span-1 md:p-5">
+
+          <div className="relative flex items-start justify-between">
+
+            <div className="min-w-0">
+
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/45">
+                Total Nilai Stock
+              </p>
+
+              <p className="mt-2 truncate text-xl font-black tracking-tight text-white md:text-2xl">
+                {formatCurrency(
+                  totalStockValue
+                )}
+              </p>
+
+              <p className="mt-1 text-[10px] text-white/45">
+                stock × harga terakhir
+              </p>
+
+            </div>
+
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-emerald-200">
+              <WalletCards size={19} />
+            </div>
+
+          </div>
+
+        </div>
+
       </div>
 
       {/* =================================================
@@ -1956,8 +2295,6 @@ export default function OutletStockPage() {
       ================================================= */}
 
       <div className="overflow-hidden rounded-[26px] border border-[#DCE8E3] bg-white shadow-[0_12px_40px_rgba(24,53,45,0.06)]">
-
-        {/* TABLE HEADER */}
 
         <div className="flex flex-col gap-4 border-b border-[#E8EFEC] bg-gradient-to-r from-white to-[#F8FBF9] px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
 
@@ -1982,8 +2319,8 @@ export default function OutletStockPage() {
               </div>
 
               <p className="mt-0.5 text-[11px] text-gray-400">
-                Data stock berdasarkan outlet
-                yang dipilih
+                Stock, harga terakhir, estimasi nilai,
+                dan audit pergerakan stock
               </p>
 
             </div>
@@ -2002,15 +2339,23 @@ export default function OutletStockPage() {
               Base Unit
             </span>
 
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#DDE9E4] bg-[#F8FAF9] px-3 py-2 text-[10px] font-semibold text-gray-500">
+              <WalletCards size={12} />
+              Nilai Stock
+            </span>
+
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#DDE9E4] bg-[#F8FAF9] px-3 py-2 text-[10px] font-semibold text-gray-500">
+              <Activity size={12} />
+              Full Audit
+            </span>
+
           </div>
 
         </div>
 
-        {/* TABLE */}
-
         <div className="overflow-x-auto">
 
-          <table className="min-w-[1650px] w-full text-sm">
+          <table className="min-w-[1900px] w-full text-sm">
 
             <thead className="bg-[#F7FAF8]">
 
@@ -2023,6 +2368,8 @@ export default function OutletStockPage() {
                   "Satuan",
                   "Stock Sistem",
                   "Konversi",
+                  "Harga Terakhir",
+                  "Total",
                   "SO Terakhir",
                   "Fisik",
                   "Selisih",
@@ -2037,6 +2384,8 @@ export default function OutletStockPage() {
                       [
                         "Stock Sistem",
                         "Konversi",
+                        "Harga Terakhir",
+                        "Total",
                         "SO Terakhir",
                         "Fisik",
                         "Selisih",
@@ -2069,7 +2418,7 @@ export default function OutletStockPage() {
                 <tr>
 
                   <td
-                    colSpan={13}
+                    colSpan={15}
                     className="px-5 py-20 text-center"
                   >
 
@@ -2103,7 +2452,7 @@ export default function OutletStockPage() {
                 <tr>
 
                   <td
-                    colSpan={13}
+                    colSpan={15}
                     className="px-5 py-20 text-center"
                   >
 
@@ -2180,6 +2529,19 @@ export default function OutletStockPage() {
                           1
                       );
 
+                    const lastPurchasePrice =
+                      Number(
+                        item.barang
+                          ?.purchasePrice ||
+                          0
+                      );
+
+                    const stockValue =
+                      Number(
+                        item.stock || 0
+                      ) *
+                      lastPurchasePrice;
+
                     const StatusIcon =
                       stockStatus.icon;
 
@@ -2195,8 +2557,6 @@ export default function OutletStockPage() {
                         "
                       >
 
-                        {/* NO */}
-
                         <td className="px-5 py-4 text-xs font-semibold text-gray-400">
                           {String(
                             index + 1
@@ -2205,8 +2565,6 @@ export default function OutletStockPage() {
                             "0"
                           )}
                         </td>
-
-                        {/* OUTLET */}
 
                         <td className="px-5 py-4">
 
@@ -2235,8 +2593,6 @@ export default function OutletStockPage() {
                           </div>
 
                         </td>
-
-                        {/* BARANG */}
 
                         <td className="px-5 py-4">
 
@@ -2280,8 +2636,6 @@ export default function OutletStockPage() {
 
                         </td>
 
-                        {/* SATUAN */}
-
                         <td className="px-5 py-4">
 
                           <div className="font-bold text-[#35564C]">
@@ -2305,8 +2659,6 @@ export default function OutletStockPage() {
                             )}
 
                         </td>
-
-                        {/* STOCK SISTEM */}
 
                         <td className="px-5 py-4 text-right">
 
@@ -2336,8 +2688,6 @@ export default function OutletStockPage() {
                           </div>
 
                         </td>
-
-                        {/* KONVERSI */}
 
                         <td className="px-5 py-4 text-right">
 
@@ -2369,7 +2719,69 @@ export default function OutletStockPage() {
 
                         </td>
 
-                        {/* SO */}
+                        <td className="px-5 py-4 text-right">
+
+                          {lastPurchasePrice >
+                          0 ? (
+
+                            <div className="inline-flex flex-col items-end">
+
+                              <div className="font-black text-[#35564C]">
+                                {formatCurrency(
+                                  lastPurchasePrice
+                                )}
+                              </div>
+
+                              <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+                                / {mainUnit}
+                              </div>
+
+                            </div>
+
+                          ) : (
+
+                            <span className="rounded-lg bg-gray-50 px-2.5 py-1.5 text-[10px] font-bold text-gray-400">
+                              Belum ada harga
+                            </span>
+
+                          )}
+
+                        </td>
+
+                        <td className="px-5 py-4 text-right">
+
+                          <div className="inline-flex flex-col items-end">
+
+                            <div className="flex items-center gap-1.5">
+
+                              <WalletCards
+                                size={11}
+                                className="text-[#497F70]"
+                              />
+
+                              <span className="font-black text-[#173B31]">
+                                {formatCurrency(
+                                  stockValue
+                                )}
+                              </span>
+
+                            </div>
+
+                            <div className="mt-0.5 text-[9px] font-medium text-gray-400">
+                              {formatNumber(
+                                Number(
+                                  item.stock || 0
+                                )
+                              )}{" "}
+                              ×{" "}
+                              {formatCurrency(
+                                lastPurchasePrice
+                              )}
+                            </div>
+
+                          </div>
+
+                        </td>
 
                         <td className="px-5 py-4 text-right">
 
@@ -2401,8 +2813,6 @@ export default function OutletStockPage() {
 
                         </td>
 
-                        {/* FISIK */}
-
                         <td className="px-5 py-4 text-right">
 
                           {lastOpname ? (
@@ -2432,8 +2842,6 @@ export default function OutletStockPage() {
                           )}
 
                         </td>
-
-                        {/* DIFFERENCE */}
 
                         <td className="px-5 py-4 text-right">
 
@@ -2482,8 +2890,6 @@ export default function OutletStockPage() {
 
                         </td>
 
-                        {/* STATUS SO */}
-
                         <td className="px-5 py-4 text-center">
 
                           {lastOpname ? (
@@ -2516,8 +2922,6 @@ export default function OutletStockPage() {
 
                         </td>
 
-                        {/* MINIMUM */}
-
                         <td className="px-5 py-4 text-right">
 
                           <div className="font-bold text-gray-600">
@@ -2539,26 +2943,20 @@ export default function OutletStockPage() {
                             item.barang
                               ?.baseUnit && (
                               <div className="mt-1 text-[9px] text-gray-400">
-
                                 ≈{" "}
-
                                 {formatNumber(
                                   Number(
                                     item.minimumStockConvertedQty
                                   )
                                 )}{" "}
-
                                 {
                                   item.barang
                                     .baseUnit
                                 }
-
                               </div>
                             )}
 
                         </td>
-
-                        {/* STATUS STOCK */}
 
                         <td className="px-5 py-4 text-center">
 
@@ -2594,8 +2992,6 @@ export default function OutletStockPage() {
 
                         </td>
 
-                        {/* HISTORY */}
-
                         <td className="px-5 py-4 text-center">
 
                           <button
@@ -2612,17 +3008,21 @@ export default function OutletStockPage() {
                               gap-1.5
                               rounded-xl
                               border
-                              border-[#D2E2DB]
-                              bg-[#F7FBF9]
+                              border-[#CFE2D9]
+                              bg-gradient-to-r
+                              from-[#F4FAF7]
+                              to-[#ECF6F1]
                               px-3
                               py-2
                               text-[10px]
                               font-black
                               text-[#497F70]
+                              shadow-sm
                               transition
                               hover:border-[#497F70]
                               hover:bg-[#497F70]
                               hover:text-white
+                              hover:shadow-md
                               active:scale-95
                             "
                           >
@@ -2631,7 +3031,7 @@ export default function OutletStockPage() {
                               size={13}
                             />
 
-                            History
+                            Semua History
 
                             <ChevronRight
                               size={11}
@@ -2655,59 +3055,73 @@ export default function OutletStockPage() {
 
         </div>
 
-        {/* TABLE FOOTER */}
-
         {!loading &&
           filteredData.length > 0 && (
 
-            <div className="flex flex-col gap-2 border-t border-[#E8EFEC] bg-[#FAFCFB] px-5 py-3.5 text-[10px] text-gray-400 md:flex-row md:items-center md:justify-between md:px-6">
+            <div className="flex flex-col gap-3 border-t border-[#E8EFEC] bg-[#FAFCFB] px-5 py-3.5 text-[10px] text-gray-400 md:flex-row md:items-center md:justify-between md:px-6">
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
 
-                <Activity
-                  size={12}
-                  className="text-[#497F70]"
-                />
+                <div className="flex items-center gap-2">
 
-                Menampilkan{" "}
+                  <Activity
+                    size={12}
+                    className="text-[#497F70]"
+                  />
 
-                <strong className="text-gray-600">
-                  {formatNumber(
-                    filteredData.length
-                  )}
-                </strong>{" "}
+                  Menampilkan{" "}
 
-                item persediaan
+                  <strong className="text-gray-600">
+                    {formatNumber(
+                      filteredData.length
+                    )}
+                  </strong>{" "}
+
+                  item persediaan
+
+                </div>
+
+                <span className="hidden h-3 w-px bg-gray-300 md:block" />
+
+                <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCE9E3] bg-white px-2.5 py-1.5">
+
+                  <WalletCards
+                    size={11}
+                    className="text-[#497F70]"
+                  />
+
+                  <span>
+                    Total Nilai:
+                  </span>
+
+                  <strong className="font-black text-[#173B31]">
+                    {formatCurrency(
+                      totalStockValue
+                    )}
+                  </strong>
+
+                </div>
 
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
 
                 <span className="inline-flex items-center gap-1">
-
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-
                   Aman{" "}
                   {stockSafeCount}
-
                 </span>
 
                 <span className="inline-flex items-center gap-1">
-
                   <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-
                   Minimum{" "}
                   {stockMinimumCount}
-
                 </span>
 
                 <span className="inline-flex items-center gap-1">
-
                   <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-
                   Habis{" "}
                   {stockEmptyCount}
-
                 </span>
 
               </div>
@@ -2719,7 +3133,7 @@ export default function OutletStockPage() {
       </div>
 
       {/* =================================================
-          HISTORY MODAL
+          FULL STOCK HISTORY MODAL
       ================================================= */}
 
       {selectedHistory && (
@@ -2732,7 +3146,7 @@ export default function OutletStockPage() {
             flex
             items-center
             justify-center
-            bg-[#10251F]/70
+            bg-[#10251F]/75
             p-3
             backdrop-blur-md
             md:p-6
@@ -2747,9 +3161,11 @@ export default function OutletStockPage() {
           }}
         >
 
-          <div className="flex max-h-[94vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-[0_30px_100px_rgba(0,0,0,0.28)]">
+          <div className="flex max-h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-[0_30px_100px_rgba(0,0,0,0.30)]">
 
-            {/* MODAL HEADER */}
+            {/* =================================================
+                MODAL HEADER
+            ================================================= */}
 
             <div className="relative overflow-hidden border-b border-[#E3ECE8] bg-[#173B31] px-5 py-5 text-white md:px-7 md:py-6">
 
@@ -2770,10 +3186,14 @@ export default function OutletStockPage() {
                       <div className="flex flex-wrap items-center gap-2">
 
                         <h2 className="text-lg font-black tracking-tight md:text-xl">
-                          History Stock
+                          Semua History Stock
                         </h2>
 
-                        <span className="rounded-full bg-emerald-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-200">
+                        <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-200">
+                          ALL MOVEMENTS
+                        </span>
+
+                        <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/60">
                           Audit Trail
                         </span>
 
@@ -2793,18 +3213,22 @@ export default function OutletStockPage() {
                   <div className="mt-4 flex flex-wrap gap-2">
 
                     <span className="rounded-lg bg-white/10 px-2.5 py-1.5 text-[10px] font-bold text-white">
+
                       {
                         selectedHistory
                           .barang.code
                       }
+
                     </span>
 
                     <span className="rounded-lg bg-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-white/70">
+
                       Unit:{" "}
                       {
                         selectedHistory
                           .barang.unit
                       }
+
                     </span>
 
                     <span className="rounded-lg bg-emerald-400/10 px-2.5 py-1.5 text-[10px] font-bold text-emerald-200">
@@ -2857,7 +3281,26 @@ export default function OutletStockPage() {
 
                       )}
 
-                    <span className="rounded-lg bg-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-white/70">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-white/70">
+
+                      <WalletCards size={11} />
+
+                      Harga:{" "}
+
+                      {formatCurrency(
+                        Number(
+                          selectedHistory
+                            .barang
+                            .purchasePrice ||
+                            0
+                        )
+                      )}
+
+                    </span>
+
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-white/70">
+
+                      <Warehouse size={11} />
 
                       Outlet:{" "}
 
@@ -2900,7 +3343,9 @@ export default function OutletStockPage() {
 
             </div>
 
-            {/* HISTORY KPI */}
+            {/* =================================================
+                HISTORY KPI
+            ================================================= */}
 
             <div className="grid grid-cols-2 gap-3 border-b border-[#E6EEEA] bg-[#F8FAF9] p-4 md:grid-cols-4 md:p-5">
 
@@ -2914,7 +3359,7 @@ export default function OutletStockPage() {
                   />
 
                   <span className="text-[9px] font-black uppercase tracking-wider">
-                    Total
+                    Total Movement
                   </span>
 
                 </div>
@@ -2926,7 +3371,7 @@ export default function OutletStockPage() {
                 </p>
 
                 <p className="mt-0.5 text-[9px] text-gray-400">
-                  transaksi
+                  seluruh transaksi
                 </p>
 
               </div>
@@ -2944,14 +3389,16 @@ export default function OutletStockPage() {
                 </div>
 
                 <p className="mt-2 text-xl font-black text-emerald-700">
+
                   +
                   {formatNumber(
                     historySummary.stockIn
                   )}
+
                 </p>
 
                 <p className="mt-0.5 text-[9px] text-emerald-600/60">
-                  barang masuk
+                  seluruh barang masuk
                 </p>
 
               </div>
@@ -2969,14 +3416,16 @@ export default function OutletStockPage() {
                 </div>
 
                 <p className="mt-2 text-xl font-black text-red-700">
+
                   -
                   {formatNumber(
                     historySummary.stockOut
                   )}
+
                 </p>
 
                 <p className="mt-0.5 text-[9px] text-red-600/60">
-                  barang keluar
+                  seluruh barang keluar
                 </p>
 
               </div>
@@ -3000,14 +3449,16 @@ export default function OutletStockPage() {
                 </p>
 
                 <p className="mt-0.5 text-[9px] text-blue-600/60">
-                  aktivitas informasi
+                  aktivitas tanpa perubahan qty
                 </p>
 
               </div>
 
             </div>
 
-            {/* BODY */}
+            {/* =================================================
+                BODY
+            ================================================= */}
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
 
@@ -3027,12 +3478,16 @@ export default function OutletStockPage() {
                     </div>
 
                     <p className="text-sm font-bold text-[#35564C]">
-                      Memuat audit trail
+                      Memuat seluruh audit trail
                     </p>
 
-                    <p className="mt-1 text-xs text-gray-400">
-                      Mengambil seluruh pergerakan
-                      barang...
+                    <p className="mt-1 max-w-md text-xs leading-5 text-gray-400">
+                      Mengambil semua pergerakan barang
+                      dari purchase, barang masuk,
+                      gudang pusat, transfer outlet,
+                      adjustment, waste, pemakaian,
+                      POS, manufacture, stock opname,
+                      dan transaksi stock lainnya...
                     </p>
 
                   </div>
@@ -3046,7 +3501,9 @@ export default function OutletStockPage() {
                   <div className="max-w-sm text-center">
 
                     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-100 text-red-500">
+
                       <CircleX size={26} />
+
                     </div>
 
                     <p className="font-bold text-red-700">
@@ -3081,20 +3538,23 @@ export default function OutletStockPage() {
 
                 <div className="flex min-h-[360px] items-center justify-center rounded-2xl border border-dashed border-[#DDE9E4] bg-[#FAFCFB]">
 
-                  <div className="max-w-sm text-center">
+                  <div className="max-w-md text-center">
 
                     <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#F1F5F3] text-gray-300">
+
                       <History size={30} />
+
                     </div>
 
                     <p className="font-bold text-gray-500">
-                      Belum ada aktivitas
+                      Belum ada pergerakan stock
                     </p>
 
                     <p className="mt-1 text-xs leading-5 text-gray-400">
                       Barang ini belum memiliki
-                      riwayat transaksi yang
-                      tercatat.
+                      riwayat transaksi stock yang
+                      tercatat dari seluruh sumber
+                      transaksi.
                     </p>
 
                   </div>
@@ -3107,7 +3567,7 @@ export default function OutletStockPage() {
 
                   <div className="overflow-x-auto">
 
-                    <table className="min-w-[1250px] w-full text-sm">
+                    <table className="min-w-[1650px] w-full text-sm">
 
                       <thead className="bg-[#F6F9F7]">
 
@@ -3117,10 +3577,14 @@ export default function OutletStockPage() {
                             "No",
                             "Tanggal",
                             "Jenis Transaksi",
+                            "Source",
                             "No. Transaksi",
                             "Masuk",
                             "Keluar",
+                            "Stock Sebelum",
+                            "Stock Sesudah",
                             "Status",
+                            "User",
                             "Keterangan",
                           ].map(
                             (header) => (
@@ -3131,6 +3595,8 @@ export default function OutletStockPage() {
                                   [
                                     "Masuk",
                                     "Keluar",
+                                    "Stock Sebelum",
+                                    "Stock Sesudah",
                                   ].includes(
                                     header
                                   )
@@ -3138,7 +3604,9 @@ export default function OutletStockPage() {
                                     : ""
                                 } ${
                                   header ===
-                                  "Status"
+                                    "Status" ||
+                                  header ===
+                                    "User"
                                     ? "text-center"
                                     : ""
                                 }`}
@@ -3166,6 +3634,9 @@ export default function OutletStockPage() {
                                 history.type
                               );
 
+                            const TypeIcon =
+                              type.icon;
+
                             const isIn =
                               history.direction ===
                               "IN";
@@ -3173,6 +3644,18 @@ export default function OutletStockPage() {
                             const isOut =
                               history.direction ===
                               "OUT";
+
+                            const source =
+                              getHistorySourceLabel(
+                                history.source
+                              );
+
+                            const userName =
+                              history.user
+                                ?.name ||
+                              history.user
+                                ?.username ||
+                              "-";
 
                             return (
 
@@ -3189,14 +3672,20 @@ export default function OutletStockPage() {
                                 "
                               >
 
+                                {/* NO */}
+
                                 <td className="px-4 py-4 text-[10px] font-bold text-gray-400">
+
                                   {String(
                                     index + 1
                                   ).padStart(
                                     2,
                                     "0"
                                   )}
+
                                 </td>
+
+                                {/* DATE */}
 
                                 <td className="px-4 py-4">
 
@@ -3237,11 +3726,15 @@ export default function OutletStockPage() {
 
                                 </td>
 
+                                {/* TYPE */}
+
                                 <td className="px-4 py-4">
 
                                   <span
                                     className={`
                                       inline-flex
+                                      items-center
+                                      gap-1.5
                                       rounded-lg
                                       border
                                       px-2.5
@@ -3251,21 +3744,47 @@ export default function OutletStockPage() {
                                       ${type.className}
                                     `}
                                   >
+
+                                    <TypeIcon
+                                      size={12}
+                                    />
+
                                     {
                                       type.text
                                     }
+
                                   </span>
 
                                 </td>
+
+                                {/* SOURCE */}
+
+                                <td className="px-4 py-4">
+
+                                  <span className="inline-flex rounded-lg border border-[#DDE9E4] bg-[#F7FAF8] px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#587168]">
+
+                                    {
+                                      source
+                                    }
+
+                                  </span>
+
+                                </td>
+
+                                {/* NUMBER */}
 
                                 <td className="px-4 py-4">
 
                                   <span className="rounded-lg bg-[#F5F8F6] px-2.5 py-1.5 font-mono text-[10px] font-bold text-[#35564C]">
+
                                     {history.number ||
                                       "-"}
+
                                   </span>
 
                                 </td>
+
+                                {/* IN */}
 
                                 <td className="px-4 py-4 text-right">
 
@@ -3296,6 +3815,8 @@ export default function OutletStockPage() {
 
                                 </td>
 
+                                {/* OUT */}
+
                                 <td className="px-4 py-4 text-right">
 
                                   {isOut ? (
@@ -3325,14 +3846,72 @@ export default function OutletStockPage() {
 
                                 </td>
 
+                                {/* BEFORE */}
+
+                                <td className="px-4 py-4 text-right">
+
+                                  {history.stockBefore !==
+                                  null ? (
+
+                                    <span className="font-black text-gray-600">
+
+                                      {formatNumber(
+                                        Number(
+                                          history.stockBefore
+                                        )
+                                      )}
+
+                                    </span>
+
+                                  ) : (
+
+                                    <span className="text-gray-300">
+                                      —
+                                    </span>
+
+                                  )}
+
+                                </td>
+
+                                {/* AFTER */}
+
+                                <td className="px-4 py-4 text-right">
+
+                                  {history.stockAfter !==
+                                  null ? (
+
+                                    <span className="font-black text-[#497F70]">
+
+                                      {formatNumber(
+                                        Number(
+                                          history.stockAfter
+                                        )
+                                      )}
+
+                                    </span>
+
+                                  ) : (
+
+                                    <span className="text-gray-300">
+                                      —
+                                    </span>
+
+                                  )}
+
+                                </td>
+
+                                {/* STATUS */}
+
                                 <td className="px-4 py-4 text-center">
 
                                   {history.status ? (
 
                                     <span className="inline-flex rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[9px] font-bold uppercase text-gray-600">
+
                                       {
                                         history.status
                                       }
+
                                     </span>
 
                                   ) : (
@@ -3345,9 +3924,40 @@ export default function OutletStockPage() {
 
                                 </td>
 
+                                {/* USER */}
+
+                                <td className="px-4 py-4 text-center">
+
+                                  {userName !==
+                                  "-" ? (
+
+                                    <div className="inline-flex max-w-[130px] items-center justify-center rounded-lg bg-[#F4F8F6] px-2.5 py-1.5">
+
+                                      <span className="truncate text-[9px] font-bold text-[#497F70]">
+
+                                        {
+                                          userName
+                                        }
+
+                                      </span>
+
+                                    </div>
+
+                                  ) : (
+
+                                    <span className="text-[9px] text-gray-300">
+                                      SYSTEM
+                                    </span>
+
+                                  )}
+
+                                </td>
+
+                                {/* DESCRIPTION */}
+
                                 <td className="px-4 py-4">
 
-                                  <div className="max-w-[380px]">
+                                  <div className="max-w-[420px]">
 
                                     <p className="text-xs font-medium leading-5 text-gray-600">
 
@@ -3358,6 +3968,47 @@ export default function OutletStockPage() {
 
                                     </p>
 
+                                    {(history.fromOutlet ||
+                                      history.toOutlet) && (
+
+                                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+
+                                        {history.fromOutlet && (
+                                          <span className="rounded-md bg-orange-50 px-2 py-1 text-[9px] font-bold text-orange-600">
+
+                                            {
+                                              history
+                                                .fromOutlet
+                                                .code
+                                            }
+
+                                          </span>
+                                        )}
+
+                                        {history.fromOutlet &&
+                                          history.toOutlet && (
+                                            <ChevronRight
+                                              size={11}
+                                              className="text-gray-300"
+                                            />
+                                          )}
+
+                                        {history.toOutlet && (
+                                          <span className="rounded-md bg-blue-50 px-2 py-1 text-[9px] font-bold text-blue-600">
+
+                                            {
+                                              history
+                                                .toOutlet
+                                                .code
+                                            }
+
+                                          </span>
+                                        )}
+
+                                      </div>
+
+                                    )}
+
                                     {(history.stockBefore !==
                                       null ||
                                       history.stockAfter !==
@@ -3366,7 +4017,7 @@ export default function OutletStockPage() {
                                       <div className="mt-2 inline-flex items-center gap-2 rounded-lg bg-[#F7FAF8] px-2.5 py-1.5 text-[9px] font-semibold text-gray-400">
 
                                         <span>
-                                          Stock
+                                          Saldo
                                         </span>
 
                                         <span className="font-bold text-gray-600">
@@ -3426,20 +4077,31 @@ export default function OutletStockPage() {
 
             </div>
 
-            {/* FOOTER */}
+            {/* =================================================
+                FOOTER
+            ================================================= */}
 
             <div className="flex flex-col gap-3 border-t border-[#E4ECE8] bg-[#F8FAF9] px-5 py-4 md:flex-row md:items-center md:justify-between md:px-6">
 
-              <div className="flex items-center gap-2 text-[10px] font-medium text-gray-400">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium text-gray-400">
 
                 <ShieldCheck
                   size={13}
                   className="text-[#497F70]"
                 />
 
-                Audit trail bersifat read-only.
-                Stock sistem tidak diubah dari
-                halaman ini.
+                <span>
+                  Full audit trail bersifat
+                  read-only.
+                </span>
+
+                <span className="hidden h-3 w-px bg-gray-300 md:block" />
+
+                <span>
+                  Semua pergerakan stock
+                  ditampilkan dari sumber
+                  transaksi yang dikirim API.
+                </span>
 
               </div>
 
