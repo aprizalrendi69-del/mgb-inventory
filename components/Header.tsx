@@ -31,8 +31,13 @@ interface NotificationItem {
   readAt?: string | null;
   link?: string | null;
   href?: string | null;
+
   purchaseId?: number | string | null;
   outletPurchaseId?: number | string | null;
+
+  transferId?: number | string | null;
+  transferNumber?: string | null;
+
   commentId?: number | string | null;
 
   user?: {
@@ -61,6 +66,13 @@ interface NotificationItem {
     poNumber?: string | null;
     number?: string | null;
     code?: string | null;
+  } | null;
+
+  transfer?: {
+    id?: number | string | null;
+    number?: string | null;
+    transferDate?: string | null;
+    status?: string | null;
   } | null;
 }
 
@@ -158,6 +170,25 @@ function getPurchaseLabel(
   return purchaseNumber;
 }
 
+function getTransferLabel(
+  item: NotificationItem
+): string | null {
+  const transferNumber =
+    item.transferNumber ||
+    item.transfer?.number ||
+    null;
+
+  if (transferNumber) {
+    return `Transfer ${transferNumber}`;
+  }
+
+  if (item.transferId) {
+    return `Transfer #${item.transferId}`;
+  }
+
+  return null;
+}
+
 function getNotificationLink(
   item: NotificationItem
 ): string | null {
@@ -175,6 +206,10 @@ function getNotificationLink(
 
   if (item.purchaseId) {
     return `/purchase/${item.purchaseId}`;
+  }
+
+  if (item.transferId) {
+    return `/outlet/barang-masuk/TRANSFER-${item.transferId}`;
   }
 
   return null;
@@ -627,6 +662,9 @@ export default function Header({
       ).length;
     }, [notifications]);
 
+  const hasUnread =
+    unreadCount > 0;
+
   // =========================================================
   // MARK ALL AS READ
   // =========================================================
@@ -696,17 +734,6 @@ export default function Header({
   // =========================================================
   // OPEN NOTIFICATION
   // =========================================================
-  //
-  // FLOW:
-  //
-  // 1. User klik notification
-  // 2. UI langsung berubah menjadi read
-  // 3. POST /api/notifications
-  // 4. Backend menyimpan readAt
-  // 5. Notification panel ditutup
-  // 6. Navigasi ke purchase
-  //
-  // =========================================================
 
   const openNotification =
     async (
@@ -720,10 +747,6 @@ export default function Header({
       const optimisticReadAt =
         item.readAt ??
         new Date().toISOString();
-
-      // -------------------------------------------------------
-      // INSTANT UI UPDATE
-      // -------------------------------------------------------
 
       setNotifications(
         (current) =>
@@ -741,14 +764,9 @@ export default function Header({
           )
       );
 
-      // Tutup panel langsung.
       setNotificationOpen(
         false
       );
-
-      // -------------------------------------------------------
-      // SAVE READ STATUS TO DATABASE
-      // -------------------------------------------------------
 
       try {
         const response =
@@ -786,8 +804,6 @@ export default function Header({
             readAt?: string | null;
           };
 
-        // Pastikan notification yang diklik
-        // tetap read setelah response server.
         setNotifications(
           (current) =>
             current.map(
@@ -811,16 +827,7 @@ export default function Header({
           "[Header] Failed to mark notification as read:",
           error
         );
-
-        // UI tetap read.
-        // Jika POST gagal, server akan tetap
-        // menentukan status sebenarnya pada polling
-        // berikutnya.
       }
-
-      // -------------------------------------------------------
-      // NAVIGATE
-      // -------------------------------------------------------
 
       if (link) {
         router.push(link);
@@ -868,8 +875,6 @@ export default function Header({
 
         <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
 
-          {/* BACK */}
-
           <button
             type="button"
             onClick={goBack}
@@ -894,8 +899,6 @@ export default function Header({
             />
           </button>
 
-          {/* MENU */}
-
           <button
             type="button"
             onClick={
@@ -911,8 +914,6 @@ export default function Header({
               className="transition-transform duration-200 group-hover:scale-105"
             />
           </button>
-
-          {/* BRAND */}
 
           <div className="hidden items-center gap-3 sm:flex">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/25 bg-white/15 text-xs font-black tracking-tight text-emerald-800 shadow-[0_8px_25px_rgba(15,118,110,0.08)] backdrop-blur-2xl backdrop-saturate-150">
@@ -966,7 +967,7 @@ export default function Header({
           </div>
 
           {/* ===================================================
-              NOTIFICATION
+              PREMIUM NOTIFICATION CENTER
           =================================================== */}
 
           <div
@@ -975,6 +976,9 @@ export default function Header({
             }
             className="relative"
           >
+
+            {/* NOTIFICATION BUTTON */}
+
             <button
               ref={
                 notificationButtonRef
@@ -999,32 +1003,79 @@ export default function Header({
                 notificationOpen
               }
               aria-haspopup="dialog"
-              title="Pemberitahuan"
+              title={
+                hasUnread
+                  ? `${unreadCount} pemberitahuan belum dibaca`
+                  : "Pemberitahuan"
+              }
               className={[
-                "group relative flex h-11 w-11 items-center justify-center rounded-xl border backdrop-blur-2xl backdrop-saturate-150 transition-all duration-200",
+                "group relative flex h-11 w-11 items-center justify-center overflow-visible rounded-xl border backdrop-blur-2xl backdrop-saturate-150 transition-all duration-300",
                 notificationOpen
-                  ? "border-emerald-300/60 bg-emerald-100/30 text-emerald-700 shadow-[0_12px_35px_rgba(15,118,110,0.20)]"
+                  ? "border-emerald-300/70 bg-emerald-100/40 text-emerald-700 shadow-[0_14px_40px_rgba(15,118,110,0.24)]"
+                  : hasUnread
+                  ? "border-emerald-300/60 bg-white/25 text-emerald-700 shadow-[0_10px_35px_rgba(16,185,129,0.20)] hover:border-emerald-400/70 hover:bg-white/40"
                   : "border-white/30 bg-white/15 text-slate-600 shadow-[0_8px_25px_rgba(15,118,110,0.10)] hover:border-emerald-300/60 hover:bg-white/30 hover:text-emerald-700 hover:shadow-[0_12px_35px_rgba(15,118,110,0.18)]",
               ].join(" ")}
             >
-              <Bell
-                size={20}
-                strokeWidth={2.2}
-                className="transition-transform duration-200 group-hover:rotate-[-8deg]"
-              />
 
-              {unreadCount >
-                0 && (
-                <>
-                  <span className="absolute right-2 top-2 h-2.5 w-2.5 animate-ping rounded-full bg-emerald-500 opacity-70" />
+              {/* OUTER GLOW */}
 
-                  <span className="absolute -right-1 -top-1 flex min-w-[19px] items-center justify-center rounded-full border-2 border-white bg-gradient-to-r from-emerald-600 to-green-700 px-1 py-0.5 text-[9px] font-black leading-none text-white shadow-lg">
+              {hasUnread && (
+                <span className="pointer-events-none absolute -inset-1 -z-10 rounded-2xl bg-emerald-400/20 opacity-80 blur-md animate-pulse" />
+              )}
+
+              {/* ICON */}
+
+              <span
+                className={[
+                  "relative flex items-center justify-center",
+                  hasUnread &&
+                    !notificationOpen
+                    ? "animate-[notificationShake_1.8s_ease-in-out_infinite]"
+                    : "",
+                ].join(" ")}
+              >
+                <Bell
+                  size={20}
+                  strokeWidth={2.2}
+                  className={[
+                    "transition-all duration-300",
+                    notificationOpen
+                      ? "scale-110"
+                      : "group-hover:scale-110",
+                  ].join(" ")}
+                />
+              </span>
+
+              {/* UNREAD PULSE */}
+
+              {hasUnread && (
+                <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-70" />
+
+                  <span className="relative block h-2.5 w-2.5 rounded-full border-2 border-white bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_12px_rgba(16,185,129,0.65)]" />
+                </span>
+              )}
+
+              {/* COUNT BADGE */}
+
+              {hasUnread && (
+                <span className="absolute -right-2.5 -top-2.5 flex min-w-[22px] items-center justify-center rounded-full border-2 border-white bg-gradient-to-br from-emerald-500 via-emerald-600 to-green-700 px-1.5 py-1 text-[9px] font-black leading-none text-white shadow-[0_5px_16px_rgba(16,185,129,0.38)]">
+                  <span className="absolute inset-0 rounded-full bg-white/20 blur-[2px]" />
+
+                  <span className="relative">
                     {unreadCount >
                     99
                       ? "99+"
                       : unreadCount}
                   </span>
-                </>
+                </span>
+              )}
+
+              {/* ACTIVE INDICATOR */}
+
+              {notificationOpen && (
+                <span className="absolute -bottom-1 left-1/2 h-1 w-6 -translate-x-1/2 rounded-full bg-gradient-to-r from-emerald-400 to-green-600 shadow-[0_0_12px_rgba(16,185,129,0.55)]" />
               )}
             </button>
 
@@ -1036,31 +1087,54 @@ export default function Header({
               <div
                 role="dialog"
                 aria-label="Pemberitahuan"
-                className="absolute right-0 top-[calc(100%+12px)] w-[min(455px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_24px_70px_rgba(6,78,59,0.20)]"
+                className="animate-[notificationPanelIn_180ms_ease-out] absolute right-0 top-[calc(100%+14px)] w-[min(475px,calc(100vw-24px))] overflow-hidden rounded-[26px] border border-emerald-100/80 bg-white shadow-[0_30px_90px_rgba(6,78,59,0.24)] ring-1 ring-black/[0.02]"
               >
 
-                {/* HEADER */}
+                {/* PREMIUM HEADER */}
 
-                <div className="relative overflow-hidden bg-gradient-to-br from-emerald-700 via-emerald-800 to-green-950 px-5 py-4 text-white">
-                  <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+                <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top_right,rgba(110,231,183,0.24),transparent_30%),linear-gradient(135deg,#064E3B,#065F46_48%,#022C22)] px-5 pb-5 pt-5 text-white">
 
-                  <div className="absolute -bottom-14 left-1/3 h-28 w-28 rounded-full bg-emerald-300/10 blur-2xl" />
+                  <div className="pointer-events-none absolute -right-16 -top-20 h-44 w-44 rounded-full bg-emerald-300/15 blur-3xl" />
+
+                  <div className="pointer-events-none absolute -bottom-16 left-1/3 h-36 w-36 rounded-full bg-green-300/10 blur-3xl" />
+
+                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,transparent_0%,rgba(255,255,255,0.04)_45%,transparent_70%)]" />
 
                   <div className="relative flex items-start justify-between gap-3">
+
                     <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/10 shadow-inner backdrop-blur-sm">
+
+                      <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_10px_25px_rgba(0,0,0,0.12)] backdrop-blur-md">
+
                         <Bell
-                          size={20}
+                          size={21}
                           strokeWidth={2.2}
                         />
+
+                        {hasUnread && (
+                          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center">
+                            <span className="absolute h-full w-full animate-ping rounded-full bg-emerald-300/60" />
+
+                            <span className="relative h-2.5 w-2.5 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.85)]" />
+                          </span>
+                        )}
                       </div>
 
                       <div className="min-w-0">
-                        <div className="text-[15px] font-black tracking-tight">
-                          Pemberitahuan
+
+                        <div className="flex items-center gap-2">
+                          <div className="text-[16px] font-black tracking-tight">
+                            Pemberitahuan
+                          </div>
+
+                          {hasUnread && (
+                            <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-emerald-200">
+                              Baru
+                            </span>
+                          )}
                         </div>
 
-                        <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-100">
+                        <div className="mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-100/70">
                           MGB ERP Notification Center
                         </div>
                       </div>
@@ -1074,21 +1148,59 @@ export default function Header({
                         )
                       }
                       aria-label="Tutup pemberitahuan"
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/70 transition hover:bg-white/10 hover:text-white"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/65 transition hover:border-white/20 hover:bg-white/10 hover:text-white"
                     >
-                      <X size={17} />
+                      <X
+                        size={17}
+                      />
                     </button>
                   </div>
 
-                  <div className="relative mt-4 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_0_4px_rgba(110,231,183,0.10)]" />
+                  {/* HEADER STATUS */}
 
-                      <span className="text-[10px] font-bold text-emerald-50">
+                  <div className="relative mt-5 grid grid-cols-2 gap-2">
+
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.07] px-3 py-2.5 backdrop-blur-sm">
+                      <p className="text-[8px] font-bold uppercase tracking-[0.14em] text-emerald-100/55">
+                        Status
+                      </p>
+
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <span className="relative flex h-2 w-2">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-60" />
+
+                          <span className="relative h-2 w-2 rounded-full bg-emerald-300" />
+                        </span>
+
+                        <span className="text-[10px] font-black text-white">
+                          LIVE
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.07] px-3 py-2.5 backdrop-blur-sm">
+                      <p className="text-[8px] font-bold uppercase tracking-[0.14em] text-emerald-100/55">
+                        Belum Dibaca
+                      </p>
+
+                      <p className="mt-1 text-sm font-black text-white">
+                        {unreadCount}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* ACTION ROW */}
+
+                  <div className="relative mt-3 flex items-center justify-between gap-3">
+
+                    <div className="flex items-center gap-2">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+
+                      <span className="text-[9px] font-bold text-emerald-50/80">
                         {unreadCount >
                         0
-                          ? `${unreadCount} belum dibaca`
-                          : "Semua sudah dibaca"}
+                          ? `${unreadCount} notifikasi menunggu perhatian`
+                          : "Semua notifikasi sudah dibaca"}
                       </span>
                     </div>
 
@@ -1102,10 +1214,11 @@ export default function Header({
                         unreadCount ===
                           0
                       }
-                      className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 px-2.5 py-1.5 text-[10px] font-extrabold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="group flex shrink-0 items-center gap-1.5 rounded-xl border border-white/10 bg-white/10 px-3 py-1.5 text-[9px] font-extrabold text-white transition hover:border-white/20 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-35"
                     >
                       <Check
-                        size={13}
+                        size={12}
+                        className="transition-transform group-hover:scale-110"
                       />
 
                       {markingRead
@@ -1117,37 +1230,46 @@ export default function Header({
 
                 {/* BODY */}
 
-                <div className="max-h-[470px] overflow-y-auto">
+                <div className="max-h-[475px] overflow-y-auto bg-[#FBFDFC]">
 
                   {notificationLoading &&
                   notifications.length ===
                     0 ? (
-                    <div className="flex min-h-[230px] flex-col items-center justify-center px-6 text-center">
-                      <div className="mb-4 flex h-12 w-12 animate-pulse items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                    <div className="flex min-h-[250px] flex-col items-center justify-center px-6 text-center">
+
+                      <div className="relative mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-100 bg-white text-emerald-600 shadow-[0_10px_30px_rgba(16,185,129,0.10)]">
+                        <span className="absolute inset-0 animate-ping rounded-2xl bg-emerald-100/50" />
+
                         <Bell
-                          size={22}
+                          size={23}
+                          className="relative animate-pulse"
                         />
                       </div>
 
-                      <div className="text-sm font-extrabold text-slate-700">
+                      <div className="text-sm font-black text-slate-700">
                         Memuat pemberitahuan
                       </div>
 
                       <div className="mt-1 text-xs text-slate-400">
                         Mengambil informasi terbaru...
                       </div>
+
+                      <div className="mt-5 h-1 w-24 overflow-hidden rounded-full bg-emerald-50">
+                        <div className="h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600" />
+                      </div>
                     </div>
                   ) : notificationError &&
                     notifications.length ===
                       0 ? (
-                    <div className="flex min-h-[230px] flex-col items-center justify-center px-6 text-center">
-                      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-500">
+                    <div className="flex min-h-[250px] flex-col items-center justify-center px-6 text-center">
+
+                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-red-100 bg-red-50 text-red-500">
                         <X
-                          size={21}
+                          size={22}
                         />
                       </div>
 
-                      <div className="text-sm font-extrabold text-slate-700">
+                      <div className="text-sm font-black text-slate-700">
                         Terjadi masalah
                       </div>
 
@@ -1164,17 +1286,20 @@ export default function Header({
                             false
                           )
                         }
-                        className="mt-4 rounded-lg bg-emerald-600 px-4 py-2 text-[11px] font-extrabold text-white shadow-sm transition hover:bg-emerald-700"
+                        className="mt-4 rounded-xl bg-emerald-600 px-4 py-2 text-[10px] font-extrabold text-white shadow-[0_8px_20px_rgba(16,185,129,0.18)] transition hover:-translate-y-0.5 hover:bg-emerald-700"
                       >
                         Coba Lagi
                       </button>
                     </div>
                   ) : notifications.length ===
                     0 ? (
-                    <div className="flex min-h-[250px] flex-col items-center justify-center px-6 text-center">
-                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-600">
+                    <div className="flex min-h-[270px] flex-col items-center justify-center px-6 text-center">
+
+                      <div className="relative mb-5 flex h-16 w-16 items-center justify-center rounded-[22px] border border-emerald-100 bg-gradient-to-br from-white to-emerald-50 text-emerald-600 shadow-[0_12px_35px_rgba(16,185,129,0.10)]">
+                        <div className="absolute inset-2 rounded-2xl border border-emerald-100/80" />
+
                         <Bell
-                          size={24}
+                          size={25}
                         />
                       </div>
 
@@ -1185,9 +1310,18 @@ export default function Header({
                       <div className="mt-1 max-w-[280px] text-xs leading-relaxed text-slate-400">
                         Semua aktivitas terbaru akan muncul di sini.
                       </div>
+
+                      <div className="mt-4 flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+
+                        <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-emerald-700">
+                          Sistem aktif
+                        </span>
+                      </div>
                     </div>
                   ) : (
                     <div className="divide-y divide-slate-100">
+
                       {notifications.map(
                         (
                           notification
@@ -1199,6 +1333,11 @@ export default function Header({
 
                           const purchaseLabel =
                             getPurchaseLabel(
+                              notification
+                            );
+
+                          const transferLabel =
+                            getTransferLabel(
                               notification
                             );
 
@@ -1234,27 +1373,41 @@ export default function Header({
                                 )
                               }
                               className={[
-                                "group flex w-full gap-3 px-5 py-4 text-left transition-all duration-200",
+                                "group relative flex w-full gap-3.5 overflow-hidden px-5 py-4 text-left transition-all duration-200",
                                 isUnread
-                                  ? "bg-emerald-50/50 hover:bg-emerald-50"
+                                  ? "bg-gradient-to-r from-emerald-50/90 via-white to-white hover:from-emerald-50 hover:to-emerald-50/30"
                                   : "bg-white hover:bg-slate-50",
                               ].join(
                                 " "
                               )}
                             >
 
+                              {/* UNREAD SIDE ACCENT */}
+
+                              {isUnread && (
+                                <span className="absolute bottom-0 left-0 top-0 w-1 bg-gradient-to-b from-emerald-400 via-emerald-500 to-green-600" />
+                              )}
+
                               {/* ICON */}
 
                               <div
                                 className={[
-                                  "relative mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all",
+                                  "relative mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-all duration-200",
                                   isUnread
-                                    ? "border-emerald-200 bg-white text-emerald-600 shadow-sm"
+                                    ? "border-emerald-200 bg-white text-emerald-600 shadow-[0_6px_18px_rgba(16,185,129,0.10)] group-hover:-translate-y-0.5 group-hover:shadow-[0_10px_25px_rgba(16,185,129,0.16)]"
                                     : "border-slate-100 bg-slate-50 text-slate-400",
                                 ].join(
                                   " "
                                 )}
                               >
+                                {isUnread && (
+                                  <span className="absolute -right-1 -top-1 h-3 w-3">
+                                    <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/50" />
+
+                                    <span className="relative block h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
+                                  </span>
+                                )}
+
                                 <MessageCircle
                                   size={
                                     18
@@ -1263,16 +1416,14 @@ export default function Header({
                                     2.1
                                   }
                                 />
-
-                                {isUnread && (
-                                  <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
-                                )}
                               </div>
 
                               {/* CONTENT */}
 
                               <div className="min-w-0 flex-1">
+
                                 <div className="flex items-start justify-between gap-2">
+
                                   <div
                                     className={[
                                       "line-clamp-2 text-[12px] leading-snug",
@@ -1298,14 +1449,33 @@ export default function Header({
                                   )}
                                 </div>
 
-                                <div className="mt-1.5 text-[12px] font-semibold leading-relaxed text-slate-600">
+                                <div
+                                  className={[
+                                    "mt-1.5 line-clamp-3 text-[12px] leading-relaxed",
+                                    isUnread
+                                      ? "font-semibold text-slate-600"
+                                      : "font-medium text-slate-500",
+                                  ].join(
+                                    " "
+                                  )}
+                                >
                                   {
                                     message
                                   }
                                 </div>
 
                                 <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                                  <span className="font-extrabold text-sky-600">
+
+                                  <span
+                                    className={[
+                                      "font-extrabold",
+                                      isUnread
+                                        ? "text-sky-600"
+                                        : "text-slate-500",
+                                    ].join(
+                                      " "
+                                    )}
+                                  >
                                     {
                                       actor
                                     }
@@ -1317,9 +1487,23 @@ export default function Header({
                                         •
                                       </span>
 
-                                      <span className="font-bold text-emerald-700">
+                                      <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 font-bold text-emerald-700">
                                         {
                                           purchaseLabel
+                                        }
+                                      </span>
+                                    </>
+                                  )}
+
+                                  {transferLabel && (
+                                    <>
+                                      <span className="text-slate-300">
+                                        •
+                                      </span>
+
+                                      <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 font-bold text-emerald-700">
+                                        {
+                                          transferLabel
                                         }
                                       </span>
                                     </>
@@ -1340,11 +1524,12 @@ export default function Header({
                               {/* CHEVRON */}
 
                               <div className="flex shrink-0 items-center">
+
                                 <ChevronRight
                                   size={
                                     16
                                   }
-                                  className="text-slate-300 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-emerald-500"
+                                  className="text-slate-300 transition-all duration-200 group-hover:translate-x-1 group-hover:text-emerald-500"
                                 />
                               </div>
                             </button>
@@ -1357,25 +1542,32 @@ export default function Header({
 
                 {/* FOOTER */}
 
-                <div className="border-t border-emerald-100 bg-slate-50/80 px-5 py-3">
+                <div className="border-t border-emerald-100 bg-gradient-to-r from-slate-50 via-white to-emerald-50/40 px-5 py-3.5">
+
                   <div className="flex items-center justify-between gap-3">
+
                     <div className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+
+                      <span className="relative flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+
+                        <span className="relative h-2 w-2 rounded-full bg-emerald-500" />
+                      </span>
 
                       <span className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-500">
                         Notification Center LIVE
                       </span>
                     </div>
 
-                    <span className="text-[9px] font-bold text-slate-400">
-                      15S
+                    <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[8px] font-black tracking-[0.12em] text-slate-400 shadow-sm">
+                      SYNC 15S
                     </span>
                   </div>
 
                   {notificationError &&
                     notifications.length >
                       0 && (
-                      <div className="mt-2 text-[10px] font-semibold text-red-500">
+                      <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[10px] font-semibold text-red-500">
                         {
                           notificationError
                         }
@@ -1413,6 +1605,52 @@ export default function Header({
           </button>
         </div>
       </div>
+
+      {/* =====================================================
+          PREMIUM NOTIFICATION ANIMATIONS
+      ===================================================== */}
+
+      <style jsx global>{`
+        @keyframes notificationShake {
+          0%,
+          18%,
+          100% {
+            transform: rotate(0deg);
+          }
+
+          3% {
+            transform: rotate(12deg);
+          }
+
+          6% {
+            transform: rotate(-12deg);
+          }
+
+          9% {
+            transform: rotate(9deg);
+          }
+
+          12% {
+            transform: rotate(-7deg);
+          }
+
+          15% {
+            transform: rotate(4deg);
+          }
+        }
+
+        @keyframes notificationPanelIn {
+          from {
+            opacity: 0;
+            transform: translateY(-8px) scale(0.98);
+          }
+
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+      `}</style>
     </header>
   );
 }

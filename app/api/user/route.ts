@@ -99,10 +99,54 @@ const userSelect = {
 //
 
 function isOutletRole(role: string) {
-  return (
-    role === "OUTLET_ADMIN" ||
-    role === "KASIR"
-  );
+  return role === "OUTLET_ADMIN" || role === "KASIR";
+}
+
+// =====================================================
+// PHOTO HELPER
+// =====================================================
+//
+// Normalisasi photo:
+//
+// undefined
+// -> tidak mengubah photo lama
+//
+// null
+// -> hapus photo
+//
+// ""
+// -> hapus photo
+//
+// "   "
+// -> hapus photo
+//
+// "data:image/..."
+// -> simpan photo
+//
+// =====================================================
+
+function normalizePhoto(
+  photo: unknown
+): string | null | undefined {
+  // Tidak ada field photo
+  if (photo === undefined) {
+    return undefined;
+  }
+
+  // Explicit null = hapus foto
+  if (photo === null) {
+    return null;
+  }
+
+  // String
+  if (typeof photo === "string") {
+    const trimmed = photo.trim();
+
+    return trimmed ? trimmed : null;
+  }
+
+  // Tipe lain tidak valid untuk foto
+  return null;
 }
 
 // =====================================================
@@ -356,14 +400,10 @@ export async function POST(req: NextRequest) {
     }
 
     // =================================================
-    // VALIDASI PHOTO
+    // PHOTO
     // =================================================
 
-    const selectedPhoto =
-      typeof photo === "string" &&
-      photo.trim()
-        ? photo.trim()
-        : null;
+    const selectedPhoto = normalizePhoto(photo);
 
     // =================================================
     // CEK APAKAH ROLE MEMBUTUHKAN OUTLET
@@ -394,12 +434,11 @@ export async function POST(req: NextRequest) {
     // CEK USERNAME
     // =================================================
 
-    const exist =
-      await prisma.user.findUnique({
-        where: {
-          username: username.trim(),
-        },
-      });
+    const exist = await prisma.user.findUnique({
+      where: {
+        username: username.trim(),
+      },
+    });
 
     if (exist) {
       return NextResponse.json(
@@ -437,12 +476,11 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const outlet =
-        await prisma.outlet.findUnique({
-          where: {
-            id: selectedOutletId,
-          },
-        });
+      const outlet = await prisma.outlet.findUnique({
+        where: {
+          id: selectedOutletId,
+        },
+      });
 
       if (!outlet) {
         return NextResponse.json(
@@ -461,29 +499,25 @@ export async function POST(req: NextRequest) {
     // HASH PASSWORD
     // =================================================
 
-    const hash = await bcrypt.hash(
-      password,
-      10
-    );
+    const hash = await bcrypt.hash(password, 10);
 
     // =================================================
     // CREATE USER
     // =================================================
 
-    const user =
-      await prisma.user.create({
-        data: {
-          username: username.trim(),
-          fullname: fullname.trim(),
-          password: hash,
-          photo: selectedPhoto,
-          role,
-          active: true,
-          outletId: selectedOutletId,
-        },
+    const user = await prisma.user.create({
+      data: {
+        username: username.trim(),
+        fullname: fullname.trim(),
+        password: hash,
+        photo: selectedPhoto ?? null,
+        role,
+        active: true,
+        outletId: selectedOutletId,
+      },
 
-        select: userSelect,
-      });
+      select: userSelect,
+    });
 
     return NextResponse.json({
       success: true,
@@ -491,10 +525,7 @@ export async function POST(req: NextRequest) {
       data: user,
     });
   } catch (error: any) {
-    console.error(
-      "CREATE USER ERROR:",
-      error
-    );
+    console.error("CREATE USER ERROR:", error);
 
     return NextResponse.json(
       {
@@ -739,6 +770,29 @@ export async function PUT(req: NextRequest) {
     }
 
     // =================================================
+    // NORMALISASI PHOTO
+    // =================================================
+    //
+    // PENTING:
+    //
+    // photo === undefined
+    // -> jangan ubah foto lama
+    //
+    // photo === null
+    // -> hapus foto
+    //
+    // photo === ""
+    // -> hapus foto
+    //
+    // photo === "..."
+    // -> ganti/simpan foto
+    //
+    // =================================================
+
+    const normalizedPhoto =
+      normalizePhoto(photo);
+
+    // =================================================
     // OUTLET ADMIN
     // HANYA FIELD TERBATAS
     // =================================================
@@ -759,10 +813,19 @@ export async function PUT(req: NextRequest) {
       // ===============================================
       // PHOTO
       // ===============================================
+      //
+      // Sebelumnya hanya:
+      //
+      // if (typeof photo === "string")
+      //
+      // sehingga photo:null tidak pernah diproses.
+      //
+      // Sekarang null juga diproses sebagai DELETE.
+      //
+      // ===============================================
 
-      if (typeof photo === "string") {
-        updateData.photo =
-          photo.trim() || null;
+      if (normalizedPhoto !== undefined) {
+        updateData.photo = normalizedPhoto;
       }
 
       // ===============================================
@@ -808,7 +871,9 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({
         success: true,
         message:
-          "Akun berhasil diperbarui",
+          normalizedPhoto === null
+            ? "Akun berhasil diperbarui dan foto profil dihapus"
+            : "Akun berhasil diperbarui",
         data: user,
       });
     }
@@ -849,8 +914,7 @@ export async function PUT(req: NextRequest) {
     // ADMIN VALIDASI OUTLET
     // =================================================
 
-    let selectedOutletId: number | null =
-      null;
+    let selectedOutletId: number | null = null;
 
     const outletRequired = isOutletRole(role);
 
@@ -908,20 +972,6 @@ export async function PUT(req: NextRequest) {
     }
 
     // =================================================
-    // PHOTO
-    // =================================================
-
-    let selectedPhoto:
-      | string
-      | null
-      | undefined = undefined;
-
-    if (typeof photo === "string") {
-      selectedPhoto =
-        photo.trim() || null;
-    }
-
-    // =================================================
     // UPDATE DATA ADMIN
     // =================================================
 
@@ -947,10 +997,20 @@ export async function PUT(req: NextRequest) {
     // =================================================
     // PHOTO
     // =================================================
+    //
+    // undefined
+    // -> pertahankan foto lama
+    //
+    // null
+    // -> hapus foto
+    //
+    // string
+    // -> simpan/ganti foto
+    //
+    // =================================================
 
-    if (selectedPhoto !== undefined) {
-      updateData.photo =
-        selectedPhoto;
+    if (normalizedPhoto !== undefined) {
+      updateData.photo = normalizedPhoto;
     }
 
     // =================================================
@@ -995,7 +1055,10 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "User berhasil diperbarui",
+      message:
+        normalizedPhoto === null
+          ? "User berhasil diperbarui dan foto profil dihapus"
+          : "User berhasil diperbarui",
       data: user,
     });
   } catch (error: any) {

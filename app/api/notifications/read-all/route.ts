@@ -1,7 +1,13 @@
+// app/api/notifications/read-all/route.ts
+
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
 import { prisma } from "@/lib/prisma";
+
+// ============================================================
+// CURRENT USER
+// ============================================================
 
 async function getCurrentUser() {
   try {
@@ -15,28 +21,37 @@ async function getCurrentUser() {
       return null;
     }
 
-    const session = await prisma.session.findUnique({
-      where: {
-        token: sessionToken,
-      },
-      select: {
-        expiresAt: true,
+    // =========================================================
+    // DATABASE SESSION
+    // =========================================================
 
-        user: {
-          select: {
-            id: true,
-            username: true,
-            fullname: true,
-            role: true,
-            active: true,
-            outletId: true,
+    const session =
+      await prisma.session.findUnique({
+        where: {
+          token: sessionToken,
+        },
+
+        select: {
+          expiresAt: true,
+
+          user: {
+            select: {
+              id: true,
+              username: true,
+              fullname: true,
+              role: true,
+              active: true,
+              outletId: true,
+            },
           },
         },
-      },
-    });
+      });
 
     if (session) {
-      if (session.expiresAt <= new Date()) {
+      if (
+        session.expiresAt <=
+        new Date()
+      ) {
         return null;
       }
 
@@ -52,26 +67,44 @@ async function getCurrentUser() {
     // =========================================================
 
     try {
-      const raw = decodeURIComponent(sessionToken);
-      const parsed = JSON.parse(raw);
+      const raw =
+        decodeURIComponent(
+          sessionToken
+        );
 
-      if (!parsed?.id) {
+      const parsed =
+        JSON.parse(raw);
+
+      const userId = Number(
+        parsed?.user?.id ??
+          parsed?.id ??
+          0
+      );
+
+      if (
+        !Number.isInteger(
+          userId
+        ) ||
+        userId <= 0
+      ) {
         return null;
       }
 
-      const user = await prisma.user.findUnique({
-        where: {
-          id: Number(parsed.id),
-        },
-        select: {
-          id: true,
-          username: true,
-          fullname: true,
-          role: true,
-          active: true,
-          outletId: true,
-        },
-      });
+      const user =
+        await prisma.user.findUnique({
+          where: {
+            id: userId,
+          },
+
+          select: {
+            id: true,
+            username: true,
+            fullname: true,
+            role: true,
+            active: true,
+            outletId: true,
+          },
+        });
 
       if (!user?.active) {
         return null;
@@ -81,14 +114,28 @@ async function getCurrentUser() {
     } catch {
       return null;
     }
-  } catch {
+  } catch (error) {
+    console.error(
+      "[getCurrentUser notifications/read-all]",
+      error
+    );
+
     return null;
   }
 }
 
+// ============================================================
+// POST
+// ============================================================
+
 export async function POST() {
   try {
-    const currentUser = await getCurrentUser();
+    // =========================================================
+    // AUTH
+    // =========================================================
+
+    const currentUser =
+      await getCurrentUser();
 
     if (!currentUser) {
       return NextResponse.json(
@@ -102,22 +149,67 @@ export async function POST() {
       );
     }
 
-    const result =
+    const readAt =
+      new Date();
+
+    // =========================================================
+    // MARK PURCHASE MENTIONS AS READ
+    // =========================================================
+
+    const purchaseResult =
       await prisma.purchaseCommentMention.updateMany({
         where: {
-          userId: currentUser.id,
+          userId:
+            currentUser.id,
+
           readAt: null,
         },
 
         data: {
-          readAt: new Date(),
+          readAt,
         },
       });
+
+    // =========================================================
+    // MARK TRANSFER MENTIONS AS READ
+    // =========================================================
+
+    const transferResult =
+      await prisma.outletTransferCommentMention.updateMany({
+        where: {
+          userId:
+            currentUser.id,
+
+          readAt: null,
+        },
+
+        data: {
+          readAt,
+        },
+      });
+
+    // =========================================================
+    // TOTAL
+    // =========================================================
+
+    const updated =
+      purchaseResult.count +
+      transferResult.count;
+
+    // =========================================================
+    // RESPONSE
+    // =========================================================
 
     return NextResponse.json({
       success: true,
 
-      updated: result.count,
+      updated,
+
+      purchaseUpdated:
+        purchaseResult.count,
+
+      transferUpdated:
+        transferResult.count,
 
       message:
         "Semua pemberitahuan telah ditandai sebagai dibaca.",

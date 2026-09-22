@@ -1192,6 +1192,7 @@ export default function Sidebar({
               onClick={onClose}
               aria-label="Tutup sidebar"
               className="
+                group
                 relative
                 mt-0.5
                 flex
@@ -1211,11 +1212,18 @@ export default function Sidebar({
                 hover:border-emerald-300/[0.14]
                 hover:bg-emerald-400/[0.06]
                 hover:text-white
+                active:scale-90
               "
             >
               <X
                 size={15}
                 strokeWidth={1.8}
+                className="
+                  transition-transform
+                  duration-200
+                  group-hover:scale-110
+                  group-active:rotate-12
+                "
               />
             </button>
           </div>
@@ -1285,6 +1293,9 @@ export default function Sidebar({
                     via-white/[0.04]
                     to-transparent
                     shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]
+                    transition-transform
+                    duration-300
+                    group-hover:scale-[1.04]
                   "
                 >
                   {user?.photo ? (
@@ -1524,6 +1535,11 @@ export default function Sidebar({
 
                     onClose();
                   }}
+                  aria-current={
+                    active
+                      ? "page"
+                      : undefined
+                  }
                   className={`
                     group
                     relative
@@ -1620,7 +1636,15 @@ export default function Sidebar({
                       rounded-lg
                       border
                       transition-all
-                      duration-200
+                      duration-300
+                      ease-out
+
+                      group-hover:scale-[1.055]
+                      group-hover:-translate-y-0.5
+                      group-hover:shadow-[0_6px_18px_rgba(0,0,0,0.14)]
+                      group-active:scale-90
+                      group-active:translate-y-0
+                      group-active:rotate-1
 
                       ${
                         active
@@ -1655,6 +1679,10 @@ export default function Sidebar({
                             ${tone.glow}
                             blur-md
                             opacity-70
+                            transition-all
+                            duration-300
+                            group-hover:scale-150
+                            group-hover:opacity-100
                           `}
                         />
 
@@ -1676,14 +1704,31 @@ export default function Sidebar({
                           absolute
                           inset-0
                           bg-[radial-gradient(circle_at_30%_20%,rgba(110,231,183,0.18),transparent_55%)]
+                          transition-transform
+                          duration-300
+                          group-hover:scale-125
                         "
                       />
                     )}
 
                     <Icon
-                      className="relative z-10"
+                      aria-hidden="true"
                       size={16.5}
                       strokeWidth={1.85}
+                      className="
+                        relative
+                        z-10
+                        origin-center
+                        transition-all
+                        duration-300
+                        ease-out
+                        group-hover:scale-110
+                        group-hover:-translate-y-0.5
+                        group-hover:rotate-[-4deg]
+                        group-active:scale-90
+                        group-active:translate-y-0
+                        group-active:rotate-[5deg]
+                      "
                     />
                   </span>
 
@@ -1696,10 +1741,12 @@ export default function Sidebar({
                       truncate
                       text-[10.5px]
                       leading-none
+                      transition-transform
+                      duration-200
                       ${
                         active
-                          ? "font-bold text-white"
-                          : "font-medium text-inherit"
+                          ? "font-bold text-white group-hover:translate-x-0.5"
+                          : "font-medium text-inherit group-hover:translate-x-0.5"
                       }
                     `}
                   >
@@ -1785,6 +1832,11 @@ export default function Sidebar({
                     <ChevronRight
                       size={13}
                       strokeWidth={1.8}
+                      className="
+                        transition-transform
+                        duration-200
+                        group-hover:translate-x-0.5
+                      "
                     />
                   </span>
                 </Link>

@@ -65,20 +65,6 @@ export async function GET(req: NextRequest) {
 
     /* =====================================================
        2B. NILAI PERSEDIAAN OUTLET
-
-       Setiap outlet memiliki OutletStock sendiri.
-
-       Nilai:
-       stock × averageCost
-
-       Sekaligus dibuat breakdown per outlet supaya dashboard
-       bisa menampilkan:
-
-       Outlet A     Rp 10.000.000
-       Outlet B     Rp  7.500.000
-       Outlet C     Rp  3.200.000
-
-       Nilai tetap menggunakan averageCost milik OutletStock.
     ===================================================== */
 
     const outletStocks = await prisma.outletStock.findMany({
@@ -116,10 +102,6 @@ export async function GET(req: NextRequest) {
 
       const value = stock * cost;
 
-      /*
-       * Jika relasi outlet tidak ditemukan, skip.
-       * OutletStock normalnya selalu mempunyai outlet.
-       */
       if (!item.outlet) {
         continue;
       }
@@ -146,10 +128,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    /*
-     * Urutkan berdasarkan nama outlet
-     * supaya dashboard konsisten.
-     */
     const nilaiPersediaanOutletBreakdown =
       Array.from(
         outletInventoryMap.values()
@@ -160,17 +138,6 @@ export async function GET(req: NextRequest) {
         )
       );
 
-    /*
-     * Total seluruh outlet dihitung dari breakdown.
-     *
-     * Dengan cara ini:
-     *
-     * nilaiPersediaanOutlet
-     *
-     * selalu sama dengan total:
-     *
-     * Outlet A + Outlet B + Outlet C + ...
-     */
     const nilaiPersediaanOutlet =
       nilaiPersediaanOutletBreakdown.reduce(
         (total, outlet) =>
@@ -180,8 +147,6 @@ export async function GET(req: NextRequest) {
 
     /* =====================================================
        2C. TOTAL SELURUH PERSEDIAAN
-
-       Pusat + seluruh outlet
     ===================================================== */
 
     const nilaiPersediaanTotal =
@@ -571,9 +536,13 @@ export async function GET(req: NextRequest) {
       .slice(0, 10);
 
     /* =====================================================
-       8. GRAFIK INVENTORY
-
+       8. PERIODE GRAFIK
+       
        7 / 30 / 90 HARI
+
+       Periode ini digunakan bersama oleh:
+       - Stock Card
+       - Waste Pusat
     ===================================================== */
 
     const startDate =
@@ -590,6 +559,10 @@ export async function GET(req: NextRequest) {
       startDate.getDate() -
         (period - 1)
     );
+
+    /* =====================================================
+       8A. STOCK CARD
+    ===================================================== */
 
     const stockCards =
       await prisma.stockCard.findMany({
@@ -611,9 +584,105 @@ export async function GET(req: NextRequest) {
       });
 
     /* =====================================================
-       SIAPKAN SEMUA TANGGAL
+       8B. WASTE PUSAT
 
-       Tanggal tanpa transaksi tetap muncul.
+       Waste Pusat menggunakan:
+
+       StockWaste
+
+       Sedangkan Waste Outlet menggunakan:
+
+       OutletStockOut
+
+       Karena dashboard ini membutuhkan Waste Pusat,
+       kita hanya mengambil StockWaste.
+
+       HANYA APPROVED yang dihitung sebagai waste resmi.
+    ===================================================== */
+
+    const wastePusatData =
+      await prisma.stockWaste.findMany({
+        where: {
+          trxDate: {
+            gte: startDate,
+          },
+
+          status: "APPROVED",
+        },
+
+        select: {
+          trxDate: true,
+          wasteQty: true,
+          unitCost: true,
+          totalCost: true,
+        },
+
+        orderBy: {
+          trxDate: "asc",
+        },
+      });
+
+    /* =====================================================
+       TOTAL WASTE PUSAT PERIODE
+
+       Angka ini digunakan oleh:
+
+       stats.wastePusat
+       stats.waste
+
+       sehingga frontend lama maupun baru
+       tetap bisa membaca datanya.
+    ===================================================== */
+
+    const wastePusat =
+      wastePusatData.reduce(
+        (total, item) => {
+          /*
+           * totalCost adalah nilai waste yang sebenarnya
+           * tersimpan pada transaksi.
+
+           * Jika totalCost kosong/0, fallback ke:
+           *
+           * wasteQty × unitCost
+           *
+           * supaya data lama tetap terbaca.
+           */
+
+          const storedTotalCost =
+            Number(
+              item.totalCost || 0
+            );
+
+          const calculatedTotalCost =
+            Number(
+              item.wasteQty || 0
+            ) *
+            Number(
+              item.unitCost || 0
+            );
+
+          const value =
+            storedTotalCost !== 0
+              ? storedTotalCost
+              : calculatedTotalCost;
+
+          return total + value;
+        },
+        0
+      );
+
+    /* =====================================================
+       8C. CHART MAP
+
+       Setiap tanggal selalu dibuat terlebih dahulu.
+
+       Jadi:
+
+       22 Sep -> waste 100.000
+       23 Sep -> waste 0
+       24 Sep -> waste 250.000
+
+       bukan hanya tanggal yang memiliki transaksi.
     ===================================================== */
 
     const chartMap = new Map<
@@ -621,6 +690,8 @@ export async function GET(req: NextRequest) {
       {
         masuk: number;
         keluar: number;
+        waste: number;
+        wastePusat: number;
         date: Date;
       }
     >();
@@ -652,13 +723,15 @@ export async function GET(req: NextRequest) {
         {
           masuk: 0,
           keluar: 0,
+          waste: 0,
+          wastePusat: 0,
           date,
         }
       );
     }
 
     /* =====================================================
-       MASUKKAN DATA STOCK CARD
+       8D. MASUKKAN DATA STOCK CARD
     ===================================================== */
 
     for (
@@ -701,7 +774,74 @@ export async function GET(req: NextRequest) {
     }
 
     /* =====================================================
-       FORMAT CHART
+       8E. MASUKKAN DATA WASTE PUSAT KE CHART
+    ===================================================== */
+
+    for (
+      const wasteItem of wastePusatData
+    ) {
+      const date =
+        new Date(
+          wasteItem.trxDate
+        );
+
+      if (
+        Number.isNaN(
+          date.getTime()
+        )
+      ) {
+        continue;
+      }
+
+      const key =
+        `${date.getFullYear()}-${String(
+          date.getMonth() + 1
+        ).padStart(2, "0")}-${String(
+          date.getDate()
+        ).padStart(2, "0")}`;
+
+      const current =
+        chartMap.get(key);
+
+      if (!current) {
+        continue;
+      }
+
+      const storedTotalCost =
+        Number(
+          wasteItem.totalCost || 0
+        );
+
+      const calculatedTotalCost =
+        Number(
+          wasteItem.wasteQty || 0
+        ) *
+        Number(
+          wasteItem.unitCost || 0
+        );
+
+      const wasteValue =
+        storedTotalCost !== 0
+          ? storedTotalCost
+          : calculatedTotalCost;
+
+      /*
+       * Dua field diberikan untuk
+       * backward compatibility:
+
+       * wastePusat
+       * waste
+       */
+
+      current.wastePusat +=
+        wasteValue;
+
+      current.waste +=
+        wasteValue;
+    }
+
+    /* =====================================================
+       8F. FORMAT CHART
     ===================================================== */
 
     const chart =
@@ -730,6 +870,15 @@ export async function GET(req: NextRequest) {
 
           keluar:
             value.keluar,
+
+          /*
+           * WASTE PUSAT
+           */
+          waste:
+            value.waste,
+
+          wastePusat:
+            value.wastePusat,
         })
       );
 
@@ -857,23 +1006,6 @@ export async function GET(req: NextRequest) {
 
           /*
            * BREAKDOWN INVENTORY PER OUTLET
-           *
-           * Contoh:
-           *
-           * [
-           *   {
-           *     outletId: 1,
-           *     outletCode: "OUT-A",
-           *     outletName: "Outlet A",
-           *     value: 10000000
-           *   },
-           *   {
-           *     outletId: 2,
-           *     outletCode: "OUT-B",
-           *     outletName: "Outlet B",
-           *     value: 7500000
-           *   }
-           * ]
            */
           nilaiPersediaanOutletBreakdown,
 
@@ -913,7 +1045,28 @@ export async function GET(req: NextRequest) {
 
           stockTrend: 0,
 
-          /* JUMLAH USER ONLINE */
+          /*
+           * =================================================
+           * WASTE PUSAT
+           * =================================================
+           *
+           * Total nilai waste APPROVED
+           * pada periode dashboard.
+           *
+           * Contoh period = 7:
+           * 7 hari terakhir.
+           */
+          wastePusat,
+
+          /*
+           * Alias waste untuk kompatibilitas
+           * dengan frontend versi sebelumnya.
+           */
+          waste: wastePusat,
+
+          /*
+           * JUMLAH USER ONLINE
+           */
           onlineUserCount:
             formattedOnlineUsers.length,
         },
@@ -932,6 +1085,14 @@ export async function GET(req: NextRequest) {
 
         deliveryPending,
 
+        /*
+         * CHART:
+         *
+         * masuk
+         * keluar
+         * waste
+         * wastePusat
+         */
         chart,
       },
     });

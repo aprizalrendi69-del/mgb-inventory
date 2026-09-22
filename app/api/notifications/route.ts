@@ -88,11 +88,18 @@ async function getCurrentUser(): Promise<CurrentUser | null> {
   }
 }
 
-function formatNotificationMessage(comment: string) {
+// =========================================================
+// HELPERS
+// =========================================================
+
+function formatNotificationMessage(
+  comment: string,
+  fallback = "Anda disebut dalam komentar."
+) {
   const clean = String(comment ?? "").trim();
 
   if (!clean) {
-    return "Anda disebut dalam komentar purchase.";
+    return fallback;
   }
 
   return clean;
@@ -100,6 +107,14 @@ function formatNotificationMessage(comment: string) {
 
 // =========================================================
 // GET NOTIFICATIONS
+// =========================================================
+//
+// Menggabungkan:
+//
+// 1. PurchaseCommentMention
+// 2. OutletTransferCommentMention
+//
+// Keduanya masuk ke satu Notification Center.
 // =========================================================
 
 export async function GET() {
@@ -119,11 +134,18 @@ export async function GET() {
     }
 
     // =======================================================
-    // PURCHASE COMMENT MENTIONS
+    // LOAD PURCHASE + TRANSFER MENTION SECARA PARALEL
     // =======================================================
 
-    const mentions =
-      await prisma.purchaseCommentMention.findMany({
+    const [
+      purchaseMentions,
+      transferMentions,
+    ] = await Promise.all([
+      // =====================================================
+      // PURCHASE COMMENT MENTIONS
+      // =====================================================
+
+      prisma.purchaseCommentMention.findMany({
         where: {
           userId: currentUser.id,
         },
@@ -187,136 +209,438 @@ export async function GET() {
             },
           },
         },
+      }),
+
+      // =====================================================
+      // OUTLET TRANSFER COMMENT MENTIONS
+      // =====================================================
+
+      prisma.outletTransferCommentMention.findMany({
+        where: {
+          userId: currentUser.id,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 50,
+        select: {
+          id: true,
+          userId: true,
+          createdAt: true,
+          readAt: true,
+
+          comment: {
+            select: {
+              id: true,
+              comment: true,
+              createdAt: true,
+              userId: true,
+
+              user: {
+                select: {
+                  id: true,
+                  fullname: true,
+                  username: true,
+                },
+              },
+
+              transferId: true,
+
+              transfer: {
+                select: {
+                  id: true,
+                  number: true,
+                  transferDate: true,
+                  status: true,
+
+                  sourceOutlet: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+
+                  outlet: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    // =======================================================
+    // TRANSFORM PURCHASE NOTIFICATIONS
+    // =======================================================
+
+    const purchaseNotifications =
+      purchaseMentions.map((mention) => {
+        const comment = mention.comment;
+
+        const actorName =
+          comment.user?.fullname ||
+          comment.user?.username ||
+          "User";
+
+        const isOutletPurchase =
+          Boolean(comment.outletPurchaseId);
+
+        const purchase =
+          comment.purchase;
+
+        const outletPurchase =
+          comment.outletPurchase;
+
+        let context =
+          "Purchase";
+
+        if (isOutletPurchase) {
+          context =
+            outletPurchase?.outlet?.name
+              ? `Purchase Outlet • ${outletPurchase.outlet.name}`
+              : "Purchase Outlet";
+        } else if (purchase) {
+          context =
+            "Purchase Pusat";
+        }
+
+        // -----------------------------------------------------
+        // LINK
+        // -----------------------------------------------------
+
+        let link = "/purchase";
+
+        if (outletPurchase?.id) {
+          link =
+            `/outlet/purchase/${outletPurchase.id}`;
+        } else if (purchase?.id) {
+          link =
+            `/purchase/${purchase.id}`;
+        }
+
+        return {
+          id: `purchase-comment-mention-${mention.id}`,
+
+          mentionId: mention.id,
+
+          type:
+            "PURCHASE_COMMENT_MENTION",
+
+          title:
+            `${actorName} menyebut Anda`,
+
+          message:
+            formatNotificationMessage(
+              comment.comment,
+              "Anda disebut dalam komentar purchase."
+            ),
+
+          description: context,
+
+          createdAt:
+            mention.createdAt,
+
+          read:
+            Boolean(mention.readAt),
+
+          readAt:
+            mention.readAt,
+
+          commentId:
+            comment.id,
+
+          purchaseId:
+            comment.purchaseId,
+
+          outletPurchaseId:
+            comment.outletPurchaseId,
+
+          link,
+
+          actor: {
+            id:
+              comment.user?.id ??
+              comment.userId,
+
+            fullname:
+              comment.user?.fullname ??
+              null,
+
+            username:
+              comment.user?.username ??
+              null,
+          },
+
+          purchase: purchase
+            ? {
+                id: purchase.id,
+                purchaseDate:
+                  purchase.purchaseDate,
+                status:
+                  purchase.status,
+                paymentMethod:
+                  purchase.paymentMethod,
+                total:
+                  purchase.total,
+              }
+            : null,
+
+          outletPurchase:
+            outletPurchase
+              ? {
+                  id:
+                    outletPurchase.id,
+                  outlet:
+                    outletPurchase.outlet,
+                }
+              : null,
+
+          meta: {
+            context,
+            source:
+              "PURCHASE_COMMENT_MENTION",
+          },
+        };
       });
 
     // =======================================================
-    // TRANSFORM NOTIFICATIONS
+    // TRANSFORM TRANSFER NOTIFICATIONS
     // =======================================================
 
-    const notifications = mentions.map((mention) => {
-      const comment = mention.comment;
+    const transferNotifications =
+      transferMentions.map(
+        (mention) => {
+          const comment =
+            mention.comment;
 
-      const actorName =
-        comment.user?.fullname ||
-        comment.user?.username ||
-        "User";
+          const transfer =
+            comment.transfer;
 
-      const isOutletPurchase =
-        Boolean(comment.outletPurchaseId);
+          const actorName =
+            comment.user?.fullname ||
+            comment.user?.username ||
+            "User";
 
-      const purchase = comment.purchase;
-      const outletPurchase = comment.outletPurchase;
+          const transferNumber =
+            transfer?.number ||
+            `TRANSFER-${comment.transferId}`;
 
-      let context = "Purchase";
+          // -------------------------------------------------
+          // CONTEXT
+          // -------------------------------------------------
 
-      if (isOutletPurchase) {
-        context = outletPurchase?.outlet?.name
-          ? `Purchase Outlet • ${outletPurchase.outlet.name}`
-          : "Purchase Outlet";
-      } else if (purchase) {
-        context = "Purchase Pusat";
-      }
+          let context =
+            `Transfer • ${transferNumber}`;
 
-      // -----------------------------------------------------
-      // LINK
-      // -----------------------------------------------------
+          if (
+            transfer?.sourceOutlet?.name &&
+            transfer?.outlet?.name
+          ) {
+            context =
+              `Transfer • ${transferNumber} • ${transfer.sourceOutlet.name} → ${transfer.outlet.name}`;
+          } else if (
+            transfer?.outlet?.name
+          ) {
+            context =
+              `Transfer • ${transferNumber} • ${transfer.outlet.name}`;
+          }
 
-      let link = "/purchase";
+          // -------------------------------------------------
+          // LINK
+          // -------------------------------------------------
+          //
+          // URL halaman Barang Masuk menggunakan:
+          //
+          // /outlet/barang-masuk/TRANSFER-{id}
+          //
+          // -------------------------------------------------
 
-      if (outletPurchase?.id) {
-        link = `/outlet/purchase/${outletPurchase.id}`;
-      } else if (purchase?.id) {
-        link = `/purchase/${purchase.id}`;
-      }
+          const link =
+            `/outlet/barang-masuk/TRANSFER-${comment.transferId}`;
 
-      return {
-        id: `purchase-comment-mention-${mention.id}`,
+          return {
+            id:
+              `transfer-comment-mention-${mention.id}`,
 
-        // ID asli supaya frontend mudah mengirim ke POST.
-        mentionId: mention.id,
+            mentionId:
+              mention.id,
 
-        type: "PURCHASE_COMMENT_MENTION",
+            type:
+              "TRANSFER_COMMENT_MENTION",
 
-        title: `${actorName} menyebut Anda`,
+            title:
+              `${actorName} menyebut Anda`,
 
-        message: formatNotificationMessage(
-          comment.comment
-        ),
+            message:
+              formatNotificationMessage(
+                comment.comment,
+                "Anda disebut dalam komentar transfer."
+              ),
 
-        description: context,
+            description:
+              context,
 
-        createdAt: mention.createdAt,
+            createdAt:
+              mention.createdAt,
 
-        read: Boolean(mention.readAt),
+            read:
+              Boolean(mention.readAt),
 
-        readAt: mention.readAt,
+            readAt:
+              mention.readAt,
 
-        commentId: comment.id,
+            commentId:
+              comment.id,
 
-        purchaseId: comment.purchaseId,
+            transferId:
+              comment.transferId,
 
-        outletPurchaseId:
-          comment.outletPurchaseId,
+            transferNumber,
 
-        link,
+            link,
 
-        actor: {
-          id:
-            comment.user?.id ??
-            comment.userId,
+            actor: {
+              id:
+                comment.user?.id ??
+                comment.userId,
 
-          fullname:
-            comment.user?.fullname ??
-            null,
+              fullname:
+                comment.user?.fullname ??
+                null,
 
-          username:
-            comment.user?.username ??
-            null,
-        },
+              username:
+                comment.user?.username ??
+                null,
+            },
 
-        purchase: purchase
-          ? {
-              id: purchase.id,
-              purchaseDate:
-                purchase.purchaseDate,
-              status: purchase.status,
-              paymentMethod:
-                purchase.paymentMethod,
-              total: purchase.total,
-            }
-          : null,
+            transfer: transfer
+              ? {
+                  id:
+                    transfer.id,
 
-        outletPurchase: outletPurchase
-          ? {
-              id: outletPurchase.id,
-              outlet:
-                outletPurchase.outlet,
-            }
-          : null,
+                  number:
+                    transfer.number,
 
-        meta: {
-          context,
-        },
-      };
-    });
+                  transferDate:
+                    transfer.transferDate,
+
+                  status:
+                    transfer.status,
+                }
+              : {
+                  id:
+                    comment.transferId,
+
+                  number:
+                    transferNumber,
+
+                  transferDate:
+                    null,
+
+                  status:
+                    null,
+                },
+
+            meta: {
+              context,
+              source:
+                "OUTLET_TRANSFER_COMMENT_MENTION",
+
+              sourceOutlet:
+                transfer?.sourceOutlet
+                  ? {
+                      id:
+                        transfer
+                          .sourceOutlet
+                          .id,
+
+                      name:
+                        transfer
+                          .sourceOutlet
+                          .name,
+                    }
+                  : null,
+
+              destinationOutlet:
+                transfer?.outlet
+                  ? {
+                      id:
+                        transfer.outlet.id,
+
+                      name:
+                        transfer.outlet.name,
+                    }
+                  : null,
+            },
+          };
+        }
+      );
+
+    // =======================================================
+    // MERGE
+    // =======================================================
+    //
+    // Purchase + Transfer digabung kemudian diurutkan
+    // berdasarkan waktu mention terbaru.
+    //
+    // =======================================================
+
+    const notifications = [
+      ...purchaseNotifications,
+      ...transferNotifications,
+    ]
+      .sort(
+        (a, b) =>
+          new Date(
+            b.createdAt
+          ).getTime() -
+          new Date(
+            a.createdAt
+          ).getTime()
+      )
+      .slice(0, 50);
 
     // =======================================================
     // UNREAD COUNT
     // =======================================================
 
-    const unreadCount =
-      await prisma.purchaseCommentMention.count({
+    const [
+      unreadPurchaseCount,
+      unreadTransferCount,
+    ] = await Promise.all([
+      prisma.purchaseCommentMention.count({
         where: {
           userId: currentUser.id,
           readAt: null,
         },
-      });
+      }),
+
+      prisma.outletTransferCommentMention.count({
+        where: {
+          userId: currentUser.id,
+          readAt: null,
+        },
+      }),
+    ]);
+
+    const unreadCount =
+      unreadPurchaseCount +
+      unreadTransferCount;
 
     return NextResponse.json({
       ok: true,
+
       notifications,
+
       unreadCount,
-      total: notifications.length,
+
+      total:
+        notifications.length,
     });
   } catch (error) {
     console.error(
@@ -327,11 +651,14 @@ export async function GET() {
     return NextResponse.json(
       {
         ok: false,
+
         message:
           error instanceof Error
             ? error.message
             : "Gagal mengambil pemberitahuan.",
+
         notifications: [],
+
         unreadCount: 0,
       },
       {
@@ -345,26 +672,39 @@ export async function GET() {
 // POST - MARK ONE NOTIFICATION AS READ
 // =========================================================
 //
-// Body:
+// Bisa menerima:
+//
 // {
 //   mentionId: 123
 // }
 //
-// Saat notification diklik:
-// purchaseCommentMention.readAt = sekarang
+// atau:
 //
-// Hanya user pemilik mention yang boleh mengubahnya.
+// {
+//   notificationId: "purchase-comment-mention-123"
+// }
+//
+// atau:
+//
+// {
+//   notificationId: "transfer-comment-mention-456"
+// }
+//
 // =========================================================
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request
+) {
   try {
-    const currentUser = await getCurrentUser();
+    const currentUser =
+      await getCurrentUser();
 
     if (!currentUser) {
       return NextResponse.json(
         {
           ok: false,
-          message: "Unauthorized",
+          message:
+            "Unauthorized",
         },
         {
           status: 401,
@@ -372,18 +712,29 @@ export async function POST(request: Request) {
       );
     }
 
+    // =======================================================
+    // PARSE BODY
+    // =======================================================
+
     let body: {
-      mentionId?: number | string;
-      notificationId?: number | string;
+      mentionId?:
+        | number
+        | string;
+
+      notificationId?:
+        | number
+        | string;
     };
 
     try {
-      body = await request.json();
+      body =
+        await request.json();
     } catch {
       return NextResponse.json(
         {
           ok: false,
-          message: "Body request tidak valid.",
+          message:
+            "Body request tidak valid.",
         },
         {
           status: 400,
@@ -391,21 +742,33 @@ export async function POST(request: Request) {
       );
     }
 
-    // Bisa menerima mentionId langsung.
-    // notificationId juga didukung untuk fleksibilitas frontend.
+    // =======================================================
+    // DETERMINE NOTIFICATION TYPE
+    // =======================================================
+
     let mentionIdValue =
       body.mentionId ??
       body.notificationId;
 
-    // Kalau frontend mengirim:
-    // purchase-comment-mention-123
-    // ambil angka 123.
+    let notificationType:
+      | "PURCHASE"
+      | "TRANSFER"
+      | null = null;
+
+    // -------------------------------------------------------
+    // PURCHASE PREFIX
+    // -------------------------------------------------------
+
     if (
-      typeof mentionIdValue === "string" &&
+      typeof mentionIdValue ===
+        "string" &&
       mentionIdValue.startsWith(
         "purchase-comment-mention-"
       )
     ) {
+      notificationType =
+        "PURCHASE";
+
       mentionIdValue =
         mentionIdValue.replace(
           "purchase-comment-mention-",
@@ -413,12 +776,40 @@ export async function POST(request: Request) {
         );
     }
 
-    const mentionId = Number(
-      mentionIdValue
-    );
+    // -------------------------------------------------------
+    // TRANSFER PREFIX
+    // -------------------------------------------------------
+
+    else if (
+      typeof mentionIdValue ===
+        "string" &&
+      mentionIdValue.startsWith(
+        "transfer-comment-mention-"
+      )
+    ) {
+      notificationType =
+        "TRANSFER";
+
+      mentionIdValue =
+        mentionIdValue.replace(
+          "transfer-comment-mention-",
+          ""
+        );
+    }
+
+    // =======================================================
+    // VALIDATE MENTION ID
+    // =======================================================
+
+    const mentionId =
+      Number(
+        mentionIdValue
+      );
 
     if (
-      !Number.isInteger(mentionId) ||
+      !Number.isInteger(
+        mentionId
+      ) ||
       mentionId <= 0
     ) {
       return NextResponse.json(
@@ -434,21 +825,185 @@ export async function POST(request: Request) {
     }
 
     // =======================================================
-    // CARI NOTIFICATION MILIK USER
+    // TRANSFER NOTIFICATION
+    // =======================================================
+
+    if (
+      notificationType ===
+      "TRANSFER"
+    ) {
+      const mention =
+        await prisma.outletTransferCommentMention.findFirst(
+          {
+            where: {
+              id: mentionId,
+              userId:
+                currentUser.id,
+            },
+
+            select: {
+              id: true,
+              userId: true,
+              readAt: true,
+            },
+          }
+        );
+
+      if (!mention) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              "Notification transfer tidak ditemukan.",
+          },
+          {
+            status: 404,
+          }
+        );
+      }
+
+      // -----------------------------------------------------
+      // ALREADY READ
+      // -----------------------------------------------------
+
+      if (mention.readAt) {
+        const [
+          unreadPurchaseCount,
+          unreadTransferCount,
+        ] = await Promise.all([
+          prisma.purchaseCommentMention.count({
+            where: {
+              userId:
+                currentUser.id,
+              readAt: null,
+            },
+          }),
+
+          prisma.outletTransferCommentMention.count({
+            where: {
+              userId:
+                currentUser.id,
+              readAt: null,
+            },
+          }),
+        ]);
+
+        return NextResponse.json({
+          ok: true,
+
+          alreadyRead: true,
+
+          readAt:
+            mention.readAt,
+
+          mentionId:
+            mention.id,
+
+          notificationType:
+            "TRANSFER",
+
+          unreadCount:
+            unreadPurchaseCount +
+            unreadTransferCount,
+        });
+      }
+
+      // -----------------------------------------------------
+      // MARK TRANSFER AS READ
+      // -----------------------------------------------------
+
+      const readAt =
+        new Date();
+
+      const updated =
+        await prisma.outletTransferCommentMention.update(
+          {
+            where: {
+              id: mention.id,
+            },
+
+            data: {
+              readAt,
+            },
+
+            select: {
+              id: true,
+              userId: true,
+              readAt: true,
+            },
+          }
+        );
+
+      // -----------------------------------------------------
+      // RECOUNT ALL UNREAD
+      // -----------------------------------------------------
+
+      const [
+        unreadPurchaseCount,
+        unreadTransferCount,
+      ] = await Promise.all([
+        prisma.purchaseCommentMention.count({
+          where: {
+            userId:
+              currentUser.id,
+            readAt: null,
+          },
+        }),
+
+        prisma.outletTransferCommentMention.count({
+          where: {
+            userId:
+              currentUser.id,
+            readAt: null,
+          },
+        }),
+      ]);
+
+      return NextResponse.json({
+        ok: true,
+
+        alreadyRead: false,
+
+        mentionId:
+          updated.id,
+
+        readAt:
+          updated.readAt,
+
+        notificationType:
+          "TRANSFER",
+
+        unreadCount:
+          unreadPurchaseCount +
+          unreadTransferCount,
+      });
+    }
+
+    // =======================================================
+    // PURCHASE NOTIFICATION
+    // =======================================================
+    //
+    // Jika notificationId tidak memiliki prefix dan hanya
+    // berupa angka, tetap dianggap Purchase agar kompatibel
+    // dengan frontend lama.
     // =======================================================
 
     const mention =
-      await prisma.purchaseCommentMention.findFirst({
-        where: {
-          id: mentionId,
-          userId: currentUser.id,
-        },
-        select: {
-          id: true,
-          userId: true,
-          readAt: true,
-        },
-      });
+      await prisma.purchaseCommentMention.findFirst(
+        {
+          where: {
+            id: mentionId,
+            userId:
+              currentUser.id,
+          },
+
+          select: {
+            id: true,
+            userId: true,
+            readAt: true,
+          },
+        }
+      );
 
     if (!mention) {
       return NextResponse.json(
@@ -468,28 +1023,64 @@ export async function POST(request: Request) {
     // =======================================================
 
     if (mention.readAt) {
+      const [
+        unreadPurchaseCount,
+        unreadTransferCount,
+      ] = await Promise.all([
+        prisma.purchaseCommentMention.count({
+          where: {
+            userId:
+              currentUser.id,
+            readAt: null,
+          },
+        }),
+
+        prisma.outletTransferCommentMention.count({
+          where: {
+            userId:
+              currentUser.id,
+            readAt: null,
+          },
+        }),
+      ]);
+
       return NextResponse.json({
         ok: true,
+
         alreadyRead: true,
-        readAt: mention.readAt,
-        mentionId: mention.id,
+
+        readAt:
+          mention.readAt,
+
+        mentionId:
+          mention.id,
+
+        notificationType:
+          "PURCHASE",
+
+        unreadCount:
+          unreadPurchaseCount +
+          unreadTransferCount,
       });
     }
 
     // =======================================================
-    // MARK AS READ
+    // MARK PURCHASE AS READ
     // =======================================================
 
-    const readAt = new Date();
+    const readAt =
+      new Date();
 
     const updated =
       await prisma.purchaseCommentMention.update({
         where: {
           id: mention.id,
         },
+
         data: {
           readAt,
         },
+
         select: {
           id: true,
           userId: true,
@@ -498,23 +1089,47 @@ export async function POST(request: Request) {
       });
 
     // =======================================================
-    // HITUNG ULANG UNREAD
+    // HITUNG ULANG SEMUA UNREAD
     // =======================================================
 
-    const unreadCount =
-      await prisma.purchaseCommentMention.count({
+    const [
+      unreadPurchaseCount,
+      unreadTransferCount,
+    ] = await Promise.all([
+      prisma.purchaseCommentMention.count({
         where: {
-          userId: currentUser.id,
+          userId:
+            currentUser.id,
           readAt: null,
         },
-      });
+      }),
+
+      prisma.outletTransferCommentMention.count({
+        where: {
+          userId:
+            currentUser.id,
+          readAt: null,
+        },
+      }),
+    ]);
 
     return NextResponse.json({
       ok: true,
+
       alreadyRead: false,
-      mentionId: updated.id,
-      readAt: updated.readAt,
-      unreadCount,
+
+      mentionId:
+        updated.id,
+
+      readAt:
+        updated.readAt,
+
+      notificationType:
+        "PURCHASE",
+
+      unreadCount:
+        unreadPurchaseCount +
+        unreadTransferCount,
     });
   } catch (error) {
     console.error(
@@ -525,6 +1140,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
+
         message:
           error instanceof Error
             ? error.message

@@ -90,6 +90,7 @@ export default function BarangKeluarDetailPage() {
   const [deleting, setDeleting] = useState(false);
 
   const [note, setNote] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState("");
 
   // =====================================================
   // TAMBAH BARANG
@@ -161,6 +162,7 @@ export default function BarangKeluarDetailPage() {
       });
 
       setNote(delivery?.remarks || "");
+      setDeliveryDate(formatDateInput(delivery?.deliveryDate));
     } catch (error: any) {
       console.error("LOAD BARANG KELUAR ERROR:", error);
 
@@ -504,6 +506,11 @@ export default function BarangKeluarDetailPage() {
       return;
     }
 
+    if (!deliveryDate) {
+      alert("Tanggal Delivery Order wajib diisi.");
+      return;
+    }
+
     if (data.items.length === 0) {
       alert(
         "Delivery Order harus memiliki minimal 1 barang."
@@ -555,6 +562,8 @@ export default function BarangKeluarDetailPage() {
 
         body: JSON.stringify({
           customerId: data.customer?.id ?? null,
+
+          deliveryDate,
 
           remarks: note,
 
@@ -740,6 +749,19 @@ export default function BarangKeluarDetailPage() {
         year: "numeric",
       }
     );
+  }
+
+  function formatDateInput(value: string) {
+    if (!value) return "";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
   }
 
   // =====================================================
@@ -996,12 +1018,25 @@ export default function BarangKeluarDetailPage() {
 
               <div className="flex items-center gap-2 text-xs text-slate-400">
                 <CalendarDays className="h-4 w-4 text-slate-300" />
-                <span>
-                  Tanggal{" "}
-                  <strong className="ml-1 font-semibold text-slate-600">
-                    {formatDate(data.deliveryDate)}
-                  </strong>
-                </span>
+                {isDraft ? (
+                  <label className="flex items-center gap-2">
+                    <span>Tanggal</span>
+                    <input
+                      type="date"
+                      value={deliveryDate}
+                      onChange={(e) => setDeliveryDate(e.target.value)}
+                      disabled={saving || deleting}
+                      className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none transition focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                    />
+                  </label>
+                ) : (
+                  <span>
+                    Tanggal{" "}
+                    <strong className="ml-1 font-semibold text-slate-600">
+                      {formatDate(data.deliveryDate)}
+                    </strong>
+                  </span>
+                )}
               </div>
 
               <div className="hidden h-4 w-px bg-slate-200 sm:block" />

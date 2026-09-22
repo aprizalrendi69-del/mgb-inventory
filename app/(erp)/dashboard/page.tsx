@@ -109,6 +109,10 @@ type DashboardStats = {
   purchaseTrend: number;
   deliveryTrend: number;
   stockTrend: number;
+
+  wasteCount?: number;
+  wasteTotalQty?: number;
+  wasteTotalValue?: number;
 };
 
 type DashboardData = {
@@ -119,11 +123,15 @@ type DashboardData = {
   activities: any[];
   purchasePending: any[];
   deliveryPending: any[];
+  wasteSummary?: { totalTransactions?: number; totalWasteQty?: number; totalWasteValue?: number; pendingCount?: number; approvedCount?: number; rejectedCount?: number };
+  wasteRecent?: any[];
 
   chart: {
     label: string;
     masuk: number;
     keluar: number;
+    waste?: number;
+    wastePusat?: number;
   }[];
 };
 
@@ -409,6 +417,14 @@ function ChartTooltip({
     )?.value || 0
   );
 
+  const waste = Number(
+    payload.find(
+      (item: any) =>
+        item.dataKey === "waste" ||
+        item.dataKey === "wastePusat"
+    )?.value || 0
+  );
+
   return (
     <div className="min-w-[235px] overflow-hidden rounded-[20px] border border-slate-200/80 bg-white/95 shadow-[0_25px_70px_rgba(15,23,42,0.16)] backdrop-blur-xl">
       <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3.5">
@@ -450,6 +466,20 @@ function ChartTooltip({
           </span>
         </div>
 
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-rose-400" />
+
+            <span className="text-[10px] text-slate-500">
+              Waste Pusat
+            </span>
+          </div>
+
+          <span className="text-xs font-bold text-rose-600">
+            {formatNumber(waste)}
+          </span>
+        </div>
+
         <div className="border-t border-slate-100 pt-3">
           <div className="flex items-center justify-between">
             <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">
@@ -457,7 +487,7 @@ function ChartTooltip({
             </span>
 
             <span className="text-sm font-bold text-slate-800">
-              {formatNumber(masuk + keluar)}
+              {formatNumber(masuk + keluar + waste)}
             </span>
           </div>
         </div>
@@ -861,27 +891,45 @@ export default function Dashboard() {
       label: item.label,
       masuk: Number(item.masuk || 0),
       keluar: Number(item.keluar || 0),
+      waste: Number(
+        item.wastePusat ??
+          item.waste ??
+          0
+      ),
     }));
   }, [data]);
 
   const chartSummary = useMemo(() => {
     return chartData.reduce(
       (summary, item) => {
-        summary.masuk += item.masuk;
-        summary.keluar += item.keluar;
-
+        summary.masuk += Number(item.masuk || 0);
+        summary.keluar += Number(item.keluar || 0);
+        summary.waste += Number(item.waste || 0);
         return summary;
       },
-      {
-        masuk: 0,
-        keluar: 0,
-      }
+      { masuk: 0, keluar: 0, waste: 0 }
     );
   }, [chartData]);
+
+  // Fallback langsung dari summary API agar data waste tetap tampil
+  // walaupun endpoint belum memasukkan waste ke setiap titik chart.
+  const wasteTotalQty = Number(
+    data?.wasteSummary?.totalWasteQty ?? data?.stats?.wasteTotalQty ?? 0
+  );
+  const wasteTotalValue = Number(
+    data?.wasteSummary?.totalWasteValue ?? data?.stats?.wasteTotalValue ?? 0
+  );
+  const wasteTransactionCount = Number(
+    data?.wasteSummary?.totalTransactions ?? data?.stats?.wasteCount ?? 0
+  );
 
   const totalActivity =
     chartSummary.masuk +
     chartSummary.keluar;
+
+  const totalOperationalVolume =
+    totalActivity +
+    chartSummary.waste;
 
   /* =======================================================
   METRICS
@@ -1979,6 +2027,44 @@ export default function Dashboard() {
         </section>
 
         {/* ===================================================
+            WASTE PUSAT
+        =================================================== */}
+
+        <section className="rounded-[27px] border border-rose-100 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <SectionHeader
+              eyebrow="Waste Monitoring"
+              title="Waste Pusat"
+              description="Data waste yang tercatat pada sistem"
+              icon={PackageX}
+            />
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2">
+                <p className="text-[7px] font-bold uppercase tracking-[0.14em] text-rose-500">Qty Waste</p>
+                <p className="mt-1 text-sm font-bold text-rose-700">{formatNumber(wasteTotalQty)}</p>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                <p className="text-[7px] font-bold uppercase tracking-[0.14em] text-slate-400">Transaksi</p>
+                <p className="mt-1 text-sm font-bold text-slate-700">{formatNumber(wasteTransactionCount)}</p>
+              </div>
+              <div className="rounded-xl border border-violet-100 bg-violet-50 px-3 py-2">
+                <p className="text-[7px] font-bold uppercase tracking-[0.14em] text-violet-500">Nilai</p>
+                <p className="mt-1 text-sm font-bold text-violet-700">{formatCompactCurrency(wasteTotalValue)}</p>
+              </div>
+              <div className="hidden rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 sm:block">
+                <p className="text-[7px] font-bold uppercase tracking-[0.14em] text-emerald-500">Chart</p>
+                <p className="mt-1 text-sm font-bold text-emerald-700">{formatNumber(chartSummary.waste)}</p>
+              </div>
+            </div>
+          </div>
+          {!wasteTotalQty && !wasteTotalValue && !wasteTransactionCount && !chartSummary.waste && (
+            <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-[9px] text-slate-500">
+              API dashboard belum mengirim data waste. Data waste di database tidak akan bisa tampil sebelum endpoint <span className="font-bold">/api/dashboard</span> mengirim wasteSummary atau field wastePusat.
+            </div>
+          )}
+        </section>
+
+        {/* ===================================================
             ANALYTICS
         =================================================== */}
 
@@ -1993,7 +2079,7 @@ export default function Dashboard() {
               <SectionHeader
                 eyebrow="Operational Analytics"
                 title="Aktivitas Inventory"
-                description="Pergerakan barang masuk dan keluar"
+                description="Pergerakan barang masuk, keluar, dan waste pusat"
                 icon={BarChart3}
               />
 
@@ -2024,7 +2110,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="mt-6 grid grid-cols-3 gap-3">
+            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
 
               <div className="rounded-[20px] border border-emerald-100 bg-emerald-50/60 p-3.5">
 
@@ -2070,6 +2156,28 @@ export default function Dashboard() {
 
               </div>
 
+              <div className="rounded-[20px] border border-rose-100 bg-gradient-to-br from-rose-50/90 via-white to-white p-3.5 shadow-[0_10px_28px_rgba(244,63,94,0.06)]">
+
+                <div className="flex items-center justify-between">
+                  <PackageX className="h-4 w-4 text-rose-500" />
+
+                  <span className="rounded-full bg-rose-100 px-2 py-1 text-[7px] font-black uppercase tracking-[0.12em] text-rose-600">
+                    WASTE
+                  </span>
+                </div>
+
+                <p className="mt-2 text-lg font-bold text-rose-700">
+                  {formatNumber(
+                    chartSummary.waste
+                  )}
+                </p>
+
+                <p className="mt-0.5 text-[8px] text-rose-500/70">
+                  Waste Pusat
+                </p>
+
+              </div>
+
               <div className="rounded-[20px] border border-blue-100 bg-blue-50/60 p-3.5">
 
                 <div className="flex items-center justify-between">
@@ -2082,12 +2190,12 @@ export default function Dashboard() {
 
                 <p className="mt-2 text-lg font-bold text-blue-700">
                   {formatNumber(
-                    totalActivity
+                    totalOperationalVolume
                   )}
                 </p>
 
                 <p className="mt-0.5 text-[8px] text-blue-500/70">
-                  Total aktivitas
+                  In + Out + Waste
                 </p>
 
               </div>
@@ -2134,6 +2242,30 @@ export default function Dashboard() {
                         <stop
                           offset="100%"
                           stopColor="#10B981"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+
+                      <linearGradient
+                        id="mgbPremiumWaste"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="0%"
+                          stopColor="#F43F5E"
+                          stopOpacity={0.18}
+                        />
+                        <stop
+                          offset="65%"
+                          stopColor="#F43F5E"
+                          stopOpacity={0.045}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="#F43F5E"
                           stopOpacity={0}
                         />
                       </linearGradient>
@@ -2245,6 +2377,22 @@ export default function Dashboard() {
                       }}
                     />
 
+                    <Area
+                      type="monotone"
+                      dataKey="waste"
+                      name="Waste Pusat"
+                      stroke="#F43F5E"
+                      strokeWidth={2.5}
+                      fill="url(#mgbPremiumWaste)"
+                      dot={false}
+                      activeDot={{
+                        r: 5,
+                        strokeWidth: 2.5,
+                        stroke: "#F43F5E",
+                        fill: "#FFFFFF",
+                      }}
+                    />
+
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
@@ -2277,7 +2425,20 @@ export default function Dashboard() {
                 </span>
               </div>
 
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-rose-500" />
+
+                <span className="text-[9px] font-medium text-slate-500">
+                  Waste Pusat
+                </span>
+              </div>
+
               <div className="ml-auto text-[9px] text-slate-400">
+                Waste Pusat{" "}
+                <span className="font-bold text-rose-500">
+                  terpantau
+                </span>
+                {" • "}
                 Periode{" "}
                 <span className="font-bold text-slate-600">
                   {period === "7"

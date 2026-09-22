@@ -26,6 +26,12 @@ import {
   X,
   Check,
   ArrowDownToLine,
+  MessageCircle,
+  Send,
+  AtSign,
+  UserRound,
+  Loader2,
+  MoreHorizontal,
 } from "lucide-react";
 
 type Item = {
@@ -127,6 +133,22 @@ type CurrentUser = {
   outletId?: number | null;
 };
 
+type MentionUser = {
+  id: number;
+  name: string;
+  username?: string | null;
+  role?: string | null;
+};
+
+type DiscussionComment = {
+  id: string | number;
+  content: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  user?: MentionUser | null;
+  mentions?: MentionUser[];
+};
+
 type FeedbackState = {
   open: boolean;
   type: "success" | "error";
@@ -147,6 +169,23 @@ export default function OutletBarangMasukDetailPage() {
   const [role, setRole] = useState("");
   const [userOutletId, setUserOutletId] =
     useState<number | null>(null);
+
+  const [currentUser, setCurrentUser] =
+    useState<CurrentUser & { name?: string; username?: string } | null>(null);
+
+  // =====================================================
+  // DISCUSSION / COMMENTS
+  // =====================================================
+
+  const [comments, setComments] = useState<DiscussionComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentSending, setCommentSending] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [mentionUsers, setMentionUsers] = useState<MentionUser[]>([]);
+  const [mentionLoading, setMentionLoading] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [selectedMentionUserIds, setSelectedMentionUserIds] = useState<number[]>([]);
 
   const [receivedQty, setReceivedQty] =
     useState<Record<number, number>>({});
@@ -326,6 +365,11 @@ export default function OutletBarangMasukDetailPage() {
         result ??
         {};
 
+      setCurrentUser(user as CurrentUser & {
+        name?: string;
+        username?: string;
+      });
+
       setRole(
         String(user.role || "")
           .trim()
@@ -343,6 +387,541 @@ export default function OutletBarangMasukDetailPage() {
         error
       );
     }
+  };
+
+
+  // =====================================================
+  // DISCUSSION HELPERS
+  // =====================================================
+
+  const commentsEndpoint = `/api/outlet/barang-masuk/${encodeURIComponent(
+    id
+  )}/comments`;
+
+  const normalizeComments = (result: any): DiscussionComment[] => {
+    const raw = Array.isArray(result)
+      ? result
+      : Array.isArray(result?.comments)
+      ? result.comments
+      : Array.isArray(result?.data)
+      ? result.data
+      : [];
+
+    return raw.map((item: any, index: number) => ({
+      id: item?.id ?? `comment-${index}`,
+      content: String(
+        item?.content ??
+          item?.message ??
+          item?.text ??
+          ""
+      ),
+      createdAt:
+        item?.createdAt ??
+        item?.created_at ??
+        item?.createdAt,
+      updatedAt:
+        item?.updatedAt ??
+        item?.updated_at ??
+        null,
+      user: item?.user
+        ? {
+            id: Number(item.user.id),
+            name: String(
+              item.user.name ??
+                item.user.fullName ??
+                item.user.username ??
+                "User"
+            ),
+            username:
+              item.user.username ??
+              null,
+            role:
+              item.user.role ??
+              null,
+          }
+        : null,
+      mentions: Array.isArray(item?.mentions)
+        ? item.mentions
+            .map((mention: any) => {
+              const source = mention?.user ?? mention ?? {};
+              const mentionId = Number(
+                source?.id ??
+                  source?.userId ??
+                  source?._id
+              );
+
+              const mentionUsername = String(
+                source?.username ??
+                  source?.userName ??
+                  source?.login ??
+                  ""
+              ).trim();
+
+              const mentionName = String(
+                source?.name ??
+                  source?.fullname ??
+                  source?.fullName ??
+                  mentionUsername ??
+                  ""
+              ).trim();
+
+              return {
+                id: mentionId,
+                name:
+                  mentionName ||
+                  mentionUsername ||
+                  `User ${mentionId}`,
+                username:
+                  mentionUsername || null,
+                role:
+                  source?.role ??
+                  source?.roleName ??
+                  null,
+              } satisfies MentionUser;
+            })
+            .filter(
+              (mention: MentionUser) =>
+                Number.isInteger(mention.id) &&
+                mention.id > 0
+            )
+        : [],
+    }));
+  };
+
+  const loadComments = async () => {
+    try {
+      setCommentsLoading(true);
+
+      const response = await fetch(
+        commentsEndpoint,
+        {
+          cache: "no-store",
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          setComments([]);
+          return;
+        }
+
+        throw new Error(
+          "Gagal memuat diskusi transaksi."
+        );
+      }
+
+      const result = await response.json();
+      setComments(normalizeComments(result));
+    } catch (error) {
+      console.error(
+        "LOAD BARANG MASUK COMMENTS ERROR:",
+        error
+      );
+    } finally {
+      setCommentsLoading(false);
+    }
+  };
+
+  const loadMentionUsers = async () => {
+    // Endpoint khusus mention. Jangan gunakan /api/master/user karena
+    // endpoint tersebut memang memiliki permission Master User yang ketat.
+    try {
+      setMentionLoading(true);
+
+      const response = await fetch(
+        "/api/outlet/barang-masuk/mention-users",
+        {
+          method: "GET",
+          cache: "no-store",
+          headers: {
+            Accept: "application/json",
+          },
+        }
+      );
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          result?.message ||
+            "Gagal mengambil daftar user untuk mention."
+        );
+      }
+
+      const raw = Array.isArray(result?.data)
+        ? result.data
+        : Array.isArray(result?.users)
+        ? result.users
+        : Array.isArray(result)
+        ? result
+        : [];
+
+      const normalized = raw
+        .map((item: any) => {
+          const source = item?.user ?? item ?? {};
+          const id = Number(
+            source?.id ?? source?.userId ?? source?._id
+          );
+          const username = String(
+            source?.username ??
+              source?.userName ??
+              source?.login ??
+              ""
+          ).trim();
+          const name = String(
+            source?.fullname ??
+              source?.fullName ??
+              source?.name ??
+              username ??
+              ""
+          ).trim();
+          const role = String(
+            source?.role ?? source?.roleName ?? ""
+          ).trim();
+
+          return {
+            id,
+            name: name || username || `User ${id}`,
+            username: username || null,
+            role: role || null,
+          } satisfies MentionUser;
+        })
+        .filter(
+          (user: MentionUser) =>
+            Number.isInteger(user.id) && user.id > 0
+        );
+
+      // Deduplicate agar user tidak muncul dua kali di dropdown.
+      const uniqueUsers = Array.from(
+        new Map(
+          normalized.map((user: MentionUser) => [user.id, user])
+        ).values()
+      );
+
+      setMentionUsers(uniqueUsers);
+    } catch (error) {
+      console.error(
+        "LOAD MENTION USERS ERROR:",
+        error
+      );
+      setMentionUsers([]);
+    } finally {
+      setMentionLoading(false);
+    }
+  };
+
+  const getMentionToken = (value: string) => {
+    const atIndex = value.lastIndexOf("@");
+
+    if (atIndex < 0) return null;
+
+    // "@" harus berada di awal teks atau setelah whitespace.
+    if (
+      atIndex > 0 &&
+      !/\s/.test(value.charAt(atIndex - 1))
+    ) {
+      return null;
+    }
+
+    const token = value.slice(atIndex + 1);
+
+    // Jika mention yang baru dipilih sudah diikuti teks biasa,
+    // jangan buka dropdown lagi.
+    const lowerToken = token.toLowerCase();
+
+    const hasCompletedMention = selectedMentionUserIds.some(
+      (userId) => {
+        const user = mentionUsers.find(
+          (candidate) => Number(candidate.id) === Number(userId)
+        );
+
+        if (!user) return false;
+
+        const name = String(user.name || "").trim();
+        if (!name) return false;
+
+        const lowerName = name.toLowerCase();
+
+        return (
+          lowerToken === lowerName ||
+          lowerToken.startsWith(`${lowerName} `)
+        );
+      }
+    );
+
+    if (hasCompletedMention) return null;
+
+    return token;
+  };
+
+  const filteredMentionUsers = useMemo(() => {
+    const query = mentionQuery.trim().toLowerCase();
+
+    if (!query) {
+      return mentionUsers.slice(0, 8);
+    }
+
+    return mentionUsers
+      .filter((user) =>
+        [
+          user.name,
+          user.username || "",
+          user.role || "",
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query)
+      )
+      .slice(0, 8);
+  }, [mentionUsers, mentionQuery]);
+
+  // Mention menggunakan NAMA user sebagai label yang terlihat.
+  // Username hanya dipakai sebagai fallback jika nama kosong.
+  const getMentionHandle = (user: MentionUser) =>
+    String(
+      user.name?.trim() ||
+        user.username?.trim() ||
+        `User ${user.id}`
+    ).trim();
+
+  const handleCommentChange = (value: string) => {
+    setCommentText(value);
+
+    // Hapus ID mention yang sudah tidak lagi ada di teks.
+    setSelectedMentionUserIds((current) =>
+      current.filter((userId) => {
+        const user = mentionUsers.find(
+          (candidate) => Number(candidate.id) === Number(userId)
+        );
+        if (!user) return false;
+        return value
+          .toLowerCase()
+          .includes(`@${getMentionHandle(user).toLowerCase()}`);
+      })
+    );
+
+    const token = getMentionToken(value);
+
+    if (token !== null) {
+      setMentionQuery(token);
+      setMentionOpen(true);
+      if (!mentionUsers.length) void loadMentionUsers();
+      return;
+    }
+
+    setMentionOpen(false);
+    setMentionQuery("");
+  };
+
+  const insertMention = (user: MentionUser) => {
+    const atIndex = commentText.lastIndexOf("@");
+
+    if (atIndex < 0) return;
+
+    if (
+      atIndex > 0 &&
+      !/\s/.test(commentText.charAt(atIndex - 1))
+    ) {
+      return;
+    }
+
+    const before = commentText.slice(0, atIndex);
+    const mentionLabel = `@${getMentionHandle(user)}`;
+    const nextText = `${before}${mentionLabel} `;
+
+    setCommentText(nextText);
+    setSelectedMentionUserIds((current) =>
+      current.includes(Number(user.id))
+        ? current
+        : [...current, Number(user.id)]
+    );
+    setMentionOpen(false);
+    setMentionQuery("");
+  };
+
+  const openMentionPicker = () => {
+    if (!mentionUsers.length) void loadMentionUsers();
+
+    const token = getMentionToken(commentText);
+    if (token === null) {
+      const separator =
+        commentText.length > 0 && !/\s$/.test(commentText) ? " " : "";
+      setCommentText(`${commentText}${separator}@`);
+      setMentionQuery("");
+    } else {
+      setMentionQuery(token);
+    }
+    setMentionOpen(true);
+  };
+
+  const submitComment = async () => {
+    const content = commentText.trim();
+
+    if (!content || commentSending) return;
+
+    try {
+      setCommentSending(true);
+
+      const validMentionUserIds = selectedMentionUserIds.filter(
+        (userId) => {
+          const user = mentionUsers.find(
+            (candidate) => Number(candidate.id) === Number(userId)
+          );
+          if (!user) return false;
+          return content
+            .toLowerCase()
+            .includes(`@${getMentionHandle(user).toLowerCase()}`);
+        }
+      );
+
+      const response = await fetch(
+        commentsEndpoint,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            content,
+            mentionUserIds: validMentionUserIds,
+          }),
+        }
+      );
+
+      const result =
+        await response.json().catch(
+          () => ({})
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          result?.message ||
+            result?.error ||
+            "Gagal mengirim komentar."
+        );
+      }
+
+      setCommentText("");
+      setMentionOpen(false);
+      setMentionQuery("");
+      setSelectedMentionUserIds([]);
+
+      const created =
+        result?.comment ??
+        result?.data ??
+        result;
+
+      if (created?.content) {
+        setComments((prev) => [
+          ...prev,
+          normalizeComments([created])[0],
+        ]);
+      } else {
+        await loadComments();
+      }
+    } catch (error) {
+      showFeedback(
+        "error",
+        "Komentar Gagal Dikirim",
+        error instanceof Error
+          ? error.message
+          : "Gagal mengirim komentar/diskusi."
+      );
+    } finally {
+      setCommentSending(false);
+    }
+  };
+
+  const formatCommentTime = (
+    value?: string | null
+  ) => {
+    if (!value) return "";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    return date.toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const highlightMentions = (
+    content: string,
+    mentions: MentionUser[] = []
+  ) => {
+    const mentionNames = Array.from(
+      new Set(
+        mentions
+          .map((mention) =>
+            String(
+              mention?.name ||
+                mention?.username ||
+                ""
+            ).trim()
+          )
+          .filter(Boolean)
+      )
+    ).sort((a, b) => b.length - a.length);
+
+    // Fallback untuk komentar lama yang belum mengembalikan
+    // relation mentions dari API.
+    if (mentionNames.length === 0) {
+      return content
+        .split(/(@[^\s@]+(?:\s[^\s@]+)*)/g)
+        .map((part, index) =>
+          part.startsWith("@") ? (
+            <span
+              key={`${part}-${index}`}
+              className="font-extrabold text-[#497F70]"
+            >
+              {part}
+            </span>
+          ) : (
+            <span key={`${part}-${index}`}>
+              {part}
+            </span>
+          )
+        );
+    }
+
+    const escapedNames = mentionNames.map((name) =>
+      name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    );
+
+    const mentionRegex = new RegExp(
+      `(@(?:${escapedNames.join("|")}))(?=\\s|$)`,
+      "gi"
+    );
+
+    const parts = content.split(mentionRegex);
+
+    return parts.map((part, index) => {
+      const isMention = mentionNames.some(
+        (name) =>
+          part.toLowerCase() ===
+          `@${name}`.toLowerCase()
+      );
+
+      return isMention ? (
+        <span
+          key={`${part}-${index}`}
+          className="font-extrabold text-[#497F70]"
+        >
+          {part}
+        </span>
+      ) : (
+        <span key={`${part}-${index}`}>
+          {part}
+        </span>
+      );
+    });
   };
 
   // =====================================================
@@ -457,6 +1036,8 @@ export default function OutletBarangMasukDetailPage() {
   useEffect(() => {
     loadCurrentUser();
     loadData();
+    loadComments();
+    void loadMentionUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -2929,6 +3510,311 @@ export default function OutletBarangMasukDetailPage() {
             </p>
           </div>
         </div>
+
+
+        {/* =====================================================
+            PREMIUM DISCUSSION
+            ===================================================== */}
+        <section className="mb-6 overflow-hidden rounded-[28px] border border-[#DDE9E4] bg-white shadow-[0_16px_50px_rgba(38,73,58,0.07)]">
+          <div className="relative overflow-hidden border-b border-[#E7EFEB] bg-gradient-to-br from-[#F8FCFA] via-white to-[#EEF7F2] px-5 py-5 md:px-7 md:py-6">
+            <div className="absolute -right-16 -top-20 h-44 w-44 rounded-full bg-[#497F70]/5" />
+            <div className="absolute -bottom-20 right-20 h-40 w-40 rounded-full bg-[#6A9C8B]/5" />
+
+            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3.5">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#497F70] to-[#355F4F] text-white shadow-[0_8px_20px_rgba(73,127,112,0.22)]">
+                  <MessageCircle size={20} />
+                </div>
+
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-lg font-extrabold tracking-tight text-[#18352D]">
+                      Diskusi Transaksi
+                    </h2>
+
+                    <span className="inline-flex items-center gap-1 rounded-full border border-[#D5E5DC] bg-white px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.13em] text-[#497F70]">
+                      <AtSign size={10} />
+                      Mention
+                    </span>
+                  </div>
+
+                  <p className="mt-1 text-xs leading-5 text-gray-400">
+                    Tambahkan catatan, koordinasi, atau mention
+                    tim langsung pada transaksi ini.
+                  </p>
+                </div>
+              </div>
+
+              <div className="inline-flex items-center gap-2 self-start rounded-xl border border-[#DDE9E4] bg-white/80 px-3 py-2 text-[10px] font-bold text-[#60776E] shadow-sm">
+                <ShieldCheck size={13} className="text-[#497F70]" />
+                Konteks transaksi tersimpan
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5 md:p-7">
+            <div className="mb-5 max-h-[430px] space-y-3 overflow-y-auto pr-1">
+              {commentsLoading ? (
+                <div className="flex min-h-[130px] items-center justify-center gap-2 text-xs font-semibold text-gray-400">
+                  <Loader2
+                    size={16}
+                    className="animate-spin text-[#497F70]"
+                  />
+                  Memuat diskusi...
+                </div>
+              ) : comments.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-[#D7E5DE] bg-[#FAFCFB] px-5 py-10 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EDF5F1] text-[#497F70]">
+                    <MessageCircle size={21} />
+                  </div>
+
+                  <p className="mt-3 text-sm font-extrabold text-[#18352D]">
+                    Belum ada diskusi
+                  </p>
+
+                  <p className="mx-auto mt-1 max-w-md text-xs leading-5 text-gray-400">
+                    Jadikan area ini sebagai ruang koordinasi
+                    untuk transaksi {data.nomor}.
+                    Gunakan <strong>@mention</strong> untuk
+                    memanggil rekan satu tim.
+                  </p>
+                </div>
+              ) : (
+                comments.map((comment) => {
+                  const isMine =
+                    currentUser?.id != null &&
+                    comment.user?.id != null &&
+                    Number(currentUser.id) ===
+                      Number(comment.user.id);
+
+                  return (
+                    <div
+                      key={comment.id}
+                      className={`group flex gap-3 ${
+                        isMine
+                          ? "justify-end"
+                          : "justify-start"
+                      }`}
+                    >
+                      {!isMine && (
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#EDF5F1] to-[#DCEBE4] text-[#497F70]">
+                          <UserRound size={16} />
+                        </div>
+                      )}
+
+                      <div
+                        className={`max-w-[min(780px,88%)] rounded-2xl border px-4 py-3 shadow-sm ${
+                          isMine
+                            ? "border-[#BFD7CC] bg-gradient-to-br from-[#F0F8F4] to-white"
+                            : "border-[#E1EAE6] bg-white"
+                        }`}
+                      >
+                        <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-extrabold text-[#18352D]">
+                            {comment.user?.name ||
+                              "User"}
+                          </span>
+
+                          {comment.user?.role && (
+                            <span className="rounded-full bg-[#F3F7F5] px-2 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-[#789087]">
+                              {comment.user.role}
+                            </span>
+                          )}
+
+                          {comment.createdAt && (
+                            <span className="text-[9px] font-medium text-gray-400">
+                              {formatCommentTime(
+                                comment.createdAt
+                              )}
+                            </span>
+                          )}
+
+                          {!isMine && (
+                            <MoreHorizontal
+                              size={14}
+                              className="ml-auto text-gray-300"
+                            />
+                          )}
+                        </div>
+
+                        <p className="whitespace-pre-wrap break-words text-xs leading-6 text-[#496158]">
+                          {highlightMentions(
+                            comment.content,
+                            comment.mentions || []
+                          )}
+                        </p>
+                      </div>
+
+                      {isMine && (
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#497F70] to-[#355F4F] text-white">
+                          <UserRound size={16} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="relative">
+              {mentionOpen && (
+                <div className="absolute bottom-[calc(100%+10px)] left-0 z-30 w-full max-w-[420px] overflow-hidden rounded-2xl border border-[#D5E5DC] bg-white shadow-[0_20px_55px_rgba(25,60,45,0.16)]">
+                  <div className="flex items-center justify-between border-b border-[#EDF2EF] px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <AtSign size={14} className="text-[#497F70]" />
+                      <span className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-[#60776E]">
+                        Mention anggota
+                      </span>
+                    </div>
+
+                    {mentionLoading && (
+                      <Loader2
+                        size={13}
+                        className="animate-spin text-[#497F70]"
+                      />
+                    )}
+                  </div>
+
+                  <div className="max-h-64 overflow-y-auto p-1.5">
+                    {mentionLoading && filteredMentionUsers.length === 0 ? (
+                      <div className="flex items-center gap-2 px-3 py-4 text-xs text-gray-400">
+                        <Loader2 size={14} className="animate-spin text-[#497F70]" />
+                        Memuat anggota...
+                      </div>
+                    ) : filteredMentionUsers.length === 0 ? (
+                      <div className="px-3 py-4 text-xs text-gray-400">
+                        Tidak ada anggota yang cocok.
+                      </div>
+                    ) : (
+                      filteredMentionUsers.map((user) => (
+                        <button
+                          key={user.id}
+                          type="button"
+                          onMouseDown={(event) =>
+                            event.preventDefault()
+                          }
+                          onClick={() =>
+                            insertMention(user)
+                          }
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-[#F3F8F5]"
+                        >
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#EDF5F1] text-[#497F70]">
+                            <UserRound size={15} />
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-extrabold text-[#18352D]">
+                              {user.name}
+                            </p>
+
+                            <p className="truncate text-[10px] text-gray-400">
+                              @{user.username ||
+                                user.name.replace(
+                                  /\s+/g,
+                                  "_"
+                                )}
+                              {user.role
+                                ? ` · ${user.role}`
+                                : ""}
+                            </p>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="overflow-hidden rounded-[22px] border border-[#D6E4DE] bg-[#FBFDFC] shadow-inner transition-all focus-within:border-[#8FB7A7] focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(73,127,112,0.08)]">
+                <textarea
+                  value={commentText}
+                  onChange={(event) =>
+                    handleCommentChange(
+                      event.target.value
+                    )
+                  }
+                  onFocus={() => {
+                    if (!mentionUsers.length) {
+                      void loadMentionUsers();
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" &&
+                      !event.shiftKey
+                    ) {
+                      if (
+                        mentionOpen &&
+                        filteredMentionUsers.length > 0
+                      ) {
+                        event.preventDefault();
+                        insertMention(filteredMentionUsers[0]);
+                        return;
+                      }
+
+                      event.preventDefault();
+                      void submitComment();
+                    }
+
+                    if (
+                      event.key === "Escape"
+                    ) {
+                      setMentionOpen(false);
+                    }
+                  }}
+                  placeholder="Tulis komentar atau gunakan @ untuk mention..."
+                  rows={3}
+                  className="block w-full resize-none border-0 bg-transparent px-4 py-4 text-sm leading-6 text-[#18352D] outline-none placeholder:text-gray-400"
+                />
+
+                <div className="flex flex-col gap-3 border-t border-[#E8EFEB] bg-white/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={openMentionPicker}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-[#D8E6E0] bg-white px-3 py-2 text-[10px] font-extrabold text-[#497F70] shadow-sm transition hover:border-[#B9CEC3] hover:bg-[#F4F9F6]"
+                    >
+                      <AtSign size={13} />
+                      Mention
+                    </button>
+
+                    <span className="hidden text-[10px] font-medium text-gray-400 sm:inline">
+                      Enter untuk kirim · Shift + Enter untuk
+                      baris baru
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void submitComment()
+                    }
+                    disabled={
+                      !commentText.trim() ||
+                      commentSending
+                    }
+                    className="group inline-flex min-h-[42px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#497F70] to-[#355F4F] px-5 text-xs font-extrabold text-white shadow-[0_8px_22px_rgba(73,127,112,0.22)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(73,127,112,0.3)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+                  >
+                    {commentSending ? (
+                      <Loader2
+                        size={15}
+                        className="animate-spin"
+                      />
+                    ) : (
+                      <Send
+                        size={15}
+                        className="transition-transform group-hover:translate-x-0.5"
+                      />
+                    )}
+                    {commentSending
+                      ? "Mengirim..."
+                      : "Kirim Komentar"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* REMARKS */}
         {data.remarks && (

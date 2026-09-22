@@ -8,29 +8,31 @@ datasource db {
 }
 
 model User {
-  id                      Int                      @id @default(autoincrement())
-  username                String                   @unique
-  password                String
-  fullname                String
-  photo                   String?
-  role                    Role
-  outletId                Int?
-  active                  Boolean                  @default(true)
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  lastSeen                DateTime?
-  chatMessages            ChatMessage[]
-  chatParticipants        ChatParticipant[]
-  deliveryItemVoids       DeliveryItem[]           @relation("DeliveryItemVoidedBy")
-  histories               History[]
-  manufactureOrders       ManufactureOrder[]
-  outletSales             OutletSale[]
-  outletStockOuts         OutletStockOut[]
-  purchaseComments        PurchaseComment[]
-  purchaseCommentMentions PurchaseCommentMention[] @relation("PurchaseCommentMentions")
-  sessions                Session[]
-  stockWastes             StockWaste[]
-  outlet                  Outlet?                  @relation(fields: [outletId], references: [id])
+  id                            Int                            @id @default(autoincrement())
+  username                      String                         @unique
+  password                      String
+  fullname                      String
+  photo                         String?
+  role                          Role
+  outletId                      Int?
+  active                        Boolean                        @default(true)
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
+  lastSeen                      DateTime?
+  chatMessages                  ChatMessage[]
+  chatParticipants              ChatParticipant[]
+  deliveryItemVoids             DeliveryItem[]                 @relation("DeliveryItemVoidedBy")
+  histories                     History[]
+  manufactureOrders             ManufactureOrder[]
+  outletSales                   OutletSale[]
+  outletStockOuts               OutletStockOut[]
+  purchaseComments              PurchaseComment[]
+  purchaseCommentMentions       PurchaseCommentMention[]       @relation("PurchaseCommentMentions")
+  sessions                      Session[]
+  stockWastes                   StockWaste[]
+  outlet                        Outlet?                        @relation(fields: [outletId], references: [id])
+  transferComments              OutletTransferComment[]
+  outletTransferCommentMentions OutletTransferCommentMention[]
 }
 
 model Outlet {
@@ -93,18 +95,19 @@ model OutletStockOut {
 }
 
 model OutletTransfer {
-  id             Int                  @id @default(autoincrement())
-  number         String               @unique
+  id             Int                     @id @default(autoincrement())
+  number         String                  @unique
   sourceOutletId Int?
   outletId       Int
-  transferDate   DateTime             @default(now())
-  status         OutletTransferStatus @default(SENT)
+  transferDate   DateTime                @default(now())
+  status         OutletTransferStatus    @default(SENT)
   remarks        String?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  outlet         Outlet               @relation("TransferDestinationOutlet", fields: [outletId], references: [id])
-  sourceOutlet   Outlet?              @relation("TransferSourceOutlet", fields: [sourceOutletId], references: [id])
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  outlet         Outlet                  @relation("TransferDestinationOutlet", fields: [outletId], references: [id])
+  sourceOutlet   Outlet?                 @relation("TransferSourceOutlet", fields: [sourceOutletId], references: [id])
   items          OutletTransferItem[]
+  comments       OutletTransferComment[]
 
   @@index([sourceOutletId])
   @@index([outletId])
@@ -329,14 +332,47 @@ model PurchaseComment {
 }
 
 model PurchaseCommentMention {
-  id        Int            @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   commentId Int
   userId    Int
-  createdAt DateTime       @default(now())
+  createdAt DateTime  @default(now())
   readAt    DateTime?
 
   comment PurchaseComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
   user    User            @relation("PurchaseCommentMentions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([commentId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([userId, readAt, createdAt])
+}
+
+model OutletTransferComment {
+  id         Int      @id @default(autoincrement())
+  transferId Int
+  userId     Int
+  comment    String
+  createdAt  DateTime @default(now())
+
+  transfer OutletTransfer                 @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  user     User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mentions OutletTransferCommentMention[]
+
+  @@index([transferId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model OutletTransferCommentMention {
+  id        Int       @id @default(autoincrement())
+  commentId Int
+  userId    Int
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  comment OutletTransferComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([commentId, userId])
   @@index([commentId])
