@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+
 import {
   Eye,
   EyeOff,
@@ -30,8 +31,18 @@ import {
   ImagePlus,
 } from "lucide-react";
 
+// =========================================================
+// TYPES
+// =========================================================
+
 type Outlet = {
   id: number;
+  name: string;
+};
+
+type Customer = {
+  id: number;
+  code: string;
   name: string;
 };
 
@@ -42,8 +53,17 @@ type User = {
   photo?: string | null;
   role: string;
   active: boolean;
+
   outletId?: number | null;
   outlet?: Outlet | null;
+
+  // =======================================================
+  // CUSTOMER YANG TERHUBUNG KE USER
+  // =======================================================
+
+  customerId?: number | null;
+  customer?: Customer | null;
+
   lastSeen?: string | null;
   online?: boolean;
 };
@@ -55,6 +75,13 @@ type FormState = {
   photo: string;
   role: string;
   outletId: string;
+
+  // =======================================================
+  // CUSTOMER
+  // =======================================================
+
+  customerId: string;
+
   active: boolean;
 };
 
@@ -65,8 +92,15 @@ const initialForm: FormState = {
   photo: "",
   role: "ADMIN",
   outletId: "",
+
+  customerId: "",
+
   active: true,
 };
+
+// =========================================================
+// HELPERS
+// =========================================================
 
 function isOutletRole(role: string) {
   return (
@@ -75,18 +109,35 @@ function isOutletRole(role: string) {
   );
 }
 
-export default function UserPage() {
-  const [data, setData] = useState<User[]>([]);
-  const [outlets, setOutlets] = useState<Outlet[]>([]);
+// =========================================================
+// PAGE
+// =========================================================
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+export default function UserPage() {
+  const [data, setData] =
+    useState<User[]>([]);
+
+  const [outlets, setOutlets] =
+    useState<Outlet[]>([]);
+
+  const [customers, setCustomers] =
+    useState<Customer[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
   const [uploadingPhoto, setUploadingPhoto] =
     useState(false);
+
   const [onlineLoading, setOnlineLoading] =
     useState(false);
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] =
+    useState("");
+
   const [showPassword, setShowPassword] =
     useState(false);
 
@@ -107,9 +158,12 @@ export default function UserPage() {
     try {
       setLoading(true);
 
-      const res = await fetch("/api/user", {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        "/api/user",
+        {
+          cache: "no-store",
+        }
+      );
 
       const json = await res.json();
 
@@ -127,7 +181,9 @@ export default function UserPage() {
         error
       );
 
-      alert("Gagal mengambil data user");
+      alert(
+        "Gagal mengambil data user"
+      );
     } finally {
       setLoading(false);
     }
@@ -216,13 +272,60 @@ export default function UserPage() {
       const json = await res.json();
 
       if (json.success) {
-        setOutlets(json.data ?? []);
+        setOutlets(
+          json.data ?? []
+        );
       } else {
-        console.error(json.message);
+        console.error(
+          json.message
+        );
       }
     } catch (error) {
       console.error(
         "Load outlet error:",
+        error
+      );
+    }
+  }
+
+  // =========================================================
+  // LOAD CUSTOMER
+  // =========================================================
+  //
+  // Customer digunakan untuk menghubungkan
+  // User OUTLET_ADMIN dengan Customer.
+  //
+  // Delivery Request nantinya mengambil
+  // customerId dari User yang login.
+  //
+  // =========================================================
+
+  async function loadCustomers() {
+    try {
+      const res = await fetch(
+        "/api/master/customer",
+        {
+          cache: "no-store",
+        }
+      );
+
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        console.error(
+          json.message ??
+            "Gagal mengambil data customer"
+        );
+
+        return;
+      }
+
+      setCustomers(
+        json.data ?? []
+      );
+    } catch (error) {
+      console.error(
+        "Load customer error:",
         error
       );
     }
@@ -236,6 +339,7 @@ export default function UserPage() {
     await Promise.all([
       load(),
       loadOutlets(),
+      loadCustomers(),
     ]);
   }
 
@@ -254,9 +358,10 @@ export default function UserPage() {
   useEffect(() => {
     loadOnlineStatus();
 
-    const interval = setInterval(() => {
-      loadOnlineStatus();
-    }, 30000);
+    const interval =
+      setInterval(() => {
+        loadOnlineStatus();
+      }, 30000);
 
     return () => {
       clearInterval(interval);
@@ -288,15 +393,36 @@ export default function UserPage() {
     setEditingUserId(user.id);
 
     setForm({
-      username: user.username ?? "",
-      fullname: user.fullname ?? "",
+      username:
+        user.username ?? "",
+
+      fullname:
+        user.fullname ?? "",
+
       password: "",
-      photo: user.photo ?? "",
-      role: user.role ?? "ADMIN",
-      outletId: user.outletId
-        ? String(user.outletId)
-        : "",
-      active: user.active,
+
+      photo:
+        user.photo ?? "",
+
+      role:
+        user.role ?? "ADMIN",
+
+      outletId:
+        user.outletId
+          ? String(user.outletId)
+          : "",
+
+      // =====================================================
+      // CUSTOMER
+      // =====================================================
+
+      customerId:
+        user.customerId
+          ? String(user.customerId)
+          : "",
+
+      active:
+        user.active,
     });
 
     setShowPassword(false);
@@ -331,10 +457,22 @@ export default function UserPage() {
   ) {
     setForm((current) => ({
       ...current,
+
       role,
-      outletId: isOutletRole(role)
-        ? current.outletId
-        : "",
+
+      outletId:
+        isOutletRole(role)
+          ? current.outletId
+          : "",
+
+      // =====================================================
+      // CUSTOMER HANYA UNTUK OUTLET_ADMIN
+      // =====================================================
+
+      customerId:
+        role === "OUTLET_ADMIN"
+          ? current.customerId
+          : "",
     }));
   }
 
@@ -368,6 +506,7 @@ export default function UserPage() {
       alert(
         "Format foto harus JPG, PNG, atau WEBP."
       );
+
       return;
     }
 
@@ -378,6 +517,7 @@ export default function UserPage() {
       alert(
         "Ukuran foto maksimal 5 MB."
       );
+
       return;
     }
 
@@ -403,7 +543,10 @@ export default function UserPage() {
       const json =
         await res.json();
 
-      if (!res.ok || !json.success) {
+      if (
+        !res.ok ||
+        !json.success
+      ) {
         throw new Error(
           json.message ??
             "Gagal mengupload foto"
@@ -478,23 +621,48 @@ export default function UserPage() {
   // =========================================================
 
   async function simpan() {
+    // =======================================================
+    // VALIDASI USERNAME
+    // =======================================================
+
     if (!form.username.trim()) {
-      alert("Username wajib diisi");
+      alert(
+        "Username wajib diisi"
+      );
+
       return;
     }
 
+    // =======================================================
+    // VALIDASI NAMA
+    // =======================================================
+
     if (!form.fullname.trim()) {
-      alert("Nama wajib diisi");
+      alert(
+        "Nama wajib diisi"
+      );
+
       return;
     }
+
+    // =======================================================
+    // VALIDASI PASSWORD CREATE
+    // =======================================================
 
     if (
       editingUserId === null &&
       !form.password.trim()
     ) {
-      alert("Password wajib diisi");
+      alert(
+        "Password wajib diisi"
+      );
+
       return;
     }
+
+    // =======================================================
+    // VALIDASI PASSWORD
+    // =======================================================
 
     if (
       form.password.trim() &&
@@ -503,10 +671,14 @@ export default function UserPage() {
       alert(
         "Password minimal 6 karakter"
       );
+
       return;
     }
 
-    // KASIR dan OUTLET_ADMIN wajib memiliki outlet
+    // =======================================================
+    // VALIDASI OUTLET
+    // =======================================================
+
     if (
       isOutletRole(form.role) &&
       !form.outletId
@@ -516,13 +688,41 @@ export default function UserPage() {
           ? "Outlet wajib dipilih untuk KASIR"
           : "Outlet wajib dipilih untuk OUTLET ADMIN"
       );
+
       return;
     }
+
+    // =======================================================
+    // VALIDASI CUSTOMER
+    // =======================================================
+    //
+    // OUTLET_ADMIN wajib mempunyai Customer.
+    //
+    // Customer inilah yang digunakan otomatis
+    // pada Delivery Request.
+    //
+    // =======================================================
+
+    if (
+      form.role === "OUTLET_ADMIN" &&
+      !form.customerId
+    ) {
+      alert(
+        "Customer wajib dipilih untuk OUTLET ADMIN"
+      );
+
+      return;
+    }
+
+    // =======================================================
+    // FOTO
+    // =======================================================
 
     if (uploadingPhoto) {
       alert(
         "Tunggu sampai foto selesai diupload."
       );
+
       return;
     }
 
@@ -532,33 +732,69 @@ export default function UserPage() {
       const isEdit =
         editingUserId !== null;
 
+      // =====================================================
+      // PAYLOAD
+      // =====================================================
+
       const body = {
         ...(isEdit
           ? {
               id: editingUserId,
             }
           : {}),
+
         username:
           form.username.trim(),
+
         fullname:
           form.fullname.trim(),
-        password: form.password,
+
+        password:
+          form.password,
+
         photo:
-          form.photo.trim() || null,
-        role: form.role,
+          form.photo.trim() ||
+          null,
 
-        // Outlet hanya dikirim untuk role
-        // yang memang terikat ke outlet.
-        outletId: isOutletRole(
-          form.role
-        )
-          ? Number(
-              form.outletId
-            )
-          : null,
+        role:
+          form.role,
 
-        active: form.active,
+        // ===================================================
+        // OUTLET
+        // ===================================================
+
+        outletId:
+          isOutletRole(form.role)
+            ? Number(
+                form.outletId
+              )
+            : null,
+
+        // ===================================================
+        // CUSTOMER
+        // ===================================================
+        //
+        // Hanya OUTLET_ADMIN.
+        //
+        // ===================================================
+
+        customerId:
+          form.role ===
+            "OUTLET_ADMIN" &&
+          form.customerId
+            ? Number(
+                form.customerId
+              )
+            : null,
+
+        active:
+          form.active,
       };
+
+      console.log(
+        "USER MASTER SAVE PAYLOAD:",
+        body
+      );
 
       const res = await fetch(
         "/api/user",
@@ -566,10 +802,12 @@ export default function UserPage() {
           method: isEdit
             ? "PUT"
             : "POST",
+
           headers: {
             "Content-Type":
               "application/json",
           },
+
           body: JSON.stringify(
             body
           ),
@@ -589,6 +827,7 @@ export default function UserPage() {
         resetForm();
 
         await load();
+
         await loadOnlineStatus();
       } else {
         alert(
@@ -631,13 +870,24 @@ export default function UserPage() {
             user.username
               ?.toLowerCase()
               .includes(keyword) ||
+
             user.fullname
               ?.toLowerCase()
               .includes(keyword) ||
+
             user.role
               ?.toLowerCase()
               .includes(keyword) ||
+
             user.outlet?.name
+              ?.toLowerCase()
+              .includes(keyword) ||
+
+            user.customer?.name
+              ?.toLowerCase()
+              .includes(keyword) ||
+
+            user.customer?.code
               ?.toLowerCase()
               .includes(keyword)
           );
@@ -652,14 +902,16 @@ export default function UserPage() {
   const onlineCount =
     useMemo(() => {
       return data.filter(
-        (user) => user.online
+        (user) =>
+          user.online
       ).length;
     }, [data]);
 
   const activeCount =
     useMemo(() => {
       return data.filter(
-        (user) => user.active
+        (user) =>
+          user.active
       ).length;
     }, [data]);
 
@@ -676,12 +928,13 @@ export default function UserPage() {
     useMemo(() => {
       return data.filter(
         (user) =>
-          user.role === "KASIR"
+          user.role ===
+          "KASIR"
       ).length;
     }, [data]);
 
   // =========================================================
-  // ROLE
+  // ROLE CONFIG
   // =========================================================
 
   function getRoleConfig(
@@ -790,12 +1043,14 @@ export default function UserPage() {
 
   return (
     <div className="min-h-full bg-[#F4F7F5] p-4 md:p-6 lg:p-8">
+
       {/* =====================================================
           PAGE HEADER
       ===================================================== */}
 
       <div className="mb-7">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+
           <div>
             <div className="mb-3 flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-[#497F70]" />
@@ -806,6 +1061,7 @@ export default function UserPage() {
             </div>
 
             <div className="flex items-center gap-4">
+
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-[#18352D] text-white shadow-[0_12px_30px_rgba(24,53,45,0.18)]">
                 <Users
                   size={25}
@@ -821,10 +1077,11 @@ export default function UserPage() {
                 <p className="mt-1 text-sm text-slate-500">
                   Kelola akun pengguna,
                   foto profil, role,
-                  outlet, dan akses
-                  sistem.
+                  outlet, customer,
+                  dan akses sistem.
                 </p>
               </div>
+
             </div>
           </div>
 
@@ -874,20 +1131,24 @@ export default function UserPage() {
 
             Refresh Data
           </button>
+
         </div>
       </div>
 
       {/* =====================================================
-          SUMMARY CARDS
+          SUMMARY
       ===================================================== */}
 
       <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+
         {/* TOTAL */}
 
         <div className="group relative overflow-hidden rounded-[22px] border border-[#DCE8E2] bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
+
           <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#EDF5F1]" />
 
           <div className="relative flex items-start justify-between">
+
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
                 Total User
@@ -906,15 +1167,18 @@ export default function UserPage() {
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EDF5F1] text-[#497F70]">
               <Users size={20} />
             </div>
+
           </div>
         </div>
 
         {/* ACTIVE */}
 
         <div className="group relative overflow-hidden rounded-[22px] border border-[#DCE8E2] bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
+
           <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-emerald-50" />
 
           <div className="relative flex items-start justify-between">
+
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
                 Akun Aktif
@@ -933,21 +1197,25 @@ export default function UserPage() {
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
               <CheckCircle2 size={20} />
             </div>
+
           </div>
         </div>
 
         {/* ONLINE */}
 
         <div className="group relative overflow-hidden rounded-[22px] border border-[#DCE8E2] bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
+
           <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-teal-50" />
 
           <div className="relative flex items-start justify-between">
+
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
                 Sedang Online
               </p>
 
               <div className="mt-3 flex items-center gap-2">
+
                 <p className="text-3xl font-bold tracking-tight text-[#497F70]">
                   {onlineCount}
                 </p>
@@ -957,6 +1225,7 @@ export default function UserPage() {
 
                   <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                 </span>
+
               </div>
 
               <p className="mt-1 text-xs text-slate-400">
@@ -968,15 +1237,18 @@ export default function UserPage() {
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-50 text-[#497F70]">
               <Activity size={20} />
             </div>
+
           </div>
         </div>
 
         {/* OUTLET ADMIN */}
 
         <div className="group relative overflow-hidden rounded-[22px] border border-[#DCE8E2] bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
+
           <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-blue-50" />
 
           <div className="relative flex items-start justify-between">
+
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
                 Outlet Admin
@@ -995,15 +1267,18 @@ export default function UserPage() {
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
               <Building2 size={20} />
             </div>
+
           </div>
         </div>
 
         {/* KASIR */}
 
         <div className="group relative overflow-hidden rounded-[22px] border border-[#DCE8E2] bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.045)]">
+
           <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#EDF5F1]" />
 
           <div className="relative flex items-start justify-between">
+
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
                 Kasir
@@ -1021,15 +1296,18 @@ export default function UserPage() {
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EDF5F1] text-[#497F70]">
               <UserRound size={20} />
             </div>
+
           </div>
         </div>
+
       </div>
 
       {/* =====================================================
-          MAIN CONTENT
+          MAIN
       ===================================================== */}
 
-      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
+
         {/* ===================================================
             FORM
         =================================================== */}
@@ -1050,7 +1328,8 @@ export default function UserPage() {
             }
           `}
         >
-          {/* FORM TOP */}
+
+          {/* FORM HEADER */}
 
           <div
             className={`
@@ -1066,10 +1345,13 @@ export default function UserPage() {
               }
             `}
           >
+
             <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-white/70" />
 
             <div className="relative flex items-center justify-between">
+
               <div className="flex items-center gap-3">
+
                 <div
                   className={`
                     flex
@@ -1085,49 +1367,45 @@ export default function UserPage() {
                     }
                   `}
                 >
-                  {editingUserId !==
-                  null ? (
+                  {editingUserId !== null ? (
                     <Pencil size={19} />
                   ) : (
-                    <UserPlus
-                      size={19}
-                    />
+                    <UserPlus size={19} />
                   )}
                 </div>
 
                 <div>
+
                   <div className="flex items-center gap-2">
+
                     <h2 className="font-bold text-slate-900">
-                      {editingUserId !==
-                      null
+                      {editingUserId !== null
                         ? "Edit User"
                         : "Tambah User"}
                     </h2>
 
-                    {editingUserId !==
-                      null && (
+                    {editingUserId !== null && (
                       <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-blue-600">
                         Editing
                       </span>
                     )}
+
                   </div>
 
                   <p className="mt-0.5 text-[11px] text-slate-500">
-                    {editingUserId !==
-                    null
+                    {editingUserId !== null
                       ? "Perbarui informasi akun"
                       : "Buat akun pengguna baru"}
                   </p>
+
                 </div>
+
               </div>
 
-              {editingUserId !==
-                null && (
+              {editingUserId !== null && (
                 <button
                   type="button"
-                  onClick={
-                    batalEdit
-                  }
+                  onClick={batalEdit}
                   disabled={
                     saving ||
                     uploadingPhoto
@@ -1155,16 +1433,20 @@ export default function UserPage() {
                   <X size={17} />
                 </button>
               )}
+
             </div>
           </div>
 
           {/* FORM BODY */}
 
           <div className="space-y-5 p-5">
-            {/* FOTO PROFILE */}
+
+            {/* FOTO */}
 
             <div>
+
               <div className="mb-2 flex items-center justify-between">
+
                 <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
                   Foto Profil
                 </label>
@@ -1172,19 +1454,20 @@ export default function UserPage() {
                 <span className="text-[9px] font-medium text-slate-400">
                   JPG / PNG / WEBP
                 </span>
+
               </div>
 
               <div className="overflow-hidden rounded-[20px] border border-[#DCE8E2] bg-gradient-to-br from-[#F4F8F6] via-white to-white p-4">
+
                 <div className="flex items-center gap-4">
-                  {/* PREVIEW */}
 
                   <div className="relative shrink-0">
+
                     <div className="flex h-[82px] w-[82px] items-center justify-center overflow-hidden rounded-[22px] border-4 border-white bg-[#E8F2ED] text-2xl font-bold text-[#497F70] shadow-[0_8px_24px_rgba(24,53,45,0.10)]">
+
                       {form.photo ? (
                         <img
-                          src={
-                            form.photo
-                          }
+                          src={form.photo}
                           alt="Preview foto profil"
                           className="h-full w-full object-cover"
                         />
@@ -1193,18 +1476,17 @@ export default function UserPage() {
                           form.fullname
                         )
                       )}
+
                     </div>
 
                     <div className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#18352D] text-white shadow-sm">
-                      <Camera
-                        size={13}
-                      />
+                      <Camera size={13} />
                     </div>
+
                   </div>
 
-                  {/* INFO */}
-
                   <div className="min-w-0 flex-1">
+
                     <p className="text-sm font-bold text-slate-800">
                       {form.photo
                         ? "Foto profil aktif"
@@ -1218,6 +1500,7 @@ export default function UserPage() {
                     </p>
 
                     <div className="mt-3 flex flex-wrap gap-2">
+
                       <button
                         type="button"
                         onClick={
@@ -1256,13 +1539,9 @@ export default function UserPage() {
                         ) : (
                           <>
                             {form.photo ? (
-                              <Camera
-                                size={12}
-                              />
+                              <Camera size={12} />
                             ) : (
-                              <ImagePlus
-                                size={12}
-                              />
+                              <ImagePlus size={12} />
                             )}
 
                             {form.photo
@@ -1302,20 +1581,18 @@ export default function UserPage() {
                             disabled:opacity-50
                           "
                         >
-                          <Trash2
-                            size={12}
-                          />
+                          <Trash2 size={12} />
                           Hapus
                         </button>
                       )}
+
                     </div>
                   </div>
+
                 </div>
 
                 <input
-                  ref={
-                    fileInputRef
-                  }
+                  ref={fileInputRef}
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   onChange={
@@ -1325,6 +1602,7 @@ export default function UserPage() {
                 />
 
                 <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/80 px-3 py-2">
+
                   <ImagePlus
                     size={13}
                     className="shrink-0 text-slate-400"
@@ -1335,18 +1613,22 @@ export default function UserPage() {
                     foto wajah dengan
                     pencahayaan yang jelas.
                   </p>
+
                 </div>
+
               </div>
             </div>
 
             {/* USERNAME */}
 
             <div>
+
               <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
                 Username
               </label>
 
               <div className="relative">
+
                 <UserRound
                   size={16}
                   className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -1355,9 +1637,7 @@ export default function UserPage() {
                 <input
                   type="text"
                   placeholder="Masukkan username"
-                  value={
-                    form.username
-                  }
+                  value={form.username}
                   onChange={(e) =>
                     setForm({
                       ...form,
@@ -1385,17 +1665,20 @@ export default function UserPage() {
                     focus:ring-[#497F70]/8
                   "
                 />
+
               </div>
             </div>
 
             {/* NAMA */}
 
             <div>
+
               <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
                 Nama Lengkap
               </label>
 
               <div className="relative">
+
                 <Users
                   size={16}
                   className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -1404,9 +1687,7 @@ export default function UserPage() {
                 <input
                   type="text"
                   placeholder="Masukkan nama lengkap"
-                  value={
-                    form.fullname
-                  }
+                  value={form.fullname}
                   onChange={(e) =>
                     setForm({
                       ...form,
@@ -1434,13 +1715,16 @@ export default function UserPage() {
                     focus:ring-[#497F70]/8
                   "
                 />
+
               </div>
             </div>
 
             {/* PASSWORD */}
 
             <div>
+
               <div className="flex items-center justify-between">
+
                 <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
                   Password
                 </label>
@@ -1449,10 +1733,10 @@ export default function UserPage() {
                   size={14}
                   className="text-slate-300"
                 />
+
               </div>
 
-              {editingUserId !==
-                null && (
+              {editingUserId !== null && (
                 <p className="mt-1 text-[10px] text-slate-400">
                   Kosongkan jika password
                   tidak ingin diubah.
@@ -1460,6 +1744,7 @@ export default function UserPage() {
               )}
 
               <div className="relative mt-2">
+
                 <input
                   type={
                     showPassword
@@ -1467,14 +1752,11 @@ export default function UserPage() {
                       : "password"
                   }
                   placeholder={
-                    editingUserId !==
-                    null
+                    editingUserId !== null
                       ? "Kosongkan jika tidak diubah"
                       : "Minimal 6 karakter"
                   }
-                  value={
-                    form.password
-                  }
+                  value={form.password}
                   onChange={(e) =>
                     setForm({
                       ...form,
@@ -1526,42 +1808,34 @@ export default function UserPage() {
                     hover:bg-slate-100
                     hover:text-slate-700
                   "
-                  title={
-                    showPassword
-                      ? "Sembunyikan password"
-                      : "Tampilkan password"
-                  }
                 >
                   {showPassword ? (
-                    <EyeOff
-                      size={16}
-                    />
+                    <EyeOff size={16} />
                   ) : (
-                    <Eye
-                      size={16}
-                    />
+                    <Eye size={16} />
                   )}
                 </button>
+
               </div>
             </div>
 
             {/* ROLE */}
 
             <div>
+
               <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
                 Role & Hak Akses
               </label>
 
               <div className="relative">
+
                 <ShieldCheck
                   size={16}
                   className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
                 />
 
                 <select
-                  value={
-                    form.role
-                  }
+                  value={form.role}
                   onChange={(e) =>
                     handleRoleChange(
                       e.target.value
@@ -1588,6 +1862,7 @@ export default function UserPage() {
                     focus:ring-[#497F70]/8
                   "
                 >
+
                   <option value="ADMIN">
                     ADMIN
                   </option>
@@ -1611,26 +1886,28 @@ export default function UserPage() {
                   <option value="KASIR">
                     KASIR
                   </option>
+
                 </select>
 
                 <ChevronDown
                   size={16}
                   className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400"
                 />
+
               </div>
 
-              {/* ROLE DESCRIPTION */}
-
-              {form.role ===
-                "KASIR" && (
+              {form.role === "KASIR" && (
                 <div className="mt-2 rounded-xl border border-[#DCE8E2] bg-[#F4F8F6] px-3 py-2.5">
+
                   <div className="flex items-start gap-2">
+
                     <UserRound
                       size={14}
                       className="mt-0.5 shrink-0 text-[#497F70]"
                     />
 
                     <div>
+
                       <p className="text-[10px] font-bold text-[#497F70]">
                         Kasir Outlet
                       </p>
@@ -1641,30 +1918,32 @@ export default function UserPage() {
                         dan wajib terikat ke
                         satu outlet.
                       </p>
+
                     </div>
+
                   </div>
+
                 </div>
               )}
+
             </div>
 
             {/* OUTLET */}
 
-            {isOutletRole(
-              form.role
-            ) && (
+            {isOutletRole(form.role) && (
               <div
                 className={`
                   rounded-2xl
                   border
                   p-3.5
                   ${
-                    form.role ===
-                    "KASIR"
+                    form.role === "KASIR"
                       ? "border-[#BFD4CA] bg-[#F1F7F4]"
                       : "border-emerald-100 bg-emerald-50/50"
                   }
                 `}
               >
+
                 <label
                   className={`
                     mb-2
@@ -1674,8 +1953,7 @@ export default function UserPage() {
                     uppercase
                     tracking-[0.12em]
                     ${
-                      form.role ===
-                      "KASIR"
+                      form.role === "KASIR"
                         ? "text-[#497F70]"
                         : "text-emerald-700"
                     }
@@ -1685,6 +1963,7 @@ export default function UserPage() {
                 </label>
 
                 <div className="relative">
+
                   <Building2
                     size={16}
                     className={`
@@ -1693,8 +1972,7 @@ export default function UserPage() {
                       top-1/2
                       -translate-y-1/2
                       ${
-                        form.role ===
-                        "KASIR"
+                        form.role === "KASIR"
                           ? "text-[#497F70]"
                           : "text-emerald-600"
                       }
@@ -1702,15 +1980,12 @@ export default function UserPage() {
                   />
 
                   <select
-                    value={
-                      form.outletId
-                    }
+                    value={form.outletId}
                     onChange={(e) =>
                       setForm({
                         ...form,
                         outletId:
-                          e.target
-                            .value,
+                          e.target.value,
                       })
                     }
                     className={`
@@ -1728,13 +2003,13 @@ export default function UserPage() {
                       outline-none
                       transition
                       ${
-                        form.role ===
-                        "KASIR"
+                        form.role === "KASIR"
                           ? "border-[#BFD4CA] focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/8"
                           : "border-emerald-100 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/8"
                       }
                     `}
                   >
+
                     <option value="">
                       Pilih Outlet
                     </option>
@@ -1742,29 +2017,24 @@ export default function UserPage() {
                     {outlets.map(
                       (outlet) => (
                         <option
-                          key={
-                            outlet.id
-                          }
-                          value={
-                            outlet.id
-                          }
+                          key={outlet.id}
+                          value={outlet.id}
                         >
-                          {
-                            outlet.name
-                          }
+                          {outlet.name}
                         </option>
                       )
                     )}
+
                   </select>
 
                   <ChevronDown
                     size={16}
                     className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400"
                   />
+
                 </div>
 
-                {form.role ===
-                  "KASIR" && (
+                {form.role === "KASIR" && (
                   <p className="mt-2 text-[9px] font-medium text-[#497F70]">
                     Kasir hanya dapat
                     bekerja pada outlet
@@ -1772,26 +2042,124 @@ export default function UserPage() {
                   </p>
                 )}
 
-                {outlets.length ===
-                  0 && (
+                {outlets.length === 0 && (
                   <p className="mt-2 text-[10px] font-medium text-amber-600">
                     Belum ada outlet
                     yang tersedia.
                   </p>
                 )}
+
+              </div>
+            )}
+
+            {/* =================================================
+                CUSTOMER
+            ================================================= */}
+
+            {form.role === "OUTLET_ADMIN" && (
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-3.5">
+
+                <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-700">
+                  Customer Outlet
+                </label>
+
+                <div className="relative">
+
+                  <Users
+                    size={16}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-600"
+                  />
+
+                  <select
+                    value={
+                      form.customerId
+                    }
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        customerId:
+                          e.target.value,
+                      })
+                    }
+                    disabled={
+                      saving ||
+                      uploadingPhoto
+                    }
+                    className="
+                      h-11
+                      w-full
+                      appearance-none
+                      rounded-xl
+                      border
+                      border-emerald-100
+                      bg-white
+                      pl-10
+                      pr-10
+                      text-sm
+                      font-medium
+                      text-slate-800
+                      outline-none
+                      transition
+                      focus:border-emerald-400
+                      focus:ring-4
+                      focus:ring-emerald-500/8
+                      disabled:cursor-not-allowed
+                      disabled:bg-slate-50
+                    "
+                  >
+
+                    <option value="">
+                      Pilih Customer
+                    </option>
+
+                    {customers.map(
+                      (customer) => (
+                        <option
+                          key={customer.id}
+                          value={customer.id}
+                        >
+                          {customer.code} —{" "}
+                          {customer.name}
+                        </option>
+                      )
+                    )}
+
+                  </select>
+
+                  <ChevronDown
+                    size={16}
+                    className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+
+                </div>
+
+                {customers.length === 0 ? (
+                  <p className="mt-2 text-[10px] font-medium text-amber-600">
+                    Belum ada Customer yang
+                    tersedia.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-[9px] leading-relaxed text-emerald-700">
+                    Customer ini akan otomatis
+                    digunakan ketika user membuat
+                    Delivery Request.
+                  </p>
+                )}
+
               </div>
             )}
 
             {/* STATUS */}
 
-            {editingUserId !==
-              null && (
+            {editingUserId !== null && (
               <div>
+
                 <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
                   Status Akun
                 </label>
 
                 <div className="relative">
+
                   <Circle
                     size={13}
                     fill="currentColor"
@@ -1818,8 +2186,7 @@ export default function UserPage() {
                       setForm({
                         ...form,
                         active:
-                          e.target
-                            .value ===
+                          e.target.value ===
                           "true",
                       })
                     }
@@ -1844,6 +2211,7 @@ export default function UserPage() {
                       focus:ring-[#497F70]/8
                     "
                   >
+
                     <option value="true">
                       Aktif
                     </option>
@@ -1851,12 +2219,14 @@ export default function UserPage() {
                     <option value="false">
                       Nonaktif
                     </option>
+
                   </select>
 
                   <ChevronDown
                     size={16}
                     className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400"
                   />
+
                 </div>
               </div>
             )}
@@ -1892,13 +2262,13 @@ export default function UserPage() {
                 disabled:cursor-not-allowed
                 disabled:opacity-60
                 ${
-                  editingUserId !==
-                  null
+                  editingUserId !== null
                     ? "bg-blue-600 hover:bg-blue-700"
                     : "bg-[#18352D] hover:bg-[#21483D]"
                 }
               `}
             >
+
               {saving ? (
                 <>
                   <RefreshCw
@@ -1907,8 +2277,7 @@ export default function UserPage() {
                   />
                   Menyimpan...
                 </>
-              ) : editingUserId !==
-                null ? (
+              ) : editingUserId !== null ? (
                 <>
                   <Save size={17} />
                   Simpan Perubahan
@@ -1919,15 +2288,13 @@ export default function UserPage() {
                   Simpan User
                 </>
               )}
+
             </button>
 
-            {editingUserId !==
-              null && (
+            {editingUserId !== null && (
               <button
                 type="button"
-                onClick={
-                  batalEdit
-                }
+                onClick={batalEdit}
                 disabled={
                   saving ||
                   uploadingPhoto
@@ -1955,6 +2322,7 @@ export default function UserPage() {
                 Batal Edit
               </button>
             )}
+
           </div>
         </div>
 
@@ -1963,31 +2331,38 @@ export default function UserPage() {
         =================================================== */}
 
         <div className="min-w-0 overflow-hidden rounded-[24px] border border-[#DCE8E2] bg-white shadow-[0_10px_35px_rgba(15,23,42,0.055)]">
+
           {/* TABLE HEADER */}
 
           <div className="border-b border-[#E7EEE9] bg-white px-5 py-5 md:px-6">
+
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+
               <div>
+
                 <div className="flex items-center gap-2">
+
                   <h2 className="text-base font-bold text-slate-900">
                     Daftar User
                   </h2>
 
                   <span className="rounded-full bg-[#EDF5F1] px-2.5 py-1 text-[10px] font-bold text-[#497F70]">
-                    {
-                      filteredUsers.length
-                    }
+                    {filteredUsers.length}
                   </span>
+
                 </div>
 
                 <p className="mt-1 text-xs text-slate-400">
                   Monitor akun, role,
-                  outlet, aktivitas,
-                  dan profil pengguna.
+                  outlet, customer,
+                  aktivitas, dan profil
+                  pengguna.
                 </p>
+
               </div>
 
               <div className="relative w-full lg:w-[300px]">
+
                 <Search
                   size={17}
                   className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -1996,13 +2371,10 @@ export default function UserPage() {
                 <input
                   type="text"
                   placeholder="Cari nama, username, role..."
-                  value={
-                    search
-                  }
+                  value={search}
                   onChange={(e) =>
                     setSearch(
-                      e.target
-                        .value
+                      e.target.value
                     )
                   }
                   className="
@@ -2036,16 +2408,22 @@ export default function UserPage() {
                     <X size={14} />
                   </button>
                 )}
+
               </div>
+
             </div>
           </div>
 
           {/* TABLE */}
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1080px]">
+
+            <table className="w-full min-w-[1250px]">
+
               <thead>
+
                 <tr className="border-b border-[#E8EEE9] bg-[#F8FAF9]">
+
                   <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400">
                     User
                   </th>
@@ -2062,6 +2440,10 @@ export default function UserPage() {
                     Outlet
                   </th>
 
+                  <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400">
+                    Customer
+                  </th>
+
                   <th className="px-5 py-4 text-center text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400">
                     Akun
                   </th>
@@ -2073,45 +2455,55 @@ export default function UserPage() {
                   <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400">
                     Aksi
                   </th>
+
                 </tr>
+
               </thead>
 
               <tbody className="divide-y divide-[#EDF1EE]">
+
                 {loading ? (
+
                   <tr>
+
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-6 py-16 text-center"
                     >
+
                       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EDF5F1]">
+
                         <RefreshCw
                           size={21}
                           className="animate-spin text-[#497F70]"
                         />
+
                       </div>
 
                       <p className="mt-4 text-sm font-semibold text-slate-600">
-                        Memuat data
-                        user
+                        Memuat data user
                       </p>
 
                       <p className="mt-1 text-xs text-slate-400">
                         Menyiapkan daftar
                         pengguna...
                       </p>
+
                     </td>
+
                   </tr>
-                ) : filteredUsers.length ===
-                  0 ? (
+
+                ) : filteredUsers.length === 0 ? (
+
                   <tr>
+
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-6 py-16 text-center"
                     >
+
                       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 text-slate-300">
-                        <Users
-                          size={25}
-                        />
+                        <Users size={25} />
                       </div>
 
                       <p className="mt-4 text-sm font-semibold text-slate-600">
@@ -2124,11 +2516,16 @@ export default function UserPage() {
                         kunci pencarian
                         lainnya.
                       </p>
+
                     </td>
+
                   </tr>
+
                 ) : (
+
                   filteredUsers.map(
                     (user) => {
+
                       const roleConfig =
                         getRoleConfig(
                           user.role
@@ -2139,9 +2536,7 @@ export default function UserPage() {
 
                       return (
                         <tr
-                          key={
-                            user.id
-                          }
+                          key={user.id}
                           className={`
                             group
                             transition
@@ -2153,11 +2548,15 @@ export default function UserPage() {
                             }
                           `}
                         >
+
                           {/* USER */}
 
                           <td className="px-6 py-4">
+
                             <div className="flex items-center gap-3">
+
                               <div className="relative shrink-0">
+
                                 <div
                                   className={`
                                     flex
@@ -2177,6 +2576,7 @@ export default function UserPage() {
                                     }
                                   `}
                                 >
+
                                   {user.photo ? (
                                     <img
                                       src={
@@ -2193,6 +2593,7 @@ export default function UserPage() {
                                       user.fullname
                                     )
                                   )}
+
                                 </div>
 
                                 <span
@@ -2212,9 +2613,11 @@ export default function UserPage() {
                                     }
                                   `}
                                 />
+
                               </div>
 
                               <div className="min-w-0">
+
                                 <p className="truncate font-semibold text-slate-800">
                                   {
                                     user.fullname
@@ -2227,24 +2630,30 @@ export default function UserPage() {
                                     user.id
                                   }
                                 </p>
+
                               </div>
+
                             </div>
+
                           </td>
 
                           {/* USERNAME */}
 
                           <td className="px-5 py-4">
+
                             <span className="rounded-lg bg-slate-50 px-2.5 py-1.5 font-mono text-xs font-medium text-slate-600">
                               @
                               {
                                 user.username
                               }
                             </span>
+
                           </td>
 
                           {/* ROLE */}
 
                           <td className="px-5 py-4">
+
                             <span
                               className={`
                                 inline-flex
@@ -2260,24 +2669,25 @@ export default function UserPage() {
                                 ${roleConfig.className}
                               `}
                             >
-                              <RoleIcon
-                                size={
-                                  12
-                                }
-                              />
+
+                              <RoleIcon size={12} />
 
                               {
                                 roleConfig.label
                               }
+
                             </span>
+
                           </td>
 
                           {/* OUTLET */}
 
                           <td className="px-5 py-4">
-                            {user.outlet
-                              ?.name ? (
+
+                            {user.outlet?.name ? (
+
                               <div className="flex items-center gap-2">
+
                                 <div
                                   className={`
                                     flex
@@ -2294,19 +2704,14 @@ export default function UserPage() {
                                     }
                                   `}
                                 >
-                                  <Building2
-                                    size={
-                                      14
-                                    }
-                                  />
+                                  <Building2 size={14} />
                                 </div>
 
                                 <div>
+
                                   <span className="block text-sm font-medium text-slate-700">
                                     {
-                                      user
-                                        .outlet
-                                        .name
+                                      user.outlet.name
                                     }
                                   </span>
 
@@ -2316,18 +2721,69 @@ export default function UserPage() {
                                       Outlet Kasir
                                     </span>
                                   )}
+
                                 </div>
+
                               </div>
+
                             ) : (
+
                               <span className="inline-flex items-center rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-400">
                                 Pusat
                               </span>
+
                             )}
+
                           </td>
 
-                          {/* ACCOUNT STATUS */}
+                          {/* CUSTOMER */}
+
+                          <td className="px-5 py-4">
+
+                            {user.customer ? (
+
+                              <div className="min-w-[180px]">
+
+                                <div className="flex items-center gap-2">
+
+                                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                                    <Users size={14} />
+                                  </div>
+
+                                  <div className="min-w-0">
+
+                                    <span className="block truncate text-sm font-medium text-slate-700">
+                                      {
+                                        user.customer.name
+                                      }
+                                    </span>
+
+                                    <span className="block text-[9px] font-semibold text-emerald-600">
+                                      {
+                                        user.customer.code
+                                      }
+                                    </span>
+
+                                  </div>
+
+                                </div>
+
+                              </div>
+
+                            ) : (
+
+                              <span className="inline-flex items-center rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-400">
+                                Tidak terhubung
+                              </span>
+
+                            )}
+
+                          </td>
+
+                          {/* ACCOUNT */}
 
                           <td className="px-5 py-4 text-center">
+
                             <span
                               className={`
                                 inline-flex
@@ -2345,6 +2801,7 @@ export default function UserPage() {
                                 }
                               `}
                             >
+
                               <span
                                 className={`
                                   h-1.5
@@ -2361,13 +2818,17 @@ export default function UserPage() {
                               {user.active
                                 ? "AKTIF"
                                 : "NONAKTIF"}
+
                             </span>
+
                           </td>
 
                           {/* ONLINE */}
 
                           <td className="px-5 py-4 text-center">
+
                             <div className="flex flex-col items-center">
+
                               <span
                                 className={`
                                   inline-flex
@@ -2385,11 +2846,14 @@ export default function UserPage() {
                                   }
                                 `}
                               >
+
                                 {user.online ? (
                                   <span className="relative flex h-2 w-2">
+
                                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
 
                                     <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+
                                   </span>
                                 ) : (
                                   <span className="h-2 w-2 rounded-full bg-slate-300" />
@@ -2398,6 +2862,7 @@ export default function UserPage() {
                                 {user.online
                                   ? "ONLINE"
                                   : "OFFLINE"}
+
                               </span>
 
                               {!user.online &&
@@ -2408,12 +2873,15 @@ export default function UserPage() {
                                     )}
                                   </span>
                                 )}
+
                             </div>
+
                           </td>
 
                           {/* ACTION */}
 
                           <td className="px-6 py-4 text-right">
+
                             <button
                               type="button"
                               onClick={() =>
@@ -2441,46 +2909,51 @@ export default function UserPage() {
                                 hover:bg-blue-50
                                 hover:text-blue-600
                               "
-                              title="Edit user"
                             >
-                              <Pencil
-                                size={
-                                  13
-                                }
-                              />
+                              <Pencil size={13} />
                               Edit
                             </button>
+
                           </td>
+
                         </tr>
                       );
                     }
                   )
                 )}
+
               </tbody>
             </table>
           </div>
 
-          {/* TABLE FOOTER */}
+          {/* FOOTER */}
 
           {!loading &&
-            filteredUsers.length >
-              0 && (
+            filteredUsers.length > 0 && (
               <div className="flex flex-col gap-2 border-t border-[#E8EEE9] bg-[#FBFCFB] px-6 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+
                 <p className="text-[10px] font-medium text-slate-400">
+
                   Menampilkan{" "}
+
                   <span className="font-bold text-slate-600">
                     {
                       filteredUsers.length
                     }
                   </span>{" "}
+
                   dari{" "}
+
                   <span className="font-bold text-slate-600">
                     {data.length}
                   </span>{" "}
+
                   user
+
                 </p>
 
                 <div className="flex items-center gap-2 text-[10px] text-slate-400">
+
                   <span
                     className={`h-1.5 w-1.5 rounded-full ${
                       onlineLoading
@@ -2492,9 +2965,12 @@ export default function UserPage() {
                   {onlineLoading
                     ? "Memperbarui status..."
                     : "Status online tersinkronisasi"}
+
                 </div>
+
               </div>
             )}
+
         </div>
       </div>
     </div>

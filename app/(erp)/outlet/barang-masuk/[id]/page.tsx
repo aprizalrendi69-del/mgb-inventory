@@ -999,12 +999,16 @@ export default function OutletBarangMasukDetailPage() {
                 item.receivedQty ?? 0
               );
           } else {
-            initialReceived[item.id] =
-              Number(
-                item.receivedQty ??
-                  item.qty ??
-                  0
-              );
+            // Penerimaan Purchase juga harus diisi manual per item.
+            // Jika sebelumnya sudah pernah menerima sebagian, tampilkan
+            // sisa yang belum diterima sebagai nilai awal.
+            const orderedQty = Number(item.qty || 0);
+            const previouslyReceived = Number(item.receivedQty ?? 0);
+
+            initialReceived[item.id] = Math.max(
+              0,
+              orderedQty - previouslyReceived
+            );
           }
         }
       );
@@ -1185,11 +1189,7 @@ export default function OutletBarangMasukDetailPage() {
 
           return (
             sum +
-            Number(
-              item.receivedQty ??
-                item.qty ??
-                0
-            )
+            Number(receivedQty[item.id] ?? 0)
           );
         },
         0
@@ -1217,17 +1217,9 @@ export default function OutletBarangMasukDetailPage() {
     () =>
       receivableItems.reduce(
         (sum, item) => {
-          const qty =
-            isTransfer
-              ? Number(
-                  receivedQty[item.id] ??
-                    0
-                )
-              : Number(
-                  item.receivedQty ??
-                    item.qty ??
-                    0
-                );
+          const qty = Number(
+            receivedQty[item.id] ?? 0
+          );
 
           return (
             sum +
@@ -1278,60 +1270,44 @@ export default function OutletBarangMasukDetailPage() {
   // TRANSFER VALIDATION
   // =====================================================
 
-  const transferQtyValid = useMemo(() => {
-    if (!isTransfer) return true;
+  // Validasi Qty Diterima berlaku untuk PURCHASE dan TRANSFER.
+  // Qty tidak boleh negatif dan tidak boleh melebihi Qty Kirim.
+  const receiveQtyValid = useMemo(() => {
+    return receivableItems.every((item) => {
+      const qtyKirim = Number(item.qty || 0);
+      const qtyDiterima = Number(receivedQty[item.id] ?? 0);
 
-    return receivableItems.every(
-      (item) => {
-        const qtyKirim = Number(
-          item.qty || 0
-        );
-
-        const qtyDiterima = Number(
-          receivedQty[item.id] ?? 0
-        );
-
-        return (
-          qtyDiterima >= 0 &&
-          qtyDiterima <= qtyKirim
-        );
-      }
-    );
-  }, [
-    isTransfer,
-    receivableItems,
-    receivedQty,
-  ]);
-
-  const transferTotalReceived =
-    useMemo(() => {
-      if (!isTransfer) return 0;
-
-      return receivableItems.reduce(
-        (sum, item) =>
-          sum +
-          Number(
-            receivedQty[item.id] ?? 0
-          ),
-        0
+      return (
+        Number.isFinite(qtyDiterima) &&
+        qtyDiterima >= 0 &&
+        qtyDiterima <= qtyKirim
       );
-    }, [
-      isTransfer,
-      receivableItems,
-      receivedQty,
-    ]);
+    });
+  }, [receivableItems, receivedQty]);
+
+  const totalInputReceived = useMemo(
+    () =>
+      receivableItems.reduce(
+        (sum, item) =>
+          sum + Number(receivedQty[item.id] ?? 0),
+        0
+      ),
+    [receivableItems, receivedQty]
+  );
 
   const canReceive =
     Boolean(data) &&
     !alreadyReceived &&
     hasReceivableItems &&
     outletOwnershipValid &&
+    receiveQtyValid &&
+    totalInputReceived > 0 &&
     (isPurchase
-      ? purchaseStatus === "APPROVED" &&
+      ? (purchaseStatus === "APPROVED" ||
+          purchaseStatus === "PARTIAL") &&
         invoiceNumberValid
       : isTransfer
-      ? transferQtyValid &&
-        transferTotalReceived > 0
+      ? true
       : false);
 
   // =====================================================
@@ -1424,24 +1400,22 @@ export default function OutletBarangMasukDetailPage() {
       return false;
     }
 
-    if (isTransfer) {
-      if (!transferQtyValid) {
-        showFeedback(
-          "error",
-          "Qty Tidak Valid",
-          "Qty diterima tidak valid. Pastikan tidak melebihi Qty Kirim."
-        );
-        return false;
-      }
+    if (!receiveQtyValid) {
+      showFeedback(
+        "error",
+        "Qty Tidak Valid",
+        "Qty Diterima tidak valid. Pastikan nilainya tidak negatif dan tidak melebihi Qty Kirim."
+      );
+      return false;
+    }
 
-      if (transferTotalReceived <= 0) {
-        showFeedback(
-          "error",
-          "Qty Belum Diisi",
-          "Isi minimal satu Qty Diterima sebelum melakukan penerimaan."
-        );
-        return false;
-      }
+    if (totalInputReceived <= 0) {
+      showFeedback(
+        "error",
+        "Qty Belum Diisi",
+        "Isi minimal satu Qty Diterima sebelum melakukan penerimaan."
+      );
+      return false;
     }
 
     return true;
@@ -1508,11 +1482,15 @@ export default function OutletBarangMasukDetailPage() {
                 "application/json",
             },
             body: JSON.stringify({
-              purchaseId:
-                data.sourceId,
+              purchaseId: data.sourceId,
               invoiceNumber:
-                invoiceNumberTrimmed ||
-                null,
+                invoiceNumberTrimmed || null,
+              items: receivableItems.map((item) => ({
+                id: item.id,
+                receivedQty: Number(
+                  receivedQty[item.id] ?? 0
+                ),
+              })),
             }),
           }
         );
@@ -3002,12 +2980,9 @@ export default function OutletBarangMasukDetailPage() {
                     Qty Kirim
                   </th>
 
-                  {data.sumber ===
-                    "TRANSFER" && (
-                    <th className="px-5 py-4 text-center text-[11px] font-extrabold uppercase tracking-wider text-[#527065]">
-                      Qty Diterima
-                    </th>
-                  )}
+                  <th className="px-5 py-4 text-center text-[11px] font-extrabold uppercase tracking-wider text-[#527065]">
+                    Qty Diterima
+                  </th>
 
                   <th className="px-5 py-4 text-right text-[11px] font-extrabold uppercase tracking-wider text-[#527065]">
                     Harga
@@ -3023,12 +2998,7 @@ export default function OutletBarangMasukDetailPage() {
                 {data.items.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={
-                        data.sumber ===
-                        "TRANSFER"
-                          ? 6
-                          : 5
-                      }
+                      colSpan={6}
                       className="px-5 py-16 text-center"
                     >
                       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-100">
@@ -3062,17 +3032,8 @@ export default function OutletBarangMasukDetailPage() {
                       const qtyDiterima =
                         isVoided
                           ? 0
-                          : data.sumber ===
-                            "TRANSFER"
-                          ? Number(
-                              receivedQty[
-                                item.id
-                              ] ?? 0
-                            )
                           : Number(
-                              item.receivedQty ??
-                                item.qty ??
-                                0
+                              receivedQty[item.id] ?? 0
                             );
 
                       const subtotal =
@@ -3264,9 +3225,7 @@ export default function OutletBarangMasukDetailPage() {
                             )}
                           </td>
 
-                          {data.sumber ===
-                            "TRANSFER" && (
-                            <td className="px-5 py-5 text-center align-top">
+                          <td className="px-5 py-5 text-center align-top">
                               {isVoided ? (
                                 <div className="flex flex-col items-center gap-2">
                                   <span className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-100 px-3 py-2 text-[10px] font-extrabold text-red-700">
@@ -3344,8 +3303,7 @@ export default function OutletBarangMasukDetailPage() {
                                     )}
                                 </div>
                               )}
-                            </td>
-                          )}
+                          </td>
 
                           <td
                             className={
@@ -3405,14 +3363,9 @@ export default function OutletBarangMasukDetailPage() {
                     {formatNumber(totalQty)}
                   </td>
 
-                  {data.sumber ===
-                    "TRANSFER" && (
-                    <td className="px-5 py-5 text-center font-extrabold text-emerald-700">
-                      {formatNumber(
-                        totalReceivedQty
-                      )}
-                    </td>
-                  )}
+                  <td className="px-5 py-5 text-center font-extrabold text-emerald-700">
+                    {formatNumber(totalReceivedQty)}
+                  </td>
 
                   <td />
 
@@ -3902,9 +3855,7 @@ export default function OutletBarangMasukDetailPage() {
 
                 <span>
                   {formatNumber(
-                    isTransfer
-                      ? transferTotalReceived
-                      : totalQty
+                    totalReceivedQty
                   )}{" "}
                   qty akan diterima
                 </span>
@@ -4166,9 +4117,7 @@ export default function OutletBarangMasukDetailPage() {
 
                   <p className="mt-2 text-xl font-extrabold text-emerald-700">
                     {formatNumber(
-                      isTransfer
-                        ? transferTotalReceived
-                        : totalQty
+                      totalReceivedQty
                     )}
                   </p>
 
@@ -4184,13 +4133,11 @@ export default function OutletBarangMasukDetailPage() {
 
                   <p className="mt-2 text-xl font-extrabold text-orange-700">
                     {formatNumber(
-                      isTransfer
-                        ? Math.max(
-                            0,
-                            totalQty -
-                              transferTotalReceived
-                          )
-                        : 0
+                      Math.max(
+                        0,
+                        totalQty -
+                          totalReceivedQty
+                      )
                     )}
                   </p>
 

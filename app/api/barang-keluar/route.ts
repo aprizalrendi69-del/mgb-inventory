@@ -10,9 +10,8 @@ import { Prisma } from "@prisma/client";
  * Input dari <input type="date">:
  *     2026-08-25
  *
- * Kita simpan pada UTC siang agar ketika ditampilkan kembali
- * dengan toISOString().slice(0, 10), tanggal tidak bergeser
- * karena perbedaan timezone.
+ * Disimpan pada UTC siang agar tanggal tidak bergeser
+ * ketika dikonversi kembali ke format YYYY-MM-DD.
  */
 function parseDateOnly(value: unknown): Date | null {
   if (typeof value !== "string") {
@@ -58,15 +57,13 @@ function parseDateOnly(value: unknown): Date | null {
  * GENERATE DELIVERY NUMBER
  * ============================================================
  *
- * Jangan menggunakan delivery.count().
- *
- * Contoh data:
+ * Contoh:
  *
  * DO-00001
  * DO-00002
  * DO-00005
  *
- * Maka nomor berikutnya:
+ * Berikutnya:
  *
  * DO-00006
  *
@@ -92,12 +89,16 @@ async function generateDeliveryNumber(
   let nextNumber = 1;
 
   if (latestDelivery?.number) {
-    const match = latestDelivery.number.match(/^DO-(\d+)$/);
+    const match =
+      latestDelivery.number.match(/^DO-(\d+)$/);
 
     if (match) {
       const currentNumber = Number(match[1]);
 
-      if (Number.isSafeInteger(currentNumber) && currentNumber >= 1) {
+      if (
+        Number.isSafeInteger(currentNumber) &&
+        currentNumber >= 1
+      ) {
         nextNumber = currentNumber + 1;
       }
     }
@@ -111,8 +112,12 @@ async function generateDeliveryNumber(
  * CHECK UNIQUE DELIVERY NUMBER ERROR
  * ============================================================
  */
-function isDeliveryNumberUniqueError(error: unknown): boolean {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+function isDeliveryNumberUniqueError(
+  error: unknown
+): boolean {
+  if (
+    !(error instanceof Prisma.PrismaClientKnownRequestError)
+  ) {
     return false;
   }
 
@@ -137,6 +142,27 @@ function isDeliveryNumberUniqueError(error: unknown): boolean {
  * ============================================================
  * POST - CREATE BARANG KELUAR DRAFT
  * ============================================================
+ *
+ * Mendukung 2 jenis Delivery:
+ *
+ * 1. CUSTOMER DELIVERY
+ *
+ *    customerId = ADA
+ *    outletId   = ADA
+ *
+ * 2. OUTLET DELIVERY
+ *
+ *    customerId = NULL
+ *    outletId   = ADA
+ *
+ * PENTING:
+ *
+ * Endpoint ini hanya membuat DRAFT.
+ *
+ * TIDAK ADA pengurangan Barang.stock.
+ *
+ * Stock baru boleh berkurang pada proses RELEASE.
+ * ============================================================
  */
 export async function POST(req: NextRequest) {
   try {
@@ -151,11 +177,16 @@ export async function POST(req: NextRequest) {
     } = body;
 
     // =====================================================
-    // VALIDASI DATA UTAMA
+    // VALIDASI OUTLET & ITEMS
     // =====================================================
 
+    /**
+     * Outlet wajib ada.
+     *
+     * Customer tidak lagi wajib karena Delivery dari
+     * Outlet Request memang tidak memiliki customer.
+     */
     if (
-      !customerId ||
       !outletId ||
       !items ||
       !Array.isArray(items) ||
@@ -165,7 +196,7 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           message:
-            "Customer, outlet, dan barang wajib diisi",
+            "Outlet dan barang wajib diisi",
         },
         {
           status: 400,
@@ -173,23 +204,65 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const customerIdNumber = Number(customerId);
     const outletIdNumber = Number(outletId);
 
     if (
-      !Number.isInteger(customerIdNumber) ||
-      !Number.isInteger(outletIdNumber)
+      !Number.isInteger(outletIdNumber) ||
+      outletIdNumber <= 0
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Customer atau outlet tidak valid",
+          message: "Outlet tidak valid",
         },
         {
           status: 400,
         }
       );
     }
+
+    // =====================================================
+    // CUSTOMER OPTIONAL
+    // =====================================================
+
+    let customerIdNumber: number | null = null;
+
+    /**
+     * Kalau customerId diberikan:
+     * validasi sebagai Customer Delivery.
+     *
+     * Kalau tidak diberikan:
+     * dianggap sebagai Outlet Delivery.
+     */
+    if (
+      customerId !== null &&
+      customerId !== undefined &&
+      customerId !== ""
+    ) {
+      customerIdNumber = Number(customerId);
+
+      if (
+        !Number.isInteger(customerIdNumber) ||
+        customerIdNumber <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Customer tidak valid",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+    }
+
+    // =====================================================
+    // TENTUKAN JENIS DELIVERY
+    // =====================================================
+
+    const isOutletDelivery =
+      customerIdNumber === null;
 
     // =====================================================
     // TANGGAL DELIVERY
@@ -202,7 +275,8 @@ export async function POST(req: NextRequest) {
       deliveryDate !== null &&
       deliveryDate !== ""
     ) {
-      const parsed = parseDateOnly(deliveryDate);
+      const parsed =
+        parseDateOnly(deliveryDate);
 
       if (!parsed) {
         return NextResponse.json(
@@ -238,39 +312,54 @@ export async function POST(req: NextRequest) {
     // VALIDASI CUSTOMER
     // =====================================================
 
-    const customer = await prisma.customer.findUnique({
-      where: {
-        id: customerIdNumber,
-      },
-    });
+    /**
+     * Customer hanya divalidasi kalau memang dikirim.
+     *
+     * Untuk Outlet Delivery:
+     *
+     * customerId = null
+     *
+     * sehingga bagian ini dilewati.
+     */
+    if (customerIdNumber !== null) {
+      const customer =
+        await prisma.customer.findUnique({
+          where: {
+            id: customerIdNumber,
+          },
+        });
 
-    if (!customer) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Customer tidak ditemukan",
-        },
-        {
-          status: 400,
-        }
-      );
+      if (!customer) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Customer tidak ditemukan",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
     }
 
     // =====================================================
     // VALIDASI OUTLET
     // =====================================================
 
-    const outlet = await prisma.outlet.findUnique({
-      where: {
-        id: outletIdNumber,
-      },
-    });
+    const outlet =
+      await prisma.outlet.findUnique({
+        where: {
+          id: outletIdNumber,
+        },
+      });
 
     if (!outlet) {
       return NextResponse.json(
         {
           success: false,
-          message: "Outlet tidak ditemukan",
+          message:
+            "Outlet tidak ditemukan",
         },
         {
           status: 400,
@@ -281,11 +370,6 @@ export async function POST(req: NextRequest) {
     // =====================================================
     // VALIDASI ITEMS SEBELUM TRANSACTION
     // =====================================================
-    //
-    // Kita normalisasi data item terlebih dahulu.
-    // Ini membuat transaction lebih aman dan lebih mudah
-    // dikontrol.
-    //
 
     const normalizedItems: Array<{
       barangId: number;
@@ -293,8 +377,13 @@ export async function POST(req: NextRequest) {
     }> = [];
 
     for (const item of items) {
-      const barangId = Number(item?.barangId);
-      const qty = Number(item?.qty);
+      const barangId = Number(
+        item?.barangId
+      );
+
+      const qty = Number(
+        item?.qty
+      );
 
       if (
         !Number.isInteger(barangId) ||
@@ -324,18 +413,7 @@ export async function POST(req: NextRequest) {
     // RETRY CREATE DELIVERY
     // =====================================================
     //
-    // P2002 pada Delivery.number bisa terjadi kalau dua
-    // request membuat nomor yang sama hampir bersamaan.
-    //
-    // Jika itu terjadi:
-    //
-    // Request A -> DO-00010 -> berhasil
-    // Request B -> DO-00010 -> P2002
-    //
-    // Request B akan mengulang transaction dan membaca
-    // nomor terbaru, kemudian mencoba DO-00011.
-    //
-    // Data lama tidak diubah dan tidak dihapus.
+    // Menghindari benturan nomor Delivery.
     //
 
     const MAX_RETRY = 5;
@@ -344,20 +422,27 @@ export async function POST(req: NextRequest) {
       ReturnType<typeof createDeliveryDraft>
     > | null = null;
 
-    for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
+    for (
+      let attempt = 1;
+      attempt <= MAX_RETRY;
+      attempt++
+    ) {
       try {
-        result = await createDeliveryDraft({
-          parsedDeliveryDate,
-          customerIdNumber,
-          outletIdNumber,
-          note,
-          normalizedItems,
-        });
+        result =
+          await createDeliveryDraft({
+            parsedDeliveryDate,
+            customerIdNumber,
+            outletIdNumber,
+            note,
+            normalizedItems,
+          });
 
         break;
       } catch (error) {
         const isUniqueNumberError =
-          isDeliveryNumberUniqueError(error);
+          isDeliveryNumberUniqueError(
+            error
+          );
 
         if (
           isUniqueNumberError &&
@@ -388,11 +473,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
 
-      message:
-        `Barang keluar ${result.number} berhasil ` +
-        `disimpan sebagai DRAFT untuk outlet ${outlet.name}`,
+      message: isOutletDelivery
+        ? `Barang keluar ${result.number} berhasil disimpan sebagai DRAFT untuk outlet ${outlet.name}`
+        : `Barang keluar ${result.number} berhasil disimpan sebagai DRAFT`,
 
-      data: result,
+      data: {
+        ...result,
+
+        /**
+         * Informasi tambahan untuk frontend.
+         */
+        isOutletDelivery,
+
+        deliveryType: isOutletDelivery
+          ? "OUTLET"
+          : "CUSTOMER",
+      },
     });
   } catch (error: any) {
     console.error(
@@ -404,7 +500,9 @@ export async function POST(req: NextRequest) {
     // UNIQUE DELIVERY NUMBER
     // =====================================================
 
-    if (isDeliveryNumberUniqueError(error)) {
+    if (
+      isDeliveryNumberUniqueError(error)
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -448,7 +546,7 @@ async function createDeliveryDraft({
   normalizedItems,
 }: {
   parsedDeliveryDate: Date;
-  customerIdNumber: number;
+  customerIdNumber: number | null;
   outletIdNumber: number;
   note: unknown;
   normalizedItems: Array<{
@@ -471,46 +569,63 @@ async function createDeliveryDraft({
       // CREATE DELIVERY
       // =================================================
 
-      const delivery = await tx.delivery.create({
-        data: {
-          number,
+      const delivery =
+        await tx.delivery.create({
+          data: {
+            number,
 
-          customerId: customerIdNumber,
+            /**
+             * Customer boleh NULL.
+             *
+             * Untuk Outlet Request:
+             *
+             * customerId = null
+             */
+            customerId:
+              customerIdNumber,
 
-          outletId: outletIdNumber,
+            /**
+             * Outlet tetap wajib.
+             */
+            outletId:
+              outletIdNumber,
 
-          // =================================================
-          // TANGGAL TRANSAKSI
-          // =================================================
+            // =================================================
+            // TANGGAL TRANSAKSI
+            // =================================================
 
-          deliveryDate: parsedDeliveryDate,
+            deliveryDate:
+              parsedDeliveryDate,
 
-          // =================================================
-          // STATUS
-          // =================================================
+            // =================================================
+            // STATUS
+            // =================================================
 
-          status: "DRAFT",
+            status: "DRAFT",
 
-          remarks:
-            typeof note === "string"
-              ? note.trim() || null
-              : null,
+            remarks:
+              typeof note === "string"
+                ? note.trim() || null
+                : null,
 
-          // =================================================
-          // TOTAL AWAL
-          // =================================================
+            // =================================================
+            // TOTAL AWAL
+            // =================================================
 
-          totalQty: 0,
-        },
-      });
+            totalQty: 0,
+          },
+        });
 
       // =================================================
       // PROCESS ITEMS
       // =================================================
 
       for (const item of normalizedItems) {
-        const barangId = item.barangId;
-        const keluarQty = item.qty;
+        const barangId =
+          item.barangId;
+
+        const keluarQty =
+          item.qty;
 
         // ===============================================
         // AMBIL BARANG
@@ -535,25 +650,35 @@ async function createDeliveryDraft({
         //
         // PENTING:
         //
-        // Status masih DRAFT.
+        // Ini hanya pengecekan.
         //
-        // Jadi stock BELUM dikurangi di endpoint ini.
+        // TIDAK ADA:
         //
-        // Stock baru boleh berkurang pada proses RELEASE
-        // sesuai flow Barang Keluar / Delivery.
+        // barang.stock -= keluarQty
         //
+        // Stock tetap utuh selama DRAFT.
+        //
+        // Stock baru dikurangi pada RELEASE.
+        // ===============================================
 
-        const currentStock = Number(
-          barang.stock ?? 0
-        );
+        const currentStock =
+          Number(
+            barang.stock ?? 0
+          );
 
-        if (!Number.isFinite(currentStock)) {
+        if (
+          !Number.isFinite(
+            currentStock
+          )
+        ) {
           throw new Error(
             `Stock barang ${barang.name} tidak valid`
           );
         }
 
-        if (currentStock < keluarQty) {
+        if (
+          currentStock < keluarQty
+        ) {
           throw new Error(
             `Stock ${barang.name} tidak cukup. ` +
               `Stock tersedia: ${currentStock}, ` +
@@ -565,11 +690,14 @@ async function createDeliveryDraft({
         // HARGA
         // ===============================================
 
-        const price = Number(
-          barang.sellingPrice ?? 0
-        );
+        const price =
+          Number(
+            barang.sellingPrice ?? 0
+          );
 
-        if (!Number.isFinite(price)) {
+        if (
+          !Number.isFinite(price)
+        ) {
           throw new Error(
             `Harga jual ${barang.name} tidak valid`
           );
@@ -588,11 +716,14 @@ async function createDeliveryDraft({
 
         await tx.deliveryItem.create({
           data: {
-            deliveryId: delivery.id,
+            deliveryId:
+              delivery.id,
 
-            barangId: barang.id,
+            barangId:
+              barang.id,
 
-            qty: keluarQty,
+            qty:
+              keluarQty,
 
             price,
 
@@ -600,7 +731,8 @@ async function createDeliveryDraft({
           },
         });
 
-        totalQty += keluarQty;
+        totalQty +=
+          keluarQty;
       }
 
       // =================================================
@@ -625,6 +757,10 @@ async function createDeliveryDraft({
             items: {
               include: {
                 barang: true,
+              },
+
+              orderBy: {
+                id: "asc",
               },
             },
           },

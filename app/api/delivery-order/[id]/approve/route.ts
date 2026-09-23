@@ -1,441 +1,805 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
 import {
   DeliveryStatus,
-  HistoryType,
+  DeliveryRequestStatus,
   OutletTransferStatus,
+  HistoryType,
 } from "@prisma/client";
+
+// ============================================================
+// TYPES
+// ============================================================
+
+type SessionUser = {
+  id: number;
+  username: string;
+  fullname: string;
+  role: string;
+  active: boolean;
+  outletId: number | null;
+};
+
+// ============================================================
+// CURRENT USER
+// ============================================================
+
+async function getCurrentUser(): Promise<SessionUser | null> {
+  const cookieStore = await cookies();
+
+  const sessionCookie =
+    cookieStore.get("erp-session") ??
+    cookieStore.get("session");
+
+  if (!sessionCookie?.value) {
+    return null;
+  }
+
+  // ----------------------------------------------------------
+  // TRY DB SESSION
+  // ----------------------------------------------------------
+
+  try {
+    const sessionData = JSON.parse(
+      sessionCookie.value
+    );
+
+    const userId = Number(
+      sessionData?.user?.id ??
+        sessionData?.data?.user?.id ??
+        sessionData?.data?.id ??
+        sessionData?.id
+    );
+
+    if (
+      Number.isInteger(userId) &&
+      userId > 0
+    ) {
+      const user =
+        await prisma.user.findUnique({
+          where: {
+            id: userId,
+          },
+
+          select: {
+            id: true,
+            username: true,
+            fullname: true,
+            role: true,
+            active: true,
+            outletId: true,
+          },
+        });
+
+      if (user) {
+        return {
+          id: user.id,
+          username: user.username,
+          fullname: user.fullname,
+          role: String(user.role ?? ""),
+          active: Boolean(user.active),
+          outletId:
+            user.outletId ?? null,
+        };
+      }
+    }
+  } catch {
+    // lanjut ke fallback JSON
+  }
+
+  // ----------------------------------------------------------
+  // FALLBACK JSON SESSION
+  // ----------------------------------------------------------
+
+  try {
+    const parsed = JSON.parse(
+      sessionCookie.value
+    );
+
+    const rawUser =
+      parsed?.user ??
+      parsed?.data?.user ??
+      parsed?.data ??
+      parsed;
+
+    const userId = Number(
+      rawUser?.id
+    );
+
+    if (
+      !Number.isInteger(userId) ||
+      userId <= 0
+    ) {
+      return null;
+    }
+
+    return {
+      id: userId,
+      username:
+        String(
+          rawUser?.username ?? ""
+        ),
+      fullname:
+        String(
+          rawUser?.fullname ?? ""
+        ),
+      role:
+        String(
+          rawUser?.role ?? ""
+        ),
+      active:
+        rawUser?.active !== false,
+      outletId:
+        rawUser?.outletId != null
+          ? Number(
+              rawUser.outletId
+            )
+          : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================
+// RESPONSE HELPERS
+// ============================================================
+
+function unauthorized(
+  message = "Tidak login"
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      message,
+    },
+    {
+      status: 401,
+    }
+  );
+}
+
+function forbidden(
+  message = "Anda tidak memiliki akses"
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      message,
+    },
+    {
+      status: 403,
+    }
+  );
+}
+
+function badRequest(
+  message: string
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      message,
+    },
+    {
+      status: 400,
+    }
+  );
+}
+
+// ============================================================
+// POST
+//
+// FLOW:
+//
+// DRAFT DELIVERY
+//      ↓
+// RELEASE
+//      ↓
+// VALIDATE STOCK
+//      ↓
+// BARANG.STOCK PUSAT BERKURANG
+//      ↓
+// STOCK CARD OUT
+//      ↓
+// STOCK MUTATION OUT
+//      ↓
+// DELIVERY = RELEASED
+//      ↓
+// SURAT JALAN
+//      ↓
+// OUTLET TRANSFER = SENT
+//      ↓
+// JIKA ASAL DELIVERY REQUEST
+// DELIVERY REQUEST = COMPLETED
+//
+// IMPORTANT:
+//
+// - TIDAK menambah OutletStock.
+// - OutletStock bertambah saat outlet menerima transfer.
+// - Tidak boleh double release.
+// - Manual Delivery tanpa DeliveryRequest tetap berjalan normal.
+// - OutletTransfer diidentifikasi berdasarkan number.
+// - OutletTransfer TIDAK menggunakan deliveryId.
+// ============================================================
 
 export async function POST(
   req: NextRequest,
   {
     params,
   }: {
-    params: Promise<{ id: string }>;
+    params: Promise<{
+      id: string;
+    }>;
   }
 ) {
   try {
-    const cookieStore = await cookies();
+    // ========================================================
+    // 1. CURRENT USER
+    // ========================================================
 
-    const session =
-      cookieStore.get("erp-session") ||
-      cookieStore.get("session");
+    const user =
+      await getCurrentUser();
 
-    if (!session) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Tidak login.",
-        },
-        { status: 401 }
+    if (!user) {
+      return unauthorized();
+    }
+
+    if (user.active === false) {
+      return forbidden(
+        "User tidak aktif"
       );
     }
 
-    // =====================================================
-    // AMBIL USER DARI SESSION
-    // =====================================================
+    // ========================================================
+    // 2. ROLE
+    // ========================================================
 
-    let userId = 0;
+    const role = String(
+      user.role ?? ""
+    )
+      .trim()
+      .toUpperCase();
 
-    try {
-      const dbSession =
-        await prisma.session.findUnique({
+    const allowedRoles = [
+      "ADMIN",
+      "MANAGER",
+      "GUDANG",
+    ];
+
+    if (
+      !allowedRoles.includes(role)
+    ) {
+      return forbidden(
+        "Anda tidak memiliki akses untuk release Delivery"
+      );
+    }
+
+    // ========================================================
+    // 3. PARAMETER
+    // ========================================================
+
+    const { id } =
+      await params;
+
+    const deliveryId = Number(
+      String(id ?? "").trim()
+    );
+
+    if (
+      !Number.isInteger(
+        deliveryId
+      ) ||
+      deliveryId <= 0
+    ) {
+      return badRequest(
+        "ID Delivery tidak valid"
+      );
+    }
+
+    // ========================================================
+    // 4. LOAD DELIVERY
+    //
+    // Load di luar transaction hanya untuk mendapatkan
+    // informasi awal / response.
+    //
+    // Status final tetap dicek ulang DI DALAM transaction.
+    // ========================================================
+
+    const delivery =
+      await prisma.delivery.findUnique(
+        {
           where: {
-            token: session.value,
+            id: deliveryId,
           },
-          select: {
-            expiresAt: true,
-            user: {
+
+          include: {
+            customer: true,
+
+            outlet: {
               select: {
                 id: true,
+                code: true,
+                name: true,
+                active: true,
+              },
+            },
+
+            items: {
+              include: {
+                barang: true,
+              },
+
+              orderBy: {
+                id: "asc",
+              },
+            },
+
+            suratJalan: true,
+
+            deliveryRequest: {
+              select: {
+                id: true,
+                number: true,
+                status: true,
+                outletId: true,
               },
             },
           },
-        });
-
-      if (dbSession) {
-        if (dbSession.expiresAt <= new Date()) {
-          return NextResponse.json(
-            {
-              success: false,
-              message: "Session sudah kedaluwarsa.",
-            },
-            { status: 401 }
-          );
         }
-
-        userId = dbSession.user.id;
-      }
-    } catch {}
-
-    // =====================================================
-    // FALLBACK SESSION JSON
-    // =====================================================
-
-    if (!userId) {
-      try {
-        const parsed = JSON.parse(session.value);
-
-        userId = Number(
-          parsed?.user?.id ??
-            parsed?.id ??
-            0
-        );
-      } catch {}
-    }
-
-    // =====================================================
-    // VALIDASI USER ID
-    // =====================================================
-
-    if (
-      !Number.isInteger(userId) ||
-      userId <= 0
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Session tidak valid.",
-        },
-        { status: 401 }
       );
-    }
 
-    // =====================================================
-    // AMBIL ACTOR
-    // =====================================================
-
-    const actor =
-      await prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
-        select: {
-          id: true,
-          role: true,
-          active: true,
-        },
-      });
-
-    if (!actor?.active) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "User tidak aktif.",
-        },
-        { status: 403 }
-      );
-    }
-
-    // =====================================================
-    // VALIDASI ROLE
-    // =====================================================
-
-    if (
-      !["ADMIN", "MANAGER", "GUDANG"].includes(
-        String(actor.role).toUpperCase()
-      )
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Anda tidak memiliki akses untuk release Delivery Order.",
-        },
-        { status: 403 }
-      );
-    }
-
-    // =====================================================
-    // PARAMETER ID
-    // =====================================================
-
-    const { id } = await params;
-
-    const deliveryId = Number(id);
-
-    // =====================================================
-    // VALIDASI ID
-    // =====================================================
-
-    if (
-      !deliveryId ||
-      Number.isNaN(deliveryId)
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "ID Delivery tidak valid",
-        },
-        { status: 400 }
-      );
-    }
-
-    // =====================================================
-    // AMBIL DELIVERY
-    // =====================================================
-
-    const delivery =
-      await prisma.delivery.findUnique({
-        where: {
-          id: deliveryId,
-        },
-
-        include: {
-          customer: true,
-
-          outlet: true,
-
-          items: {
-            include: {
-              barang: true,
-            },
-
-            orderBy: {
-              id: "asc",
-            },
-          },
-
-          suratJalan: true,
-        },
-      });
-
-    // =====================================================
-    // DELIVERY TIDAK DITEMUKAN
-    // =====================================================
+    // ========================================================
+    // 5. NOT FOUND
+    // ========================================================
 
     if (!delivery) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Delivery Order tidak ditemukan",
+            "Delivery tidak ditemukan",
         },
-        { status: 404 }
+        {
+          status: 404,
+        }
       );
     }
 
-    // =====================================================
-    // HANYA DRAFT YANG BOLEH RELEASE
-    // =====================================================
+    // ========================================================
+    // 6. EARLY STATUS CHECK
+    //
+    // Hanya sebagai feedback cepat.
+    // Security final tetap dilakukan di transaction.
+    // ========================================================
 
     if (
       delivery.status !==
       DeliveryStatus.DRAFT
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            `Delivery Order ${delivery.number} sudah ${delivery.status}`,
-        },
-        { status: 400 }
+      return badRequest(
+        `Delivery tidak dapat di-release karena status saat ini ${delivery.status}`
       );
     }
 
-    // =====================================================
-    // VALIDASI ITEM
-    // =====================================================
+    // ========================================================
+    // 7. ITEMS
+    // ========================================================
 
     if (
       !delivery.items ||
       delivery.items.length === 0
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Delivery Order tidak memiliki barang",
-        },
-        { status: 400 }
+      return badRequest(
+        "Delivery tidak memiliki barang"
       );
     }
 
-    // =====================================================
-    // VALIDASI OUTLET TUJUAN
-    // =====================================================
-    //
-    // Delivery.outletId = OUTLET TUJUAN
-    //
-    // sourceOutletId TIDAK DIAMBIL DARI DELIVERY
-    // karena pengiriman ini berasal dari GUDANG PUSAT.
-    //
-    // =====================================================
+    // ========================================================
+    // 8. OUTLET
+    // ========================================================
 
     if (!delivery.outletId) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            `Delivery ${delivery.number} belum memiliki outlet tujuan.`,
-        },
-        { status: 400 }
+      return badRequest(
+        "Delivery belum memiliki outlet tujuan"
       );
     }
 
-    // =====================================================
-    // VALIDASI OUTLET
-    // =====================================================
-
-    const outlet =
-      await prisma.outlet.findUnique({
-        where: {
-          id: delivery.outletId,
-        },
-      });
-
-    if (!outlet) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            `Outlet tujuan dengan ID ${delivery.outletId} tidak ditemukan.`,
-        },
-        { status: 400 }
+    if (!delivery.outlet) {
+      return badRequest(
+        "Outlet tujuan tidak ditemukan"
       );
     }
 
-    // =====================================================
-    // TRANSACTION
-    // =====================================================
+    if (
+      delivery.outlet.active ===
+      false
+    ) {
+      return badRequest(
+        "Outlet tujuan tidak aktif"
+      );
+    }
+
+    // ========================================================
+    // 9. TRANSACTION
+    // ========================================================
 
     const result =
       await prisma.$transaction(
         async (tx) => {
-          // ===================================================
-          // 1. PROSES STOCK SETIAP ITEM
-          // ===================================================
+          // ==================================================
+          // 9A. RELOAD DELIVERY DI DALAM TRANSACTION
+          //
+          // Ini penting supaya dua request release bersamaan
+          // tidak sama-sama mengurangi stock.
+          // ==================================================
 
-          for (const item of delivery.items) {
-            // ===============================================
-            // AMBIL BARANG TERBARU
-            // ===============================================
-
-            const barang =
-              await tx.barang.findUnique({
+          const currentDelivery =
+            await tx.delivery.findUnique(
+              {
                 where: {
-                  id: item.barangId,
+                  id: deliveryId,
                 },
-              });
 
-            if (!barang) {
+                select: {
+                  id: true,
+                  number: true,
+                  status: true,
+                  outletId: true,
+                  deliveryDate: true,
+                  remarks: true,
+
+                  deliveryRequest: {
+                    select: {
+                      id: true,
+                      number: true,
+                      status: true,
+                      outletId: true,
+                    },
+                  },
+
+                  items: {
+                    select: {
+                      id: true,
+                      barangId: true,
+                      qty: true,
+                      price: true,
+                      subtotal: true,
+                      note: true,
+                      voided: true,
+
+                      barang: {
+                        select: {
+                          id: true,
+                          code: true,
+                          name: true,
+                          stock: true,
+                          purchasePrice: true,
+                          sellingPrice: true,
+                          hasExpired: true,
+                        },
+                      },
+                    },
+
+                    orderBy: {
+                      id: "asc",
+                    },
+                  },
+                },
+              }
+            );
+
+          if (!currentDelivery) {
+            throw new Error(
+              "Delivery tidak ditemukan"
+            );
+          }
+
+          // ==================================================
+          // 9B. STATUS RECHECK
+          // ==================================================
+
+          if (
+            currentDelivery.status !==
+            DeliveryStatus.DRAFT
+          ) {
+            throw new Error(
+              `Delivery sudah diproses. Status saat ini ${currentDelivery.status}`
+            );
+          }
+
+          // ==================================================
+          // 9C. OUTLET RECHECK
+          // ==================================================
+
+          if (
+            !currentDelivery.outletId
+          ) {
+            throw new Error(
+              "Delivery belum memiliki outlet tujuan"
+            );
+          }
+
+          const targetOutlet =
+            await tx.outlet.findUnique(
+              {
+                where: {
+                  id:
+                    currentDelivery.outletId,
+                },
+
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  active: true,
+                },
+              }
+            );
+
+          if (!targetOutlet) {
+            throw new Error(
+              "Outlet tujuan tidak ditemukan"
+            );
+          }
+
+          if (
+            targetOutlet.active ===
+            false
+          ) {
+            throw new Error(
+              "Outlet tujuan tidak aktif"
+            );
+          }
+
+          // ==================================================
+          // 9D. DELIVERY REQUEST SECURITY
+          //
+          // Kalau Delivery berasal dari Delivery Request,
+          // outlet Delivery harus sama dengan outlet request.
+          // ==================================================
+
+          if (
+            currentDelivery.deliveryRequest
+          ) {
+            if (
+              currentDelivery.deliveryRequest
+                .outletId !==
+              currentDelivery.outletId
+            ) {
+              throw new Error(
+                "Outlet Delivery tidak sesuai dengan Delivery Request"
+              );
+            }
+
+            if (
+              currentDelivery.deliveryRequest
+                .status !==
+              DeliveryRequestStatus.PROCESSING
+            ) {
+              throw new Error(
+                `Delivery Request ${currentDelivery.deliveryRequest.number} tidak dapat diselesaikan karena statusnya ${currentDelivery.deliveryRequest.status}`
+              );
+            }
+          }
+
+          // ==================================================
+          // 9E. ITEMS RECHECK
+          // ==================================================
+
+          if (
+            currentDelivery.items.length ===
+            0
+          ) {
+            throw new Error(
+              "Delivery tidak memiliki barang"
+            );
+          }
+
+          // ==================================================
+          // TRACKING
+          // ==================================================
+
+          const releasedItems: Array<{
+            itemId: number;
+            barangId: number;
+            barang: string;
+            qty: number;
+            stockBefore: number;
+            stockAfter: number;
+          }> = [];
+
+          let totalQty = 0;
+
+          // ==================================================
+          // 10. PROCESS ITEMS
+          // ==================================================
+
+          for (
+            const item of currentDelivery.items
+          ) {
+            // ------------------------------------------------
+            // VOID ITEM
+            // ------------------------------------------------
+
+            if (
+              item.voided === true
+            ) {
+              continue;
+            }
+
+            // ------------------------------------------------
+            // BARANG
+            // ------------------------------------------------
+
+            if (!item.barang) {
               throw new Error(
                 `Barang ID ${item.barangId} tidak ditemukan`
               );
             }
 
-            // ===============================================
+            // ------------------------------------------------
             // QTY
-            // ===============================================
+            // ------------------------------------------------
 
-            const qtyKeluar =
-              Number(item.qty);
+            const qty = Number(
+              item.qty
+            );
 
             if (
-              !Number.isFinite(qtyKeluar) ||
-              qtyKeluar <= 0
+              !Number.isFinite(qty) ||
+              qty <= 0
             ) {
               throw new Error(
-                `Qty barang ${barang.name} tidak valid`
+                `Qty ${item.barang.name} tidak valid`
               );
             }
 
-            // ===============================================
-            // STOCK SEBELUM
-            // ===============================================
+            totalQty += qty;
 
-            const stockSebelum =
-              Number(barang.stock);
+            // ------------------------------------------------
+            // RELOAD BARANG
+            //
+            // Ambil stock terbaru di transaction.
+            // ------------------------------------------------
 
-            // ===============================================
-            // CEK STOCK
-            // ===============================================
-
-            if (
-              stockSebelum < qtyKeluar
-            ) {
-              throw new Error(
-                `Stock ${barang.name} tidak cukup. ` +
-                  `Stock tersedia: ${stockSebelum}, ` +
-                  `kebutuhan: ${qtyKeluar}`
-              );
-            }
-
-            // ===============================================
-            // STOCK SESUDAH
-            // ===============================================
-
-            const stockSesudah =
-              stockSebelum - qtyKeluar;
-
-            // ===============================================
-            // FEFO
-            // ===============================================
-
-            if (barang.hasExpired) {
-              const batches =
-                await tx.batchStock.findMany({
+            const currentBarang =
+              await tx.barang.findUnique(
+                {
                   where: {
-                    barangId: barang.id,
-
-                    qty: {
-                      gt: 0,
-                    },
+                    id: item.barangId,
                   },
 
-                  orderBy: [
-                    {
-                      expiredDate: "asc",
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                    stock: true,
+                    purchasePrice: true,
+                    sellingPrice: true,
+                    hasExpired: true,
+                  },
+                }
+              );
+
+            if (!currentBarang) {
+              throw new Error(
+                `Barang ${item.barangId} tidak ditemukan`
+              );
+            }
+
+            // ------------------------------------------------
+            // STOCK BEFORE
+            // ------------------------------------------------
+
+            const stockBefore =
+              Number(
+                currentBarang.stock ?? 0
+              );
+
+            if (
+              !Number.isFinite(
+                stockBefore
+              ) ||
+              stockBefore < 0
+            ) {
+              throw new Error(
+                `Stock ${currentBarang.name} tidak valid`
+              );
+            }
+
+            // ------------------------------------------------
+            // STOCK CHECK
+            // ------------------------------------------------
+
+            if (
+              stockBefore < qty
+            ) {
+              throw new Error(
+                `Stock ${currentBarang.name} tidak cukup. Stock tersedia ${stockBefore}, kebutuhan ${qty}`
+              );
+            }
+
+            // ------------------------------------------------
+            // STOCK AFTER
+            // ------------------------------------------------
+
+            const stockAfter =
+              stockBefore - qty;
+
+            // ------------------------------------------------
+            // FEFO
+            //
+            // Jika barang menggunakan expiry/batch,
+            // kurangi batch berdasarkan expiredDate terdekat.
+            // ------------------------------------------------
+
+            if (
+              currentBarang.hasExpired ===
+              true
+            ) {
+              const batches =
+                await tx.batchStock.findMany(
+                  {
+                    where: {
+                      barangId:
+                        item.barangId,
+
+                      qty: {
+                        gt: 0,
+                      },
                     },
 
-                    {
-                      id: "asc",
-                    },
-                  ],
-                });
-
-              // =============================================
-              // TIDAK ADA BATCH
-              // =============================================
-
-              if (batches.length === 0) {
-                throw new Error(
-                  `Batch ${barang.name} tidak ditemukan`
-                );
-              }
-
-              // =============================================
-              // TOTAL STOCK BATCH
-              // =============================================
-
-              const totalBatchStock =
-                batches.reduce(
-                  (total, batch) =>
-                    total +
-                    Number(batch.qty),
-                  0
+                    orderBy: [
+                      {
+                        expiredDate:
+                          "asc",
+                      },
+                      {
+                        id: "asc",
+                      },
+                    ],
+                  }
                 );
 
               if (
-                totalBatchStock <
-                qtyKeluar
+                !batches ||
+                batches.length ===
+                  0
               ) {
                 throw new Error(
-                  `Stock batch ${barang.name} tidak cukup. ` +
-                    `Tersedia ${totalBatchStock}, ` +
-                    `kebutuhan ${qtyKeluar}`
+                  `Batch stock ${currentBarang.name} tidak ditemukan`
                 );
               }
 
-              // =============================================
-              // FEFO
-              // =============================================
-
               let remainingQty =
-                qtyKeluar;
+                qty;
 
-              for (const batch of batches) {
+              let totalBatchQty =
+                0;
+
+              for (
+                const batch of batches
+              ) {
+                totalBatchQty +=
+                  Number(
+                    batch.qty ?? 0
+                  );
+              }
+
+              if (
+                totalBatchQty <
+                qty
+              ) {
+                throw new Error(
+                  `Batch stock ${currentBarang.name} tidak cukup untuk FEFO`
+                );
+              }
+
+              for (
+                const batch of batches
+              ) {
                 if (
                   remainingQty <= 0
                 ) {
@@ -443,16 +807,24 @@ export async function POST(
                 }
 
                 const batchQty =
-                  Number(batch.qty);
+                  Number(
+                    batch.qty ?? 0
+                  );
 
-                const usedQty =
+                if (
+                  !Number.isFinite(
+                    batchQty
+                  ) ||
+                  batchQty <= 0
+                ) {
+                  continue;
+                }
+
+                const takeQty =
                   Math.min(
                     batchQty,
                     remainingQty
                   );
-
-                const newBatchQty =
-                  batchQty - usedQty;
 
                 await tx.batchStock.update(
                   {
@@ -461,339 +833,531 @@ export async function POST(
                     },
 
                     data: {
-                      qty: newBatchQty,
+                      qty:
+                        batchQty -
+                        takeQty,
                     },
                   }
                 );
 
-                remainingQty -= usedQty;
+                remainingQty -=
+                  takeQty;
               }
 
-              // =============================================
-              // FEFO GAGAL
-              // =============================================
-
               if (
-                remainingQty > 0
+                remainingQty >
+                0.000001
               ) {
                 throw new Error(
-                  `Gagal menjalankan FEFO untuk ${barang.name}`
+                  `Gagal mengurangi batch FEFO ${currentBarang.name}`
                 );
               }
             }
 
-            // ===============================================
-            // UPDATE BARANG STOCK
-            // ===============================================
+            // ------------------------------------------------
+            // UPDATE BARANG STOCK PUSAT
+            // ------------------------------------------------
 
             const updatedBarang =
-              await tx.barang.update({
+              await tx.barang.update(
+                {
+                  where: {
+                    id:
+                      item.barangId,
+                  },
+
+                  data: {
+                    stock:
+                      stockAfter,
+                  },
+                }
+              );
+
+            // ------------------------------------------------
+            // INVENTORY
+            // ------------------------------------------------
+
+            await tx.inventory.upsert(
+              {
                 where: {
-                  id: barang.id,
+                  barangId:
+                    item.barangId,
                 },
 
-                data: {
-                  stock: stockSesudah,
+                create: {
+                  barangId:
+                    item.barangId,
+
+                  stock:
+                    stockAfter,
+
+                  availableStock:
+                    stockAfter,
+
+                  minimumStock:
+                    0,
                 },
-              });
 
-            // ===============================================
-            // UPDATE INVENTORY
-            // ===============================================
+                update: {
+                  stock:
+                    stockAfter,
 
-            await tx.inventory.upsert({
-              where: {
-                barangId: barang.id,
-              },
+                  availableStock:
+                    stockAfter,
+                },
+              }
+            );
 
-              update: {
-                stock: stockSesudah,
-                availableStock:
-                  stockSesudah,
-              },
-
-              create: {
-                barangId: barang.id,
-                stock: stockSesudah,
-                availableStock:
-                  stockSesudah,
-                minimumStock:
-                  barang.minimumStock,
-              },
-            });
-
-            // ===============================================
-            // HARGA
-            // ===============================================
+            // ------------------------------------------------
+            // UNIT PRICE
+            // ------------------------------------------------
 
             const unitPrice =
-              Number(item.price) ||
               Number(
-                barang.sellingPrice
-              ) ||
-              0;
+                item.price ??
+                  currentBarang.purchasePrice ??
+                  currentBarang.sellingPrice ??
+                  0
+              );
+
+            const safeUnitPrice =
+              Number.isFinite(
+                unitPrice
+              ) &&
+              unitPrice >= 0
+                ? unitPrice
+                : 0;
 
             const totalValue =
-              unitPrice * qtyKeluar;
+              qty *
+              safeUnitPrice;
 
-            // ===============================================
+            // ------------------------------------------------
             // STOCK CARD
-            // ===============================================
+            // ------------------------------------------------
 
-            await tx.stockCard.create({
-              data: {
-                barangId: barang.id,
+            await tx.stockCard.create(
+              {
+                data: {
+                  barangId:
+                    item.barangId,
 
-                trxDate:
-                  delivery.deliveryDate,
+                  trxDate:
+                    currentDelivery.deliveryDate,
 
-                trxType: "DELIVERY",
+                  trxType:
+                    "DELIVERY",
 
-                trxNumber:
-                  delivery.number,
+                  trxNumber:
+                    currentDelivery.number,
 
-                referenceId:
-                  delivery.id,
+                  referenceId:
+                    currentDelivery.id,
 
-                warehouse: "MAIN",
+                  warehouse:
+                    "MAIN",
 
-                qtyIn: 0,
+                  qtyIn: 0,
 
-                qtyOut: qtyKeluar,
+                  qtyOut: qty,
 
-                balance:
-                  updatedBarang.stock,
+                  balance:
+                    updatedBarang.stock,
 
-                unitPrice,
+                  unitPrice:
+                    safeUnitPrice,
 
-                totalValue,
+                  totalValue,
 
-                note:
-                  delivery.remarks ||
-                  "Barang keluar Delivery Order",
-              },
-            });
+                  note:
+                    currentDelivery.remarks ??
+                    `Release Delivery ${currentDelivery.number}`,
+                },
+              }
+            );
 
-            // ===============================================
+            // ------------------------------------------------
             // STOCK MUTATION
-            // ===============================================
+            // ------------------------------------------------
 
-            await tx.stockMutation.create({
-              data: {
-                barangId: barang.id,
+            await tx.stockMutation.create(
+              {
+                data: {
+                  barangId:
+                    item.barangId,
 
-                type: "OUT",
+                  type:
+                    "OUT",
 
-                qty: qtyKeluar,
+                  qty,
 
-                stockBefore:
-                  stockSebelum,
+                  stockBefore,
 
-                stockAfter:
-                  stockSesudah,
+                  stockAfter,
 
-                reference:
-                  delivery.number,
+                  reference:
+                    currentDelivery.number,
 
-                description:
-                  "Release Delivery Order",
-              },
+                  description:
+                    `Release Delivery Order ${currentDelivery.number}`,
+                },
+              }
+            );
+
+            // ------------------------------------------------
+            // TRACKING
+            // ------------------------------------------------
+
+            releasedItems.push({
+              itemId:
+                item.id,
+
+              barangId:
+                item.barangId,
+
+              barang:
+                currentBarang.name,
+
+              qty,
+
+              stockBefore,
+
+              stockAfter,
             });
           }
 
-          // ===================================================
-          // 2. RELEASE DELIVERY
-          // ===================================================
+          // ==================================================
+          // 11. TOTAL QTY VALIDATION
+          // ==================================================
+
+          if (
+            totalQty <= 0
+          ) {
+            throw new Error(
+              "Tidak ada barang aktif yang dapat di-release"
+            );
+          }
+
+          // ==================================================
+          // 12. UPDATE DELIVERY RELEASED
+          // ==================================================
 
           const releasedDelivery =
-            await tx.delivery.update({
-              where: {
-                id: delivery.id,
-              },
+            await tx.delivery.update(
+              {
+                where: {
+                  id:
+                    currentDelivery.id,
+                },
 
-              data: {
-                status:
-                  DeliveryStatus.RELEASED,
-              },
-            });
+                data: {
+                  status:
+                    DeliveryStatus.RELEASED,
 
-          // ===================================================
-          // 3. SURAT JALAN
-          // ===================================================
+                  totalQty,
+                },
+
+                select: {
+                  id: true,
+                  number: true,
+                  status: true,
+                  outletId: true,
+                  deliveryDate: true,
+                  totalQty: true,
+                },
+              }
+            );
+
+          // ==================================================
+          // 13. SURAT JALAN
+          //
+          // Gunakan nomor deterministic berdasarkan DO.
+          // ==================================================
+
+          const suratJalanNumber =
+            `SJ-${currentDelivery.number}`;
 
           let suratJalan =
-            await tx.suratJalan.findUnique({
-              where: {
-                deliveryId:
-                  delivery.id,
-              },
-            });
+            await tx.suratJalan.findUnique(
+              {
+                where: {
+                  deliveryId:
+                    currentDelivery.id,
+                },
+              }
+            );
 
           if (!suratJalan) {
-            const sjNumber =
-              `SJ-${delivery.number}`;
-
             suratJalan =
-              await tx.suratJalan.create({
-                data: {
-                  number: sjNumber,
+              await tx.suratJalan.create(
+                {
+                  data: {
+                    deliveryId:
+                      currentDelivery.id,
 
-                  deliveryId:
-                    delivery.id,
-                },
-              });
+                    number:
+                      suratJalanNumber,
+                  },
+                }
+              );
           }
 
-          // ===================================================
-          // 4. OUTLET TRANSFER
-          // ===================================================
+          // ==================================================
+          // 14. OUTLET TRANSFER
           //
-          // sourceOutletId = NULL
+          // CENTRAL -> OUTLET
           //
-          // karena sumber pengiriman adalah
-          // GUDANG PUSAT.
+          // IMPORTANT:
           //
-          // outletId = outlet tujuan.
+          // OutletTransfer TIDAK memiliki deliveryId.
+          // Transfer diidentifikasi dengan nomor:
           //
-          // OutletStock TIDAK DIUBAH DI SINI.
+          // TRF-${currentDelivery.number}
           //
-          // OutletStock baru bertambah ketika outlet
-          // melakukan receiving.
-          //
-          // ===================================================
+          // OutletStock BELUM bertambah di sini.
+          // ==================================================
+
+          const transferNumber =
+            `TRF-${currentDelivery.number}`;
 
           let outletTransfer =
             await tx.outletTransfer.findUnique(
               {
                 where: {
                   number:
-                    `TRF-${delivery.number}`,
+                    transferNumber,
                 },
 
                 include: {
-                  outlet: true,
-
-                  items: {
-                    include: {
-                      barang: true,
-                    },
-                  },
+                  items: true,
                 },
               }
             );
 
-          // ===================================================
+          // --------------------------------------------------
           // CREATE TRANSFER
-          // ===================================================
+          // --------------------------------------------------
 
           if (!outletTransfer) {
-            const transferNumber =
-              `TRF-${delivery.number}`;
-
             outletTransfer =
-              await tx.outletTransfer.create({
-                data: {
-                  number:
-                    transferNumber,
+              await tx.outletTransfer.create(
+                {
+                  data: {
+                    number:
+                      transferNumber,
 
-                  // =========================================
-                  // GUDANG PUSAT
-                  // =========================================
+                    sourceOutletId:
+                      null,
 
-                  sourceOutletId:
-                    null,
+                    outletId:
+                      currentDelivery.outletId,
 
-                  // =========================================
-                  // OUTLET TUJUAN
-                  // =========================================
+                    transferDate:
+                      currentDelivery.deliveryDate,
 
-                  outletId:
-                    outlet.id,
+                    status:
+                      OutletTransferStatus.SENT,
 
-                  transferDate:
-                    delivery.deliveryDate,
+                    remarks:
+                      `Pengiriman dari gudang pusat - ${currentDelivery.number}`,
 
-                  status:
-                    OutletTransferStatus.SENT,
+                    items: {
+                      create:
+                        currentDelivery.items
+                          .filter(
+                            (item) =>
+                              item.voided !==
+                              true
+                          )
+                          .map(
+                            (item) => ({
+                              barangId:
+                                item.barangId,
 
-                  remarks:
-                    `Pengiriman dari gudang pusat - ${delivery.number}`,
+                              qty:
+                                Number(
+                                  item.qty
+                                ),
 
-                  items: {
-                    create:
-                      delivery.items.map(
-                        (item) => ({
-                          barangId:
-                            item.barangId,
-
-                          qty:
-                            Number(item.qty),
-
-                          receivedQty: 0,
-                        })
-                      ),
-                  },
-                },
-
-                include: {
-                  outlet: true,
-
-                  items: {
-                    include: {
-                      barang: true,
+                              receivedQty:
+                                0,
+                            })
+                          ),
                     },
                   },
-                },
-              });
+
+                  include: {
+                    items: true,
+                  },
+                }
+              );
+          } else {
+            // ------------------------------------------------
+            // TRANSFER SUDAH ADA
+            //
+            // Jangan membuat stock outlet di sini.
+            //
+            // Jika transfer masih DRAFT, ubah menjadi SENT.
+            // Jika sudah SENT / RECEIVED / status lainnya,
+            // jangan menimpa statusnya.
+            // ------------------------------------------------
+
+            if (
+              outletTransfer.status ===
+              OutletTransferStatus.DRAFT
+            ) {
+              outletTransfer =
+                await tx.outletTransfer.update(
+                  {
+                    where: {
+                      id:
+                        outletTransfer.id,
+                    },
+
+                    data: {
+                      status:
+                        OutletTransferStatus.SENT,
+                    },
+
+                    include: {
+                      items: true,
+                    },
+                  }
+                );
+            }
           }
 
-          // ===================================================
-          // 5. HISTORY
-          // ===================================================
+          // ==================================================
+          // 15. DELIVERY REQUEST -> COMPLETED
+          //
+          // HANYA jika Delivery ini berasal dari
+          // Delivery Request.
+          //
+          // Manual Delivery tidak tersentuh.
+          // ==================================================
 
-          await tx.history.create({
-            data: {
-              transactionType:
-                HistoryType.DELIVERY,
+          let completedDeliveryRequest:
+            | {
+                id: number;
+                number: string;
+                status: DeliveryRequestStatus;
+              }
+            | null = null;
 
-              userId,
+          if (
+            currentDelivery.deliveryRequest
+          ) {
+            const updatedRequest =
+              await tx.deliveryRequest.update(
+                {
+                  where: {
+                    id:
+                      currentDelivery
+                        .deliveryRequest
+                        .id,
+                  },
 
-              referenceNumber:
-                delivery.number,
+                  data: {
+                    status:
+                      DeliveryRequestStatus.COMPLETED,
+                  },
 
-              description:
-                `Release Delivery Order ${delivery.number} ` +
-                `dan kirim dari gudang pusat ke outlet ${outlet.name}`,
-            },
-          });
+                  select: {
+                    id: true,
+                    number: true,
+                    status: true,
+                  },
+                }
+              );
 
-          // ===================================================
-          // RETURN
-          // ===================================================
+            completedDeliveryRequest =
+              updatedRequest;
+          }
+
+          // ==================================================
+          // 16. HISTORY
+          // ==================================================
+
+          await tx.history.create(
+            {
+              data: {
+                transactionType:
+                  HistoryType.DELIVERY,
+
+                userId:
+                  user.id,
+
+                referenceNumber:
+                  currentDelivery.number,
+
+                description:
+                  currentDelivery
+                    .deliveryRequest
+                    ? `Release Delivery ${currentDelivery.number} dari Delivery Request ${currentDelivery.deliveryRequest.number}. Stock pusat berkurang dan transfer dikirim ke outlet ${targetOutlet.name}.`
+                    : `Release Delivery ${currentDelivery.number}. Stock pusat berkurang dan transfer dikirim ke outlet ${targetOutlet.name}.`,
+              },
+            }
+          );
+
+          // ==================================================
+          // 17. RESULT
+          // ==================================================
 
           return {
             delivery:
               releasedDelivery,
 
-            suratJalan,
+            outlet: {
+              id:
+                targetOutlet.id,
 
-            outletTransfer,
+              code:
+                targetOutlet.code,
 
-            outlet,
+              name:
+                targetOutlet.name,
+            },
+
+            suratJalan: {
+              id:
+                suratJalan.id,
+
+              number:
+                suratJalan.number,
+            },
+
+            outletTransfer: {
+              id:
+                outletTransfer.id,
+
+              number:
+                outletTransfer.number,
+
+              status:
+                outletTransfer.status,
+            },
+
+            deliveryRequest:
+              completedDeliveryRequest,
+
+            totalQty,
+
+            releasedItems,
           };
         }
       );
 
-    // =====================================================
-    // SUCCESS RESPONSE
-    // =====================================================
+    // ========================================================
+    // 18. SUCCESS RESPONSE
+    // ========================================================
 
     return NextResponse.json({
       success: true,
 
       message:
-        `Delivery Order ${delivery.number} berhasil di-Release ` +
-        `dan dikirim dari gudang pusat ke ${result.outlet.name}`,
+        result.deliveryRequest
+          ? `Delivery ${result.delivery.number} berhasil di-release dan Delivery Request ${result.deliveryRequest.number} selesai`
+          : `Delivery ${result.delivery.number} berhasil di-release`,
 
       data: {
         deliveryId:
@@ -802,34 +1366,83 @@ export async function POST(
         deliveryNumber:
           result.delivery.number,
 
+        deliveryStatus:
+          result.delivery.status,
+
+        totalQty:
+          result.totalQty,
+
+        outlet:
+          result.outlet,
+
         suratJalan:
           result.suratJalan,
 
         outletTransfer:
           result.outletTransfer,
+
+        deliveryRequest:
+          result.deliveryRequest,
+
+        releasedItems:
+          result.releasedItems,
       },
     });
   } catch (error: any) {
-    // =====================================================
-    // ERROR
-    // =====================================================
+    // ========================================================
+    // ERROR LOG
+    // ========================================================
 
     console.error(
-      "APPROVE DELIVERY ERROR:",
+      "RELEASE DELIVERY ERROR:",
       error
     );
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Gagal release Delivery";
+
+    // ========================================================
+    // BUSINESS ERROR
+    // ========================================================
+
+    const businessPatterns = [
+      "Delivery tidak ditemukan",
+      "Delivery sudah diproses",
+      "Delivery tidak dapat",
+      "Delivery tidak memiliki",
+      "Delivery belum",
+      "Outlet tujuan",
+      "Outlet Delivery",
+      "Delivery Request",
+      "Stock ",
+      "Barang ",
+      "Qty ",
+      "Batch ",
+      "Gagal mengurangi batch",
+      "Tidak ada barang aktif",
+      "User",
+    ];
+
+    const isBusinessError =
+      businessPatterns.some(
+        (pattern) =>
+          message.startsWith(
+            pattern
+          )
+      );
 
     return NextResponse.json(
       {
         success: false,
-
-        message:
-          error?.message ||
-          "Gagal melakukan release Delivery Order",
+        message,
       },
-
       {
-        status: 500,
+        status:
+          isBusinessError
+            ? 400
+            : 500,
       }
     );
   }

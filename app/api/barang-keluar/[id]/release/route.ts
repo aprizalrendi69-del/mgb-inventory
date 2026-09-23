@@ -53,37 +53,26 @@ export async function POST(
         });
 
         if (!delivery) {
-          throw new Error(
-            "Delivery tidak ditemukan"
-          );
+          throw new Error("Delivery tidak ditemukan");
         }
 
         // =====================================================
         // HANYA DRAFT YANG BOLEH RELEASE
         // =====================================================
 
-        if (
-          delivery.status !==
-          DeliveryStatus.DRAFT
-        ) {
+        if (delivery.status !== DeliveryStatus.DRAFT) {
           throw new Error(
             "Delivery sudah pernah di-release"
           );
         }
 
-        if (
-          !delivery.outletId ||
-          !delivery.outlet
-        ) {
+        if (!delivery.outletId || !delivery.outlet) {
           throw new Error(
             "Delivery belum memiliki outlet tujuan"
           );
         }
 
-        if (
-          !delivery.items ||
-          delivery.items.length === 0
-        ) {
+        if (!delivery.items || delivery.items.length === 0) {
           throw new Error(
             "Delivery tidak memiliki item"
           );
@@ -97,24 +86,38 @@ export async function POST(
         //
         // PENTING:
         //
-        // Jangan gunakan new Date() sebagai tanggal transaksi.
+        // delivery.deliveryDate adalah tanggal transaksi
+        // yang sudah ditentukan sejak Delivery Request / DO.
         //
-        // Jika user membuat DO tanggal:
+        // JANGAN menggunakan:
         //
+        //     new Date()
+        //
+        // sebagai tanggal transaksi RELEASE.
+        //
+        // Contoh:
+        //
+        // Admin Outlet memilih:
         //     25 Agustus 2026
         //
-        // kemudian release:
+        // Delivery dibuat:
+        //     deliveryDate = 25 Agustus 2026
         //
+        // Release dilakukan:
         //     26 Agustus 2026
         //
-        // delivery.deliveryDate tetap:
-        //
+        // Maka tanggal transaksi tetap:
         //     25 Agustus 2026
         //
         // =====================================================
 
-        const transactionDate =
-          delivery.deliveryDate;
+        const transactionDate = delivery.deliveryDate;
+
+        if (!transactionDate) {
+          throw new Error(
+            `Delivery ${delivery.number} belum memiliki tanggal transaksi`
+          );
+        }
 
         // =====================================================
         // CEK SEMUA BARANG TERLEBIH DAHULU
@@ -123,21 +126,17 @@ export async function POST(
         for (const item of delivery.items) {
           const qty = Number(item.qty);
 
-          if (
-            !Number.isInteger(qty) ||
-            qty <= 0
-          ) {
+          if (!Number.isInteger(qty) || qty <= 0) {
             throw new Error(
               `Qty ${item.barang.name} tidak valid`
             );
           }
 
-          const barang =
-            await tx.barang.findUnique({
-              where: {
-                id: item.barangId,
-              },
-            });
+          const barang = await tx.barang.findUnique({
+            where: {
+              id: item.barangId,
+            },
+          });
 
           if (!barang) {
             throw new Error(
@@ -159,9 +158,7 @@ export async function POST(
           // CEK STOCK
           // ===================================================
 
-          if (
-            Number(barang.stock) < qty
-          ) {
+          if (Number(barang.stock) < qty) {
             throw new Error(
               `Stock ${barang.name} tidak cukup. ` +
                 `Tersedia ${barang.stock}, diperlukan ${qty}`
@@ -173,27 +170,23 @@ export async function POST(
           // ===================================================
 
           if (barang.hasExpired) {
-            const batches =
-              await tx.batchStock.findMany({
-                where: {
-                  barangId: barang.id,
+            const batches = await tx.batchStock.findMany({
+              where: {
+                barangId: barang.id,
 
-                  qty: {
-                    gt: 0,
-                  },
+                qty: {
+                  gt: 0,
                 },
-              });
+              },
+            });
 
-            const totalBatchStock =
-              batches.reduce(
-                (total, batch) =>
-                  total + Number(batch.qty),
-                0
-              );
+            const totalBatchStock = batches.reduce(
+              (total, batch) =>
+                total + Number(batch.qty),
+              0
+            );
 
-            if (
-              totalBatchStock < qty
-            ) {
+            if (totalBatchStock < qty) {
               throw new Error(
                 `Stock batch ${barang.name} tidak cukup. ` +
                   `Tersedia ${totalBatchStock}, diperlukan ${qty}`
@@ -207,12 +200,11 @@ export async function POST(
         // =====================================================
 
         for (const item of delivery.items) {
-          const barang =
-            await tx.barang.findUnique({
-              where: {
-                id: item.barangId,
-              },
-            });
+          const barang = await tx.barang.findUnique({
+            where: {
+              id: item.barangId,
+            },
+          });
 
           if (!barang) {
             throw new Error(
@@ -222,33 +214,31 @@ export async function POST(
 
           const qty = Number(item.qty);
 
-          const stockBefore =
-            Number(barang.stock);
+          const stockBefore = Number(barang.stock);
 
           // ===================================================
           // FEFO
           // ===================================================
 
           if (barang.hasExpired) {
-            const batches =
-              await tx.batchStock.findMany({
-                where: {
-                  barangId: barang.id,
+            const batches = await tx.batchStock.findMany({
+              where: {
+                barangId: barang.id,
 
-                  qty: {
-                    gt: 0,
-                  },
+                qty: {
+                  gt: 0,
                 },
+              },
 
-                orderBy: [
-                  {
-                    expiredDate: "asc",
-                  },
-                  {
-                    id: "asc",
-                  },
-                ],
-              });
+              orderBy: [
+                {
+                  expiredDate: "asc",
+                },
+                {
+                  id: "asc",
+                },
+              ],
+            });
 
             let remainingQty = qty;
 
@@ -257,14 +247,12 @@ export async function POST(
                 break;
               }
 
-              const batchQty =
-                Number(batch.qty);
+              const batchQty = Number(batch.qty);
 
-              const usedQty =
-                Math.min(
-                  batchQty,
-                  remainingQty
-                );
+              const usedQty = Math.min(
+                batchQty,
+                remainingQty
+              );
 
               await tx.batchStock.update({
                 where: {
@@ -272,8 +260,7 @@ export async function POST(
                 },
 
                 data: {
-                  qty:
-                    batchQty - usedQty,
+                  qty: batchQty - usedQty,
                 },
               });
 
@@ -291,18 +278,17 @@ export async function POST(
           // KURANGI STOCK BARANG PUSAT
           // ===================================================
 
-          const updatedBarang =
-            await tx.barang.update({
-              where: {
-                id: barang.id,
-              },
+          const updatedBarang = await tx.barang.update({
+            where: {
+              id: barang.id,
+            },
 
-              data: {
-                stock: {
-                  decrement: qty,
-                },
+            data: {
+              stock: {
+                decrement: qty,
               },
-            });
+            },
+          });
 
           // ===================================================
           // INVENTORY GUDANG PUSAT
@@ -337,16 +323,13 @@ export async function POST(
           // STOCK CARD PUSAT
           // ===================================================
           //
-          // SEBELUM:
-          // trxDate otomatis = waktu release.
+          // Tanggal transaksi mengikuti Delivery.
           //
-          // SEKARANG:
-          // trxDate = tanggal DO yang dipilih user.
+          // BUKAN tanggal saat tombol RELEASE ditekan.
           //
           // ===================================================
 
-          const price =
-            Number(item.price) || 0;
+          const price = Number(item.price) || 0;
 
           await tx.stockCard.create({
             data: {
@@ -356,11 +339,9 @@ export async function POST(
 
               trxType: "DELIVERY",
 
-              trxNumber:
-                delivery.number,
+              trxNumber: delivery.number,
 
-              referenceId:
-                delivery.id,
+              referenceId: delivery.id,
 
               warehouse: "MAIN",
 
@@ -368,15 +349,11 @@ export async function POST(
 
               qtyOut: qty,
 
-              balance:
-                Number(
-                  updatedBarang.stock
-                ),
+              balance: Number(updatedBarang.stock),
 
               unitPrice: price,
 
-              totalValue:
-                price * qty,
+              totalValue: price * qty,
 
               note:
                 delivery.remarks ||
@@ -398,13 +375,9 @@ export async function POST(
 
               stockBefore,
 
-              stockAfter:
-                Number(
-                  updatedBarang.stock
-                ),
+              stockAfter: Number(updatedBarang.stock),
 
-              reference:
-                delivery.number,
+              reference: delivery.number,
 
               description:
                 `Release Delivery ke outlet ${outlet.name}`,
@@ -423,8 +396,7 @@ export async function POST(
             },
 
             data: {
-              status:
-                DeliveryStatus.RELEASED,
+              status: DeliveryStatus.RELEASED,
             },
           });
 
@@ -443,11 +415,9 @@ export async function POST(
           suratJalan =
             await tx.suratJalan.create({
               data: {
-                number:
-                  `SJ-${delivery.number}`,
+                number: `SJ-${delivery.number}`,
 
-                deliveryId:
-                  delivery.id,
+                deliveryId: delivery.id,
               },
             });
         }
@@ -456,17 +426,25 @@ export async function POST(
         // OUTLET TRANSFER
         // =====================================================
         //
-        // transferDate sekarang mengikuti
+        // Transfer dibuat saat RELEASE.
+        //
+        // Tetapi tanggal transaksi TETAP menggunakan
         // tanggal Delivery.
         //
-        // Jadi bukan tanggal release.
+        // Jadi:
+        //
+        // delivery.deliveryDate
+        //       ↓
+        // outletTransfer.transferDate
+        //
+        // BUKAN new Date().
+        //
         // =====================================================
 
         let outletTransfer =
           await tx.outletTransfer.findUnique({
             where: {
-              number:
-                `TRF-${delivery.number}`,
+              number: `TRF-${delivery.number}`,
             },
           });
 
@@ -474,36 +452,28 @@ export async function POST(
           outletTransfer =
             await tx.outletTransfer.create({
               data: {
-                number:
-                  `TRF-${delivery.number}`,
+                number: `TRF-${delivery.number}`,
 
                 outletId: outlet.id,
 
-                transferDate:
-                  transactionDate,
+                transferDate: transactionDate,
 
-                status:
-                  OutletTransferStatus.SENT,
+                status: OutletTransferStatus.SENT,
 
                 remarks:
                   delivery.remarks ||
                   `Transfer barang dari gudang ke ${outlet.name}`,
 
                 items: {
-                  create:
-                    delivery.items.map(
-                      (item) => ({
-                        barangId:
-                          item.barangId,
+                  create: delivery.items.map(
+                    (item) => ({
+                      barangId: item.barangId,
 
-                        qty:
-                          Number(
-                            item.qty
-                          ),
+                      qty: Number(item.qty),
 
-                        receivedQty: 0,
-                      })
-                    ),
+                      receivedQty: 0,
+                    })
+                  ),
                 },
               },
 
@@ -520,20 +490,21 @@ export async function POST(
 
         await tx.history.create({
           data: {
-            transactionType:
-              HistoryType.DELIVERY,
+            transactionType: HistoryType.DELIVERY,
 
-            referenceNumber:
-              delivery.number,
+            referenceNumber: delivery.number,
 
             description:
               `Release Delivery ${delivery.number} → Outlet ${outlet.name}`,
           },
         });
 
+        // =====================================================
+        // RETURN
+        // =====================================================
+
         return {
-          delivery:
-            updatedDelivery,
+          delivery: updatedDelivery,
 
           suratJalan,
 

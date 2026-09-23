@@ -18,10 +18,11 @@ type CurrentUser = {
   role: string;
   active: boolean;
   outletId: number | null;
+  customerId: number | null;
 };
 
 // =====================================================
-// GET CURRENT SESSION USER
+// CURRENT SESSION USER
 // =====================================================
 
 async function getCurrentUser(): Promise<CurrentUser | null> {
@@ -53,7 +54,6 @@ async function getCurrentUser(): Promise<CurrentUser | null> {
     where: {
       id: Number(sessionData.id),
     },
-
     select: {
       id: true,
       username: true,
@@ -61,6 +61,7 @@ async function getCurrentUser(): Promise<CurrentUser | null> {
       role: true,
       active: true,
       outletId: true,
+      customerId: true,
     },
   });
 
@@ -79,6 +80,7 @@ const userSelect = {
   role: true,
   active: true,
   outletId: true,
+  customerId: true,
 
   outlet: {
     select: {
@@ -86,107 +88,332 @@ const userSelect = {
       name: true,
     },
   },
+
+  customer: {
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      address: true,
+      city: true,
+      phone: true,
+      email: true,
+      contactPerson: true,
+    },
+  },
 } as const;
 
 // =====================================================
 // ROLE HELPERS
 // =====================================================
-//
-// OUTLET_ADMIN dan KASIR wajib memiliki outlet.
-//
-// Role pusat seperti ADMIN, MANAGER, PURCHASING,
-// GUDANG tidak membutuhkan outlet.
-//
 
 function isOutletRole(role: string) {
   return role === "OUTLET_ADMIN" || role === "KASIR";
 }
 
+function requiresCustomer(role: string) {
+  return role === "OUTLET_ADMIN";
+}
+
 // =====================================================
 // PHOTO HELPER
-// =====================================================
-//
-// Normalisasi photo:
-//
-// undefined
-// -> tidak mengubah photo lama
-//
-// null
-// -> hapus photo
-//
-// ""
-// -> hapus photo
-//
-// "   "
-// -> hapus photo
-//
-// "data:image/..."
-// -> simpan photo
-//
 // =====================================================
 
 function normalizePhoto(
   photo: unknown
 ): string | null | undefined {
-  // Tidak ada field photo
   if (photo === undefined) {
     return undefined;
   }
 
-  // Explicit null = hapus foto
   if (photo === null) {
     return null;
   }
 
-  // String
   if (typeof photo === "string") {
     const trimmed = photo.trim();
 
     return trimmed ? trimmed : null;
   }
 
-  // Tipe lain tidak valid untuk foto
   return null;
+}
+
+// =====================================================
+// PARSE OPTIONAL INTEGER
+// =====================================================
+
+function parseOptionalPositiveInt(
+  value: unknown
+): number | null {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  const parsed = Number(value);
+
+  if (
+    !Number.isInteger(parsed) ||
+    parsed <= 0
+  ) {
+    return null;
+  }
+
+  return parsed;
+}
+
+// =====================================================
+// CUSTOMER VALIDATION
+// =====================================================
+
+async function validateCustomer(
+  customerId: unknown,
+  required: boolean
+): Promise<
+  | {
+      ok: true;
+      customerId: number | null;
+    }
+  | {
+      ok: false;
+      response: NextResponse;
+    }
+> {
+  // ===================================================
+  // TIDAK WAJIB
+  // ===================================================
+
+  if (
+    !required &&
+    (
+      customerId === undefined ||
+      customerId === null ||
+      customerId === ""
+    )
+  ) {
+    return {
+      ok: true,
+      customerId: null,
+    };
+  }
+
+  // ===================================================
+  // WAJIB
+  // ===================================================
+
+  if (
+    required &&
+    (
+      customerId === undefined ||
+      customerId === null ||
+      customerId === ""
+    )
+  ) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          success: false,
+          message:
+            "Customer wajib dipilih untuk OUTLET ADMIN",
+        },
+        {
+          status: 400,
+        }
+      ),
+    };
+  }
+
+  const selectedCustomerId =
+    parseOptionalPositiveInt(customerId);
+
+  if (!selectedCustomerId) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          success: false,
+          message: "Customer tidak valid",
+        },
+        {
+          status: 400,
+        }
+      ),
+    };
+  }
+
+  // ===================================================
+  // CEK CUSTOMER DI DATABASE
+  // ===================================================
+
+  const customer =
+    await prisma.customer.findUnique({
+      where: {
+        id: selectedCustomerId,
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+      },
+    });
+
+  if (!customer) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          success: false,
+          message: "Customer tidak ditemukan",
+        },
+        {
+          status: 404,
+        }
+      ),
+    };
+  }
+
+  return {
+    ok: true,
+    customerId: customer.id,
+  };
+}
+
+// =====================================================
+// OUTLET VALIDATION
+// =====================================================
+
+async function validateOutlet(
+  outletId: unknown,
+  required: boolean
+): Promise<
+  | {
+      ok: true;
+      outletId: number | null;
+    }
+  | {
+      ok: false;
+      response: NextResponse;
+    }
+> {
+  // ===================================================
+  // TIDAK WAJIB
+  // ===================================================
+
+  if (
+    !required &&
+    (
+      outletId === undefined ||
+      outletId === null ||
+      outletId === ""
+    )
+  ) {
+    return {
+      ok: true,
+      outletId: null,
+    };
+  }
+
+  // ===================================================
+  // WAJIB
+  // ===================================================
+
+  if (
+    required &&
+    (
+      outletId === undefined ||
+      outletId === null ||
+      outletId === ""
+    )
+  ) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          success: false,
+          message: "Outlet wajib dipilih",
+        },
+        {
+          status: 400,
+        }
+      ),
+    };
+  }
+
+  const selectedOutletId =
+    parseOptionalPositiveInt(outletId);
+
+  if (!selectedOutletId) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          success: false,
+          message: "Outlet tidak valid",
+        },
+        {
+          status: 400,
+        }
+      ),
+    };
+  }
+
+  const outlet =
+    await prisma.outlet.findUnique({
+      where: {
+        id: selectedOutletId,
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+  if (!outlet) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          success: false,
+          message: "Outlet tidak ditemukan",
+        },
+        {
+          status: 404,
+        }
+      ),
+    };
+  }
+
+  return {
+    ok: true,
+    outletId: outlet.id,
+  };
 }
 
 // =====================================================
 // GET USER
 // =====================================================
-//
-// ADMIN
-// -> melihat semua user
-//
-// OUTLET_ADMIN
-// -> hanya melihat dirinya sendiri
-//
-// KASIR
-// -> tidak memiliki akses Master User
-//
-// =====================================================
 
 export async function GET() {
   try {
-    // =================================================
-    // GET CURRENT USER
-    // =================================================
-
     const currentUser = await getCurrentUser();
 
     if (!currentUser) {
       return NextResponse.json(
         {
           success: false,
-          message: "Tidak login atau session tidak valid",
+          message:
+            "Tidak login atau session tidak valid",
         },
         {
           status: 401,
         }
       );
     }
-
-    // =================================================
-    // CEK USER ACTIVE
-    // =================================================
 
     if (!currentUser.active) {
       return NextResponse.json(
@@ -202,17 +429,16 @@ export async function GET() {
 
     // =================================================
     // OUTLET ADMIN
-    // HANYA BOLEH MELIHAT DIRI SENDIRI
     // =================================================
 
     if (currentUser.role === "OUTLET_ADMIN") {
-      const user = await prisma.user.findUnique({
-        where: {
-          id: currentUser.id,
-        },
-
-        select: userSelect,
-      });
+      const user =
+        await prisma.user.findUnique({
+          where: {
+            id: currentUser.id,
+          },
+          select: userSelect,
+        });
 
       return NextResponse.json({
         success: true,
@@ -221,23 +447,23 @@ export async function GET() {
           id: currentUser.id,
           role: currentUser.role,
           outletId: currentUser.outletId,
+          customerId: currentUser.customerId,
         },
       });
     }
 
     // =================================================
     // ADMIN PUSAT
-    // BOLEH MELIHAT SEMUA USER
     // =================================================
 
     if (currentUser.role === "ADMIN") {
-      const users = await prisma.user.findMany({
-        orderBy: {
-          id: "asc",
-        },
-
-        select: userSelect,
-      });
+      const users =
+        await prisma.user.findMany({
+          orderBy: {
+            id: "asc",
+          },
+          select: userSelect,
+        });
 
       return NextResponse.json({
         success: true,
@@ -246,6 +472,7 @@ export async function GET() {
           id: currentUser.id,
           role: currentUser.role,
           outletId: currentUser.outletId,
+          customerId: currentUser.customerId,
         },
       });
     }
@@ -257,7 +484,8 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
-        message: "Anda tidak memiliki akses ke Master User",
+        message:
+          "Anda tidak memiliki akses ke Master User",
       },
       {
         status: 403,
@@ -283,40 +511,23 @@ export async function GET() {
 // =====================================================
 // CREATE USER
 // =====================================================
-//
-// HANYA ADMIN PUSAT
-//
-// KASIR
-// -> wajib outlet
-//
-// OUTLET_ADMIN
-// -> wajib outlet
-//
-// =====================================================
 
 export async function POST(req: NextRequest) {
   try {
-    // =================================================
-    // GET CURRENT USER
-    // =================================================
-
     const currentUser = await getCurrentUser();
 
     if (!currentUser) {
       return NextResponse.json(
         {
           success: false,
-          message: "Tidak login atau session tidak valid",
+          message:
+            "Tidak login atau session tidak valid",
         },
         {
           status: 401,
         }
       );
     }
-
-    // =================================================
-    // CEK ACTIVE
-    // =================================================
 
     if (!currentUser.active) {
       return NextResponse.json(
@@ -347,10 +558,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // =================================================
-    // BODY
-    // =================================================
-
     const body = await req.json();
 
     const {
@@ -359,17 +566,22 @@ export async function POST(req: NextRequest) {
       password,
       role,
       outletId,
+      customerId,
       photo,
     } = body;
 
     // =================================================
-    // VALIDASI
+    // VALIDASI DASAR
     // =================================================
 
     if (
-      !username?.trim() ||
-      !fullname?.trim() ||
+      typeof username !== "string" ||
+      !username.trim() ||
+      typeof fullname !== "string" ||
+      !fullname.trim() ||
+      typeof password !== "string" ||
       !password ||
+      typeof role !== "string" ||
       !role
     ) {
       return NextResponse.json(
@@ -384,7 +596,7 @@ export async function POST(req: NextRequest) {
     }
 
     // =================================================
-    // VALIDASI PASSWORD
+    // PASSWORD
     // =================================================
 
     if (password.length < 6) {
@@ -403,42 +615,71 @@ export async function POST(req: NextRequest) {
     // PHOTO
     // =================================================
 
-    const selectedPhoto = normalizePhoto(photo);
+    const selectedPhoto =
+      normalizePhoto(photo);
 
     // =================================================
-    // CEK APAKAH ROLE MEMBUTUHKAN OUTLET
+    // ROLE
     // =================================================
 
-    const outletRequired = isOutletRole(role);
+    const outletRequired =
+      isOutletRole(role);
+
+    const customerRequired =
+      requiresCustomer(role);
 
     // =================================================
-    // VALIDASI OUTLET WAJIB
+    // VALIDASI OUTLET
     // =================================================
 
-    if (outletRequired && !outletId) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            role === "KASIR"
-              ? "Outlet wajib dipilih untuk KASIR"
-              : "Outlet wajib dipilih untuk OUTLET ADMIN",
-        },
-        {
-          status: 400,
-        }
+    const outletValidation =
+      await validateOutlet(
+        outletId,
+        outletRequired
       );
+
+    if (!outletValidation.ok) {
+      return outletValidation.response;
     }
+
+    // =================================================
+    // VALIDASI CUSTOMER
+    // =================================================
+
+    const customerValidation =
+      await validateCustomer(
+        customerId,
+        customerRequired
+      );
+
+    if (!customerValidation.ok) {
+      return customerValidation.response;
+    }
+
+    // =================================================
+    // FINAL VALUE
+    // =================================================
+
+    const selectedOutletId =
+      outletRequired
+        ? outletValidation.outletId
+        : null;
+
+    const selectedCustomerId =
+      customerRequired
+        ? customerValidation.customerId
+        : null;
 
     // =================================================
     // CEK USERNAME
     // =================================================
 
-    const exist = await prisma.user.findUnique({
-      where: {
-        username: username.trim(),
-      },
-    });
+    const exist =
+      await prisma.user.findUnique({
+        where: {
+          username: username.trim(),
+        },
+      });
 
     if (exist) {
       return NextResponse.json(
@@ -453,71 +694,42 @@ export async function POST(req: NextRequest) {
     }
 
     // =================================================
-    // VALIDASI OUTLET
-    // =================================================
-
-    let selectedOutletId: number | null = null;
-
-    if (outletRequired) {
-      selectedOutletId = Number(outletId);
-
-      if (
-        !Number.isInteger(selectedOutletId) ||
-        selectedOutletId <= 0
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Outlet tidak valid",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-
-      const outlet = await prisma.outlet.findUnique({
-        where: {
-          id: selectedOutletId,
-        },
-      });
-
-      if (!outlet) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Outlet tidak ditemukan",
-          },
-          {
-            status: 404,
-          }
-        );
-      }
-    }
-
-    // =================================================
     // HASH PASSWORD
     // =================================================
 
-    const hash = await bcrypt.hash(password, 10);
+    const hash =
+      await bcrypt.hash(password, 10);
 
     // =================================================
     // CREATE USER
     // =================================================
 
-    const user = await prisma.user.create({
-      data: {
-        username: username.trim(),
-        fullname: fullname.trim(),
-        password: hash,
-        photo: selectedPhoto ?? null,
-        role,
-        active: true,
-        outletId: selectedOutletId,
-      },
+    const user =
+      await prisma.user.create({
+        data: {
+          username: username.trim(),
+          fullname: fullname.trim(),
+          password: hash,
+          photo: selectedPhoto ?? null,
+          role,
+          active: true,
+          outletId: selectedOutletId,
+          customerId: selectedCustomerId,
+        },
+        select: userSelect,
+      });
 
-      select: userSelect,
-    });
+    console.log(
+      "CREATE USER SUCCESS:",
+      {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        outletId: user.outletId,
+        customerId: user.customerId,
+        customer: user.customer,
+      }
+    );
 
     return NextResponse.json({
       success: true,
@@ -525,7 +737,10 @@ export async function POST(req: NextRequest) {
       data: user,
     });
   } catch (error: any) {
-    console.error("CREATE USER ERROR:", error);
+    console.error(
+      "CREATE USER ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
@@ -544,52 +759,23 @@ export async function POST(req: NextRequest) {
 // =====================================================
 // UPDATE USER
 // =====================================================
-//
-// ADMIN
-// -> boleh edit semua user
-//
-// OUTLET_ADMIN
-// -> hanya boleh edit dirinya sendiri
-//
-// OUTLET_ADMIN TIDAK BOLEH:
-// -> mengganti role
-// -> mengganti outlet
-// -> mengganti active
-//
-// OUTLET_ADMIN BOLEH:
-// -> username
-// -> fullname
-// -> password
-// -> photo
-//
-// KASIR
-// -> tidak boleh mengedit Master User
-//
-// =====================================================
 
 export async function PUT(req: NextRequest) {
   try {
-    // =================================================
-    // GET CURRENT USER
-    // =================================================
-
     const currentUser = await getCurrentUser();
 
     if (!currentUser) {
       return NextResponse.json(
         {
           success: false,
-          message: "Tidak login atau session tidak valid",
+          message:
+            "Tidak login atau session tidak valid",
         },
         {
           status: 401,
         }
       );
     }
-
-    // =================================================
-    // CEK ACTIVE
-    // =================================================
 
     if (!currentUser.active) {
       return NextResponse.json(
@@ -603,10 +789,6 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // =================================================
-    // BODY
-    // =================================================
-
     const body = await req.json();
 
     const {
@@ -616,20 +798,32 @@ export async function PUT(req: NextRequest) {
       password,
       role,
       outletId,
+      customerId,
       active,
       photo,
     } = body;
 
     // =================================================
-    // VALIDASI ID
+    // DEBUG REQUEST
     // =================================================
 
-    const userId = Number(id);
+    console.log(
+      "========================================"
+    );
+    console.log("UPDATE USER REQUEST");
+    console.log("BODY:", body);
+    console.log(
+      "========================================"
+    );
 
-    if (
-      !Number.isInteger(userId) ||
-      userId <= 0
-    ) {
+    // =================================================
+    // USER ID
+    // =================================================
+
+    const userId =
+      parseOptionalPositiveInt(id);
+
+    if (!userId) {
       return NextResponse.json(
         {
           success: false,
@@ -643,13 +837,6 @@ export async function PUT(req: NextRequest) {
 
     // =================================================
     // OUTLET ADMIN
-    // =================================================
-    //
-    // WAJIB EDIT DIRI SENDIRI
-    //
-    // Bahkan jika client mengirim ID user lain,
-    // request akan ditolak.
-    //
     // =================================================
 
     if (
@@ -669,7 +856,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // =================================================
-    // ROLE TIDAK DIIZINKAN
+    // ROLE ACCESS
     // =================================================
 
     if (
@@ -688,10 +875,13 @@ export async function PUT(req: NextRequest) {
     }
 
     // =================================================
-    // VALIDASI USERNAME
+    // USERNAME
     // =================================================
 
-    if (!username?.trim()) {
+    if (
+      typeof username !== "string" ||
+      !username.trim()
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -704,10 +894,13 @@ export async function PUT(req: NextRequest) {
     }
 
     // =================================================
-    // VALIDASI FULLNAME
+    // FULLNAME
     // =================================================
 
-    if (!fullname?.trim()) {
+    if (
+      typeof fullname !== "string" ||
+      !fullname.trim()
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -720,7 +913,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // =================================================
-    // CEK USER TARGET
+    // EXISTING USER
     // =================================================
 
     const existingUser =
@@ -743,7 +936,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // =================================================
-    // CEK USERNAME
+    // USERNAME DUPLICATE
     // =================================================
 
     const usernameOwner =
@@ -770,23 +963,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // =================================================
-    // NORMALISASI PHOTO
-    // =================================================
-    //
-    // PENTING:
-    //
-    // photo === undefined
-    // -> jangan ubah foto lama
-    //
-    // photo === null
-    // -> hapus foto
-    //
-    // photo === ""
-    // -> hapus foto
-    //
-    // photo === "..."
-    // -> ganti/simpan foto
-    //
+    // PHOTO
     // =================================================
 
     const normalizedPhoto =
@@ -794,7 +971,7 @@ export async function PUT(req: NextRequest) {
 
     // =================================================
     // OUTLET ADMIN
-    // HANYA FIELD TERBATAS
+    // HANYA EDIT DATA DIRI
     // =================================================
 
     if (
@@ -810,27 +987,12 @@ export async function PUT(req: NextRequest) {
         fullname: fullname.trim(),
       };
 
-      // ===============================================
-      // PHOTO
-      // ===============================================
-      //
-      // Sebelumnya hanya:
-      //
-      // if (typeof photo === "string")
-      //
-      // sehingga photo:null tidak pernah diproses.
-      //
-      // Sekarang null juga diproses sebagai DELETE.
-      //
-      // ===============================================
-
-      if (normalizedPhoto !== undefined) {
-        updateData.photo = normalizedPhoto;
+      if (
+        normalizedPhoto !== undefined
+      ) {
+        updateData.photo =
+          normalizedPhoto;
       }
-
-      // ===============================================
-      // PASSWORD
-      // ===============================================
 
       if (
         typeof password === "string" &&
@@ -853,18 +1015,12 @@ export async function PUT(req: NextRequest) {
           await bcrypt.hash(password, 10);
       }
 
-      // ===============================================
-      // UPDATE SELF
-      // ===============================================
-
       const user =
         await prisma.user.update({
           where: {
             id: currentUser.id,
           },
-
           data: updateData,
-
           select: userSelect,
         });
 
@@ -879,7 +1035,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // =================================================
-    // ADMIN PUSAT
+    // ADMIN
     // =================================================
 
     if (currentUser.role !== "ADMIN") {
@@ -895,10 +1051,13 @@ export async function PUT(req: NextRequest) {
     }
 
     // =================================================
-    // ADMIN VALIDASI ROLE
+    // ROLE
     // =================================================
 
-    if (!role) {
+    if (
+      typeof role !== "string" ||
+      !role
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -911,68 +1070,74 @@ export async function PUT(req: NextRequest) {
     }
 
     // =================================================
-    // ADMIN VALIDASI OUTLET
+    // VALIDASI OUTLET
     // =================================================
 
-    let selectedOutletId: number | null = null;
+    const outletRequired =
+      isOutletRole(role);
 
-    const outletRequired = isOutletRole(role);
+    const outletValidation =
+      await validateOutlet(
+        outletId,
+        outletRequired
+      );
 
-    if (outletRequired) {
-      if (!outletId) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              role === "KASIR"
-                ? "Outlet wajib dipilih untuk KASIR"
-                : "Outlet wajib dipilih untuk OUTLET ADMIN",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-
-      selectedOutletId = Number(outletId);
-
-      if (
-        !Number.isInteger(selectedOutletId) ||
-        selectedOutletId <= 0
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Outlet tidak valid",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-
-      const outlet =
-        await prisma.outlet.findUnique({
-          where: {
-            id: selectedOutletId,
-          },
-        });
-
-      if (!outlet) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Outlet tidak ditemukan",
-          },
-          {
-            status: 404,
-          }
-        );
-      }
+    if (!outletValidation.ok) {
+      return outletValidation.response;
     }
 
     // =================================================
-    // UPDATE DATA ADMIN
+    // VALIDASI CUSTOMER
+    // =================================================
+
+    const customerRequired =
+      requiresCustomer(role);
+
+    console.log(
+      "CUSTOMER UPDATE INPUT:",
+      {
+        userId,
+        role,
+        customerId,
+        customerRequired,
+      }
+    );
+
+    const customerValidation =
+      await validateCustomer(
+        customerId,
+        customerRequired
+      );
+
+    if (!customerValidation.ok) {
+      return customerValidation.response;
+    }
+
+    // =================================================
+    // FINAL VALUE
+    // =================================================
+
+    const selectedOutletId =
+      outletRequired
+        ? outletValidation.outletId
+        : null;
+
+    const selectedCustomerId =
+      customerRequired
+        ? customerValidation.customerId
+        : null;
+
+    console.log(
+      "CUSTOMER UPDATE VALIDATED:",
+      {
+        userId,
+        selectedCustomerId,
+        selectedOutletId,
+      }
+    );
+
+    // =================================================
+    // UPDATE DATA
     // =================================================
 
     const updateData: {
@@ -981,6 +1146,7 @@ export async function PUT(req: NextRequest) {
       role: string;
       active: boolean;
       outletId: number | null;
+      customerId?: number | null;
       password?: string;
       photo?: string | null;
     } = {
@@ -995,22 +1161,24 @@ export async function PUT(req: NextRequest) {
     };
 
     // =================================================
-    // PHOTO
-    // =================================================
+    // CUSTOMER
     //
-    // undefined
-    // -> pertahankan foto lama
-    //
-    // null
-    // -> hapus foto
-    //
-    // string
-    // -> simpan/ganti foto
-    //
+    // Tetap simpan scalar customerId agar database
+    // langsung memiliki FK yang sesuai.
     // =================================================
 
-    if (normalizedPhoto !== undefined) {
-      updateData.photo = normalizedPhoto;
+    updateData.customerId =
+      selectedCustomerId;
+
+    // =================================================
+    // PHOTO
+    // =================================================
+
+    if (
+      normalizedPhoto !== undefined
+    ) {
+      updateData.photo =
+        normalizedPhoto;
     }
 
     // =================================================
@@ -1039,7 +1207,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // =================================================
-    // UPDATE
+    // UPDATE DATABASE
     // =================================================
 
     const user =
@@ -1047,19 +1215,105 @@ export async function PUT(req: NextRequest) {
         where: {
           id: userId,
         },
-
         data: updateData,
-
         select: userSelect,
       });
 
+    // =================================================
+    // VERIFY DATABASE
+    // =================================================
+
+    const verifyUser =
+      await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+        select: {
+          id: true,
+          username: true,
+          role: true,
+          outletId: true,
+          customerId: true,
+
+          customer: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+    // =================================================
+    // LOG HASIL UPDATE
+    // =================================================
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "UPDATE USER SUCCESS:",
+      {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        outletId: user.outletId,
+        customerId: user.customerId,
+        customer: user.customer,
+      }
+    );
+
+    console.log(
+      "DATABASE VERIFY:",
+      {
+        id: verifyUser?.id,
+        customerId:
+          verifyUser?.customerId ?? null,
+        customer:
+          verifyUser?.customer ?? null,
+      }
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    // =================================================
+    // RESPONSE
+    // =================================================
+
     return NextResponse.json({
       success: true,
+
       message:
         normalizedPhoto === null
           ? "User berhasil diperbarui dan foto profil dihapus"
           : "User berhasil diperbarui",
+
       data: user,
+
+      // =================================================
+      // DEBUG
+      //
+      // Sementara kita tampilkan agar gampang memastikan
+      // customer benar-benar tersimpan.
+      // =================================================
+
+      debug: {
+        requestedCustomerId:
+          customerId ?? null,
+
+        selectedCustomerId:
+          selectedCustomerId ?? null,
+
+        savedCustomerId:
+          verifyUser?.customerId ?? null,
+
+        savedCustomer:
+          verifyUser?.customer ?? null,
+      },
     });
   } catch (error: any) {
     console.error(

@@ -30,13 +30,56 @@ import {
   Layers3,
 } from "lucide-react";
 
+type Customer = {
+  id: number;
+  code: string;
+  name: string;
+  address?: string | null;
+  city?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  contactPerson?: string | null;
+};
+
+type DeliveryOrder = {
+  id: number;
+  number?: string | null;
+  deliveryDate?: string | null;
+  status?: string | null;
+
+  customerId?: number | null;
+
+  customer?: Customer | null;
+
+  outlet?: {
+    id?: number;
+    code?: string | null;
+    name?: string | null;
+  } | null;
+
+  deliveryRequest?: {
+    id?: number;
+    number?: string | null;
+    customerId?: number | null;
+    customer?: Customer | null;
+  } | null;
+
+  totalQty?: number | null;
+
+  [key: string]: any;
+};
+
 export default function PengirimanPage() {
-  const [delivery, setDelivery] = useState<any[]>([]);
+  const [delivery, setDelivery] = useState<DeliveryOrder[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+
   const [processingId, setProcessingId] =
     useState<number | null>(null);
+
   const [deletingId, setDeletingId] =
     useState<number | null>(null);
 
@@ -45,7 +88,7 @@ export default function PengirimanPage() {
   // =========================================================
 
   const [releaseTarget, setReleaseTarget] =
-    useState<any | null>(null);
+    useState<DeliveryOrder | null>(null);
 
   useEffect(() => {
     loadData();
@@ -59,16 +102,83 @@ export default function PengirimanPage() {
     try {
       setLoading(true);
 
-      const res = await fetch("/api/delivery-order", {
-        cache: "no-store",
-      });
+      const [deliveryRes, customerRes] =
+        await Promise.all([
+          fetch("/api/delivery-order", {
+            cache: "no-store",
+          }),
 
-      const json = await res.json();
+          fetch("/api/master/customer", {
+            cache: "no-store",
+          }),
+        ]);
 
-      setDelivery(
-        Array.isArray(json.data)
-          ? json.data
-          : []
+      // =======================================================
+      // DELIVERY
+      // =======================================================
+
+      const deliveryText =
+        await deliveryRes.text();
+
+      let deliveryJson: any = {};
+
+      try {
+        deliveryJson = deliveryText
+          ? JSON.parse(deliveryText)
+          : {};
+      } catch {
+        console.error(
+          "LOAD DELIVERY ORDER INVALID JSON:",
+          deliveryText
+        );
+      }
+
+      const deliveryData =
+        Array.isArray(deliveryJson?.data)
+          ? deliveryJson.data
+          : [];
+
+      setDelivery(deliveryData);
+
+      // =======================================================
+      // CUSTOMER
+      // =======================================================
+
+      const customerText =
+        await customerRes.text();
+
+      let customerJson: any = {};
+
+      try {
+        customerJson = customerText
+          ? JSON.parse(customerText)
+          : {};
+      } catch {
+        console.error(
+          "LOAD CUSTOMER INVALID JSON:",
+          customerText
+        );
+      }
+
+      const customerData =
+        Array.isArray(customerJson?.data)
+          ? customerJson.data
+          : [];
+
+      setCustomers(customerData);
+
+      // =======================================================
+      // DEBUG
+      // =======================================================
+
+      console.log(
+        "DELIVERY ORDER DATA:",
+        deliveryData
+      );
+
+      console.log(
+        "CUSTOMER MASTER DATA:",
+        customerData
       );
     } catch (error) {
       console.error(
@@ -77,9 +187,128 @@ export default function PengirimanPage() {
       );
 
       setDelivery([]);
+      setCustomers([]);
     } finally {
       setLoading(false);
     }
+  }
+
+  // =========================================================
+  // CUSTOMER RESOLVER
+  // =========================================================
+  //
+  // Prioritas:
+  //
+  // 1. delivery.customer
+  // 2. delivery.deliveryRequest.customer
+  // 3. delivery.customerId -> master customer
+  // 4. delivery.deliveryRequest.customerId -> master customer
+  //
+  // =========================================================
+
+  function getCustomer(
+    item: DeliveryOrder | null | undefined
+  ): Customer | null {
+    if (!item) return null;
+
+    // ---------------------------------------------------------
+    // PRIORITY 1
+    // ---------------------------------------------------------
+
+    if (
+      item.customer &&
+      (
+        item.customer.id ||
+        item.customer.name ||
+        item.customer.code
+      )
+    ) {
+      return item.customer;
+    }
+
+    // ---------------------------------------------------------
+    // PRIORITY 2
+    // ---------------------------------------------------------
+
+    if (
+      item.deliveryRequest?.customer &&
+      (
+        item.deliveryRequest.customer.id ||
+        item.deliveryRequest.customer.name ||
+        item.deliveryRequest.customer.code
+      )
+    ) {
+      return item.deliveryRequest.customer;
+    }
+
+    // ---------------------------------------------------------
+    // CUSTOMER ID
+    // ---------------------------------------------------------
+
+    const customerId =
+      item.customerId ??
+      item.deliveryRequest?.customerId ??
+      null;
+
+    if (!customerId) {
+      return null;
+    }
+
+    // ---------------------------------------------------------
+    // FIND MASTER CUSTOMER
+    // ---------------------------------------------------------
+
+    const found = customers.find(
+      (customer) =>
+        Number(customer.id) ===
+        Number(customerId)
+    );
+
+    return found || null;
+  }
+
+  // =========================================================
+  // CUSTOMER NAME
+  // =========================================================
+
+  function getCustomerName(
+    item: DeliveryOrder | null | undefined
+  ) {
+    const customer = getCustomer(item);
+
+    return (
+      customer?.name ||
+      "-"
+    );
+  }
+
+  // =========================================================
+  // CUSTOMER CODE
+  // =========================================================
+
+  function getCustomerCode(
+    item: DeliveryOrder | null | undefined
+  ) {
+    const customer = getCustomer(item);
+
+    return customer?.code || "";
+  }
+
+  // =========================================================
+  // CUSTOMER ID
+  // =========================================================
+
+  function getCustomerId(
+    item: DeliveryOrder | null | undefined
+  ) {
+    if (!item) return null;
+
+    return (
+      item.customerId ??
+      item.deliveryRequest?.customerId ??
+      getCustomer(item)?.id ??
+      null
+    );
   }
 
   // =========================================================
@@ -97,6 +326,7 @@ export default function PengirimanPage() {
       alert(
         "Delivery Order ini sudah RELEASED."
       );
+
       return;
     }
 
@@ -118,6 +348,7 @@ export default function PengirimanPage() {
       alert(
         "Delivery Order ini sudah RELEASED."
       );
+
       return;
     }
 
@@ -156,6 +387,7 @@ export default function PengirimanPage() {
           json.message ||
             `Gagal release Delivery Order (${res.status})`
         );
+
         return;
       }
 
@@ -213,6 +445,7 @@ export default function PengirimanPage() {
       alert(
         "Delivery Order yang sudah RELEASED tidak dapat dihapus."
       );
+
       return;
     }
 
@@ -255,6 +488,7 @@ export default function PengirimanPage() {
           json.message ||
             `Gagal menghapus Delivery Order (${res.status})`
         );
+
         return;
       }
 
@@ -401,21 +635,21 @@ export default function PengirimanPage() {
       const keyword =
         search.trim().toLowerCase();
 
+      const customerName =
+        getCustomerName(item)
+          .toLowerCase();
+
+      const customerCode =
+        getCustomerCode(item)
+          .toLowerCase();
+
       const matchesSearch =
         !keyword ||
         String(item.number || "")
           .toLowerCase()
           .includes(keyword) ||
-        String(
-          item.customer?.name || ""
-        )
-          .toLowerCase()
-          .includes(keyword) ||
-        String(
-          item.customer?.code || ""
-        )
-          .toLowerCase()
-          .includes(keyword);
+        customerName.includes(keyword) ||
+        customerCode.includes(keyword);
 
       const matchesStatus =
         !statusFilter ||
@@ -430,6 +664,7 @@ export default function PengirimanPage() {
     delivery,
     search,
     statusFilter,
+    customers,
   ]);
 
   // =========================================================
@@ -589,9 +824,7 @@ export default function PengirimanPage() {
                 </div>
               </div>
 
-              {/* =================================================
-                  HEADER ACTION
-              ================================================= */}
+              {/* HEADER ACTION */}
 
               <div className="flex flex-col gap-2 sm:flex-row">
                 <button
@@ -1046,6 +1279,7 @@ export default function PengirimanPage() {
                                 setSearch(
                                   ""
                                 );
+
                                 setStatusFilter(
                                   ""
                                 );
@@ -1064,7 +1298,7 @@ export default function PengirimanPage() {
 
                 {!loading &&
                   filteredDelivery.map(
-                    (d: any) => {
+                    (d: DeliveryOrder) => {
                       const isProcessing =
                         processingId ===
                         d.id;
@@ -1072,6 +1306,17 @@ export default function PengirimanPage() {
                       const isDeleting =
                         deletingId ===
                         d.id;
+
+                      const customer =
+                        getCustomer(d);
+
+                      const customerName =
+                        customer?.name ||
+                        "-";
+
+                      const customerCode =
+                        customer?.code ||
+                        "";
 
                       return (
                         <tr
@@ -1176,23 +1421,22 @@ export default function PengirimanPage() {
 
                               <div className="min-w-0">
                                 <div className="max-w-[250px] truncate text-[10px] font-black text-[#3F514B]">
-                                  {d.customer
-                                    ?.name ||
-                                    "-"}
+                                  {customerName}
                                 </div>
 
-                                {d.customer
-                                  ?.code ? (
+                                {customerCode ? (
                                   <div className="mt-1 inline-flex rounded-md border border-[#E8EFEC] bg-[#F6F9F7] px-2 py-0.5 text-[8px] font-black tracking-wide text-[#8A9893]">
                                     {
-                                      d
-                                        .customer
-                                        .code
+                                      customerCode
                                     }
                                   </div>
                                 ) : (
                                   <div className="mt-1 text-[8px] text-[#A6B1AD]">
-                                    Customer
+                                    Customer ID:{" "}
+                                    {getCustomerId(
+                                      d
+                                    ) ??
+                                      "-"}
                                   </div>
                                 )}
                               </div>
@@ -1223,7 +1467,8 @@ export default function PengirimanPage() {
                           <td className="px-5 py-4.5 text-center">
                             <StatusBadge
                               status={
-                                d.status
+                                d.status ||
+                                "UNKNOWN"
                               }
                             />
                           </td>
@@ -1324,7 +1569,7 @@ export default function PengirimanPage() {
                                   )}
                                 </button>
 
-                                {/* PREMIUM RELEASE */}
+                                {/* RELEASE */}
 
                                 <button
                                   type="button"
@@ -1427,9 +1672,7 @@ export default function PengirimanPage() {
             </table>
           </div>
 
-          {/* =================================================
-              FOOTER
-          ================================================= */}
+          {/* FOOTER */}
 
           <div className="flex flex-col justify-between gap-4 border-t border-[#E5ECE9] bg-gradient-to-r from-[#F8FAF9] to-[#FBFCFB] px-5 py-4 md:flex-row md:items-center md:px-7">
             <div className="text-[9px] text-[#7E8E88]">
@@ -1671,6 +1914,8 @@ export default function PengirimanPage() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-px bg-[#E5ECE9] sm:grid-cols-4">
+                    {/* CUSTOMER */}
+
                     <div className="bg-white px-4 py-3">
                       <div className="mb-1.5 flex items-center gap-1.5 text-[#91A09A]">
                         <Users size={11} />
@@ -1681,24 +1926,39 @@ export default function PengirimanPage() {
                       </div>
 
                       <p className="truncate text-[10px] font-black text-[#35564C]">
-                        {releaseTarget
-                          .customer
-                          ?.name ||
-                          "-"}
+                        {getCustomerName(
+                          releaseTarget
+                        )}
                       </p>
 
-                      {releaseTarget
-                        .customer
-                        ?.code && (
+                      {getCustomerCode(
+                        releaseTarget
+                      ) && (
                         <p className="mt-0.5 text-[7px] font-bold text-[#9AA7A3]">
                           {
-                            releaseTarget
-                              .customer
-                              .code
+                            getCustomerCode(
+                              releaseTarget
+                            )
                           }
                         </p>
                       )}
+
+                      {!getCustomerName(
+                        releaseTarget
+                      ) ||
+                        (getCustomerName(
+                          releaseTarget
+                        ) === "-" && (
+                          <p className="mt-0.5 text-[7px] text-red-400">
+                            Customer ID:{" "}
+                            {getCustomerId(
+                              releaseTarget
+                            ) ?? "-"}
+                          </p>
+                        ))}
                     </div>
+
+                    {/* DATE */}
 
                     <div className="bg-white px-4 py-3">
                       <div className="mb-1.5 flex items-center gap-1.5 text-[#91A09A]">
@@ -1717,6 +1977,8 @@ export default function PengirimanPage() {
                         )}
                       </p>
                     </div>
+
+                    {/* QUANTITY */}
 
                     <div className="bg-white px-4 py-3">
                       <div className="mb-1.5 flex items-center gap-1.5 text-[#91A09A]">
@@ -1737,6 +1999,8 @@ export default function PengirimanPage() {
                         Total item
                       </p>
                     </div>
+
+                    {/* OUTLET */}
 
                     <div className="bg-white px-4 py-3">
                       <div className="mb-1.5 flex items-center gap-1.5 text-[#91A09A]">

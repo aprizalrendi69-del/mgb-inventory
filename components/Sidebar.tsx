@@ -71,6 +71,7 @@ type IconTone =
   | "teal"
   | "cyan"
   | "sky"
+  | "blue"
   | "violet"
   | "amber"
   | "orange"
@@ -149,6 +150,14 @@ const ICON_TONES: Record<
     border:
       "border-sky-300/[0.08] group-hover:border-sky-300/[0.13]",
     glow: "bg-sky-400/[0.11]",
+  },
+
+  blue: {
+    icon: "text-blue-300 group-hover:text-blue-200",
+    bg: "bg-blue-400/[0.07] group-hover:bg-blue-400/[0.11]",
+    border:
+      "border-blue-300/[0.08] group-hover:border-blue-300/[0.13]",
+    glow: "bg-blue-400/[0.11]",
   },
 
   violet: {
@@ -538,6 +547,13 @@ const menus: Menu[] = [
     badgeKey: "barangMasukOutlet",
   },
   {
+    title: "Delivery Request",
+    url: "/outlet/delivery-request",
+    roles: ["OUTLET_ADMIN"],
+    icon: Truck,
+    iconTone: "blue",
+  },
+  {
     title: "Barang Keluar Outlet",
     url: "/outlet/barang-keluar",
     roles: ["ADMIN", "OUTLET_ADMIN"],
@@ -621,11 +637,6 @@ const menus: Menu[] = [
     icon: FileText,
     iconTone: "emerald",
   },
-
-  // =====================================================
-  // TAMBAHAN BARU
-  // LAPORAN SEMUA BARANG KELUAR OUTLET
-  // =====================================================
   {
     title: "Laporan Barang Keluar Outlet",
     url: "/outlet/laporan/barang-keluar",
@@ -633,7 +644,6 @@ const menus: Menu[] = [
     icon: PackageMinus,
     iconTone: "orange",
   },
-
   {
     title: "Laporan Delivery Outlet",
     url: "/outlet/laporan/delivery",
@@ -1505,10 +1515,16 @@ export default function Sidebar({
               const Icon =
                 menu.icon || Package;
 
+              /*
+               * Defensive fallback:
+               * jika suatu saat ada iconTone baru yang
+               * belum dimasukkan ke ICON_TONES, Sidebar
+               * tidak akan crash.
+               */
               const tone =
                 ICON_TONES[
                   menu.iconTone || "emerald"
-                ];
+                ] ?? ICON_TONES.emerald;
 
               const badgeValue =
                 getBadgeValue(

@@ -182,6 +182,33 @@ type ReceiveItemInput = {
 // -> ditolak
 //
 // Barang.stock pusat TIDAK disentuh.
+//
+// =====================================================
+// TANGGAL TRANSAKSI:
+//
+// transfer.transferDate adalah tanggal transaksi
+// yang berasal dari:
+//
+// DeliveryRequest.requestDate
+//        ↓
+// Delivery.deliveryDate
+//        ↓
+// OutletTransfer.transferDate
+//
+// RECEIVE TIDAK BOLEH membuat tanggal transaksi baru.
+//
+// Contoh:
+//
+// Delivery Date     = 25 Agustus 2026
+// Release           = 26 Agustus 2026
+// Receive           = 27 Agustus 2026
+//
+// Maka tanggal transaksi transfer tetap:
+//
+// 25 Agustus 2026
+//
+// Waktu aktual RECEIVE tetap dapat tercatat melalui
+// createdAt / timestamp audit apabila tersedia di schema.
 // =====================================================
 
 export async function POST(
@@ -361,7 +388,7 @@ export async function POST(
 
     // ===================================================
     // 7. LOAD TRANSFER
-    // ===================================================
+    // =====================================================
 
     const transfer =
       await prisma.outletTransfer.findUnique(
@@ -423,7 +450,27 @@ export async function POST(
     }
 
     // ===================================================
-    // 9. SECURITY OUTLET
+    // 9. VALIDASI TANGGAL TRANSAKSI
+    // =====================================================
+    //
+    // transferDate adalah tanggal transaksi yang diwariskan
+    // dari Delivery.
+    //
+    // Jangan menggunakan new Date() sebagai penggantinya.
+    //
+    // =====================================================
+
+    const transactionDate =
+      transfer.transferDate;
+
+    if (!transactionDate) {
+      return badRequest(
+        `Transfer ${transfer.number} belum memiliki tanggal transaksi`
+      );
+    }
+
+    // ===================================================
+    // 10. SECURITY OUTLET
     // ===================================================
 
     if (
@@ -451,7 +498,7 @@ export async function POST(
     }
 
     // ===================================================
-    // 10. OUTLET TUJUAN
+    // 11. OUTLET TUJUAN
     // ===================================================
 
     if (!transfer.outlet) {
@@ -477,7 +524,7 @@ export async function POST(
     }
 
     // ===================================================
-    // 11. STATUS
+    // 12. STATUS
     // ===================================================
 
     if (
@@ -490,7 +537,7 @@ export async function POST(
     }
 
     // ===================================================
-    // 12. ITEM CHECK
+    // 13. ITEM CHECK
     // ===================================================
 
     if (
@@ -503,7 +550,7 @@ export async function POST(
     }
 
     // ===================================================
-    // 13. TRANSACTION
+    // 14. TRANSACTION
     // ===================================================
 
     const result =
@@ -525,6 +572,17 @@ export async function POST(
                   number: true,
                   status: true,
                   outletId: true,
+
+                  // =========================================
+                  // TANGGAL TRANSAKSI
+                  // =========================================
+                  //
+                  // Tetap menggunakan tanggal yang dibuat
+                  // saat RELEASE.
+                  //
+                  // =========================================
+
+                  transferDate: true,
                 },
               }
             );
@@ -532,6 +590,19 @@ export async function POST(
           if (!currentTransfer) {
             throw new Error(
               "Transfer tidak ditemukan"
+            );
+          }
+
+          // =================================================
+          // TANGGAL TRANSAKSI RECHECK
+          // =================================================
+
+          const currentTransactionDate =
+            currentTransfer.transferDate;
+
+          if (!currentTransactionDate) {
+            throw new Error(
+              `Transfer ${currentTransfer.number} belum memiliki tanggal transaksi`
             );
           }
 
@@ -1044,6 +1115,16 @@ export async function POST(
             // STOCK MUTATION
             //
             // HANYA QTY BARU.
+            //
+            // Tanggal transaksi sumber adalah:
+            //
+            // currentTransactionDate
+            //
+            // Namun StockMutation schema pada file ini
+            // tidak memiliki field tanggal transaksi yang
+            // dapat diisi secara eksplisit.
+            //
+            // Jangan membuat tanggal baru di sini.
             // ===============================================
 
             if (
@@ -1308,6 +1389,17 @@ export async function POST(
           // =================================================
           // UPDATE TRANSFER
           // =================================================
+          //
+          // PENTING:
+          //
+          // Hanya status yang berubah.
+          //
+          // transferDate TIDAK DIUBAH.
+          //
+          // Jadi partial receive berikutnya tetap memakai
+          // tanggal transaksi Delivery yang sama.
+          //
+          // =================================================
 
           await tx.outletTransfer.update(
             {
@@ -1366,6 +1458,13 @@ export async function POST(
 
             finalStatus,
 
+            // ===============================================
+            // TANGGAL TRANSAKSI
+            // ===============================================
+
+            transactionDate:
+              currentTransactionDate,
+
             receivedItems,
 
             voidItems,
@@ -1417,6 +1516,13 @@ export async function POST(
 
         outlet:
           transfer.outlet.name,
+
+        // ===============================================
+        // TANGGAL TRANSAKSI
+        // ===============================================
+
+        transactionDate:
+          result.transactionDate,
 
         status:
           result.finalStatus,
@@ -1487,6 +1593,7 @@ export async function POST(
       "Status penerimaan",
       "Anda tidak boleh menerima",
       "Barang ",
+      "belum memiliki tanggal transaksi",
     ];
 
     const isBusinessError =

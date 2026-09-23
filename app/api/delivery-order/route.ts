@@ -2,6 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { DeliveryStatus, HistoryType } from "@prisma/client";
 
+/*
+|--------------------------------------------------------------------------
+| GET - LIST DELIVERY ORDER
+|--------------------------------------------------------------------------
+|
+| BUSINESS FLOW:
+|
+| Delivery.customerId
+|        ↓
+| Customer
+|
+| Sedangkan tujuan outlet:
+|
+| Delivery
+|    ↓
+| OutletTransfer
+|    ↓
+| Outlet
+|
+| JANGAN lagi menganggap:
+|
+| Delivery.customerId = Outlet.id
+|
+|--------------------------------------------------------------------------
+*/
+
 export async function GET() {
   try {
     const data = await prisma.delivery.findMany({
@@ -13,13 +39,33 @@ export async function GET() {
         totalQty: true,
         remarks: true,
 
+        /*
+        |--------------------------------------------------------------------------
+        | CUSTOMER
+        |--------------------------------------------------------------------------
+        |
+        | Customer berasal langsung dari Delivery.customerId.
+        |
+        */
+
         customer: {
           select: {
             id: true,
+            code: true,
             name: true,
             address: true,
+            city: true,
+            phone: true,
+            email: true,
+            contactPerson: true,
           },
         },
+
+        /*
+        |--------------------------------------------------------------------------
+        | SURAT JALAN
+        |--------------------------------------------------------------------------
+        */
 
         suratJalan: {
           select: {
@@ -27,6 +73,12 @@ export async function GET() {
             number: true,
           },
         },
+
+        /*
+        |--------------------------------------------------------------------------
+        | DELIVERY ITEMS
+        |--------------------------------------------------------------------------
+        */
 
         items: {
           select: {
@@ -65,20 +117,18 @@ export async function GET() {
 
     /*
     |--------------------------------------------------------------------------
-    | AMBIL OUTLET TRANSFER
+    | BUILD RESULT
     |--------------------------------------------------------------------------
-    |
-    | customerId pada Delivery = outletId
-    |
-    | OutletTransfer dibuat saat Delivery RELEASED.
-    | Nomor DO disimpan di remarks:
-    |
-    | Pengiriman dari gudang - DO-xxxxxxxx
-    |
     */
 
     const result = await Promise.all(
       data.map(async (delivery) => {
+        /*
+        |--------------------------------------------------------------------------
+        | NORMALIZE ITEMS
+        |--------------------------------------------------------------------------
+        */
+
         const items = delivery.items.map((item) => {
           const dbPrice = Number(item.price ?? 0);
 
@@ -101,6 +151,12 @@ export async function GET() {
           };
         });
 
+        /*
+        |--------------------------------------------------------------------------
+        | TOTAL VALUE
+        |--------------------------------------------------------------------------
+        */
+
         const totalValue = items.reduce(
           (sum, item) =>
             sum + Number(item.subtotal ?? 0),
@@ -111,15 +167,27 @@ export async function GET() {
         |--------------------------------------------------------------------------
         | CARI OUTLET TRANSFER
         |--------------------------------------------------------------------------
+        |
+        | PENTING:
+        |
+        | Jangan lagi:
+        |
+        | outletId: delivery.customer.id
+        |
+        | Karena customer.id adalah ID CUSTOMER,
+        | bukan ID OUTLET.
+        |
+        | Kita cari transfer berdasarkan nomor Delivery Order
+        | yang disimpan pada remarks.
+        |
         */
 
-        let outletTransfer = null;
+        let outletTransfer: any = null;
 
         try {
           outletTransfer =
             await prisma.outletTransfer.findFirst({
               where: {
-                outletId: delivery.customer.id,
                 remarks: {
                   contains: delivery.number,
                 },
@@ -163,39 +231,132 @@ export async function GET() {
           );
         }
 
-        return {
-          ...delivery,
+        /*
+        |--------------------------------------------------------------------------
+        | CUSTOMER
+        |--------------------------------------------------------------------------
+        |
+        | Customer tetap berasal dari Delivery.customer.
+        |
+        */
 
-          items,
+        const customer = delivery.customer
+          ? {
+              id: delivery.customer.id,
+              code: delivery.customer.code,
+              name: delivery.customer.name,
+              address: delivery.customer.address,
+              city: delivery.customer.city,
+              phone: delivery.customer.phone,
+              email: delivery.customer.email,
+              contactPerson:
+                delivery.customer.contactPerson,
+            }
+          : null;
+
+        /*
+        |--------------------------------------------------------------------------
+        | OUTLET
+        |--------------------------------------------------------------------------
+        |
+        | Outlet berasal dari OutletTransfer.
+        |
+        */
+
+        const outlet =
+          outletTransfer?.outlet ?? null;
+
+        /*
+        |--------------------------------------------------------------------------
+        | RETURN
+        |--------------------------------------------------------------------------
+        */
+
+        return {
+          id: delivery.id,
+
+          number: delivery.number,
+
+          deliveryDate:
+            delivery.deliveryDate,
+
+          status: delivery.status,
+
+          totalQty:
+            delivery.totalQty,
 
           totalValue,
 
-          /*
-          |--------------------------------------------------------------------------
-          | DATA OUTLET
-          |--------------------------------------------------------------------------
-          */
-
-          outlet: outletTransfer?.outlet ?? null,
+          remarks:
+            delivery.remarks,
 
           /*
           |--------------------------------------------------------------------------
-          | DATA TRANSFER
+          | CUSTOMER
           |--------------------------------------------------------------------------
           */
 
-          outletTransfer: outletTransfer
-            ? {
-                id: outletTransfer.id,
-                number: outletTransfer.number,
-                status: outletTransfer.status,
-                remarks: outletTransfer.remarks,
-                items: outletTransfer.items,
-              }
-            : null,
+          customer,
+
+          /*
+          |--------------------------------------------------------------------------
+          | OUTLET
+          |--------------------------------------------------------------------------
+          */
+
+          outlet,
+
+          /*
+          |--------------------------------------------------------------------------
+          | SURAT JALAN
+          |--------------------------------------------------------------------------
+          */
+
+          suratJalan:
+            delivery.suratJalan ?? null,
+
+          /*
+          |--------------------------------------------------------------------------
+          | ITEMS
+          |--------------------------------------------------------------------------
+          */
+
+          items,
+
+          /*
+          |--------------------------------------------------------------------------
+          | OUTLET TRANSFER
+          |--------------------------------------------------------------------------
+          */
+
+          outletTransfer:
+            outletTransfer
+              ? {
+                  id:
+                    outletTransfer.id,
+
+                  number:
+                    outletTransfer.number,
+
+                  status:
+                    outletTransfer.status,
+
+                  remarks:
+                    outletTransfer.remarks,
+
+                  items:
+                    outletTransfer.items,
+                }
+              : null,
         };
       })
     );
+
+    /*
+    |--------------------------------------------------------------------------
+    | RESPONSE
+    |--------------------------------------------------------------------------
+    */
 
     return NextResponse.json({
       success: true,
@@ -210,7 +371,8 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
-        message: "Gagal mengambil Delivery Order",
+        message:
+          "Gagal mengambil Delivery Order",
       },
       {
         status: 500,
@@ -223,17 +385,45 @@ export async function GET() {
 |--------------------------------------------------------------------------
 | POST - BUAT DELIVERY ORDER
 |--------------------------------------------------------------------------
+|
+| CATATAN:
+|
+| Endpoint ini masih digunakan untuk pembuatan Delivery Order langsung.
+|
+| Untuk flow Delivery Request baru:
+|
+| OUTLET_ADMIN
+|      ↓
+| Delivery Request
+|      ↓
+| Pusat proses
+|      ↓
+| Delivery Order
+|
+| customerId harus tetap menunjuk ke Customer,
+| bukan Outlet.
+|
+|--------------------------------------------------------------------------
 */
 
-export async function POST(req: NextRequest) {
+export async function POST(
+  req: NextRequest
+) {
   try {
     const body = await req.json();
+
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDASI CUSTOMER
+    |--------------------------------------------------------------------------
+    */
 
     if (!body.customerId) {
       return NextResponse.json(
         {
           success: false,
-          message: "Customer wajib dipilih",
+          message:
+            "Customer wajib dipilih",
         },
         {
           status: 400,
@@ -241,14 +431,77 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const customerId =
+      Number(body.customerId);
+
     if (
-      !body.items ||
+      !Number.isInteger(customerId) ||
+      customerId <= 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Customer ID tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | CEK CUSTOMER
+    |--------------------------------------------------------------------------
+    */
+
+    const customer =
+      await prisma.customer.findUnique({
+        where: {
+          id: customerId,
+        },
+
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          address: true,
+          city: true,
+          phone: true,
+          email: true,
+          contactPerson: true,
+        },
+      });
+
+    if (!customer) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Customer tidak ditemukan",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDASI ITEMS
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+      !Array.isArray(body.items) ||
       body.items.length === 0
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Barang belum dipilih",
+          message:
+            "Barang belum dipilih",
         },
         {
           status: 400,
@@ -276,7 +529,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            message: `Barang dengan ID ${item.barangId} tidak ditemukan`,
+            message:
+              `Barang dengan ID ${item.barangId} tidak ditemukan`,
           },
           {
             status: 404,
@@ -284,13 +538,18 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const qty = Number(item.qty);
+      const qty =
+        Number(item.qty);
 
-      if (!qty || qty <= 0) {
+      if (
+        !Number.isFinite(qty) ||
+        qty <= 0
+      ) {
         return NextResponse.json(
           {
             success: false,
-            message: `Qty ${barang.name} tidak valid`,
+            message:
+              `Qty ${barang.name} tidak valid`,
           },
           {
             status: 400,
@@ -298,11 +557,24 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      if (barang.stock < qty) {
+      /*
+      |--------------------------------------------------------------------------
+      | CEK STOCK
+      |--------------------------------------------------------------------------
+      |
+      | DRAFT belum mengurangi stock.
+      |
+      | Jadi ini hanya memastikan stock tersedia
+      | ketika DO dibuat.
+      |
+      */
+
+      if (Number(barang.stock) < qty) {
         return NextResponse.json(
           {
             success: false,
-            message: `Stock ${barang.name} tidak mencukupi. Stock tersedia: ${barang.stock}`,
+            message:
+              `Stock ${barang.name} tidak mencukupi. Stock tersedia: ${barang.stock}`,
           },
           {
             status: 400,
@@ -336,90 +608,116 @@ export async function POST(req: NextRequest) {
 
     const deliveryItems =
       await Promise.all(
-        body.items.map(async (item: any) => {
-          const barangId =
-            Number(item.barangId);
+        body.items.map(
+          async (item: any) => {
+            const barangId =
+              Number(item.barangId);
 
-          const qty =
-            Number(item.qty);
+            const qty =
+              Number(item.qty);
 
-          const barang =
-            await prisma.barang.findUnique({
-              where: {
-                id: barangId,
-              },
-            });
+            /*
+            |--------------------------------------------------------------------------
+            | BARANG
+            |--------------------------------------------------------------------------
+            */
 
-          if (!barang) {
-            throw new Error(
-              `Barang ID ${barangId} tidak ditemukan`
-            );
-          }
-
-          /*
-          |--------------------------------------------------------------------------
-          | PRICE SUMMARY
-          |--------------------------------------------------------------------------
-          */
-
-          const summary =
-            await prisma.priceSummary.findUnique({
-              where: {
-                barangId,
-              },
-            });
-
-          let harga = Number(
-            summary?.lastPrice ?? 0
-          );
-
-          /*
-          |--------------------------------------------------------------------------
-          | FALLBACK SELLING PRICE
-          |--------------------------------------------------------------------------
-          */
-
-          if (harga <= 0) {
-            harga = Number(
-              barang.sellingPrice ?? 0
-            );
-          }
-
-          /*
-          |--------------------------------------------------------------------------
-          | FALLBACK MASTER HARGA
-          |--------------------------------------------------------------------------
-          */
-
-          if (harga <= 0) {
-            const masterHarga =
-              await prisma.masterHarga.findFirst({
+            const barang =
+              await prisma.barang.findUnique({
                 where: {
-                  barangId,
-                },
-                orderBy: {
-                  createdAt: "desc",
+                  id: barangId,
                 },
               });
 
-            if (masterHarga) {
-              harga = Number(
-                masterHarga.hargaBaru ?? 0
+            if (!barang) {
+              throw new Error(
+                `Barang ID ${barangId} tidak ditemukan`
               );
             }
+
+            /*
+            |--------------------------------------------------------------------------
+            | PRICE SUMMARY
+            |--------------------------------------------------------------------------
+            */
+
+            const summary =
+              await prisma.priceSummary.findUnique(
+                {
+                  where: {
+                    barangId,
+                  },
+                }
+              );
+
+            let harga =
+              Number(
+                summary?.lastPrice ?? 0
+              );
+
+            /*
+            |--------------------------------------------------------------------------
+            | FALLBACK SELLING PRICE
+            |--------------------------------------------------------------------------
+            */
+
+            if (harga <= 0) {
+              harga =
+                Number(
+                  barang.sellingPrice ?? 0
+                );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | FALLBACK MASTER HARGA
+            |--------------------------------------------------------------------------
+            */
+
+            if (harga <= 0) {
+              const masterHarga =
+                await prisma.masterHarga.findFirst(
+                  {
+                    where: {
+                      barangId,
+                    },
+
+                    orderBy: {
+                      createdAt:
+                        "desc",
+                    },
+                  }
+                );
+
+              if (masterHarga) {
+                harga =
+                  Number(
+                    masterHarga.hargaBaru ??
+                      0
+                  );
+              }
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | SUBTOTAL
+            |--------------------------------------------------------------------------
+            */
+
+            const subtotal =
+              harga * qty;
+
+            return {
+              barangId,
+              qty,
+              price: harga,
+              subtotal,
+              note:
+                item.note ??
+                null,
+            };
           }
-
-          const subtotal =
-            harga * qty;
-
-          return {
-            barangId,
-            qty,
-            price: harga,
-            subtotal,
-            note: item.note ?? null,
-          };
-        })
+        )
       );
 
     /*
@@ -433,16 +731,29 @@ export async function POST(req: NextRequest) {
         data: {
           number,
 
-          customerId:
-            Number(body.customerId),
+          /*
+          |--------------------------------------------------------------------------
+          | CUSTOMER
+          |--------------------------------------------------------------------------
+          |
+          | PENTING:
+          | Ini CUSTOMER ID.
+          | Bukan OUTLET ID.
+          |
+          */
+
+          customerId,
 
           deliveryDate:
             body.deliveryDate
-              ? new Date(body.deliveryDate)
+              ? new Date(
+                  body.deliveryDate
+                )
               : new Date(),
 
           remarks:
-            body.remarks ?? null,
+            body.remarks ??
+            null,
 
           totalQty,
 
@@ -450,12 +761,25 @@ export async function POST(req: NextRequest) {
             DeliveryStatus.DRAFT,
 
           items: {
-            create: deliveryItems,
+            create:
+              deliveryItems,
           },
         },
 
         include: {
+          /*
+          |--------------------------------------------------------------------------
+          | RETURN CUSTOMER
+          |--------------------------------------------------------------------------
+          */
+
           customer: true,
+
+          /*
+          |--------------------------------------------------------------------------
+          | RETURN ITEMS
+          |--------------------------------------------------------------------------
+          */
 
           items: {
             include: {
@@ -484,6 +808,12 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    /*
+    |--------------------------------------------------------------------------
+    | RESPONSE
+    |--------------------------------------------------------------------------
+    */
+
     return NextResponse.json({
       success: true,
 
@@ -502,7 +832,9 @@ export async function POST(req: NextRequest) {
       {
         success: false,
         message:
-          "Gagal membuat Delivery Order",
+          error instanceof Error
+            ? error.message
+            : "Gagal membuat Delivery Order",
       },
       {
         status: 500,

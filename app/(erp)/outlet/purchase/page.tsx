@@ -66,27 +66,10 @@ type OutletPurchase = {
     | "APPROVED"
     | "RECEIVED";
 
-  /**
-   * METODE PEMBAYARAN
-   *
-   * CASH
-   * TRANSFER
-   * COD
-   * CBD
-   * TEMPO
-   */
   paymentMethod?: string | null;
 
-  /**
-   * TANGGAL RESMI PURCHASE
-   */
   purchaseDate?: string;
 
-  /**
-   * Waktu record dibuat.
-   * Tidak digunakan sebagai
-   * tanggal Purchase Order.
-   */
   createdAt?: string;
 
   remarks: string | null;
@@ -733,6 +716,26 @@ export default function OutletPurchasePage() {
   }
 
   // =====================================================
+  // DELIVERY REQUEST
+  // =====================================================
+
+  function handleNewDeliveryRequest() {
+    router.push(
+      "/outlet/delivery-request/new"
+    );
+  }
+
+  // =====================================================
+  // NEW PURCHASE
+  // =====================================================
+
+  function handleNewPurchase() {
+    router.push(
+      "/outlet/purchase/new"
+    );
+  }
+
+  // =====================================================
   // PAYMENT
   // =====================================================
 
@@ -863,12 +866,40 @@ export default function OutletPurchasePage() {
 
               </button>
 
+              {/* =================================================
+                  DELIVERY REQUEST NEW
+              ================================================= */}
+
               <button
                 type="button"
-                onClick={() =>
-                  router.push(
-                    "/outlet/purchase/new"
-                  )
+                onClick={
+                  handleNewDeliveryRequest
+                }
+                className="group inline-flex items-center justify-center gap-2 rounded-xl border border-[#BFD4CB] bg-white px-4 py-2.5 text-xs font-extrabold text-[#497F70] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#9FBFB3] hover:bg-[#F2F8F5] hover:shadow-md"
+              >
+
+                <Truck
+                  size={16}
+                  className="transition-transform duration-200 group-hover:-translate-y-0.5"
+                />
+
+                Delivery Request New
+
+                <ArrowUpRight
+                  size={14}
+                  className="opacity-70 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+                />
+
+              </button>
+
+              {/* =================================================
+                  PURCHASE BARU
+              ================================================= */}
+
+              <button
+                type="button"
+                onClick={
+                  handleNewPurchase
                 }
                 className="group inline-flex items-center justify-center gap-2 rounded-xl bg-[#497F70] px-4.5 py-2.5 text-xs font-extrabold text-white shadow-[0_8px_20px_rgba(73,127,112,0.18)] transition-all hover:-translate-y-0.5 hover:bg-[#3D6D60] hover:shadow-[0_12px_25px_rgba(73,127,112,0.22)]"
               >

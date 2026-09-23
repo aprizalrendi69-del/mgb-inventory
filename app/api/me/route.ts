@@ -64,17 +64,19 @@ export async function GET() {
       },
 
       select: {
+        // =====================================================
+        // BASIC USER
+        // =====================================================
         id: true,
         username: true,
         fullname: true,
         role: true,
         active: true,
-
-        // =====================================================
-        // FOTO PROFIL USER
-        // =====================================================
         photo: true,
 
+        // =====================================================
+        // OUTLET
+        // =====================================================
         outletId: true,
 
         outlet: {
@@ -82,6 +84,27 @@ export async function GET() {
             id: true,
             code: true,
             name: true,
+          },
+        },
+
+        // =====================================================
+        // CUSTOMER
+        //
+        // Customer otomatis mengikuti User yang login.
+        // Tidak perlu dipilih dari form Delivery Request.
+        // =====================================================
+        customerId: true,
+
+        customer: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            address: true,
+            city: true,
+            phone: true,
+            email: true,
+            contactPerson: true,
           },
         },
       },
@@ -103,11 +126,41 @@ export async function GET() {
     }
 
     // =========================================================
+    // USER INACTIVE
+    // =========================================================
+    if (!user.active) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "User tidak aktif",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    // =========================================================
     // RESPONSE
     // =========================================================
     return NextResponse.json({
       success: true,
-      user,
+      user: {
+        id: user.id,
+        username: user.username,
+        fullname: user.fullname,
+        role: user.role,
+        active: user.active,
+        photo: user.photo,
+
+        // Outlet user
+        outletId: user.outletId,
+        outlet: user.outlet,
+
+        // Customer user
+        customerId: user.customerId,
+        customer: user.customer,
+      },
     });
   } catch (error: any) {
     console.error("ME ERROR:", error);
@@ -115,7 +168,9 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
-        message: error?.message || "Gagal mengambil data user",
+        message:
+          error?.message ||
+          "Gagal mengambil data user",
       },
       {
         status: 500,
