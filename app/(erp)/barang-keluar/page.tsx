@@ -34,6 +34,7 @@ import {
   PackageCheck,
   PackageX,
   Download,
+  MessageCircle,
 } from "lucide-react";
 
 import BarcodeInputScanner from "@/components/BarcodeInputScanner";
@@ -657,15 +658,8 @@ export default function BarangKeluarPage() {
 
       await loadDeliveryRequests();
 
-      if (delivery?.id) {
-        const buka = confirm(
-          `Delivery ${delivery.number} berhasil dibuat.\n\nBuka Delivery sekarang?`
-        );
-
-        if (buka) {
-          window.location.href = `/barang-keluar/${delivery.id}`;
-        }
-      }
+      // Setelah PROSES, tetap di halaman Delivery Request.
+      // Tidak ada redirect / confirm untuk membuka halaman detail Delivery.
     } catch (error: any) {
       console.error("PROCESS DELIVERY REQUEST ERROR:", error);
 
@@ -1116,6 +1110,395 @@ export default function BarangKeluarPage() {
       "";
 
     return String(unit).trim() || "-";
+  }
+
+  // =========================================================
+  // WHATSAPP DELIVERY REQUEST
+  // =========================================================
+
+  function isWhatsAppEligibleRequest(request: any) {
+    const status = String(request?.status || "").trim().toUpperCase();
+    return status === "DRAFT" || status === "PENDING";
+  }
+
+  function getWhatsAppStockMark(item: any) {
+    const stock = getCentralStock(item);
+    const requested = Number(item?.qty || 0);
+
+    return stock >= requested && requested > 0 ? "✅" : "❌";
+  }
+
+  function getWhatsAppStockStatus(item: any) {
+    const stock = getCentralStock(item);
+    const requested = Number(item?.qty || 0);
+
+    if (stock >= requested && requested > 0) {
+      return "TERSEDIA";
+    }
+
+    if (stock > 0) {
+      return "KURANG";
+    }
+
+    return "KOSONG";
+  }
+
+  function getWhatsAppRequestDate(request: any) {
+    return formatDate(
+      request?.requestDate ||
+        request?.requestedAt ||
+        request?.createdAt
+    );
+  }
+
+  function sortDeliveryRequestsForWhatsApp(requests: any[]) {
+    return [...requests].sort((a: any, b: any) => {
+      const outletCompare = getRequestOutlet(a).localeCompare(
+        getRequestOutlet(b),
+        "id"
+      );
+
+      if (outletCompare !== 0) {
+        return outletCompare;
+      }
+
+      const dateA = new Date(
+        a?.requestDate ||
+          a?.requestedAt ||
+          a?.createdAt ||
+          0
+      ).getTime();
+
+      const dateB = new Date(
+        b?.requestDate ||
+          b?.requestedAt ||
+          b?.createdAt ||
+          0
+      ).getTime();
+
+      if (dateA !== dateB) {
+        return dateA - dateB;
+      }
+
+      return getRequestNumber(a).localeCompare(
+        getRequestNumber(b),
+        "id",
+        { numeric: true }
+      );
+    });
+  }
+
+  function buildDeliveryRequestWhatsAppMessage(request: any) {
+    if (!isWhatsAppEligibleRequest(request)) {
+      return "";
+    }
+
+    const items = Array.isArray(request?.items)
+      ? request.items
+      : [];
+
+    if (!items.length) {
+      return "";
+    }
+
+    const itemLines = items.map((item: any) => {
+      const itemName =
+        item?.barang?.name ||
+        `Barang #${item?.barangId ?? "-"}`;
+
+      const qty = Number(item?.qty || 0);
+      const unit = getRequestItemUnit(item);
+      const stock = getCentralStock(item);
+      const note =
+        typeof item?.note === "string"
+          ? item.note.trim()
+          : "";
+
+      return [
+        `${getWhatsAppStockMark(item)} ${itemName}`,
+        `   Request (${formatNumber(qty)} ${unit}) • Stock Pusat (${formatNumber(stock)} ${unit}) • ${getWhatsAppStockStatus(item)}`,
+        note ? `   ↳ Catatan : ${note}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+    });
+
+    return [
+      "📦 *DELIVERY REQUEST*",
+      `*${getRequestOutlet(request)}* • ${getRequestNumber(request)}`,
+      `📅 ${getWhatsAppRequestDate(request)} • ${String(
+        request?.status || "-"
+      ).toUpperCase()}`,
+      "",
+      itemLines.join("\n"),
+      "",
+      `*${items.length} jenis • ${formatNumber(
+        getRequestTotalQty(request)
+      )} qty*`,
+      "",
+      "MGB ERP • Gudang Pusat",
+    ].join("\n");
+  }
+
+  async function loadAllDeliveryRequestsForWhatsApp() {
+    const res = await fetch("/api/delivery-request", {
+      cache: "no-store",
+    });
+
+    const json = await res.json();
+
+    if (!res.ok || !json.success) {
+      throw new Error(
+        json.message ||
+          "Gagal mengambil seluruh Delivery Request."
+      );
+    }
+
+    const allRequests = Array.isArray(json.data)
+      ? json.data
+      : [];
+
+    // WhatsApp HANYA mengirim request yang masih aktif:
+    // DRAFT atau PENDING. APPROVED / PROCESSING / COMPLETED /
+    // REJECTED / CANCELLED tidak ikut dikirim.
+    const eligibleRequests = allRequests.filter(
+      (request: any) =>
+        isWhatsAppEligibleRequest(request) &&
+        Array.isArray(request?.items) &&
+        request.items.length > 0
+    );
+
+    // Hindari request ganda apabila API mengembalikan record
+    // yang sama lebih dari satu kali.
+    const uniqueRequests = Array.from(
+      new Map(
+        eligibleRequests.map((request: any) => [
+          String(request?.id ?? getRequestNumber(request)),
+          request,
+        ])
+      ).values()
+    );
+
+    return uniqueRequests;
+  }
+
+  function buildAllDeliveryRequestsWhatsAppMessage(
+    requests: any[]
+  ) {
+    const validRequests = sortDeliveryRequestsForWhatsApp(
+      requests.filter(
+        (request: any) =>
+          isWhatsAppEligibleRequest(request) &&
+          Array.isArray(request?.items) &&
+          request.items.length > 0
+      )
+    );
+
+    if (!validRequests.length) {
+      return "";
+    }
+
+    const groups = new Map<
+      string,
+      { name: string; requests: any[] }
+    >();
+
+    for (const request of validRequests) {
+      const name = getRequestOutlet(request);
+      const key = name.trim().toLowerCase();
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          name,
+          requests: [],
+        });
+      }
+
+      groups.get(key)!.requests.push(request);
+    }
+
+    const outletGroups = [...groups.values()];
+
+    const totalItems = validRequests.reduce(
+      (total, request) =>
+        total + request.items.length,
+      0
+    );
+
+    const totalQty = validRequests.reduce(
+      (total, request) =>
+        total + getRequestTotalQty(request),
+      0
+    );
+
+    const availableItems = validRequests.reduce(
+      (total, request) =>
+        total +
+        request.items.filter(
+          (item: any) =>
+            getCentralStock(item) >=
+              Number(item?.qty || 0) &&
+            Number(item?.qty || 0) > 0
+        ).length,
+      0
+    );
+
+    const message: string[] = [
+      "📦 *DELIVERY REQUEST OUTLET*",
+      "*MGB ERP • GUDANG PUSAT*",
+      "",
+      `🏪 ${outletGroups.length} outlet • 📋 ${validRequests.length} request`,
+      `📦 ${totalItems} jenis • 🔢 ${formatNumber(totalQty)} qty`,
+      "",
+      "━━━━━━━━━━━━━━━━━━",
+    ];
+
+    outletGroups.forEach((group, outletIndex) => {
+      message.push(
+        `*${outletIndex + 1}. ${group.name}*`
+      );
+
+      group.requests.forEach((request: any) => {
+        message.push(
+          "",
+          `📋 *${getRequestNumber(request)}* • ${getWhatsAppRequestDate(
+            request
+          )} • ${String(request?.status || "-").toUpperCase()}`
+        );
+
+        request.items.forEach((item: any) => {
+          const itemName =
+            item?.barang?.name ||
+            `Barang #${item?.barangId ?? "-"}`;
+
+          const qty = Number(item?.qty || 0);
+          const unit = getRequestItemUnit(item);
+          const stock = getCentralStock(item);
+          const note =
+            typeof item?.note === "string"
+              ? item.note.trim()
+              : "";
+
+          message.push(
+            `${getWhatsAppStockMark(item)} ${itemName}`,
+            `   Request (${formatNumber(qty)} ${unit}) • Stock Pusat (${formatNumber(stock)} ${unit}) • ${getWhatsAppStockStatus(item)}`,
+            ...(note ? [`   ↳ Catatan : ${note}`] : [])
+          );
+        });
+
+        message.push(
+          `   _${request.items.length} jenis • ${formatNumber(
+            getRequestTotalQty(request)
+          )} qty_`
+        );
+      });
+
+      if (outletIndex < outletGroups.length - 1) {
+        message.push("", "━━━━━━━━━━━━━━━━━━");
+      }
+    });
+
+    message.push(
+      "",
+      "━━━━━━━━━━━━━━━━━━",
+      `📊 *Stock: ${availableItems}/${totalItems} item cukup*`,
+      "❌ = stock kosong / kurang",
+      "",
+      "_Pesan otomatis dari MGB ERP._"
+    );
+
+    return message.join("\n");
+  }
+
+  function openWhatsAppDeliveryRequest(request: any) {
+    if (!request) {
+      alert("Delivery Request tidak ditemukan.");
+      return;
+    }
+
+    if (!isWhatsAppEligibleRequest(request)) {
+      alert(
+        "WhatsApp hanya dapat digunakan untuk Delivery Request dengan status DRAFT atau PENDING."
+      );
+      return;
+    }
+
+    const message =
+      buildDeliveryRequestWhatsAppMessage(request);
+
+    if (!message) {
+      alert(
+        "Tidak ada detail barang pada Delivery Request."
+      );
+      return;
+    }
+
+    const whatsappUrl =
+      `https://web.whatsapp.com/send?text=${encodeURIComponent(
+        message
+      )}`;
+
+    window.open(
+      whatsappUrl,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
+  async function openWhatsAppAllDeliveryRequests() {
+    const whatsappWindow = window.open(
+      "about:blank",
+      "_blank"
+    );
+
+    try {
+      const requests =
+        await loadAllDeliveryRequestsForWhatsApp();
+
+      const message =
+        buildAllDeliveryRequestsWhatsAppMessage(
+          requests
+        );
+
+      if (!message) {
+        whatsappWindow?.close();
+
+        alert(
+          "Tidak ada Delivery Request DRAFT / PENDING dengan detail barang yang dapat dikirim."
+        );
+
+        return;
+      }
+
+      const whatsappUrl =
+        `https://web.whatsapp.com/send?text=${encodeURIComponent(
+          message
+        )}`;
+
+      if (whatsappWindow) {
+        whatsappWindow.location.href =
+          whatsappUrl;
+        whatsappWindow.focus();
+      } else {
+        window.open(
+          whatsappUrl,
+          "_blank",
+          "noopener,noreferrer"
+        );
+      }
+    } catch (error: any) {
+      whatsappWindow?.close();
+
+      console.error(
+        "WHATSAPP ALL DELIVERY REQUEST ERROR:",
+        error
+      );
+
+      alert(
+        error?.message ||
+          "Gagal mengambil Delivery Request untuk WhatsApp."
+      );
+    }
   }
 
   // =========================================================
@@ -2299,13 +2682,24 @@ export default function BarangKeluarPage() {
 
                 <button
                   type="button"
+                  onClick={openWhatsAppAllDeliveryRequests}
+                  disabled={loadingRequests}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-xs font-bold text-emerald-700 shadow-[0_8px_20px_rgba(16,185,129,0.08)] transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Kirim seluruh Delivery Request dari semua outlet ke WhatsApp Web"
+                >
+                  <MessageCircle size={14} />
+                  WhatsApp Semua Request
+                </button>
+
+                <button
+                  type="button"
                   onClick={downloadDraftDeliveryRequestsPDF}
                   disabled={loadingRequests}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#173A2F] px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(23,58,47,0.12)] transition hover:bg-[#285744] disabled:cursor-not-allowed disabled:opacity-50"
                   title="Download semua Delivery Request yang masih Draft / Pending dari seluruh outlet yang dapat diakses"
                 >
                   <Download size={14} />
-                  Download Semua Draft PDF
+                  Download PDF
                 </button>
               </div>
             </div>
@@ -2483,6 +2877,20 @@ export default function BarangKeluarPage() {
                           </button>
 
                           <button
+                             type="button"
+                             onClick={() =>
+                               openWhatsAppDeliveryRequest(
+                                 request
+                               )
+                             }
+                             title="Kirim detail Delivery Request ke WhatsApp Web"
+                             className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+                           >
+                             <MessageCircle size={14} />
+                             WhatsApp
+                           </button>
+
+                           <button
                             type="button"
                             onClick={() =>
                               openRequestDetail(
@@ -4447,7 +4855,21 @@ export default function BarangKeluarPage() {
                     )}
 
                     {!editingRequest && (
-                      <button
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openWhatsAppDeliveryRequest(
+                              requestDetail
+                            )
+                          }
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-xs font-bold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+                        >
+                          <MessageCircle size={15} />
+                          WhatsApp
+                        </button>
+
+                        <button
                         type="button"
                         onClick={() => {
                           setShowRequestDetail(
@@ -4459,6 +4881,7 @@ export default function BarangKeluarPage() {
                       >
                         Tutup
                       </button>
+                      </>
                     )}
                   </div>
                 </div>

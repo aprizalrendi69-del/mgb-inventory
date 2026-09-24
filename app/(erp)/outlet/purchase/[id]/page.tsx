@@ -4549,6 +4549,15 @@ type Comment = {
   createdAt: string;
   user: User;
   mentions?: Mention[];
+
+  // Foto komentar. Backend dapat mengembalikan salah satu nama field berikut.
+  photo?: string | null;
+  photoUrl?: string | null;
+  imageUrl?: string | null;
+  attachmentUrl?: string | null;
+  image?: string | null;
+  fileUrl?: string | null;
+  filePath?: string | null;
 };
 
 type CommentPurchase = {
@@ -4851,6 +4860,28 @@ function PurchaseOutletCommentSection({
                   ),
                 }
               : item.user,
+
+            photo:
+              item?.photo ??
+              item?.photoUrl ??
+              item?.imageUrl ??
+              item?.attachmentUrl ??
+              item?.image ??
+              item?.fileUrl ??
+              item?.filePath ??
+              null,
+
+            photoUrl:
+              item?.photoUrl ??
+              null,
+
+            imageUrl:
+              item?.imageUrl ??
+              null,
+
+            attachmentUrl:
+              item?.attachmentUrl ??
+              null,
 
             mentions:
               Array.isArray(
@@ -5638,6 +5669,71 @@ function PurchaseOutletCommentSection({
   }
 
   // =====================================================
+  // COMMENT PHOTO / IMAGE
+  // =====================================================
+  // Backend versi berbeda dapat menggunakan nama field foto yang berbeda.
+  // Helper ini menjaga kompatibilitas tanpa mengubah struktur komentar lama.
+
+  function getCommentPhotoUrl(
+    item: Comment
+  ): string | null {
+    const candidates = [
+      item?.photo,
+      item?.photoUrl,
+      item?.imageUrl,
+      item?.attachmentUrl,
+      item?.image,
+      item?.fileUrl,
+      item?.filePath,
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof candidate !== "string") {
+        continue;
+      }
+
+      const value = candidate.trim();
+
+      if (!value) {
+        continue;
+      }
+
+      // Data URL / URL absolut langsung dipakai.
+      if (
+        value.startsWith("data:") ||
+        value.startsWith("blob:") ||
+        value.startsWith("http://") ||
+        value.startsWith("https://") ||
+        value.startsWith("/")
+      ) {
+        return value;
+      }
+
+      // Path relatif dari backend dibuat menjadi URL root.
+      return `/${value.replace(/^\/+/, "")}`;
+    }
+
+    return null;
+  }
+
+  function isImageFileUrl(
+    url: string
+  ): boolean {
+    if (url.startsWith("data:image/")) {
+      return true;
+    }
+
+    const cleanUrl = url
+      .split("?")[0]
+      .split("#")[0]
+      .toLowerCase();
+
+    return /\.(jpg|jpeg|png|gif|webp|bmp|svg|avif)$/i.test(
+      cleanUrl
+    );
+  }
+
+  // =====================================================
   // RENDER COMMENT WITH MENTIONS
   // =====================================================
 
@@ -5801,6 +5897,24 @@ function PurchaseOutletCommentSection({
                     ),
                   }
                 : json.data.user,
+            photo:
+              json.data.photo ??
+              json.data.photoUrl ??
+              json.data.imageUrl ??
+              json.data.attachmentUrl ??
+              json.data.image ??
+              json.data.fileUrl ??
+              json.data.filePath ??
+              null,
+            photoUrl:
+              json.data.photoUrl ??
+              null,
+            imageUrl:
+              json.data.imageUrl ??
+              null,
+            attachmentUrl:
+              json.data.attachmentUrl ??
+              null,
           };
 
         setComments(
@@ -6122,6 +6236,59 @@ function PurchaseOutletCommentSection({
                     item
                   )}
                 </div>
+
+                {/* COMMENT PHOTO */}
+
+                {(() => {
+                  const photoUrl =
+                    getCommentPhotoUrl(
+                      item
+                    );
+
+                  if (!photoUrl) {
+                    return null;
+                  }
+
+                  if (!isImageFileUrl(photoUrl)) {
+                    return (
+                      <a
+                        href={photoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-3 inline-flex items-center gap-2 rounded-xl border border-[#D5E5DC] bg-white px-3 py-2 text-xs font-semibold text-[#497F70] transition hover:bg-[#F2F7F4]"
+                      >
+                        <FileText size={15} />
+                        Lihat lampiran
+                      </a>
+                    );
+                  }
+
+                  return (
+                    <a
+                      href={photoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="group mt-3 block w-fit max-w-full overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm transition hover:border-[#BFD3CA] hover:shadow-md"
+                      title="Buka foto komentar"
+                    >
+                      <img
+                        src={photoUrl}
+                        alt="Foto komentar"
+                        className="block max-h-[360px] max-w-full object-contain transition duration-200 group-hover:scale-[1.01]"
+                        loading="lazy"
+                        onError={(e) => {
+                          const wrapper =
+                            e.currentTarget.parentElement;
+
+                          if (wrapper) {
+                            wrapper.style.display =
+                              "none";
+                          }
+                        }}
+                      />
+                    </a>
+                  );
+                })()}
 
                 {/* MENTIONS */}
 

@@ -30,123 +30,6 @@ type RouteContext = {
 };
 
 // ============================================================
-// COMMENT PHOTO CONFIG
-// ============================================================
-
-const COMMENT_PHOTO_MAX_SIZE = 5 * 1024 * 1024;
-
-const COMMENT_PHOTO_MIME_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-]);
-
-const COMMENT_PHOTO_EXTENSIONS: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-  "image/gif": ".gif",
-};
-
-// ============================================================
-// SAVE COMMENT PHOTO
-// ============================================================
-//
-// Foto komentar disimpan sebagai file:
-//
-// public/uploads/comments/<filename>
-//
-// Database hanya menyimpan:
-//
-// /uploads/comments/<filename>
-//
-// Tidak menyimpan base64.
-//
-
-async function saveCommentPhoto(
-  file: File
-): Promise<string> {
-  if (!(file instanceof File)) {
-    throw new Error(
-      "File foto komentar tidak valid."
-    );
-  }
-
-  if (file.size <= 0) {
-    throw new Error(
-      "Foto komentar kosong."
-    );
-  }
-
-  if (
-    file.size >
-    COMMENT_PHOTO_MAX_SIZE
-  ) {
-    throw new Error(
-      "Ukuran foto komentar maksimal 5 MB."
-    );
-  }
-
-  const mimeType =
-    String(file.type ?? "")
-      .trim()
-      .toLowerCase();
-
-  if (
-    !COMMENT_PHOTO_MIME_TYPES.has(
-      mimeType
-    )
-  ) {
-    throw new Error(
-      "Format foto tidak didukung. Gunakan JPG, PNG, WebP, atau GIF."
-    );
-  }
-
-  const extension =
-    COMMENT_PHOTO_EXTENSIONS[
-      mimeType
-    ] ?? ".jpg";
-
-  const uploadDirectory =
-    path.join(
-      process.cwd(),
-      "public",
-      "uploads",
-      "comments"
-    );
-
-  await mkdir(
-    uploadDirectory,
-    {
-      recursive: true,
-    }
-  );
-
-  const filename =
-    `comment-${Date.now()}-${crypto.randomBytes(8).toString("hex")}${extension}`;
-
-  const filePath =
-    path.join(
-      uploadDirectory,
-      filename
-    );
-
-  const arrayBuffer =
-    await file.arrayBuffer();
-
-  const buffer =
-    Buffer.from(arrayBuffer);
-
-  await writeFile(
-    filePath,
-    buffer
-  );
-
-  return `/uploads/comments/${filename}`;
-}
-
-// ============================================================
 // CURRENT USER
 // ============================================================
 
@@ -166,34 +49,27 @@ async function getCurrentUser(): Promise<SessionUser | null> {
   // ----------------------------------------------------------
 
   try {
-    const session =
-      await prisma.session.findUnique({
-        where: {
-          token:
-            sessionCookie.value,
-        },
-
-        select: {
-          expiresAt: true,
-
-          user: {
-            select: {
-              id: true,
-              username: true,
-              fullname: true,
-              role: true,
-              active: true,
-              outletId: true,
-            },
+    const session = await prisma.session.findUnique({
+      where: {
+        token: sessionCookie.value,
+      },
+      select: {
+        expiresAt: true,
+        user: {
+          select: {
+            id: true,
+            username: true,
+            fullname: true,
+            role: true,
+            active: true,
+            outletId: true,
           },
         },
-      });
+      },
+    });
 
     if (session) {
-      if (
-        session.expiresAt <
-        new Date()
-      ) {
+      if (session.expiresAt < new Date()) {
         return null;
       }
 
@@ -215,10 +91,7 @@ async function getCurrentUser(): Promise<SessionUser | null> {
   // ----------------------------------------------------------
 
   try {
-    const parsed =
-      JSON.parse(
-        sessionCookie.value
-      );
+    const parsed = JSON.parse(sessionCookie.value);
 
     const userId = Number(
       parsed?.user?.id ??
@@ -227,29 +100,25 @@ async function getCurrentUser(): Promise<SessionUser | null> {
     );
 
     if (
-      !Number.isInteger(
-        userId
-      ) ||
+      !Number.isInteger(userId) ||
       userId <= 0
     ) {
       return null;
     }
 
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
-
-        select: {
-          id: true,
-          username: true,
-          fullname: true,
-          role: true,
-          active: true,
-          outletId: true,
-        },
-      });
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        username: true,
+        fullname: true,
+        role: true,
+        active: true,
+        outletId: true,
+      },
+    });
 
     if (!user || !user.active) {
       return null;
@@ -270,9 +139,7 @@ async function getCurrentUser(): Promise<SessionUser | null> {
 // ACCESS
 // ============================================================
 
-function canAccessComments(
-  role: string
-) {
+function canAccessComments(role: string) {
   return (
     role === "ADMIN" ||
     role === "MANAGER" ||
@@ -287,8 +154,7 @@ function canAccessComments(
 async function getRouteKey(
   context: RouteContext
 ): Promise<string | null> {
-  const params =
-    await context.params;
+  const params = await context.params;
 
   const rawId = String(
     params?.id ?? ""
@@ -306,10 +172,7 @@ async function getRouteKey(
 // ============================================================
 
 function parseSource(
-  value:
-    | string
-    | null
-    | undefined
+  value: string | null | undefined
 ): TransactionSource | null {
   const source = String(
     value ?? ""
@@ -317,15 +180,11 @@ function parseSource(
     .trim()
     .toUpperCase();
 
-  if (
-    source === "PURCHASE"
-  ) {
+  if (source === "PURCHASE") {
     return "PURCHASE";
   }
 
-  if (
-    source === "TRANSFER"
-  ) {
+  if (source === "TRANSFER") {
     return "TRANSFER";
   }
 
@@ -339,23 +198,18 @@ function parseSource(
 function detectSourceFromNumber(
   value: string
 ): TransactionSource | null {
-  const normalized =
-    value
-      .trim()
-      .toUpperCase();
+  const normalized = value
+    .trim()
+    .toUpperCase();
 
   if (
-    normalized.startsWith(
-      "TRANSFER-"
-    )
+    normalized.startsWith("TRANSFER-")
   ) {
     return "TRANSFER";
   }
 
   if (
-    normalized.startsWith(
-      "PURCHASE-"
-    )
+    normalized.startsWith("PURCHASE-")
   ) {
     return "PURCHASE";
   }
@@ -371,137 +225,106 @@ async function getOutletPurchaseForUser(
   transactionKey: string,
   user: SessionUser
 ) {
-  const normalizedKey =
-    String(
-      transactionKey ?? ""
-    ).trim();
+  const normalizedKey = String(
+    transactionKey ?? ""
+  ).trim();
 
-  let purchaseId:
-    | number
-    | null = null;
+  let purchaseId: number | null = null;
 
-  // ----------------------------------------------------------
   // PURCHASE-36
-  // ----------------------------------------------------------
-
   const purchaseMatch =
     normalizedKey.match(
       /^PURCHASE-(\d+)$/i
     );
 
   if (purchaseMatch) {
-    const parsedId =
-      Number(
-        purchaseMatch[1]
-      );
+    const parsedId = Number(
+      purchaseMatch[1]
+    );
 
     if (
-      Number.isInteger(
-        parsedId
-      ) &&
+      Number.isInteger(parsedId) &&
       parsedId > 0
     ) {
       purchaseId = parsedId;
     }
   }
 
-  // ----------------------------------------------------------
-  // PLAIN NUMERIC ID
-  // ----------------------------------------------------------
-
+  // Plain numeric ID
   if (!purchaseId) {
-    const parsedId =
-      Number(
-        normalizedKey
-      );
+    const parsedId = Number(
+      normalizedKey
+    );
 
     if (
-      Number.isInteger(
-        parsedId
-      ) &&
+      Number.isInteger(parsedId) &&
       parsedId > 0
     ) {
       purchaseId = parsedId;
     }
   }
 
-  // ----------------------------------------------------------
-  // FIND PURCHASE
-  // ----------------------------------------------------------
+  // Find purchase
+  const purchase = purchaseId
+    ? await prisma.outletPurchase.findUnique({
+        where: {
+          id: purchaseId,
+        },
+        select: {
+          id: true,
+          number: true,
+          outletId: true,
 
-  const purchase =
-    purchaseId
-      ? await prisma.outletPurchase.findUnique(
-          {
-            where: {
-              id: purchaseId,
-            },
-
+          supplier: {
             select: {
               id: true,
-              number: true,
-              outletId: true,
-
-              supplier: {
-                select: {
-                  id: true,
-                  name: true,
-                },
-              },
-
-              outlet: {
-                select: {
-                  id: true,
-                  code: true,
-                  name: true,
-                },
-              },
+              name: true,
             },
-          }
-        )
-      : await prisma.outletPurchase.findUnique(
-          {
-            where: {
-              number:
-                normalizedKey,
-            },
+          },
 
+          outlet: {
             select: {
               id: true,
-              number: true,
-              outletId: true,
-
-              supplier: {
-                select: {
-                  id: true,
-                  name: true,
-                },
-              },
-
-              outlet: {
-                select: {
-                  id: true,
-                  code: true,
-                  name: true,
-                },
-              },
+              code: true,
+              name: true,
             },
-          }
-        );
+          },
+        },
+      })
+    : await prisma.outletPurchase.findUnique({
+        where: {
+          number: normalizedKey,
+        },
+        select: {
+          id: true,
+          number: true,
+          outletId: true,
+
+          supplier: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+
+          outlet: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+        },
+      });
 
   if (!purchase) {
     return null;
   }
 
-  // ----------------------------------------------------------
-  // OUTLET ADMIN ACCESS
-  // ----------------------------------------------------------
-
+  // Outlet admin hanya boleh outlet sendiri
   if (
-    user.role ===
-      "OUTLET_ADMIN" &&
-    purchase.outletId !==
-      user.outletId
+    user.role === "OUTLET_ADMIN" &&
+    purchase.outletId !== user.outletId
   ) {
     return null;
   }
@@ -517,147 +340,116 @@ async function getOutletTransferForUser(
   transactionKey: string,
   user: SessionUser
 ) {
-  const normalizedKey =
-    String(
-      transactionKey ?? ""
-    ).trim();
+  const normalizedKey = String(
+    transactionKey ?? ""
+  ).trim();
 
-  let transferId:
-    | number
-    | null = null;
+  let transferId: number | null = null;
 
-  // ----------------------------------------------------------
   // TRANSFER-147
-  // ----------------------------------------------------------
-
   const transferMatch =
     normalizedKey.match(
       /^TRANSFER-(\d+)$/i
     );
 
   if (transferMatch) {
-    const parsedId =
-      Number(
-        transferMatch[1]
-      );
+    const parsedId = Number(
+      transferMatch[1]
+    );
 
     if (
-      Number.isInteger(
-        parsedId
-      ) &&
+      Number.isInteger(parsedId) &&
       parsedId > 0
     ) {
       transferId = parsedId;
     }
   }
 
-  // ----------------------------------------------------------
-  // PLAIN NUMERIC ID
-  // ----------------------------------------------------------
-
+  // Plain numeric ID
   if (!transferId) {
-    const parsedId =
-      Number(
-        normalizedKey
-      );
+    const parsedId = Number(
+      normalizedKey
+    );
 
     if (
-      Number.isInteger(
-        parsedId
-      ) &&
+      Number.isInteger(parsedId) &&
       parsedId > 0
     ) {
       transferId = parsedId;
     }
   }
 
-  // ----------------------------------------------------------
-  // FIND TRANSFER
-  // ----------------------------------------------------------
+  // Find transfer
+  const transfer = transferId
+    ? await prisma.outletTransfer.findUnique({
+        where: {
+          id: transferId,
+        },
+        select: {
+          id: true,
+          number: true,
+          sourceOutletId: true,
+          outletId: true,
+          transferDate: true,
+          status: true,
+          remarks: true,
 
-  const transfer =
-    transferId
-      ? await prisma.outletTransfer.findUnique(
-          {
-            where: {
-              id: transferId,
-            },
-
+          sourceOutlet: {
             select: {
               id: true,
-              number: true,
-              sourceOutletId: true,
-              outletId: true,
-              transferDate: true,
-              status: true,
-              remarks: true,
-
-              sourceOutlet: {
-                select: {
-                  id: true,
-                  code: true,
-                  name: true,
-                },
-              },
-
-              outlet: {
-                select: {
-                  id: true,
-                  code: true,
-                  name: true,
-                },
-              },
+              code: true,
+              name: true,
             },
-          }
-        )
-      : await prisma.outletTransfer.findUnique(
-          {
-            where: {
-              number:
-                normalizedKey,
-            },
+          },
 
+          outlet: {
             select: {
               id: true,
-              number: true,
-              sourceOutletId: true,
-              outletId: true,
-              transferDate: true,
-              status: true,
-              remarks: true,
-
-              sourceOutlet: {
-                select: {
-                  id: true,
-                  code: true,
-                  name: true,
-                },
-              },
-
-              outlet: {
-                select: {
-                  id: true,
-                  code: true,
-                  name: true,
-                },
-              },
+              code: true,
+              name: true,
             },
-          }
-        );
+          },
+        },
+      })
+    : await prisma.outletTransfer.findUnique({
+        where: {
+          number: normalizedKey,
+        },
+        select: {
+          id: true,
+          number: true,
+          sourceOutletId: true,
+          outletId: true,
+          transferDate: true,
+          status: true,
+          remarks: true,
+
+          sourceOutlet: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+
+          outlet: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+        },
+      });
 
   if (!transfer) {
     return null;
   }
 
-  // ----------------------------------------------------------
-  // OUTLET ADMIN ACCESS
-  // ----------------------------------------------------------
-
+  // Outlet admin hanya boleh outlet tujuan sendiri
   if (
-    user.role ===
-      "OUTLET_ADMIN" &&
-    transfer.outletId !==
-      user.outletId
+    user.role === "OUTLET_ADMIN" &&
+    transfer.outletId !== user.outletId
   ) {
     return null;
   }
@@ -671,18 +463,11 @@ async function getOutletTransferForUser(
 
 async function resolveTransaction(
   transactionKey: string,
-  source:
-    | TransactionSource
-    | null,
+  source: TransactionSource | null,
   user: SessionUser
 ) {
-  // ----------------------------------------------------------
-  // EXPLICIT TRANSFER
-  // ----------------------------------------------------------
-
-  if (
-    source === "TRANSFER"
-  ) {
+  // Explicit transfer
+  if (source === "TRANSFER") {
     const transfer =
       await getOutletTransferForUser(
         transactionKey,
@@ -694,20 +479,13 @@ async function resolveTransaction(
     }
 
     return {
-      source:
-        "TRANSFER" as const,
-      transaction:
-        transfer,
+      source: "TRANSFER" as const,
+      transaction: transfer,
     };
   }
 
-  // ----------------------------------------------------------
-  // EXPLICIT PURCHASE
-  // ----------------------------------------------------------
-
-  if (
-    source === "PURCHASE"
-  ) {
+  // Explicit purchase
+  if (source === "PURCHASE") {
     const purchase =
       await getOutletPurchaseForUser(
         transactionKey,
@@ -719,29 +497,19 @@ async function resolveTransaction(
     }
 
     return {
-      source:
-        "PURCHASE" as const,
-      transaction:
-        purchase,
+      source: "PURCHASE" as const,
+      transaction: purchase,
     };
   }
 
-  // ----------------------------------------------------------
-  // AUTO DETECT SOURCE
-  // ----------------------------------------------------------
-
+  // Auto detect
   const detectedSource =
     detectSourceFromNumber(
       transactionKey
     );
 
-  // ----------------------------------------------------------
-  // AUTO DETECT TRANSFER
-  // ----------------------------------------------------------
-
   if (
-    detectedSource ===
-    "TRANSFER"
+    detectedSource === "TRANSFER"
   ) {
     const transfer =
       await getOutletTransferForUser(
@@ -754,20 +522,13 @@ async function resolveTransaction(
     }
 
     return {
-      source:
-        "TRANSFER" as const,
-      transaction:
-        transfer,
+      source: "TRANSFER" as const,
+      transaction: transfer,
     };
   }
 
-  // ----------------------------------------------------------
-  // AUTO DETECT PURCHASE
-  // ----------------------------------------------------------
-
   if (
-    detectedSource ===
-    "PURCHASE"
+    detectedSource === "PURCHASE"
   ) {
     const purchase =
       await getOutletPurchaseForUser(
@@ -780,17 +541,12 @@ async function resolveTransaction(
     }
 
     return {
-      source:
-        "PURCHASE" as const,
-      transaction:
-        purchase,
+      source: "PURCHASE" as const,
+      transaction: purchase,
     };
   }
 
-  // ----------------------------------------------------------
-  // TRY PURCHASE
-  // ----------------------------------------------------------
-
+  // Try purchase
   const purchase =
     await getOutletPurchaseForUser(
       transactionKey,
@@ -799,17 +555,12 @@ async function resolveTransaction(
 
   if (purchase) {
     return {
-      source:
-        "PURCHASE" as const,
-      transaction:
-        purchase,
+      source: "PURCHASE" as const,
+      transaction: purchase,
     };
   }
 
-  // ----------------------------------------------------------
-  // FALLBACK TRANSFER
-  // ----------------------------------------------------------
-
+  // Fallback transfer
   const transfer =
     await getOutletTransferForUser(
       transactionKey,
@@ -818,14 +569,100 @@ async function resolveTransaction(
 
   if (transfer) {
     return {
-      source:
-        "TRANSFER" as const,
-      transaction:
-        transfer,
+      source: "TRANSFER" as const,
+      transaction: transfer,
     };
   }
 
   return null;
+}
+
+// ============================================================
+// SAVE COMMENT PHOTO
+// ============================================================
+
+async function saveCommentPhoto(
+  file: File
+): Promise<string> {
+  const MAX_SIZE =
+    5 * 1024 * 1024;
+
+  if (file.size <= 0) {
+    throw new Error(
+      "File foto kosong."
+    );
+  }
+
+  if (file.size > MAX_SIZE) {
+    throw new Error(
+      "Ukuran foto maksimal 5 MB."
+    );
+  }
+
+  const allowedTypes = [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+  ];
+
+  if (
+    !allowedTypes.includes(
+      file.type
+    )
+  ) {
+    throw new Error(
+      "Format foto tidak didukung. Gunakan JPG, PNG, WEBP, atau GIF."
+    );
+  }
+
+  const extensionMap: Record<
+    string,
+    string
+  > = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  };
+
+  const extension =
+    extensionMap[file.type] ??
+    "jpg";
+
+  const filename = `${Date.now()}-${crypto
+    .randomBytes(8)
+    .toString("hex")}.${extension}`;
+
+  const uploadDir = path.join(
+    process.cwd(),
+    "public",
+    "uploads",
+    "comments"
+  );
+
+  await mkdir(uploadDir, {
+    recursive: true,
+  });
+
+  const filePath = path.join(
+    uploadDir,
+    filename
+  );
+
+  const arrayBuffer =
+    await file.arrayBuffer();
+
+  const buffer = Buffer.from(
+    arrayBuffer
+  );
+
+  await writeFile(
+    filePath,
+    buffer
+  );
+
+  return `/uploads/comments/${filename}`;
 }
 
 // ============================================================
@@ -836,76 +673,56 @@ function normalizePurchaseComment(
   comment: any
 ) {
   return {
-    id:
-      comment.id,
+    id: comment.id,
 
     content:
       comment.comment,
 
     photo:
-      comment.photo ??
-      null,
+      comment.photo ?? null,
 
     createdAt:
       comment.createdAt,
 
-    updatedAt:
-      null,
+    updatedAt: null,
 
-    user:
-      comment.user
-        ? {
-            id:
-              comment.user.id,
+    user: comment.user
+      ? {
+          id: comment.user.id,
 
-            name:
-              comment.user
-                .fullname ??
-              comment.user
-                .username,
+          name:
+            comment.user.fullname ??
+            comment.user.username,
 
-            username:
-              comment.user
-                .username,
+          username:
+            comment.user.username,
 
-            role:
-              comment.user
-                .role,
-          }
-        : null,
+          role:
+            comment.user.role,
+        }
+      : null,
 
     mentions:
-      Array.isArray(
-        comment.mentions
-      )
+      Array.isArray(comment.mentions)
         ? comment.mentions
             .map(
-              (
-                mention: any
-              ) =>
+              (mention: any) =>
                 mention.user
             )
             .filter(Boolean)
             .map(
-              (
-                mentionUser: any
-              ) => ({
-                id:
-                  mentionUser.id,
+              (mentionUser: any) => ({
+                id: mentionUser.id,
 
                 name:
-                  mentionUser
-                    .fullname ??
-                  mentionUser
-                    .username,
+                  mentionUser.fullname ??
+                  mentionUser.username,
 
                 username:
-                  mentionUser
-                    .username,
+                  mentionUser.username,
 
                 role:
-                  mentionUser
-                    .role,
+                  mentionUser.role,
               })
             )
         : [],
@@ -920,76 +737,56 @@ function normalizeTransferComment(
   comment: any
 ) {
   return {
-    id:
-      comment.id,
+    id: comment.id,
 
     content:
       comment.comment,
 
     photo:
-      comment.photo ??
-      null,
+      comment.photo ?? null,
 
     createdAt:
       comment.createdAt,
 
-    updatedAt:
-      null,
+    updatedAt: null,
 
-    user:
-      comment.user
-        ? {
-            id:
-              comment.user.id,
+    user: comment.user
+      ? {
+          id: comment.user.id,
 
-            name:
-              comment.user
-                .fullname ??
-              comment.user
-                .username,
+          name:
+            comment.user.fullname ??
+            comment.user.username,
 
-            username:
-              comment.user
-                .username,
+          username:
+            comment.user.username,
 
-            role:
-              comment.user
-                .role,
-          }
-        : null,
+          role:
+            comment.user.role,
+        }
+      : null,
 
     mentions:
-      Array.isArray(
-        comment.mentions
-      )
+      Array.isArray(comment.mentions)
         ? comment.mentions
             .map(
-              (
-                mention: any
-              ) =>
+              (mention: any) =>
                 mention.user
             )
             .filter(Boolean)
             .map(
-              (
-                mentionUser: any
-              ) => ({
-                id:
-                  mentionUser.id,
+              (mentionUser: any) => ({
+                id: mentionUser.id,
 
                 name:
-                  mentionUser
-                    .fullname ??
-                  mentionUser
-                    .username,
+                  mentionUser.fullname ??
+                  mentionUser.username,
 
                 username:
-                  mentionUser
-                    .username,
+                  mentionUser.username,
 
                 role:
-                  mentionUser
-                    .role,
+                  mentionUser.role,
               })
             )
         : [],
@@ -1128,10 +925,6 @@ export async function GET(
   context: RouteContext
 ) {
   try {
-    // --------------------------------------------------------
-    // AUTH
-    // --------------------------------------------------------
-
     const user =
       await getCurrentUser();
 
@@ -1147,10 +940,6 @@ export async function GET(
         }
       );
     }
-
-    // --------------------------------------------------------
-    // ROLE
-    // --------------------------------------------------------
 
     if (
       !canAccessComments(
@@ -1169,14 +958,8 @@ export async function GET(
       );
     }
 
-    // --------------------------------------------------------
-    // TRANSACTION KEY
-    // --------------------------------------------------------
-
     const transactionKey =
-      await getRouteKey(
-        context
-      );
+      await getRouteKey(context);
 
     if (!transactionKey) {
       return NextResponse.json(
@@ -1191,20 +974,12 @@ export async function GET(
       );
     }
 
-    // --------------------------------------------------------
-    // SOURCE
-    // --------------------------------------------------------
-
     const source =
       parseSource(
-        request.nextUrl
-          .searchParams
-          .get("source")
+        request.nextUrl.searchParams.get(
+          "source"
+        )
       );
-
-    // --------------------------------------------------------
-    // RESOLVE
-    // --------------------------------------------------------
 
     const resolved =
       await resolveTransaction(
@@ -1226,9 +1001,9 @@ export async function GET(
       );
     }
 
-    // ========================================================
+    // --------------------------------------------------------
     // PURCHASE
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
       resolved.source ===
@@ -1257,8 +1032,7 @@ export async function GET(
           comments,
 
         transaction: {
-          id:
-            purchase.id,
+          id: purchase.id,
 
           number:
             purchase.number,
@@ -1272,9 +1046,9 @@ export async function GET(
       });
     }
 
-    // ========================================================
+    // --------------------------------------------------------
     // TRANSFER
-    // ========================================================
+    // --------------------------------------------------------
 
     const transfer =
       resolved.transaction;
@@ -1299,8 +1073,7 @@ export async function GET(
         comments,
 
       transaction: {
-        id:
-          transfer.id,
+        id: transfer.id,
 
         number:
           transfer.number,
@@ -1349,10 +1122,6 @@ export async function POST(
   request: NextRequest,
   context: RouteContext
 ) {
-  let savedPhotoPath:
-    | string
-    | null = null;
-
   try {
     // --------------------------------------------------------
     // AUTH
@@ -1400,9 +1169,7 @@ export async function POST(
     // --------------------------------------------------------
 
     const transactionKey =
-      await getRouteKey(
-        context
-      );
+      await getRouteKey(context);
 
     if (!transactionKey) {
       return NextResponse.json(
@@ -1418,30 +1185,72 @@ export async function POST(
     }
 
     // --------------------------------------------------------
-    // BODY
+    // FORM DATA
     // --------------------------------------------------------
-    //
-    // FRONTEND TERBARU MENGIRIM multipart/form-data.
-    //
-    // Jangan gunakan request.json() di sini.
-    //
 
-    let formData: FormData;
+    const formData =
+      await request.formData();
 
-    try {
-      formData =
-        await request.formData();
-    } catch (error) {
-      console.error(
-        "BARANG MASUK COMMENTS FORM DATA ERROR:",
-        error
+    const rawContent =
+      formData.get("content");
+
+    const content =
+      typeof rawContent ===
+      "string"
+        ? rawContent.trim()
+        : "";
+
+    // --------------------------------------------------------
+    // SOURCE
+    // --------------------------------------------------------
+
+    const rawSource =
+      formData.get("source");
+
+    const source =
+      parseSource(
+        typeof rawSource ===
+          "string"
+          ? rawSource
+          : request.nextUrl.searchParams.get(
+              "source"
+            )
       );
 
+    // --------------------------------------------------------
+    // PHOTO
+    // --------------------------------------------------------
+
+    const rawPhoto =
+      formData.get("photo");
+
+    let photoPath:
+      | string
+      | null = null;
+
+    if (
+      rawPhoto instanceof File &&
+      rawPhoto.size > 0
+    ) {
+      photoPath =
+        await saveCommentPhoto(
+          rawPhoto
+        );
+    }
+
+    // --------------------------------------------------------
+    // COMMENT + PHOTO
+    // --------------------------------------------------------
+
+    if (
+      !content &&
+      !photoPath
+    ) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Body request tidak valid. Gunakan multipart/form-data.",
+            "Komentar atau foto wajib diisi.",
         },
         {
           status: 400,
@@ -1449,39 +1258,8 @@ export async function POST(
       );
     }
 
-    // --------------------------------------------------------
-    // SOURCE
-    // --------------------------------------------------------
-
-    const sourceValue =
-      formData.get("source");
-
-    const source =
-      parseSource(
-        typeof sourceValue ===
-          "string"
-          ? sourceValue
-          : request.nextUrl
-              .searchParams
-              .get("source")
-      );
-
-    // --------------------------------------------------------
-    // CONTENT
-    // --------------------------------------------------------
-
-    const contentValue =
-      formData.get("content");
-
-    const content =
-      typeof contentValue ===
-      "string"
-        ? contentValue.trim()
-        : "";
-
     if (
-      content.length >
-      5000
+      content.length > 5000
     ) {
       return NextResponse.json(
         {
@@ -1496,104 +1274,52 @@ export async function POST(
     }
 
     // --------------------------------------------------------
-    // PHOTO
-    // --------------------------------------------------------
-
-    const photoValue =
-      formData.get("photo");
-
-    const photoFile =
-      photoValue instanceof File &&
-      photoValue.size > 0
-        ? photoValue
-        : null;
-
-    // --------------------------------------------------------
-    // TEXT + PHOTO EMPTY CHECK
-    // --------------------------------------------------------
-
-    if (
-      !content &&
-      !photoFile
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Komentar atau foto wajib diisi.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    // --------------------------------------------------------
-    // SAVE PHOTO
-    // --------------------------------------------------------
-
-    if (photoFile) {
-      try {
-        savedPhotoPath =
-          await saveCommentPhoto(
-            photoFile
-          );
-      } catch (error: any) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              error?.message ||
-              "Gagal menyimpan foto komentar.",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-    }
-
-    // --------------------------------------------------------
     // MENTION IDS
     // --------------------------------------------------------
 
-    const rawMentionValue =
+    let mentionUserIds: number[] =
+      [];
+
+    const rawMentionUserIds =
       formData.get(
         "mentionUserIds"
       );
 
-    let rawMentionUserIds:
-      | unknown[]
-      | null = null;
-
     if (
-      typeof rawMentionValue ===
-      "string" &&
-      rawMentionValue.trim()
+      typeof rawMentionUserIds ===
+      "string"
     ) {
       try {
         const parsed =
           JSON.parse(
-            rawMentionValue
+            rawMentionUserIds
           );
 
         if (
-          !Array.isArray(parsed)
+          Array.isArray(parsed)
         ) {
-          return NextResponse.json(
-            {
-              success: false,
-              message:
-                "Format mentionUserIds tidak valid.",
-            },
-            {
-              status: 400,
-            }
-          );
+          mentionUserIds =
+            Array.from(
+              new Set(
+                parsed
+                  .map(
+                    (
+                      value: unknown
+                    ) =>
+                      Number(value)
+                  )
+                  .filter(
+                    (
+                      value: number
+                    ) =>
+                      Number.isInteger(
+                        value
+                      ) &&
+                      value > 0
+                  )
+              )
+            );
         }
-
-        rawMentionUserIds =
-          parsed;
       } catch {
         return NextResponse.json(
           {
@@ -1606,32 +1332,7 @@ export async function POST(
           }
         );
       }
-    } else {
-      rawMentionUserIds =
-        [];
     }
-
-    const mentionUserIds =
-      Array.from(
-        new Set(
-          rawMentionUserIds
-            .map(
-              (
-                value: unknown
-              ) =>
-                Number(value)
-            )
-            .filter(
-              (
-                value: number
-              ) =>
-                Number.isInteger(
-                  value
-                ) &&
-                value > 0
-            )
-        )
-      );
 
     // --------------------------------------------------------
     // VALIDATE MENTION USERS
@@ -1721,42 +1422,40 @@ export async function POST(
         resolved.transaction;
 
       const createdComment =
-        await prisma.purchaseComment.create(
-          {
-            data: {
-              outletPurchaseId:
-                purchase.id,
+        await prisma.purchaseComment.create({
+          data: {
+            outletPurchaseId:
+              purchase.id,
 
-              userId:
-                user.id,
+            userId:
+              user.id,
 
-              comment:
-                content,
+            comment:
+              content,
 
-              photo:
-                savedPhotoPath,
+            photo:
+              photoPath,
 
-              mentions:
-                validMentionUsers.length >
-                0
-                  ? {
-                      create:
-                        validMentionUsers.map(
-                          (
-                            mentionedUser
-                          ) => ({
-                            userId:
-                              mentionedUser.id,
-                          })
-                        ),
-                    }
-                  : undefined,
-            },
+            mentions:
+              validMentionUsers.length >
+              0
+                ? {
+                    create:
+                      validMentionUsers.map(
+                        (
+                          mentionedUser
+                        ) => ({
+                          userId:
+                            mentionedUser.id,
+                        })
+                      ),
+                  }
+                : undefined,
+          },
 
-            select:
-              purchaseCommentSelect,
-          }
-        );
+          select:
+            purchaseCommentSelect,
+        });
 
       const normalizedComment =
         normalizePurchaseComment(
@@ -1796,51 +1495,45 @@ export async function POST(
       resolved.transaction;
 
     const createdComment =
-      await prisma.outletTransferComment.create(
-        {
-          data: {
-            transferId:
-              transfer.id,
+      await prisma.outletTransferComment.create({
+        data: {
+          transferId:
+            transfer.id,
 
-            userId:
-              user.id,
+          userId:
+            user.id,
 
-            comment:
-              content,
+          comment:
+            content,
 
-            photo:
-              savedPhotoPath,
+          photo:
+            photoPath,
 
-            mentions:
-              validMentionUsers.length >
-              0
-                ? {
-                    create:
-                      validMentionUsers.map(
-                        (
-                          mentionedUser
-                        ) => ({
-                          userId:
-                            mentionedUser.id,
-                        })
-                      ),
-                  }
-                : undefined,
-          },
+          mentions:
+            validMentionUsers.length >
+            0
+              ? {
+                  create:
+                    validMentionUsers.map(
+                      (
+                        mentionedUser
+                      ) => ({
+                        userId:
+                          mentionedUser.id,
+                      })
+                    ),
+                }
+              : undefined,
+        },
 
-          select:
-            transferCommentSelect,
-        }
-      );
+        select:
+          transferCommentSelect,
+      });
 
     const normalizedComment =
       normalizeTransferComment(
         createdComment
       );
-
-    // --------------------------------------------------------
-    // RESPONSE
-    // --------------------------------------------------------
 
     return NextResponse.json(
       {

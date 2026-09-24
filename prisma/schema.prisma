@@ -330,6 +330,7 @@ model PurchaseComment {
   outletPurchaseId Int?
   userId           Int
   comment          String
+  photo            String?
   createdAt        DateTime @default(now())
 
   user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -365,6 +366,7 @@ model OutletTransferComment {
   transferId Int
   userId     Int
   comment    String
+  photo      String?
   createdAt  DateTime @default(now())
 
   transfer OutletTransfer                 @relation(fields: [transferId], references: [id], onDelete: Cascade)

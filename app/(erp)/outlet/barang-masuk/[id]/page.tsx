@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -28,6 +28,7 @@ import {
   ArrowDownToLine,
   MessageCircle,
   Send,
+  ImagePlus,
   AtSign,
   UserRound,
   Loader2,
@@ -143,10 +144,17 @@ type MentionUser = {
 type DiscussionComment = {
   id: string | number;
   content: string;
+  imageUrl?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
   user?: MentionUser | null;
   mentions?: MentionUser[];
+};
+
+type CommentImage = {
+  url: string;
+  file: File;
+  name?: string;
 };
 
 type FeedbackState = {
@@ -186,6 +194,10 @@ export default function OutletBarangMasukDetailPage() {
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionOpen, setMentionOpen] = useState(false);
   const [selectedMentionUserIds, setSelectedMentionUserIds] = useState<number[]>([]);
+  const [commentImage, setCommentImage] = useState<CommentImage | null>(null);
+  const [commentImageLoading, setCommentImageLoading] = useState(false);
+  const [imageViewerUrl, setImageViewerUrl] = useState<string | null>(null);
+  const commentImageInputRef = useRef<HTMLInputElement | null>(null);
 
   const [receivedQty, setReceivedQty] =
     useState<Record<number, number>>({});
@@ -415,6 +427,19 @@ export default function OutletBarangMasukDetailPage() {
           item?.text ??
           ""
       ),
+      imageUrl: normalizeCommentImageUrl(
+        item?.imageUrl ??
+          item?.image_url ??
+          item?.photo ??
+          item?.attachmentUrl ??
+          item?.attachment_url ??
+          item?.fileUrl ??
+          item?.file?.url ??
+          item?.file?.path ??
+          item?.attachment?.url ??
+          item?.attachment?.path ??
+          null
+      ),
       createdAt:
         item?.createdAt ??
         item?.created_at ??
@@ -547,7 +572,8 @@ export default function OutletBarangMasukDetailPage() {
             "Gagal mengambil daftar user untuk mention."
         );
       }
-
+console.log("COMMENT POST STATUS:", response.status);
+console.log("COMMENT POST RESULT:", result);
       const raw = Array.isArray(result?.data)
         ? result.data
         : Array.isArray(result?.users)
@@ -754,10 +780,273 @@ export default function OutletBarangMasukDetailPage() {
     setMentionOpen(true);
   };
 
-  const submitComment = async () => {
-    const content = commentText.trim();
+  // =====================================================
+  // COMMENT IMAGE / ATTACHMENT HELPERS
+  // =====================================================
+  //
+  // FOTO DIPISAH DARI TEKS KOMENTAR.
+  //
+  // - Teks komentar maksimal 500 karakter.
+  // - Foto di-upload terpisah sebagai multipart/form-data.
+  // - Database komentar hanya menerima imageUrl/path foto.
+  // - Foto boleh dikirim tanpa teks komentar.
+  // - Mention tetap dikirim melalui comment API.
+  //
+  // Komentar lama yang masih menggunakan marker base64/path
+  // tetap dibaca melalui extractCommentImage() agar backward
+  // compatible.
+  //
 
-    if (!content || commentSending) return;
+  const COMMENT_MAX_LENGTH = 500;
+
+  const COMMENT_IMAGE_START = "\n\n<!--COMMENT_IMAGE:";
+  const COMMENT_IMAGE_END = "-->";
+  /**
+   * Normalisasi URL/path foto dari API.
+   *
+   * Backend boleh mengembalikan:
+   * - https://domain.com/uploads/...
+   * - /uploads/...
+   * - uploads/...
+   * - \uploads\...
+   *
+   * Browser membutuhkan URL yang valid untuk src/img.
+   */
+  const normalizeCommentImageUrl = (value?: unknown) => {
+    if (typeof value !== "string") return null;
+
+    let url = value.trim();
+    if (!url) return null;
+
+    // Jika backend mengembalikan JSON-string / quoted value.
+    if (
+      (url.startsWith('"') && url.endsWith('"')) ||
+      (url.startsWith("'") && url.endsWith("'"))
+    ) {
+      url = url.slice(1, -1).trim();
+    }
+
+    // Normalisasi path Windows yang mungkin tersimpan dari server.
+    url = url.replace(/\\/g, "/");
+
+    // URL absolut tetap digunakan apa adanya.
+    if (/^(https?:|blob:|data:)/i.test(url)) {
+      return url;
+    }
+
+    // Protocol-relative URL.
+    if (url.startsWith("//")) {
+      return `${window.location.protocol}${url}`;
+    }
+
+    // Path relatif harus dimulai "/" agar browser tidak menganggap
+    // sebagai relative terhadap URL halaman detail.
+    if (!url.startsWith("/")) {
+      url = `/${url}`;
+    }
+
+    return url;
+  };
+
+  const extractCommentImage = (content: string) => {
+    const start = content.indexOf(COMMENT_IMAGE_START);
+
+    if (start < 0) {
+      return {
+        text: content,
+        imageUrl: null as string | null,
+      };
+    }
+
+    const urlStart = start + COMMENT_IMAGE_START.length;
+    const end = content.indexOf(COMMENT_IMAGE_END, urlStart);
+
+    if (end < 0) {
+      return {
+        text: content,
+        imageUrl: null as string | null,
+      };
+    }
+
+    return {
+      text: content.slice(0, start).trimEnd(),
+      imageUrl: normalizeCommentImageUrl(content.slice(urlStart, end).trim()),
+    };
+  };
+
+  const compressCommentImage = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      throw new Error("File yang dipilih harus berupa gambar.");
+    }
+
+    const maxDimension = 1600;
+    const quality = 0.82;
+
+    const bitmap = await createImageBitmap(file);
+
+    const scale = Math.min(
+      1,
+      maxDimension / Math.max(bitmap.width, bitmap.height)
+    );
+
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      bitmap.close();
+      throw new Error("Browser tidak mendukung pemrosesan gambar.");
+    }
+
+    context.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+
+    // Semua foto dikonversi ke JPEG agar ukuran upload lebih ringan.
+    const dataUrl = canvas.toDataURL("image/jpeg", quality);
+
+    canvas.width = 1;
+    canvas.height = 1;
+
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+
+    return new File(
+      [blob],
+      file.name.replace(/\.[^.]+$/, "") + ".jpg",
+      {
+        type: "image/jpeg",
+      }
+    );
+  };
+
+  const handleCommentImageChange = async (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+
+    // Reset value agar foto yang sama bisa dipilih lagi.
+    event.target.value = "";
+
+    if (!file) return;
+
+    try {
+      setCommentImageLoading(true);
+
+      if (!file.type.startsWith("image/")) {
+        throw new Error("File yang dipilih harus berupa gambar.");
+      }
+
+      // Kompresi dilakukan di browser, tetapi FOTO BELUM di-upload
+      // pada tahap pemilihan. File akan dikirim bersama komentar
+      // melalui FormData saat tombol Kirim ditekan.
+      const compressedFile = await compressCommentImage(file);
+      const previewUrl = URL.createObjectURL(compressedFile);
+
+      setCommentImage((previous) => {
+        if (previous?.url?.startsWith("blob:")) {
+          URL.revokeObjectURL(previous.url);
+        }
+
+        return {
+          url: previewUrl,
+          file: compressedFile,
+          name: file.name,
+        };
+      });
+    } catch (error) {
+      console.error("COMMENT IMAGE PREPARE ERROR:", error);
+
+      showFeedback(
+        "error",
+        "Foto Tidak Dapat Diproses",
+        error instanceof Error
+          ? error.message
+          : "Gagal memproses foto komentar."
+      );
+    } finally {
+      setCommentImageLoading(false);
+    }
+  };
+
+  const removeCommentImage = () => {
+    setCommentImage((previous) => {
+      if (previous?.url?.startsWith("blob:")) {
+        URL.revokeObjectURL(previous.url);
+      }
+
+      return null;
+    });
+
+    if (commentImageInputRef.current) {
+      commentImageInputRef.current.value = "";
+    }
+  };
+
+  const openCommentImagePicker = () => {
+    if (commentSending || commentImageLoading) return;
+    commentImageInputRef.current?.click();
+  };
+
+  const openImageViewer = (imageUrl: string) => {
+    const normalizedUrl = normalizeCommentImageUrl(imageUrl);
+    if (!normalizedUrl) return;
+    setImageViewerUrl(normalizedUrl);
+  };
+
+  const closeImageViewer = () => {
+    setImageViewerUrl(null);
+  };
+
+  useEffect(() => {
+    if (!imageViewerUrl) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setImageViewerUrl(null);
+      }
+    };
+
+    document.addEventListener("keydown", handleEscape);
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [imageViewerUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (commentImage?.url?.startsWith("blob:")) {
+        URL.revokeObjectURL(commentImage.url);
+      }
+    };
+  }, [commentImage?.url]);
+
+  const submitComment = async () => {
+    const textContent = commentText.trim();
+    const selectedPhoto = commentImage?.file ?? null;
+
+    if (textContent.length > COMMENT_MAX_LENGTH) {
+      showFeedback(
+        "error",
+        "Komentar Terlalu Panjang",
+        `Komentar maksimal ${COMMENT_MAX_LENGTH} karakter.`
+      );
+      return;
+    }
+
+    // FOTO BOLEH DIKIRIM TANPA TEKS.
+    if (!textContent && !selectedPhoto) return;
+
+    if (commentSending || commentImageLoading) return;
 
     try {
       setCommentSending(true);
@@ -767,31 +1056,37 @@ export default function OutletBarangMasukDetailPage() {
           const user = mentionUsers.find(
             (candidate) => Number(candidate.id) === Number(userId)
           );
+
           if (!user) return false;
-          return content
+
+          return textContent
             .toLowerCase()
             .includes(`@${getMentionHandle(user).toLowerCase()}`);
         }
       );
 
-      const response = await fetch(
-        commentsEndpoint,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            content,
-            mentionUserIds: validMentionUserIds,
-          }),
-        }
+      // API comments menerima multipart/form-data secara langsung.
+      // Foto dikirim sebagai field `photo`, lalu server menyimpan
+      // file dan mengisi PurchaseComment.photo / OutletTransferComment.photo.
+      // Tidak ada base64 dan tidak perlu endpoint /comments/image.
+      const formData = new FormData();
+      formData.append("content", textContent);
+      formData.append("source", data?.sumber ?? "");
+      formData.append(
+        "mentionUserIds",
+        JSON.stringify(validMentionUserIds)
       );
 
-      const result =
-        await response.json().catch(
-          () => ({})
-        );
+      if (selectedPhoto) {
+        formData.append("photo", selectedPhoto, selectedPhoto.name);
+      }
+
+      const response = await fetch(commentsEndpoint, {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(
@@ -801,21 +1096,28 @@ export default function OutletBarangMasukDetailPage() {
         );
       }
 
+      const previousImageUrl = commentImage?.url ?? null;
+
       setCommentText("");
+      setCommentImage(null);
+
+      if (previousImageUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(previousImageUrl);
+      }
+
+      if (commentImageInputRef.current) {
+        commentImageInputRef.current.value = "";
+      }
+
       setMentionOpen(false);
       setMentionQuery("");
       setSelectedMentionUserIds([]);
 
-      const created =
-        result?.comment ??
-        result?.data ??
-        result;
+      const created = result?.comment ?? result?.data ?? result;
+      const normalizedCreated = normalizeComments([created])[0];
 
-      if (created?.content) {
-        setComments((prev) => [
-          ...prev,
-          normalizeComments([created])[0],
-        ]);
+      if (normalizedCreated) {
+        setComments((prev) => [...prev, normalizedCreated]);
       } else {
         await loadComments();
       }
@@ -856,6 +1158,7 @@ export default function OutletBarangMasukDetailPage() {
     content: string,
     mentions: MentionUser[] = []
   ) => {
+    const { text: visibleContent } = extractCommentImage(content);
     const mentionNames = Array.from(
       new Set(
         mentions
@@ -873,7 +1176,7 @@ export default function OutletBarangMasukDetailPage() {
     // Fallback untuk komentar lama yang belum mengembalikan
     // relation mentions dari API.
     if (mentionNames.length === 0) {
-      return content
+      return visibleContent
         .split(/(@[^\s@]+(?:\s[^\s@]+)*)/g)
         .map((part, index) =>
           part.startsWith("@") ? (
@@ -900,7 +1203,7 @@ export default function OutletBarangMasukDetailPage() {
       "gi"
     );
 
-    const parts = content.split(mentionRegex);
+    const parts = visibleContent.split(mentionRegex);
 
     return parts.map((part, index) => {
       const isMention = mentionNames.some(
@@ -3590,12 +3893,58 @@ export default function OutletBarangMasukDetailPage() {
                           )}
                         </div>
 
-                        <p className="whitespace-pre-wrap break-words text-xs leading-6 text-[#496158]">
-                          {highlightMentions(
-                            comment.content,
-                            comment.mentions || []
-                          )}
-                        </p>
+                        {(() => {
+                          const legacyContent =
+                            extractCommentImage(comment.content);
+
+                          const visibleContent =
+                            legacyContent.text;
+
+                          const imageUrl =
+                            normalizeCommentImageUrl(
+                              comment.imageUrl ||
+                                legacyContent.imageUrl
+                            );
+
+                          return (
+                            <>
+                              {visibleContent && (
+                                <p className="whitespace-pre-wrap break-words text-xs leading-6 text-[#496158]">
+                                  {highlightMentions(
+                                    visibleContent,
+                                    comment.mentions || []
+                                  )}
+                                </p>
+                              )}
+
+                              {imageUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openImageViewer(imageUrl)
+                                  }
+                                  className={`group/image mt-2 block overflow-hidden rounded-2xl border text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${
+                                    isMine
+                                      ? "border-[#C5DED2] bg-white"
+                                      : "border-[#E2EBE6] bg-[#FAFCFB]"
+                                  }`}
+                                  title="Klik untuk memperbesar foto"
+                                >
+                                  <img
+                                    src={imageUrl}
+                                    alt="Lampiran komentar"
+                                    className="max-h-[280px] max-w-full object-contain transition-transform duration-300 group-hover/image:scale-[1.02]"
+                                  />
+
+                                  <span className="flex items-center gap-1.5 border-t border-black/5 px-3 py-2 text-[9px] font-bold text-[#789087]">
+                                    <ImagePlus size={11} />
+                                    Klik untuk melihat lebih besar
+                                  </span>
+                                </button>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
 
                       {isMine && (
@@ -3679,8 +4028,65 @@ export default function OutletBarangMasukDetailPage() {
               )}
 
               <div className="overflow-hidden rounded-[22px] border border-[#D6E4DE] bg-[#FBFDFC] shadow-inner transition-all focus-within:border-[#8FB7A7] focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(73,127,112,0.08)]">
+                <input
+                  ref={commentImageInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
+                  onChange={handleCommentImageChange}
+                  className="hidden"
+                />
+
+                {commentImage && (
+                  <div className="border-b border-[#E8EFEB] bg-white/80 px-3 py-3">
+                    <div className="flex items-start gap-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openImageViewer(commentImage.url)
+                        }
+                        className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-[#D6E4DE] bg-[#F5F8F6]"
+                        title="Klik untuk memperbesar foto"
+                      >
+                        <img
+                          src={commentImage.url}
+                          alt="Foto yang akan dikirim"
+                          className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                        />
+                      </button>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#497F70]">
+                              Foto terlampir
+                            </p>
+                            <p className="mt-1 truncate text-xs font-semibold text-[#496158]">
+                              {commentImage.name || "Foto"}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={removeCommentImage}
+                            disabled={commentSending}
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#DDE9E4] bg-white text-gray-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Hapus foto"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+
+                        <p className="mt-2 text-[10px] leading-4 text-gray-400">
+                          Foto siap dikirim. Komentar teks bersifat opsional.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <textarea
                   value={commentText}
+                  maxLength={COMMENT_MAX_LENGTH}
                   onChange={(event) =>
                     handleCommentChange(
                       event.target.value
@@ -3731,6 +4137,20 @@ export default function OutletBarangMasukDetailPage() {
                       Mention
                     </button>
 
+                    <button
+                      type="button"
+                      onClick={openCommentImagePicker}
+                      disabled={commentSending || commentImageLoading}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-[#D8E6E0] bg-white px-3 py-2 text-[10px] font-extrabold text-[#497F70] shadow-sm transition hover:border-[#B9CEC3] hover:bg-[#F4F9F6] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {commentImageLoading ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <ImagePlus size={13} />
+                      )}
+                      {commentImageLoading ? "Memproses..." : "Tambah Foto"}
+                    </button>
+
                     <span className="hidden text-[10px] font-medium text-gray-400 sm:inline">
                       Enter untuk kirim · Shift + Enter untuk
                       baris baru
@@ -3743,8 +4163,9 @@ export default function OutletBarangMasukDetailPage() {
                       void submitComment()
                     }
                     disabled={
-                      !commentText.trim() ||
-                      commentSending
+                      (!commentText.trim() && !commentImage) ||
+                      commentSending ||
+                      commentImageLoading
                     }
                     className="group inline-flex min-h-[42px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#497F70] to-[#355F4F] px-5 text-xs font-extrabold text-white shadow-[0_8px_22px_rgba(73,127,112,0.22)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(73,127,112,0.3)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
                   >
@@ -4319,6 +4740,41 @@ export default function OutletBarangMasukDetailPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
+          IMAGE VIEWER
+          ===================================================== */}
+      {imageViewerUrl && (
+        <div
+          className="fixed inset-0 z-[11000] flex items-center justify-center bg-[#081610]/90 p-3 backdrop-blur-md sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Preview foto"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeImageViewer();
+            }
+          }}
+        >
+          <button
+            type="button"
+            onClick={closeImageViewer}
+            className="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white backdrop-blur transition hover:bg-white/20 sm:right-6 sm:top-6"
+            title="Tutup"
+            aria-label="Tutup preview foto"
+          >
+            <X size={20} />
+          </button>
+
+          <div className="relative flex max-h-[94vh] max-w-[96vw] items-center justify-center">
+            <img
+              src={imageViewerUrl}
+              alt="Foto komentar"
+              className="max-h-[92vh] max-w-[94vw] rounded-2xl object-contain shadow-[0_30px_100px_rgba(0,0,0,0.45)] sm:rounded-3xl"
+            />
           </div>
         </div>
       )}

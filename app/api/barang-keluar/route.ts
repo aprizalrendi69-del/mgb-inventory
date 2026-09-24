@@ -70,39 +70,55 @@ function parseDateOnly(value: unknown): Date | null {
  * Nomor lama tidak disentuh.
  */
 async function generateDeliveryNumber(
-  tx: Prisma.TransactionClient
+  tx: Prisma.TransactionClient,
+  attempt = 0
 ): Promise<string> {
-  const latestDelivery = await tx.delivery.findFirst({
+  /*
+   * IMPORTANT:
+   * Jangan hanya memakai findFirst + orderBy("number", "desc").
+   *
+   * Retry sebelumnya bisa menghasilkan nomor yang sama karena transaksi
+   * yang gagal di-rollback lalu generator membaca kandidat yang sama lagi.
+   *
+   * Kita ambil seluruh nomor DO-* yang berbentuk DO-angka, cari angka
+   * terbesar secara numerik, lalu tambahkan 1. Pada retry, tambahkan
+   * offset deterministik kecil agar kandidat tidak kembali sama apabila
+   * terjadi collision/race dengan transaksi lain.
+   */
+  const deliveries = await tx.delivery.findMany({
     where: {
       number: {
         startsWith: "DO-",
       },
-    },
-    orderBy: {
-      number: "desc",
     },
     select: {
       number: true,
     },
   });
 
-  let nextNumber = 1;
+  let maxNumber = 0;
 
-  if (latestDelivery?.number) {
-    const match =
-      latestDelivery.number.match(/^DO-(\d+)$/);
+  for (const delivery of deliveries) {
+    const match = delivery.number.match(/^DO-(\d+)$/);
+    if (!match) continue;
 
-    if (match) {
-      const currentNumber = Number(match[1]);
+    const value = Number(match[1]);
 
-      if (
-        Number.isSafeInteger(currentNumber) &&
-        currentNumber >= 1
-      ) {
-        nextNumber = currentNumber + 1;
-      }
+    if (
+      Number.isSafeInteger(value) &&
+      value > maxNumber
+    ) {
+      maxNumber = value;
     }
   }
+
+  /*
+   * Attempt 0 = nomor berikutnya normal.
+   * Attempt berikutnya diberi offset supaya tidak mengulang kandidat
+   * yang baru saja collision.
+   */
+  const offset = Math.max(0, attempt);
+  const nextNumber = maxNumber + 1 + offset;
 
   return `DO-${String(nextNumber).padStart(5, "0")}`;
 }
@@ -435,6 +451,7 @@ export async function POST(req: NextRequest) {
             outletIdNumber,
             note,
             normalizedItems,
+            attempt: attempt - 1,
           });
 
         break;
@@ -450,7 +467,7 @@ export async function POST(req: NextRequest) {
         ) {
           console.warn(
             `Delivery number collision. ` +
-              `Retry ${attempt}/${MAX_RETRY}`
+              `Generate candidate baru. Retry ${attempt}/${MAX_RETRY}`
           );
 
           continue;
@@ -507,7 +524,7 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           message:
-            "Nomor Delivery sedang digunakan oleh transaksi lain. Silakan coba lagi.",
+            "Nomor Delivery bentrok karena transaksi bersamaan. Tidak ada data yang dihapus. Silakan simpan kembali.",
         },
         {
           status: 409,
@@ -544,6 +561,7 @@ async function createDeliveryDraft({
   outletIdNumber,
   note,
   normalizedItems,
+  attempt = 0,
 }: {
   parsedDeliveryDate: Date;
   customerIdNumber: number | null;
@@ -553,6 +571,7 @@ async function createDeliveryDraft({
     barangId: number;
     qty: number;
   }>;
+  attempt?: number;
 }) {
   return prisma.$transaction(
     async (tx) => {
@@ -561,7 +580,7 @@ async function createDeliveryDraft({
       // =================================================
 
       const number =
-        await generateDeliveryNumber(tx);
+        await generateDeliveryNumber(tx, attempt);
 
       let totalQty = 0;
 

@@ -39,6 +39,14 @@ type Supplier = {
 
 type SourceFilter = "ALL" | "PURCHASE" | "TRANSFER";
 
+type StatusFilter =
+  | "ALL"
+  | "RECEIVED"
+  | "PARTIAL"
+  | "SENT"
+  | "APPROVED"
+  | "DRAFT";
+
 type BarangMasuk = {
   id: string;
 
@@ -119,22 +127,42 @@ export default function OutletBarangMasukPage() {
     useRef<HTMLDivElement | null>(null);
 
   // =====================================================
-  // CLOSE SOURCE MENU WHEN CLICK OUTSIDE
+  // FILTER STATUS
+  // =====================================================
+
+  const [selectedStatus, setSelectedStatus] =
+    useState<StatusFilter>("ALL");
+
+  const [statusMenuOpen, setStatusMenuOpen] =
+    useState(false);
+
+  const statusMenuRef =
+    useRef<HTMLDivElement | null>(null);
+
+  // =====================================================
+  // CLOSE FILTER MENUS WHEN CLICK OUTSIDE
   // =====================================================
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node;
+
       if (
         sourceMenuRef.current &&
-        !sourceMenuRef.current.contains(
-          event.target as Node
-        )
+        !sourceMenuRef.current.contains(target)
       ) {
         setSourceMenuOpen(false);
       }
+
+      if (
+        statusMenuRef.current &&
+        !statusMenuRef.current.contains(target)
+      ) {
+        setStatusMenuOpen(false);
+      }
     }
 
-    if (sourceMenuOpen) {
+    if (sourceMenuOpen || statusMenuOpen) {
       document.addEventListener(
         "mousedown",
         handleClickOutside
@@ -147,7 +175,10 @@ export default function OutletBarangMasukPage() {
         handleClickOutside
       );
     };
-  }, [sourceMenuOpen]);
+  }, [
+    sourceMenuOpen,
+    statusMenuOpen,
+  ]);
 
   // =====================================================
   // SOURCE LABEL
@@ -165,6 +196,36 @@ export default function OutletBarangMasukPage() {
     }
 
     return "Semua Sumber";
+  }
+
+  // =====================================================
+  // STATUS LABEL
+  // =====================================================
+
+  function statusFilterLabel(
+    status: StatusFilter
+  ) {
+    if (status === "RECEIVED") {
+      return "Diterima";
+    }
+
+    if (status === "PARTIAL") {
+      return "Sebagian";
+    }
+
+    if (status === "SENT") {
+      return "Menunggu";
+    }
+
+    if (status === "APPROVED") {
+      return "Approved";
+    }
+
+    if (status === "DRAFT") {
+      return "Draft";
+    }
+
+    return "Semua Status";
   }
 
   // =====================================================
@@ -408,6 +469,11 @@ export default function OutletBarangMasukPage() {
       const sourceOutlet =
         item.sourceOutlet;
 
+      const itemStatus =
+        String(
+          item.status || ""
+        ).toUpperCase();
+
       // =============================================
       // SECURITY CLIENT
       // =============================================
@@ -433,6 +499,21 @@ export default function OutletBarangMasukPage() {
         item.sumber !== selectedSource
       ) {
         return false;
+      }
+
+      // =============================================
+      // FILTER STATUS
+      // =============================================
+
+      if (
+        selectedStatus !== "ALL"
+      ) {
+        if (
+          itemStatus !==
+          selectedStatus
+        ) {
+          return false;
+        }
       }
 
       // =============================================
@@ -548,6 +629,7 @@ export default function OutletBarangMasukPage() {
     data,
     search,
     selectedSource,
+    selectedStatus,
     isAdminPusat,
     isOutletAdmin,
     userOutletId,
@@ -609,7 +691,9 @@ export default function OutletBarangMasukPage() {
     setDateTo("");
     setSearch("");
     setSelectedSource("ALL");
+    setSelectedStatus("ALL");
     setSourceMenuOpen(false);
+    setStatusMenuOpen(false);
   }
 
   const hasActiveFilter =
@@ -617,7 +701,8 @@ export default function OutletBarangMasukPage() {
     dateFrom ||
     dateTo ||
     search ||
-    selectedSource !== "ALL";
+    selectedSource !== "ALL" ||
+    selectedStatus !== "ALL";
 
   // =====================================================
   // STATUS BADGE
@@ -1192,7 +1277,7 @@ export default function OutletBarangMasukPage() {
                 </p>
               </div>
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
 
                 {/* SEARCH */}
 
@@ -1239,11 +1324,12 @@ export default function OutletBarangMasukPage() {
                 >
                   <button
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
                       setSourceMenuOpen(
                         (prev) => !prev
-                      )
-                    }
+                      );
+                      setStatusMenuOpen(false);
+                    }}
                     className={`inline-flex h-[46px] min-w-[150px] items-center justify-center gap-2 rounded-xl border px-4 text-sm font-bold transition-all ${
                       selectedSource !== "ALL"
                         ? "border-[#AFCFC2] bg-[#EAF3EF] text-[#35564C] shadow-sm"
@@ -1398,6 +1484,281 @@ export default function OutletBarangMasukPage() {
                   )}
                 </div>
 
+                {/* =================================================
+                    STATUS BUTTON
+                    ================================================= */}
+
+                <div
+                  ref={statusMenuRef}
+                  className="relative"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusMenuOpen(
+                        (prev) => !prev
+                      );
+                      setSourceMenuOpen(false);
+                    }}
+                    className={`inline-flex h-[46px] min-w-[150px] items-center justify-center gap-2 rounded-xl border px-4 text-sm font-bold transition-all ${
+                      selectedStatus !== "ALL"
+                        ? "border-[#AFCFC2] bg-[#EAF3EF] text-[#35564C] shadow-sm"
+                        : "border-[#D5E5DC] bg-[#FAFCFB] text-[#35564C] hover:border-[#BFD6CC] hover:bg-white"
+                    }`}
+                  >
+                    <CheckCircle2
+                      size={16}
+                    />
+
+                    <span>
+                      {selectedStatus ===
+                      "ALL"
+                        ? "Status"
+                        : statusFilterLabel(
+                            selectedStatus
+                          )}
+                    </span>
+
+                    <ChevronDown
+                      size={15}
+                      className={`transition-transform ${
+                        statusMenuOpen
+                          ? "rotate-180"
+                          : ""
+                      }`}
+                    />
+
+                    {selectedStatus !==
+                      "ALL" && (
+                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#497F70] px-1 text-[10px] font-black text-white">
+                        1
+                      </span>
+                    )}
+                  </button>
+
+                  {statusMenuOpen && (
+                    <div className="absolute right-0 z-50 mt-2 w-[220px] overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white p-1.5 shadow-[0_15px_45px_rgba(24,53,45,0.15)]">
+
+                      <div className="px-3 pb-2 pt-2">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          Filter Status
+                        </p>
+                      </div>
+
+                      {/* ALL STATUS */}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStatus(
+                            "ALL"
+                          );
+                          setStatusMenuOpen(
+                            false
+                          );
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                          selectedStatus ===
+                          "ALL"
+                            ? "bg-[#EAF3EF] text-[#35564C]"
+                            : "text-slate-600 hover:bg-[#F4F7F5]"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Boxes
+                            size={15}
+                          />
+                          Semua Status
+                        </span>
+
+                        {selectedStatus ===
+                          "ALL" && (
+                          <Check
+                            size={15}
+                            className="text-[#497F70]"
+                          />
+                        )}
+                      </button>
+
+                      {/* RECEIVED */}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStatus(
+                            "RECEIVED"
+                          );
+                          setStatusMenuOpen(
+                            false
+                          );
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                          selectedStatus ===
+                          "RECEIVED"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "text-slate-600 hover:bg-[#F4F7F5]"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <CheckCircle2
+                            size={15}
+                          />
+                          Diterima
+                        </span>
+
+                        {selectedStatus ===
+                          "RECEIVED" && (
+                          <Check
+                            size={15}
+                            className="text-emerald-600"
+                          />
+                        )}
+                      </button>
+
+                      {/* PARTIAL */}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStatus(
+                            "PARTIAL"
+                          );
+                          setStatusMenuOpen(
+                            false
+                          );
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                          selectedStatus ===
+                          "PARTIAL"
+                            ? "bg-amber-50 text-amber-700"
+                            : "text-slate-600 hover:bg-[#F4F7F5]"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Clock3
+                            size={15}
+                          />
+                          Sebagian
+                        </span>
+
+                        {selectedStatus ===
+                          "PARTIAL" && (
+                          <Check
+                            size={15}
+                            className="text-amber-600"
+                          />
+                        )}
+                      </button>
+
+                      {/* SENT */}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStatus(
+                            "SENT"
+                          );
+                          setStatusMenuOpen(
+                            false
+                          );
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                          selectedStatus ===
+                          "SENT"
+                            ? "bg-blue-50 text-blue-700"
+                            : "text-slate-600 hover:bg-[#F4F7F5]"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Truck
+                            size={15}
+                          />
+                          Menunggu
+                        </span>
+
+                        {selectedStatus ===
+                          "SENT" && (
+                          <Check
+                            size={15}
+                            className="text-blue-600"
+                          />
+                        )}
+                      </button>
+
+                      {/* APPROVED */}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStatus(
+                            "APPROVED"
+                          );
+                          setStatusMenuOpen(
+                            false
+                          );
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                          selectedStatus ===
+                          "APPROVED"
+                            ? "bg-violet-50 text-violet-700"
+                            : "text-slate-600 hover:bg-[#F4F7F5]"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <CheckCircle2
+                            size={15}
+                          />
+                          Approved
+                        </span>
+
+                        {selectedStatus ===
+                          "APPROVED" && (
+                          <Check
+                            size={15}
+                            className="text-violet-600"
+                          />
+                        )}
+                      </button>
+
+                      {/* DRAFT */}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStatus(
+                            "DRAFT"
+                          );
+                          setStatusMenuOpen(
+                            false
+                          );
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                          selectedStatus ===
+                          "DRAFT"
+                            ? "bg-slate-100 text-slate-700"
+                            : "text-slate-600 hover:bg-[#F4F7F5]"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <FileText
+                            size={15}
+                          />
+                          Draft
+                        </span>
+
+                        {selectedStatus ===
+                          "DRAFT" && (
+                          <Check
+                            size={15}
+                            className="text-slate-600"
+                          />
+                        )}
+                      </button>
+
+                    </div>
+                  )}
+                </div>
+
                 {/* COUNT */}
 
                 <div className="rounded-xl bg-[#F4F7F5] px-4 py-3 text-xs font-semibold text-slate-500">
@@ -1436,6 +1797,19 @@ export default function OutletBarangMasukPage() {
                     Sumber:{" "}
                     {sourceFilterLabel(
                       selectedSource
+                    )}
+                  </span>
+                )}
+
+                {selectedStatus !==
+                  "ALL" && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700">
+                    <CheckCircle2
+                      size={11}
+                    />
+                    Status:{" "}
+                    {statusFilterLabel(
+                      selectedStatus
                     )}
                   </span>
                 )}

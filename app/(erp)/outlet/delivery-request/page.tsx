@@ -410,11 +410,22 @@ export default function DeliveryRequestPage() {
       "ALL" | DeliveryRequestStatus
     >("ALL");
 
+  const [outletFilter, setOutletFilter] =
+    useState("ALL");
+
+  const [fromDate, setFromDate] =
+    useState("");
+
+  const [toDate, setToDate] =
+    useState("");
+
   const [selectedRequest, setSelectedRequest] =
     useState<DeliveryRequest | null>(null);
 
   const [currentUser, setCurrentUser] =
     useState<CurrentUser | null>(null);
+
+  const isAdmin = normalizeRole(currentUser?.role) === "ADMIN";
 
   const [loadingUser, setLoadingUser] =
     useState(true);
@@ -641,6 +652,12 @@ export default function DeliveryRequestPage() {
   }, [loadCurrentUser]);
 
   useEffect(() => {
+    if (currentUser && !isAdmin && outletFilter !== "ALL") {
+      setOutletFilter("ALL");
+    }
+  }, [currentUser, isAdmin, outletFilter]);
+
+  useEffect(() => {
     loadBarang();
   }, [loadBarang]);
 
@@ -654,42 +671,50 @@ export default function DeliveryRequestPage() {
 
   const filteredData =
     useMemo(() => {
-      const keyword =
-        search.trim().toLowerCase();
+      const keyword = search.trim().toLowerCase();
+      const from = fromDate ? new Date(`${fromDate}T00:00:00`) : null;
+      const to = toDate ? new Date(`${toDate}T23:59:59.999`) : null;
 
-      if (!keyword) {
-        return data;
-      }
+      return data.filter((item) => {
+        if (isAdmin && outletFilter !== "ALL" && Number(item.outlet?.id) !== Number(outletFilter)) return false;
+        const requestDate = new Date(item.requestDate);
+        if (from && requestDate < from) return false;
+        if (to && requestDate > to) return false;
+        if (!keyword) return true;
 
-      return data.filter(
-        (item) => {
-          const values = [
-            item.number,
-            item.outlet?.code,
-            item.outlet?.name,
-            item.customer?.code,
-            item.customer?.name,
-            item.createdBy?.username,
-            item.createdBy?.fullname,
-            item.remarks,
-            ...item.items.flatMap(
-              (requestItem) => [
-                requestItem.barang?.code,
-                requestItem.barang?.name,
-                requestItem.note,
-              ]
-            ),
-          ];
+        const values = [
+          item.number, item.outlet?.code, item.outlet?.name,
+          item.customer?.code, item.customer?.name,
+          item.createdBy?.username, item.createdBy?.fullname, item.remarks,
+          ...item.items.flatMap((requestItem) => [
+            requestItem.barang?.code, requestItem.barang?.name, requestItem.note,
+          ]),
+        ];
+        return values.some((value) => String(value ?? "").toLowerCase().includes(keyword));
+      });
+    }, [data, search, outletFilter, fromDate, toDate, isAdmin]);
 
-          return values.some(
-            (value) =>
-              String(value ?? "")
-                .toLowerCase()
-                .includes(keyword)
-          );
-        }
-      );
-    }, [data, search]);
+  const outletOptions = useMemo(() => {
+    const map = new Map<number, Outlet>();
+    data.forEach((request) => {
+      if (request.outlet?.id) map.set(Number(request.outlet.id), request.outlet);
+    });
+    return Array.from(map.values()).sort((a, b) =>
+      `${a.code} ${a.name}`.localeCompare(`${b.code} ${b.name}`, "id-ID")
+    );
+  }, [data]);
+
+  const hasActiveFilters =
+    Boolean(search.trim()) || statusFilter !== "ALL" ||
+    (isAdmin && outletFilter !== "ALL") || Boolean(fromDate) || Boolean(toDate);
+
+  function resetFilters() {
+    setSearch("");
+    setStatusFilter("ALL");
+    setOutletFilter("ALL");
+    setFromDate("");
+    setToDate("");
+  }
 
   // ==========================================================
   // SUMMARY
@@ -697,31 +722,31 @@ export default function DeliveryRequestPage() {
 
   const summary = useMemo(() => {
     const pending =
-      data.filter(
+      filteredData.filter(
         (item) =>
           item.status === "PENDING"
       ).length;
 
     const approved =
-      data.filter(
+      filteredData.filter(
         (item) =>
           item.status === "APPROVED"
       ).length;
 
     const processing =
-      data.filter(
+      filteredData.filter(
         (item) =>
           item.status === "PROCESSING"
       ).length;
 
     const completed =
-      data.filter(
+      filteredData.filter(
         (item) =>
           item.status === "COMPLETED"
       ).length;
 
     const totalQty =
-      data.reduce(
+      filteredData.reduce(
         (total, request) =>
           total +
           request.items.reduce(
@@ -736,7 +761,7 @@ export default function DeliveryRequestPage() {
       );
 
     const totalNotes =
-      data.reduce(
+      filteredData.reduce(
         (total, request) =>
           total +
           request.items.filter(
@@ -756,7 +781,7 @@ export default function DeliveryRequestPage() {
       totalQty,
       totalNotes,
     };
-  }, [data]);
+  }, [filteredData]);
 
   // ==========================================================
   // ACTIONS
@@ -1164,77 +1189,27 @@ export default function DeliveryRequestPage() {
         </div>
 
         {/* ==================================================
-            FILTER
+            PREMIUM FILTER BAR
         ================================================== */}
 
-        <section className="rounded-[26px] border border-[#DCEAE5] bg-white shadow-[0_10px_32px_rgba(4,28,23,0.045)]">
-          <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8A9B95]" />
-
-              <input
-                type="text"
-                value={search}
-                onChange={(event) =>
-                  setSearch(
-                    event.target.value
-                  )
-                }
-                placeholder="Cari nomor request, customer, outlet, user, barang, catatan..."
-                className="h-11 w-full rounded-xl border border-[#DCEAE5] bg-[#F7FAF9] pl-10 pr-10 text-sm font-medium text-[#10201C] outline-none transition placeholder:text-[#9AA9A4] focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
-              />
-
-              {search && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setSearch("")
-                  }
-                  className="absolute right-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg text-[#8A9B95] hover:bg-[#EAF4F0] hover:text-[#09261F]"
-                >
-                  <XCircle className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-
-            <div className="relative">
-              <select
-                value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(
-                    event.target.value as
-                      | "ALL"
-                      | DeliveryRequestStatus
-                  )
-                }
-                className="h-11 min-w-[200px] appearance-none rounded-xl border border-[#DCEAE5] bg-white pl-4 pr-10 text-sm font-bold text-[#30443E] outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
-              >
-                <option value="ALL">
-                  Semua Status
-                </option>
-                <option value="PENDING">
-                  Pending
-                </option>
-                <option value="APPROVED">
-                  Approved
-                </option>
-                <option value="PROCESSING">
-                  Processing
-                </option>
-                <option value="COMPLETED">
-                  Completed
-                </option>
-                <option value="REJECTED">
-                  Rejected
-                </option>
-                <option value="CANCELLED">
-                  Cancelled
-                </option>
-              </select>
-
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8A9B95]" />
+        <section className="overflow-hidden rounded-[28px] border border-[#DCEAE5] bg-white shadow-[0_12px_38px_rgba(4,28,23,0.055)]">
+          <div className="border-b border-[#E8EFEC] bg-gradient-to-r from-[#F8FCFA] via-white to-[#F4FAF7] px-5 py-4 md:px-6">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#09261F] text-emerald-300"><CalendarDays className="h-5 w-5" /></div>
+                <div><div className="flex items-center gap-2"><h2 className="text-sm font-black text-[#10201C]">Filter & Pencarian</h2>{hasActiveFilters && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#0B6B55]">Aktif</span>}</div><p className="mt-0.5 text-[11px] text-[#70817C]">Persempit data berdasarkan periode, outlet, status, atau kata kunci.</p></div>
+              </div>
+              {hasActiveFilters && <button type="button" onClick={resetFilters} className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-xl border border-[#DCE7E3] bg-white px-3.5 text-xs font-bold text-[#52645E] shadow-sm transition hover:border-emerald-300 hover:bg-[#EAF5F1] hover:text-[#09261F] lg:self-auto"><XCircle className="h-4 w-4" />Reset Filter</button>}
             </div>
           </div>
+          <div className="grid gap-3 p-4 md:grid-cols-2 md:p-5 xl:grid-cols-[minmax(260px,1.5fr)_180px_180px_190px_180px]">
+            <div className="relative"><label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-[#879892]">Pencarian</label><Search className="pointer-events-none absolute left-3.5 top-[38px] h-4 w-4 -translate-y-1/2 text-[#8A9B95]" /><input type="text" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nomor, customer, outlet, user, barang..." className="h-11 w-full rounded-xl border border-[#DCEAE5] bg-[#F7FAF9] pl-10 pr-10 text-sm font-medium text-[#10201C] outline-none transition placeholder:text-[#9AA9A4] focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10" />{search && <button type="button" onClick={() => setSearch("")} className="absolute right-3 top-[38px] flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg text-[#8A9B95] hover:bg-[#EAF4F0] hover:text-[#09261F]"><XCircle className="h-4 w-4" /></button>}</div>
+            <FilterSelect label="Dari Tanggal" value={fromDate} onChange={setFromDate} type="date" />
+            <FilterSelect label="Sampai Tanggal" value={toDate} onChange={setToDate} type="date" />
+            {isAdmin && <div className="relative"><label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-[#879892]">Outlet</label><select value={outletFilter} onChange={(event) => setOutletFilter(event.target.value)} className="h-11 w-full appearance-none rounded-xl border border-[#DCEAE5] bg-white px-3.5 pr-9 text-sm font-bold text-[#30443E] outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"><option value="ALL">Semua Outlet</option>{outletOptions.map((outlet) => <option key={outlet.id} value={outlet.id}>{outlet.code} - {outlet.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-[38px] h-4 w-4 -translate-y-1/2 text-[#8A9B95]" /></div>}
+            <div className="relative"><label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-[#879892]">Status</label><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "ALL" | DeliveryRequestStatus)} className="h-11 w-full appearance-none rounded-xl border border-[#DCEAE5] bg-white px-3.5 pr-9 text-sm font-bold text-[#30443E] outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"><option value="ALL">Semua Status</option><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="PROCESSING">Processing</option><option value="COMPLETED">Completed</option><option value="REJECTED">Rejected</option><option value="CANCELLED">Cancelled</option></select><ChevronDown className="pointer-events-none absolute right-3 top-[38px] h-4 w-4 -translate-y-1/2 text-[#8A9B95]" /></div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#E8EFEC] bg-[#F8FBFA] px-5 py-3"><div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-[#70817C]"><span className="inline-flex items-center gap-1.5 rounded-full border border-[#DCE7E3] bg-white px-2.5 py-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />{filteredData.length} hasil</span>{(fromDate || toDate) && <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1.5 text-[#0B6B55]">{fromDate || "Awal"} → {toDate || "Sekarang"}</span>}{isAdmin && outletFilter !== "ALL" && <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1.5 text-[#0B6B55]">{outletOptions.find((x) => String(x.id) === outletFilter)?.code || "Outlet"}</span>}</div><span className="text-[10px] font-medium text-[#8A9B95]">Tanggal berdasarkan tanggal request.</span></div>
         </section>
 
         {/* ==================================================
@@ -1667,6 +1642,12 @@ function HeaderMiniStat({
       </div>
     </div>
   );
+}
+
+function FilterSelect({
+  label, value, onChange, type = "text",
+}: { label: string; value: string; onChange: (value: string) => void; type?: "text" | "date"; }) {
+  return <div><label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-[#879892]">{label}</label><input type={type} value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-xl border border-[#DCEAE5] bg-white px-3.5 text-sm font-bold text-[#30443E] outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10" /></div>;
 }
 
 // ============================================================

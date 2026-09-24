@@ -60,6 +60,7 @@ type BadgeKey =
   | "approvalPurchase"
   | "barangMasuk"
   | "deliveryOrder"
+  | "deliveryRequest"
   | "suratJalan"
   | "approvalWastePusat"
   | "barangMasukOutlet"
@@ -93,6 +94,7 @@ interface PendingCounts {
   approvalPurchase: number;
   barangMasuk: number;
   deliveryOrder: number;
+  deliveryRequest: number;
   suratJalan: number;
   approvalWastePusat: number;
   barangMasukOutlet: number;
@@ -104,6 +106,7 @@ const EMPTY_PENDING_COUNTS: PendingCounts = {
   approvalPurchase: 0,
   barangMasuk: 0,
   deliveryOrder: 0,
+  deliveryRequest: 0,
   suratJalan: 0,
   approvalWastePusat: 0,
   barangMasukOutlet: 0,
@@ -352,6 +355,7 @@ const menus: Menu[] = [
     roles: ["ADMIN", "GUDANG"],
     icon: PackageMinus,
     iconTone: "orange",
+    badgeKey: "deliveryRequest",
   },
   {
     title: "Stock Card",
@@ -547,11 +551,11 @@ const menus: Menu[] = [
     badgeKey: "barangMasukOutlet",
   },
   {
-    title: "Delivery Request",
+    title: "Delivery Request To Gudang Pusat",
     url: "/outlet/delivery-request",
-    roles: ["OUTLET_ADMIN"],
+    roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: Truck,
-    iconTone: "blue",
+    iconTone: "cyan",
   },
   {
     title: "Barang Keluar Outlet",
@@ -812,6 +816,9 @@ export default function Sidebar({
         ),
         deliveryOrder: normalizeCount(
           counts.deliveryOrder
+        ),
+        deliveryRequest: normalizeCount(
+          counts.deliveryRequest
         ),
         suratJalan: normalizeCount(
           counts.suratJalan
@@ -1515,12 +1522,6 @@ export default function Sidebar({
               const Icon =
                 menu.icon || Package;
 
-              /*
-               * Defensive fallback:
-               * jika suatu saat ada iconTone baru yang
-               * belum dimasukkan ke ICON_TONES, Sidebar
-               * tidak akan crash.
-               */
               const tone =
                 ICON_TONES[
                   menu.iconTone || "emerald"
