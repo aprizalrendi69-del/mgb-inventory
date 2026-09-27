@@ -23,6 +23,7 @@ import {
   Database,
   RotateCcw,
   WalletCards,
+  Filter,
 } from "lucide-react";
 
 type Outlet = {
@@ -60,20 +61,11 @@ type OutletPurchase = {
   outletId: number;
   supplierId: number;
   total: number;
-
-  status:
-    | "DRAFT"
-    | "APPROVED"
-    | "RECEIVED";
-
+  status: "DRAFT" | "APPROVED" | "RECEIVED";
   paymentMethod?: string | null;
-
   purchaseDate?: string;
-
   createdAt?: string;
-
   remarks: string | null;
-
   outlet: Outlet;
   supplier: Supplier;
   items: PurchaseItem[];
@@ -93,37 +85,30 @@ export default function OutletPurchasePage() {
   // DATA
   // =====================================================
 
-  const [data, setData] =
-    useState<OutletPurchase[]>([]);
-
-  const [search, setSearch] =
-    useState("");
-
-  const [loading, setLoading] =
-    useState(true);
+  const [data, setData] = useState<OutletPurchase[]>([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
 
   // =====================================================
   // FILTER
   // =====================================================
 
-  const [selectedOutlet, setSelectedOutlet] =
+  const [selectedOutlet, setSelectedOutlet] = useState<string>("ALL");
+
+  // Tanggal transaksi: FROM - TO
+  const [tanggalDari, setTanggalDari] = useState("");
+  const [tanggalSampai, setTanggalSampai] = useState("");
+
+  // Status
+  const [selectedStatus, setSelectedStatus] =
     useState<string>("ALL");
-
-  const [tanggalMulai, setTanggalMulai] =
-    useState("");
-
-  const [tanggalSelesai, setTanggalSelesai] =
-    useState("");
 
   // =====================================================
   // USER
   // =====================================================
 
-  const [user, setUser] =
-    useState<UserInfo | null>(null);
-
-  const [loadingUser, setLoadingUser] =
-    useState(true);
+  const [user, setUser] = useState<UserInfo | null>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
 
   // =====================================================
   // LOAD USER
@@ -133,25 +118,18 @@ export default function OutletPurchasePage() {
     try {
       setLoadingUser(true);
 
-      const res = await fetch(
-        "/api/me",
-        {
-          cache: "no-store",
-        }
-      );
+      const res = await fetch("/api/me", {
+        cache: "no-store",
+      });
 
-      const json =
-        await res.json();
+      const json = await res.json();
 
       if (!res.ok) {
         setUser(null);
         return;
       }
 
-      const currentUser =
-        json?.user ??
-        json?.data ??
-        json;
+      const currentUser = json?.user ?? json?.data ?? json;
 
       if (currentUser?.id) {
         setUser(currentUser);
@@ -159,11 +137,7 @@ export default function OutletPurchasePage() {
         setUser(null);
       }
     } catch (error) {
-      console.error(
-        "LOAD CURRENT USER ERROR:",
-        error
-      );
-
+      console.error("LOAD CURRENT USER ERROR:", error);
       setUser(null);
     } finally {
       setLoadingUser(false);
@@ -178,40 +152,21 @@ export default function OutletPurchasePage() {
     try {
       setLoading(true);
 
-      const res =
-        await fetch(
-          "/api/outlet/purchase",
-          {
-            cache: "no-store",
-          }
-        );
+      const res = await fetch("/api/outlet/purchase", {
+        cache: "no-store",
+      });
 
-      const json =
-        await res.json();
+      const json = await res.json();
 
-      if (
-        !res.ok ||
-        !json.success
-      ) {
+      if (!res.ok || !json.success) {
         throw new Error(
-          json.message ||
-            "Gagal mengambil Purchase Outlet"
+          json.message || "Gagal mengambil Purchase Outlet"
         );
       }
 
-      setData(
-        Array.isArray(
-          json.data
-        )
-          ? json.data
-          : []
-      );
+      setData(Array.isArray(json.data) ? json.data : []);
     } catch (error) {
-      console.error(
-        "LOAD OUTLET PURCHASE ERROR:",
-        error
-      );
-
+      console.error("LOAD OUTLET PURCHASE ERROR:", error);
       setData([]);
     } finally {
       setLoading(false);
@@ -231,333 +186,210 @@ export default function OutletPurchasePage() {
   // ROLE
   // =====================================================
 
-  const role =
-    String(
-      user?.role || ""
-    ).toUpperCase();
+  const role = String(user?.role || "").toUpperCase();
 
   /**
    * ADMIN = ADMIN PUSAT
    *
    * Hanya role ini yang boleh
-   * melihat tombol Payment.
+   * melihat tombol Payment dan filter Outlet.
    */
-  const isAdminPusat =
-    role === "ADMIN";
+  const isAdminPusat = role === "ADMIN";
 
   // =====================================================
   // DAFTAR OUTLET
   // =====================================================
 
-  const outletOptions =
-    useMemo(() => {
-      const map =
-        new Map<
-          number,
-          Outlet
-        >();
+  const outletOptions = useMemo(() => {
+    const map = new Map<number, Outlet>();
 
-      data.forEach(
-        (item) => {
-          if (!item.outlet) {
-            return;
-          }
+    data.forEach((item) => {
+      if (!item.outlet) {
+        return;
+      }
 
-          if (
-            !map.has(
-              item.outlet.id
-            )
-          ) {
-            map.set(
-              item.outlet.id,
-              item.outlet
-            );
-          }
-        }
-      );
+      if (!map.has(item.outlet.id)) {
+        map.set(item.outlet.id, item.outlet);
+      }
+    });
 
-      return Array.from(
-        map.values()
-      ).sort(
-        (a, b) =>
-          a.name.localeCompare(
-            b.name
-          )
-      );
-    }, [data]);
+    return Array.from(map.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+  }, [data]);
 
   // =====================================================
   // FILTER DATA
   // =====================================================
 
-  const filteredData =
-    useMemo(() => {
-      const keyword =
-        search
-          .toLowerCase()
-          .trim();
+  const filteredData = useMemo(() => {
+    const keyword = search.toLowerCase().trim();
 
-      return data.filter(
-        (item) => {
-          // ---------------------------------------------
-          // SEARCH
-          // ---------------------------------------------
+    return data.filter((item) => {
+      // ---------------------------------------------------
+      // SEARCH
+      // ---------------------------------------------------
 
-          const matchesSearch =
-            !keyword ||
-            item.number
-              ?.toLowerCase()
-              .includes(
-                keyword
-              ) ||
-            item.outlet?.code
-              ?.toLowerCase()
-              .includes(
-                keyword
-              ) ||
-            item.outlet?.name
-              ?.toLowerCase()
-              .includes(
-                keyword
-              ) ||
-            item.supplier?.code
-              ?.toLowerCase()
-              .includes(
-                keyword
-              ) ||
-            item.supplier?.name
-              ?.toLowerCase()
-              .includes(
-                keyword
-              ) ||
-            item.status
-              ?.toLowerCase()
-              .includes(
-                keyword
-              ) ||
-            item.paymentMethod
-              ?.toLowerCase()
-              .includes(
-                keyword
-              );
+      const matchesSearch =
+        !keyword ||
+        item.number?.toLowerCase().includes(keyword) ||
+        item.outlet?.code?.toLowerCase().includes(keyword) ||
+        item.outlet?.name?.toLowerCase().includes(keyword) ||
+        item.supplier?.code?.toLowerCase().includes(keyword) ||
+        item.supplier?.name?.toLowerCase().includes(keyword) ||
+        item.status?.toLowerCase().includes(keyword) ||
+        item.paymentMethod?.toLowerCase().includes(keyword);
 
-          if (
-            !matchesSearch
-          ) {
-            return false;
-          }
+      if (!matchesSearch) {
+        return false;
+      }
 
-          // ---------------------------------------------
-          // FILTER OUTLET
-          // ---------------------------------------------
+      // ---------------------------------------------------
+      // FILTER OUTLET
+      // ---------------------------------------------------
 
-          if (
-            isAdminPusat &&
-            selectedOutlet !==
-              "ALL"
-          ) {
-            if (
-              String(
-                item.outletId
-              ) !==
-              selectedOutlet
-            ) {
-              return false;
-            }
-          }
-
-          // ---------------------------------------------
-          // FILTER TANGGAL
-          // ---------------------------------------------
-
-          const dateValue =
-            item.purchaseDate;
-
-          if (
-            tanggalMulai ||
-            tanggalSelesai
-          ) {
-            if (!dateValue) {
-              return false;
-            }
-
-            const itemDate =
-              new Date(
-                dateValue
-              );
-
-            if (
-              Number.isNaN(
-                itemDate.getTime()
-              )
-            ) {
-              return false;
-            }
-
-            const year =
-              itemDate.getFullYear();
-
-            const month =
-              String(
-                itemDate.getMonth() +
-                  1
-              ).padStart(
-                2,
-                "0"
-              );
-
-            const day =
-              String(
-                itemDate.getDate()
-              ).padStart(
-                2,
-                "0"
-              );
-
-            const itemDateOnly =
-              `${year}-${month}-${day}`;
-
-            if (
-              tanggalMulai &&
-              itemDateOnly <
-                tanggalMulai
-            ) {
-              return false;
-            }
-
-            if (
-              tanggalSelesai &&
-              itemDateOnly >
-                tanggalSelesai
-            ) {
-              return false;
-            }
-          }
-
-          return true;
+      if (isAdminPusat && selectedOutlet !== "ALL") {
+        if (String(item.outletId) !== selectedOutlet) {
+          return false;
         }
-      );
-    }, [
-      data,
-      search,
-      selectedOutlet,
-      tanggalMulai,
-      tanggalSelesai,
-      isAdminPusat,
-    ]);
+      }
+
+      // ---------------------------------------------------
+      // FILTER STATUS
+      // ---------------------------------------------------
+
+      if (selectedStatus !== "ALL") {
+        if (item.status !== selectedStatus) {
+          return false;
+        }
+      }
+
+      // ---------------------------------------------------
+      // FILTER TANGGAL DARI - SAMPAI
+      // ---------------------------------------------------
+
+      const dateValue = item.purchaseDate;
+
+      if (tanggalDari || tanggalSampai) {
+        if (!dateValue) {
+          return false;
+        }
+
+        const itemDate = new Date(dateValue);
+
+        if (Number.isNaN(itemDate.getTime())) {
+          return false;
+        }
+
+        const year = itemDate.getFullYear();
+        const month = String(
+          itemDate.getMonth() + 1
+        ).padStart(2, "0");
+        const day = String(
+          itemDate.getDate()
+        ).padStart(2, "0");
+
+        const itemDateOnly = `${year}-${month}-${day}`;
+
+        if (
+          tanggalDari &&
+          itemDateOnly < tanggalDari
+        ) {
+          return false;
+        }
+
+        if (
+          tanggalSampai &&
+          itemDateOnly > tanggalSampai
+        ) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [
+    data,
+    search,
+    selectedOutlet,
+    selectedStatus,
+    tanggalDari,
+    tanggalSampai,
+    isAdminPusat,
+  ]);
 
   // =====================================================
   // SUMMARY
   // =====================================================
 
-  const totalPurchase =
-    filteredData.length;
+  const totalPurchase = filteredData.length;
 
-  const totalDraft =
-    filteredData.filter(
-      (item) =>
-        item.status ===
-        "DRAFT"
-    ).length;
+  const totalDraft = filteredData.filter(
+    (item) => item.status === "DRAFT"
+  ).length;
 
-  const totalApproved =
-    filteredData.filter(
-      (item) =>
-        item.status ===
-        "APPROVED"
-    ).length;
+  const totalApproved = filteredData.filter(
+    (item) => item.status === "APPROVED"
+  ).length;
 
-  const totalReceived =
-    filteredData.filter(
-      (item) =>
-        item.status ===
-        "RECEIVED"
-    ).length;
+  const totalReceived = filteredData.filter(
+    (item) => item.status === "RECEIVED"
+  ).length;
 
-  const totalValue =
-    filteredData.reduce(
-      (sum, item) =>
-        sum +
-        Number(
-          item.total || 0
-        ),
-      0
-    );
+  const totalValue = filteredData.reduce(
+    (sum, item) => sum + Number(item.total || 0),
+    0
+  );
 
-  const totalItems =
-    filteredData.reduce(
-      (sum, item) =>
-        sum +
-        (item.items?.length || 0),
-      0
-    );
+  const totalItems = filteredData.reduce(
+    (sum, item) => sum + (item.items?.length || 0),
+    0
+  );
 
   // =====================================================
   // FORMAT RUPIAH
   // =====================================================
 
-  function formatRupiah(
-    value: number
-  ) {
-    return Number(
-      value || 0
-    ).toLocaleString(
-      "id-ID"
-    );
+  function formatRupiah(value: number) {
+    return Number(value || 0).toLocaleString("id-ID");
   }
 
   // =====================================================
   // FORMAT DATE
   // =====================================================
 
-  function formatDate(
-    value?: string
-  ) {
+  function formatDate(value?: string) {
     if (!value) {
       return "-";
     }
 
-    const date =
-      new Date(value);
+    const date = new Date(value);
 
-    if (
-      Number.isNaN(
-        date.getTime()
-      )
-    ) {
+    if (Number.isNaN(date.getTime())) {
       return "-";
     }
 
-    return date.toLocaleDateString(
-      "id-ID",
-      {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }
-    );
+    return date.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
   }
 
   // =====================================================
   // PAYMENT METHOD DISPLAY
   // =====================================================
 
-  function normalizePaymentMethod(
-    value?: string | null
-  ) {
+  function normalizePaymentMethod(value?: string | null) {
     if (!value) {
       return "-";
     }
 
-    const normalized =
-      String(value)
-        .trim()
-        .toUpperCase();
+    const normalized = String(value)
+      .trim()
+      .toUpperCase();
 
-    const labels: Record<
-      string,
-      string
-    > = {
+    const labels: Record<string, string> = {
       CASH: "Cash",
       TRANSFER: "Transfer",
       COD: "COD",
@@ -568,15 +400,10 @@ export default function OutletPurchasePage() {
       QRIS: "QRIS",
     };
 
-    return (
-      labels[normalized] ||
-      normalized
-    );
+    return labels[normalized] || normalized;
   }
 
-  function renderPaymentMethod(
-    value?: string | null
-  ) {
+  function renderPaymentMethod(value?: string | null) {
     if (!value) {
       return (
         <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
@@ -592,56 +419,41 @@ export default function OutletPurchasePage() {
       );
     }
 
-    const normalized =
-      String(value)
-        .trim()
-        .toUpperCase();
+    const normalized = String(value)
+      .trim()
+      .toUpperCase();
 
     let iconClass =
       "bg-[#EAF3EF] text-[#497F70] border-[#DCE8E3]";
 
-    if (
-      normalized ===
-      "TRANSFER"
-    ) {
+    if (normalized === "TRANSFER") {
       iconClass =
         "bg-blue-50 text-blue-600 border-blue-100";
     }
 
-    if (
-      normalized ===
-      "CASH"
-    ) {
+    if (normalized === "CASH") {
       iconClass =
         "bg-emerald-50 text-emerald-600 border-emerald-100";
     }
 
     if (
-      normalized ===
-        "TEMPO" ||
-      normalized ===
-        "COD" ||
-      normalized ===
-        "CBD"
+      normalized === "TEMPO" ||
+      normalized === "COD" ||
+      normalized === "CBD"
     ) {
       iconClass =
         "bg-amber-50 text-amber-600 border-amber-100";
     }
 
     if (
-      normalized ===
-        "CREDIT" ||
-      normalized ===
-        "DEBIT"
+      normalized === "CREDIT" ||
+      normalized === "DEBIT"
     ) {
       iconClass =
         "bg-violet-50 text-violet-600 border-violet-100";
     }
 
-    if (
-      normalized ===
-      "QRIS"
-    ) {
+    if (normalized === "QRIS") {
       iconClass =
         "bg-indigo-50 text-indigo-600 border-indigo-100";
     }
@@ -650,16 +462,10 @@ export default function OutletPurchasePage() {
       <div
         className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 ${iconClass}`}
       >
-        <CreditCard
-          size={14}
-        />
+        <CreditCard size={14} />
 
         <span className="text-[10px] font-extrabold uppercase tracking-wide">
-          {
-            normalizePaymentMethod(
-              value
-            )
-          }
+          {normalizePaymentMethod(value)}
         </span>
       </div>
     );
@@ -672,10 +478,7 @@ export default function OutletPurchasePage() {
   function renderStatus(
     status: OutletPurchase["status"]
   ) {
-    if (
-      status ===
-      "APPROVED"
-    ) {
+    if (status === "APPROVED") {
       return (
         <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wide text-blue-700 shadow-sm">
           <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.10)]" />
@@ -684,10 +487,7 @@ export default function OutletPurchasePage() {
       );
     }
 
-    if (
-      status ===
-      "RECEIVED"
-    ) {
+    if (status === "RECEIVED") {
       return (
         <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-700 shadow-sm">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.10)]" />
@@ -711,18 +511,28 @@ export default function OutletPurchasePage() {
   function resetFilter() {
     setSearch("");
     setSelectedOutlet("ALL");
-    setTanggalMulai("");
-    setTanggalSelesai("");
+    setTanggalDari("");
+    setTanggalSampai("");
+    setSelectedStatus("ALL");
   }
+
+  // =====================================================
+  // CHECK ACTIVE FILTER
+  // =====================================================
+
+  const hasActiveFilter =
+    Boolean(search) ||
+    selectedOutlet !== "ALL" ||
+    Boolean(tanggalDari) ||
+    Boolean(tanggalSampai) ||
+    selectedStatus !== "ALL";
 
   // =====================================================
   // DELIVERY REQUEST
   // =====================================================
 
   function handleNewDeliveryRequest() {
-    router.push(
-      "/outlet/delivery-request/new"
-    );
+    router.push("/outlet/delivery-request/new");
   }
 
   // =====================================================
@@ -730,24 +540,14 @@ export default function OutletPurchasePage() {
   // =====================================================
 
   function handleNewPurchase() {
-    router.push(
-      "/outlet/purchase/new"
-    );
+    router.push("/outlet/purchase/new");
   }
 
   // =====================================================
   // PAYMENT
   // =====================================================
 
-  function handlePayment(
-    purchaseId: number
-  ) {
-    /**
-     * SECURITY GUARD CLIENT
-     *
-     * Hanya ADMIN / ADMIN PUSAT
-     * yang boleh masuk ke halaman payment.
-     */
+  function handlePayment(purchaseId: number) {
     if (!isAdminPusat) {
       return;
     }
@@ -768,28 +568,30 @@ export default function OutletPurchasePage() {
           HERO HEADER
       ================================================= */}
 
-      <div className="relative mb-6 overflow-hidden rounded-[28px] border border-[#D9E7E1] bg-white shadow-[0_12px_40px_rgba(24,53,45,0.07)]">
+      <div className="relative mb-6 overflow-hidden rounded-[30px] border border-[#D9E7E1] bg-white shadow-[0_16px_50px_rgba(24,53,45,0.08)]">
 
         <div className="absolute -right-20 -top-28 h-72 w-72 rounded-full bg-[#497F70]/10 blur-3xl" />
 
         <div className="absolute -bottom-28 left-[38%] h-60 w-60 rounded-full bg-emerald-100/50 blur-3xl" />
 
+        <div className="pointer-events-none absolute right-0 top-0 h-full w-[35%] bg-gradient-to-l from-[#F7FBF9]/80 to-transparent" />
+
         <div className="relative px-5 py-6 md:px-7 md:py-7">
 
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-col gap-7 xl:flex-row xl:items-center xl:justify-between">
 
             <div className="flex items-center gap-4">
 
               <div className="relative">
 
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#497F70] to-[#315E51] text-white shadow-[0_10px_25px_rgba(73,127,112,0.25)]">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#497F70] via-[#3D6D60] to-[#315E51] text-white shadow-[0_12px_30px_rgba(73,127,112,0.28)] ring-4 ring-[#EAF3EF]">
                   <ShoppingCart
                     size={25}
                     strokeWidth={2}
                   />
                 </div>
 
-                <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-emerald-500 text-white">
+                <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-emerald-500 text-white shadow-sm">
                   <Sparkles size={9} />
                 </div>
 
@@ -827,9 +629,13 @@ export default function OutletPurchasePage() {
 
             </div>
 
+            {/* =================================================
+                HERO ACTIONS
+            ================================================= */}
+
             <div className="flex flex-wrap items-center gap-2.5">
 
-              <div className="hidden items-center gap-2 rounded-xl border border-[#DDEAE4] bg-[#F7FAF8] px-3.5 py-2.5 sm:flex">
+              <div className="hidden items-center gap-2 rounded-xl border border-[#DDEAE4] bg-[#F7FAF8] px-3.5 py-2.5 shadow-sm sm:flex">
 
                 <Database
                   size={15}
@@ -842,80 +648,76 @@ export default function OutletPurchasePage() {
 
               </div>
 
+              {/* REFRESH */}
+
               <button
                 type="button"
-                onClick={
-                  loadPurchase
-                }
-                disabled={
-                  loading
-                }
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D5E5DC] bg-white px-4 py-2.5 text-xs font-bold text-[#58736A] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#BFD4CB] hover:bg-[#F6FAF8] hover:text-[#497F70] disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={loadPurchase}
+                disabled={loading}
+                className="group inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#D5E5DC] bg-white px-4 text-xs font-extrabold text-[#58736A] shadow-[0_4px_14px_rgba(24,53,45,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#BFD4CB] hover:bg-[#F6FAF8] hover:text-[#497F70] hover:shadow-[0_8px_20px_rgba(24,53,45,0.08)] disabled:cursor-not-allowed disabled:opacity-50"
               >
-
                 <RefreshCw
                   size={15}
-                  className={
+                  className={`transition-transform ${
                     loading
                       ? "animate-spin"
-                      : ""
-                  }
+                      : "group-hover:rotate-90"
+                  }`}
                 />
 
                 Refresh
-
               </button>
 
-              {/* =================================================
-                  DELIVERY REQUEST NEW
-              ================================================= */}
+              {/* DELIVERY REQUEST */}
 
               <button
                 type="button"
-                onClick={
-                  handleNewDeliveryRequest
-                }
-                className="group inline-flex items-center justify-center gap-2 rounded-xl border border-[#BFD4CB] bg-white px-4 py-2.5 text-xs font-extrabold text-[#497F70] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#9FBFB3] hover:bg-[#F2F8F5] hover:shadow-md"
+                onClick={handleNewDeliveryRequest}
+                className="group relative inline-flex h-11 items-center justify-center gap-2 overflow-hidden rounded-xl border border-blue-500/30 bg-gradient-to-r from-[#2563EB] via-[#1D4ED8] to-[#1E40AF] px-4 text-xs font-extrabold text-white shadow-[0_10px_24px_rgba(37,99,235,0.22)] transition-all duration-200 hover:-translate-y-0.5 hover:from-[#1D4ED8] hover:via-[#1E40AF] hover:to-[#1E3A8A] hover:shadow-[0_14px_30px_rgba(37,99,235,0.30)] active:translate-y-0"
               >
+                <span className="absolute inset-x-0 top-0 h-px bg-white/40" />
+
+                <span className="absolute -right-6 -top-8 h-20 w-20 rounded-full bg-white/10 blur-xl transition-transform duration-300 group-hover:scale-150" />
 
                 <Truck
                   size={16}
-                  className="transition-transform duration-200 group-hover:-translate-y-0.5"
+                  strokeWidth={2.4}
+                  className="relative transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
                 />
 
-                Delivery Request New
+                <span className="relative">
+                  Delivery Request New
+                </span>
 
                 <ArrowUpRight
                   size={14}
-                  className="opacity-70 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+                  className="relative opacity-80 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
                 />
-
               </button>
 
-              {/* =================================================
-                  PURCHASE BARU
-              ================================================= */}
+              {/* PURCHASE BARU */}
 
               <button
                 type="button"
-                onClick={
-                  handleNewPurchase
-                }
-                className="group inline-flex items-center justify-center gap-2 rounded-xl bg-[#497F70] px-4.5 py-2.5 text-xs font-extrabold text-white shadow-[0_8px_20px_rgba(73,127,112,0.18)] transition-all hover:-translate-y-0.5 hover:bg-[#3D6D60] hover:shadow-[0_12px_25px_rgba(73,127,112,0.22)]"
+                onClick={handleNewPurchase}
+                className="group relative inline-flex h-11 items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-[#497F70] via-[#3D6D60] to-[#315E51] px-4 text-xs font-extrabold text-white shadow-[0_10px_24px_rgba(73,127,112,0.24)] transition-all duration-200 hover:-translate-y-0.5 hover:from-[#3D6D60] hover:via-[#315E51] hover:to-[#274D42] hover:shadow-[0_14px_30px_rgba(73,127,112,0.30)] active:translate-y-0"
               >
+                <span className="absolute inset-x-0 top-0 h-px bg-white/30" />
 
                 <Plus
                   size={16}
-                  className="transition-transform duration-200 group-hover:rotate-90"
+                  strokeWidth={2.5}
+                  className="relative transition-transform duration-200 group-hover:rotate-90"
                 />
 
-                Purchase Baru
+                <span className="relative">
+                  Purchase Baru
+                </span>
 
                 <ArrowUpRight
                   size={14}
-                  className="opacity-70 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+                  className="relative opacity-70 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
                 />
-
               </button>
 
             </div>
@@ -1148,7 +950,7 @@ export default function OutletPurchasePage() {
 
               <div className="flex items-center gap-3">
 
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70] shadow-sm">
                   <ShoppingCart size={17} />
                 </div>
 
@@ -1171,44 +973,39 @@ export default function OutletPurchasePage() {
 
             <div className="flex items-center gap-2">
 
-              <div className="hidden rounded-xl border border-[#E0EAE5] bg-[#F7FAF8] px-3 py-2 text-[11px] font-bold text-gray-500 sm:block">
+              <div className="hidden rounded-xl border border-[#E0EAE5] bg-[#F7FAF8] px-3 py-2 text-[11px] font-bold text-gray-500 shadow-sm sm:block">
                 {filteredData.length} ditampilkan
               </div>
 
-              {(search ||
-                selectedOutlet !==
-                  "ALL" ||
-                tanggalMulai ||
-                tanggalSelesai) && (
-
+              {hasActiveFilter && (
                 <button
                   type="button"
-                  onClick={
-                    resetFilter
-                  }
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-[#DCE7E1] bg-white px-3 py-2 text-[11px] font-bold text-[#497F70] transition hover:bg-[#F5F9F7]"
+                  onClick={resetFilter}
+                  className="group inline-flex items-center gap-1.5 rounded-xl border border-[#DCE7E1] bg-white px-3 py-2 text-[11px] font-bold text-[#497F70] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#BFD4CB] hover:bg-[#F5F9F7] hover:shadow-md"
                 >
                   <RotateCcw
                     size={13}
+                    className="transition-transform group-hover:-rotate-45"
                   />
                   Reset
                 </button>
-
               )}
 
             </div>
 
           </div>
 
-          {/* FILTER */}
+          {/* =================================================
+              FILTER
+          ================================================= */}
 
-          <div className="rounded-2xl border border-[#E1EBE6] bg-[#F8FAF9] p-3.5">
+          <div className="rounded-2xl border border-[#E1EBE6] bg-[#F8FAF9] p-3.5 shadow-inner">
 
             <div
               className={`grid gap-3 ${
                 isAdminPusat
-                  ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-4"
-                  : "grid-cols-1 md:grid-cols-2"
+                  ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-5"
+                  : "grid-cols-1 md:grid-cols-2 xl:grid-cols-4"
               }`}
             >
 
@@ -1218,11 +1015,12 @@ export default function OutletPurchasePage() {
                 className={
                   isAdminPusat
                     ? "xl:col-span-1"
-                    : "md:col-span-2"
+                    : "md:col-span-2 xl:col-span-1"
                 }
               >
 
-                <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#6D857B]">
+                <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#6D857B]">
+                  <Search size={11} />
                   Pencarian
                 </label>
 
@@ -1237,11 +1035,9 @@ export default function OutletPurchasePage() {
                     type="text"
                     value={search}
                     onChange={(e) =>
-                      setSearch(
-                        e.target.value
-                      )
+                      setSearch(e.target.value)
                     }
-                    placeholder="Cari nomor PO, supplier, metode pembayaran..."
+                    placeholder="Cari nomor PO, supplier..."
                     className="w-full rounded-xl border border-[#D9E5DF] bg-white py-2.5 pl-10 pr-4 text-xs font-medium text-[#35564C] outline-none transition-all placeholder:text-gray-400 focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
                   />
 
@@ -1254,16 +1050,15 @@ export default function OutletPurchasePage() {
               {isAdminPusat && (
                 <div>
 
-                  <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#6D857B]">
+                  <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#6D857B]">
+                    <Store size={11} />
                     Outlet
                   </label>
 
                   <div className="relative">
 
                     <select
-                      value={
-                        selectedOutlet
-                      }
+                      value={selectedOutlet}
                       onChange={(e) =>
                         setSelectedOutlet(
                           e.target.value
@@ -1276,28 +1071,14 @@ export default function OutletPurchasePage() {
                         Semua Outlet
                       </option>
 
-                      {outletOptions.map(
-                        (
-                          outlet
-                        ) => (
-                          <option
-                            key={
-                              outlet.id
-                            }
-                            value={String(
-                              outlet.id
-                            )}
-                          >
-                            {
-                              outlet.code
-                            }{" "}
-                            -{" "}
-                            {
-                              outlet.name
-                            }
-                          </option>
-                        )
-                      )}
+                      {outletOptions.map((outlet) => (
+                        <option
+                          key={outlet.id}
+                          value={String(outlet.id)}
+                        >
+                          {outlet.code} - {outlet.name}
+                        </option>
+                      ))}
 
                     </select>
 
@@ -1311,83 +1092,129 @@ export default function OutletPurchasePage() {
                 </div>
               )}
 
-              {/* TANGGAL MULAI */}
+              {/* TANGGAL DARI */}
 
-              {isAdminPusat && (
-                <div>
+              <div>
 
-                  <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#6D857B]">
-                    Tanggal Mulai
-                  </label>
+                <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#6D857B]">
+                  <CalendarDays size={11} />
+                  Tanggal Dari
+                </label>
 
-                  <div className="relative">
+                <div className="relative">
 
-                    <CalendarDays
-                      size={15}
-                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                    />
+                  <CalendarDays
+                    size={15}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
 
-                    <input
-                      type="date"
-                      value={
-                        tanggalMulai
-                      }
-                      onChange={(e) =>
-                        setTanggalMulai(
-                          e.target.value
-                        )
-                      }
-                      className="w-full rounded-xl border border-[#D9E5DF] bg-white py-2.5 pl-9 pr-3 text-xs font-medium text-gray-700 outline-none transition-all focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
-                    />
-
-                  </div>
+                  <input
+                    type="date"
+                    value={tanggalDari}
+                    max={tanggalSampai || undefined}
+                    onChange={(e) =>
+                      setTanggalDari(
+                        e.target.value
+                      )
+                    }
+                    className="w-full rounded-xl border border-[#D9E5DF] bg-white py-2.5 pl-9 pr-3 text-xs font-medium text-gray-700 outline-none transition-all focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                  />
 
                 </div>
-              )}
 
-              {/* TANGGAL SELESAI */}
+              </div>
 
-              {isAdminPusat && (
-                <div>
+              {/* TANGGAL SAMPAI */}
 
-                  <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#6D857B]">
-                    Tanggal Selesai
-                  </label>
+              <div>
 
-                  <div className="relative">
+                <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#6D857B]">
+                  <CalendarDays size={11} />
+                  Tanggal Sampai
+                </label>
 
-                    <CalendarDays
-                      size={15}
-                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                    />
+                <div className="relative">
 
-                    <input
-                      type="date"
-                      value={
-                        tanggalSelesai
-                      }
-                      onChange={(e) =>
-                        setTanggalSelesai(
-                          e.target.value
-                        )
-                      }
-                      className="w-full rounded-xl border border-[#D9E5DF] bg-white py-2.5 pl-9 pr-3 text-xs font-medium text-gray-700 outline-none transition-all focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
-                    />
+                  <CalendarDays
+                    size={15}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
 
-                  </div>
+                  <input
+                    type="date"
+                    value={tanggalSampai}
+                    min={tanggalDari || undefined}
+                    onChange={(e) =>
+                      setTanggalSampai(
+                        e.target.value
+                      )
+                    }
+                    className="w-full rounded-xl border border-[#D9E5DF] bg-white py-2.5 pl-9 pr-3 text-xs font-medium text-gray-700 outline-none transition-all focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                  />
 
                 </div>
-              )}
+
+              </div>
+
+              {/* STATUS */}
+
+              <div>
+
+                <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#6D857B]">
+                  <Filter size={11} />
+                  Status
+                </label>
+
+                <div className="relative">
+
+                  <select
+                    value={selectedStatus}
+                    onChange={(e) =>
+                      setSelectedStatus(
+                        e.target.value
+                      )
+                    }
+                    className="w-full appearance-none rounded-xl border border-[#D9E5DF] bg-white px-3.5 py-2.5 pr-10 text-xs font-semibold text-gray-700 outline-none transition-all hover:border-[#BFD4CB] focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                  >
+
+                    <option value="ALL">
+                      Semua Status
+                    </option>
+
+                    <option value="DRAFT">
+                      Draft
+                    </option>
+
+                    <option value="APPROVED">
+                      Approved
+                    </option>
+
+                    <option value="RECEIVED">
+                      Received
+                    </option>
+
+                  </select>
+
+                  <ChevronDown
+                    size={15}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+
+                </div>
+
+              </div>
 
             </div>
 
           </div>
 
-          {/* FILTER INFO */}
+          {/* =================================================
+              ACTIVE FILTER INFO
+          ================================================= */}
 
-          <div className="mt-4 flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-4 flex flex-col gap-3 text-xs lg:flex-row lg:items-center lg:justify-between">
 
-            <div className="flex items-center gap-2 text-gray-400">
+            <div className="flex flex-wrap items-center gap-2 text-gray-400">
 
               <span>
                 Menampilkan
@@ -1411,23 +1238,53 @@ export default function OutletPurchasePage() {
 
             </div>
 
-            {isAdminPusat && (
-              <div className="flex items-center gap-2 text-[11px] text-gray-400">
+            <div className="flex flex-wrap items-center gap-2">
 
-                <Store
-                  size={13}
-                  className="text-[#497F70]"
-                />
+              {isAdminPusat && (
+                <div className="flex items-center gap-2 rounded-lg bg-[#F7FAF8] px-2.5 py-1.5 text-[10px] font-semibold text-gray-400">
 
-                <span>
-                  {selectedOutlet ===
-                  "ALL"
-                    ? "Semua outlet"
-                    : "Filter outlet aktif"}
-                </span>
+                  <Store
+                    size={12}
+                    className="text-[#497F70]"
+                  />
 
-              </div>
-            )}
+                  <span>
+                    {selectedOutlet === "ALL"
+                      ? "Semua outlet"
+                      : "Filter outlet aktif"}
+                  </span>
+
+                </div>
+              )}
+
+              {selectedStatus !== "ALL" && (
+                <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-2.5 py-1.5 text-[10px] font-bold text-blue-700">
+
+                  <Filter size={12} />
+
+                  Status:{" "}
+                  {selectedStatus === "DRAFT"
+                    ? "Draft"
+                    : selectedStatus === "APPROVED"
+                    ? "Approved"
+                    : "Received"}
+
+                </div>
+              )}
+
+              {(tanggalDari || tanggalSampai) && (
+                <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-700">
+
+                  <CalendarDays size={12} />
+
+                  {tanggalDari || "Awal"}
+                  {" → "}
+                  {tanggalSampai || "Akhir"}
+
+                </div>
+              )}
+
+            </div>
 
           </div>
 
@@ -1493,9 +1350,7 @@ export default function OutletPurchasePage() {
 
               {/* LOADING */}
 
-              {loading ||
-              loadingUser ? (
-
+              {loading || loadingUser ? (
                 <tr>
 
                   <td
@@ -1505,7 +1360,7 @@ export default function OutletPurchasePage() {
 
                     <div className="flex flex-col items-center">
 
-                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EAF3EF] text-[#497F70]">
+                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EAF3EF] text-[#497F70] shadow-sm">
                         <RefreshCw
                           size={23}
                           className="animate-spin"
@@ -1525,10 +1380,7 @@ export default function OutletPurchasePage() {
                   </td>
 
                 </tr>
-
-              ) : filteredData.length ===
-                0 ? (
-
+              ) : filteredData.length === 0 ? (
                 <tr>
 
                   <td
@@ -1540,10 +1392,8 @@ export default function OutletPurchasePage() {
 
                       <div className="relative mb-5">
 
-                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EAF3EF] text-[#497F70]">
-                          <ShoppingCart
-                            size={27}
-                          />
+                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EAF3EF] text-[#497F70] shadow-sm">
+                          <ShoppingCart size={27} />
                         </div>
 
                         <div className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-gray-100 text-gray-400">
@@ -1562,25 +1412,18 @@ export default function OutletPurchasePage() {
                         filter yang dipilih.
                       </p>
 
-                      {(search ||
-                        selectedOutlet !==
-                          "ALL" ||
-                        tanggalMulai ||
-                        tanggalSelesai) && (
-
+                      {hasActiveFilter && (
                         <button
                           type="button"
-                          onClick={
-                            resetFilter
-                          }
-                          className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#497F70] px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#3D6D60]"
+                          onClick={resetFilter}
+                          className="group mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#497F70] to-[#315E51] px-4 py-2.5 text-xs font-bold text-white shadow-[0_8px_18px_rgba(73,127,112,0.18)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_22px_rgba(73,127,112,0.24)]"
                         >
                           <RotateCcw
                             size={13}
+                            className="transition-transform group-hover:-rotate-45"
                           />
                           Reset Filter
                         </button>
-
                       )}
 
                     </div>
@@ -1588,40 +1431,186 @@ export default function OutletPurchasePage() {
                   </td>
 
                 </tr>
-
               ) : (
+                filteredData.map((item, index) => (
+                  <tr
+                    key={item.id}
+                    className="group border-b border-[#EDF2EF] transition-colors duration-150 hover:bg-[#FAFCFB]"
+                  >
 
-                filteredData.map(
-                  (
-                    item,
-                    index
-                  ) => (
+                    {/* NO */}
 
-                    <tr
-                      key={
-                        item.id
-                      }
-                      className="group border-b border-[#EDF2EF] transition-colors duration-150 hover:bg-[#FAFCFB]"
-                    >
+                    <td className="px-5 py-4">
 
-                      {/* NO */}
+                      <span className="text-xs font-bold text-gray-400">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
 
-                      <td className="px-5 py-4">
+                    </td>
 
-                        <span className="text-xs font-bold text-gray-400">
-                          {String(
-                            index + 1
-                          ).padStart(
-                            2,
-                            "0"
-                          )}
+                    {/* NOMOR PO */}
+
+                    <td className="px-5 py-4">
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          router.push(
+                            `/outlet/purchase/${item.id}`
+                          )
+                        }
+                        className="group/po flex items-center gap-3 text-left"
+                      >
+
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70] transition-all duration-200 group-hover/po:bg-[#DCEBE5] group-hover/po:shadow-sm">
+                          <FileText size={16} />
+                        </div>
+
+                        <div className="min-w-0">
+
+                          <div className="font-extrabold text-[#18352D] transition-colors group-hover/po:text-[#497F70]">
+                            {item.number}
+                          </div>
+
+                          <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                            Purchase Outlet
+                          </div>
+
+                        </div>
+
+                      </button>
+
+                    </td>
+
+                    {/* OUTLET */}
+
+                    <td className="px-5 py-4">
+
+                      <div className="flex items-center gap-3">
+
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                          <Store size={16} />
+                        </div>
+
+                        <div className="min-w-0">
+
+                          <div className="max-w-[190px] truncate font-bold text-gray-700">
+                            {item.outlet?.name || "-"}
+                          </div>
+
+                          <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                            {item.outlet?.code || "-"}
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                    </td>
+
+                    {/* SUPPLIER */}
+
+                    <td className="px-5 py-4">
+
+                      <div className="flex items-center gap-3">
+
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F2F6F4] text-[#497F70]">
+                          <Truck size={16} />
+                        </div>
+
+                        <div className="min-w-0">
+
+                          <div className="max-w-[190px] truncate font-bold text-gray-700">
+                            {item.supplier?.name || "-"}
+                          </div>
+
+                          <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                            {item.supplier?.code || "-"}
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                    </td>
+
+                    {/* ITEM */}
+
+                    <td className="px-5 py-4 text-center">
+
+                      <div className="inline-flex items-center gap-2 rounded-xl border border-[#DCE8E3] bg-[#F7FAF8] px-3 py-2">
+
+                        <Package
+                          size={14}
+                          className="text-[#497F70]"
+                        />
+
+                        <span className="text-xs font-extrabold text-[#35564C]">
+                          {item.items?.length || 0}
                         </span>
 
-                      </td>
+                        <span className="text-[10px] font-medium text-gray-400">
+                          item
+                        </span>
 
-                      {/* NOMOR PO */}
+                      </div>
 
-                      <td className="px-5 py-4">
+                    </td>
+
+                    {/* TOTAL */}
+
+                    <td className="px-5 py-4 text-right">
+
+                      <div className="font-black tracking-tight text-[#18352D]">
+                        Rp {formatRupiah(item.total)}
+                      </div>
+
+                      <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+                        Total Purchase
+                      </div>
+
+                    </td>
+
+                    {/* METODE PEMBAYARAN */}
+
+                    <td className="px-5 py-4 text-center">
+                      {renderPaymentMethod(
+                        item.paymentMethod
+                      )}
+                    </td>
+
+                    {/* STATUS */}
+
+                    <td className="px-5 py-4 text-center">
+                      {renderStatus(item.status)}
+                    </td>
+
+                    {/* TANGGAL */}
+
+                    <td className="px-5 py-4 text-center">
+
+                      <div className="inline-flex items-center gap-2 rounded-lg bg-[#F7F9F8] px-2.5 py-2 text-xs font-semibold text-gray-600">
+
+                        <CalendarDays
+                          size={13}
+                          className="text-[#497F70]"
+                        />
+
+                        {formatDate(
+                          item.purchaseDate
+                        )}
+
+                      </div>
+
+                    </td>
+
+                    {/* AKSI */}
+
+                    <td className="px-5 py-4">
+
+                      <div className="flex items-center justify-center gap-2">
+
+                        {/* DETAIL */}
 
                         <button
                           type="button"
@@ -1630,266 +1619,54 @@ export default function OutletPurchasePage() {
                               `/outlet/purchase/${item.id}`
                             )
                           }
-                          className="group/po flex items-center gap-3 text-left"
+                          className="group/action inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DCE8E3] bg-white px-3 text-[10px] font-extrabold text-[#497F70] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#AFCBC0] hover:bg-[#EAF3EF] hover:shadow-md"
+                          title="Lihat Detail"
                         >
 
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70] transition-all duration-200 group-hover/po:bg-[#DCEBE5] group-hover/po:shadow-sm">
-                            <FileText
-                              size={16}
-                            />
-                          </div>
+                          <Eye
+                            size={14}
+                            className="transition-transform group-hover/action:scale-110"
+                          />
 
-                          <div className="min-w-0">
-
-                            <div className="font-extrabold text-[#18352D] transition-colors group-hover/po:text-[#497F70]">
-                              {
-                                item.number
-                              }
-                            </div>
-
-                            <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
-                              Purchase Outlet
-                            </div>
-
-                          </div>
+                          <span>
+                            Detail
+                          </span>
 
                         </button>
 
-                      </td>
+                        {/* PAYMENT */}
 
-                      {/* OUTLET */}
-
-                      <td className="px-5 py-4">
-
-                        <div className="flex items-center gap-3">
-
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                            <Store
-                              size={16}
-                            />
-                          </div>
-
-                          <div className="min-w-0">
-
-                            <div className="max-w-[190px] truncate font-bold text-gray-700">
-                              {
-                                item
-                                  .outlet
-                                  ?.name ||
-                                "-"
+                        {isAdminPusat &&
+                          item.status === "APPROVED" && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handlePayment(item.id)
                               }
-                            </div>
+                              className="group/action relative inline-flex h-9 items-center gap-1.5 overflow-hidden rounded-lg bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] px-3 text-[10px] font-extrabold text-white shadow-[0_6px_16px_rgba(37,99,235,0.18)] transition-all hover:-translate-y-0.5 hover:from-[#1D4ED8] hover:to-[#1E40AF] hover:shadow-[0_9px_20px_rgba(37,99,235,0.25)]"
+                              title="Payment - Admin Pusat"
+                            >
 
-                            <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                              {
-                                item
-                                  .outlet
-                                  ?.code ||
-                                "-"
-                              }
-                            </div>
+                              <span className="absolute inset-x-0 top-0 h-px bg-white/40" />
 
-                          </div>
+                              <CreditCard
+                                size={14}
+                                className="relative transition-transform group-hover/action:scale-110"
+                              />
 
-                        </div>
+                              <span className="relative">
+                                Payment
+                              </span>
 
-                      </td>
+                            </button>
+                          )}
 
-                      {/* SUPPLIER */}
+                      </div>
 
-                      <td className="px-5 py-4">
+                    </td>
 
-                        <div className="flex items-center gap-3">
-
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F2F6F4] text-[#497F70]">
-                            <Truck
-                              size={16}
-                            />
-                          </div>
-
-                          <div className="min-w-0">
-
-                            <div className="max-w-[190px] truncate font-bold text-gray-700">
-                              {
-                                item
-                                  .supplier
-                                  ?.name ||
-                                "-"
-                              }
-                            </div>
-
-                            <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                              {
-                                item
-                                  .supplier
-                                  ?.code ||
-                                "-"
-                              }
-                            </div>
-
-                          </div>
-
-                        </div>
-
-                      </td>
-
-                      {/* ITEM */}
-
-                      <td className="px-5 py-4 text-center">
-
-                        <div className="inline-flex items-center gap-2 rounded-xl border border-[#DCE8E3] bg-[#F7FAF8] px-3 py-2">
-
-                          <Package
-                            size={14}
-                            className="text-[#497F70]"
-                          />
-
-                          <span className="text-xs font-extrabold text-[#35564C]">
-                            {
-                              item.items
-                                ?.length ||
-                              0
-                            }
-                          </span>
-
-                          <span className="text-[10px] font-medium text-gray-400">
-                            item
-                          </span>
-
-                        </div>
-
-                      </td>
-
-                      {/* TOTAL */}
-
-                      <td className="px-5 py-4 text-right">
-
-                        <div className="font-black tracking-tight text-[#18352D]">
-                          Rp{" "}
-                          {
-                            formatRupiah(
-                              item.total
-                            )
-                          }
-                        </div>
-
-                        <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-400">
-                          Total Purchase
-                        </div>
-
-                      </td>
-
-                      {/* METODE PEMBAYARAN */}
-
-                      <td className="px-5 py-4 text-center">
-
-                        {renderPaymentMethod(
-                          item.paymentMethod
-                        )}
-
-                      </td>
-
-                      {/* STATUS */}
-
-                      <td className="px-5 py-4 text-center">
-
-                        {renderStatus(
-                          item.status
-                        )}
-
-                      </td>
-
-                      {/* TANGGAL */}
-
-                      <td className="px-5 py-4 text-center">
-
-                        <div className="inline-flex items-center gap-2 rounded-lg bg-[#F7F9F8] px-2.5 py-2 text-xs font-semibold text-gray-600">
-
-                          <CalendarDays
-                            size={13}
-                            className="text-[#497F70]"
-                          />
-
-                          {
-                            formatDate(
-                              item.purchaseDate
-                            )
-                          }
-
-                        </div>
-
-                      </td>
-
-                      {/* AKSI */}
-
-                      <td className="px-5 py-4">
-
-                        <div className="flex items-center justify-center gap-2">
-
-                          {/* DETAIL */}
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              router.push(
-                                `/outlet/purchase/${item.id}`
-                              )
-                            }
-                            className="group/action inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DCE8E3] bg-white px-3 text-[10px] font-extrabold text-[#497F70] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#BFD4CB] hover:bg-[#EAF3EF] hover:shadow-md"
-                            title="Lihat Detail"
-                          >
-
-                            <Eye
-                              size={14}
-                            />
-
-                            <span>
-                              Detail
-                            </span>
-
-                          </button>
-
-                          {/* =================================================
-                              PAYMENT
-                              HANYA ADMIN PUSAT
-                          ================================================= */}
-
-                          {isAdminPusat &&
-                            item.status ===
-                              "APPROVED" && (
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handlePayment(
-                                    item.id
-                                  )
-                                }
-                                className="group/action inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-[10px] font-extrabold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md"
-                                title="Payment - Admin Pusat"
-                              >
-
-                                <CreditCard
-                                  size={14}
-                                />
-
-                                <span>
-                                  Payment
-                                </span>
-
-                              </button>
-
-                            )}
-
-                        </div>
-
-                      </td>
-
-                    </tr>
-
-                  )
-                )
-
+                  </tr>
+                ))
               )}
 
             </tbody>
@@ -1900,9 +1677,7 @@ export default function OutletPurchasePage() {
 
             {!loading &&
               !loadingUser &&
-              filteredData.length >
-                0 && (
-
+              filteredData.length > 0 && (
                 <tfoot>
 
                   <tr className="border-t border-[#DCE8E3] bg-[#F7FAF8]">
@@ -1930,29 +1705,23 @@ export default function OutletPurchasePage() {
 
                       <div className="mt-1 font-black tracking-tight text-[#18352D]">
                         Rp{" "}
-                        {
-                          formatRupiah(
-                            filteredData.reduce(
-                              (
-                                sum,
-                                item
-                              ) =>
-                                sum +
-                                Number(
-                                  item.total ||
-                                    0
-                                ),
-                              0
-                            )
+                        {formatRupiah(
+                          filteredData.reduce(
+                            (sum, item) =>
+                              sum +
+                              Number(
+                                item.total || 0
+                              ),
+                            0
                           )
-                        }
+                        )}
                       </div>
 
                     </td>
 
                     <td className="px-5 py-4 text-center">
 
-                      <div className="inline-flex items-center gap-2 rounded-xl border border-[#DCE8E3] bg-white px-3 py-2">
+                      <div className="inline-flex items-center gap-2 rounded-xl border border-[#DCE8E3] bg-white px-3 py-2 shadow-sm">
 
                         <WalletCards
                           size={14}
@@ -1989,7 +1758,6 @@ export default function OutletPurchasePage() {
                   </tr>
 
                 </tfoot>
-
               )}
 
           </table>
@@ -2002,17 +1770,13 @@ export default function OutletPurchasePage() {
 
         {!loading &&
           !loadingUser &&
-          filteredData.length >
-            0 && (
-
+          filteredData.length > 0 && (
             <div className="flex flex-col gap-3 border-t border-[#E7EEEA] bg-white px-5 py-4 md:flex-row md:items-center md:justify-between md:px-6">
 
               <div className="flex items-center gap-2">
 
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                  <CheckCircle2
-                    size={14}
-                  />
+                  <CheckCircle2 size={14} />
                 </div>
 
                 <div>
@@ -2034,6 +1798,7 @@ export default function OutletPurchasePage() {
 
                 <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-amber-700">
                   <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+
                   <span className="font-bold">
                     {totalDraft} Draft
                   </span>
@@ -2041,6 +1806,7 @@ export default function OutletPurchasePage() {
 
                 <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-blue-700">
                   <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+
                   <span className="font-bold">
                     {totalApproved} Approved
                   </span>
@@ -2048,6 +1814,7 @@ export default function OutletPurchasePage() {
 
                 <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+
                   <span className="font-bold">
                     {totalReceived} Received
                   </span>
@@ -2056,7 +1823,6 @@ export default function OutletPurchasePage() {
               </div>
 
             </div>
-
           )}
 
       </div>

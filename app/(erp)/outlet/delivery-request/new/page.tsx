@@ -713,13 +713,13 @@ export default function DeliveryRequestNewPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#F2F8F5] px-4 py-6 md:px-8 md:py-8">
+      <main className="min-h-screen bg-slate-50 px-4 py-6 md:px-8 md:py-8">
         <div className="mx-auto flex min-h-[720px] max-w-[1600px] items-center justify-center">
-          <div className="relative w-full max-w-md overflow-hidden rounded-[32px] border border-emerald-100 bg-white p-8 shadow-[0_30px_90px_rgba(6,78,59,0.12)]">
+          <div className="relative w-full max-w-md overflow-hidden rounded-[32px] border border-slate-200 bg-white p-8 shadow-[0_30px_90px_rgba(15,23,42,0.08)]">
             <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-emerald-50" />
 
             <div className="relative flex items-center gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
                 <Loader2
                   size={23}
                   className="animate-spin"
@@ -749,10 +749,10 @@ export default function DeliveryRequestNewPage() {
 
   if (!isOutletAdmin) {
     return (
-      <main className="min-h-screen bg-[#F2F8F5] px-4 py-6 md:px-8 md:py-8">
+      <main className="min-h-screen bg-slate-50 px-4 py-6 md:px-8 md:py-8">
         <div className="mx-auto flex min-h-[720px] max-w-2xl items-center justify-center">
-          <div className="w-full overflow-hidden rounded-[32px] border border-emerald-100 bg-white shadow-[0_30px_90px_rgba(6,78,59,0.12)]">
-            <div className="relative overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-900 px-6 py-14 text-center text-white md:px-10">
+          <div className="w-full overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.08)]">
+            <div className="relative overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-900 to-emerald-800 px-6 py-14 text-center text-white md:px-10">
               <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-white/[0.06]" />
               <div className="absolute -bottom-24 -left-16 h-48 w-48 rounded-full bg-emerald-400/[0.08]" />
 
@@ -818,13 +818,13 @@ export default function DeliveryRequestNewPage() {
   // ==========================================================
 
   return (
-    <main className="min-h-screen bg-[#F2F8F5] px-3 py-4 md:px-6 md:py-7 lg:px-8">
+    <main className="min-h-screen bg-slate-50 px-3 py-4 md:px-6 md:py-7 lg:px-8">
       <div className="mx-auto max-w-[1600px] space-y-5">
 
         {/* TOP ACCENT */}
 
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-emerald-100">
-          <div className="h-full w-1/3 rounded-full bg-gradient-to-r from-emerald-700 via-emerald-500 to-teal-400" />
+          <div className="h-full w-1/3 rounded-full bg-emerald-700" />
         </div>
 
         {/* BREADCRUMB */}
@@ -861,10 +861,10 @@ export default function DeliveryRequestNewPage() {
 
         {/* HERO */}
 
-        <section className="relative overflow-hidden rounded-[32px] border border-emerald-100 bg-white shadow-[0_22px_70px_rgba(6,78,59,0.08)]">
+        <section className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_22px_70px_rgba(15,23,42,0.07)]">
           <div className="absolute inset-0 overflow-hidden">
             <div className="absolute -right-28 -top-36 h-[460px] w-[460px] rounded-full bg-emerald-50" />
-            <div className="absolute -bottom-52 right-[18%] h-[400px] w-[400px] rounded-full bg-teal-50/60" />
+            <div className="absolute -bottom-52 right-[18%] h-[400px] w-[400px] rounded-full bg-emerald-50/50" />
             <div className="absolute -left-32 bottom-[-180px] h-[360px] w-[360px] rounded-full bg-slate-50" />
           </div>
 
@@ -872,7 +872,7 @@ export default function DeliveryRequestNewPage() {
             <button
               type="button"
               onClick={() => router.back()}
-              className="group inline-flex items-center gap-2 rounded-xl border border-emerald-100 bg-white px-4 py-2.5 text-xs font-black text-slate-600 shadow-sm transition hover:-translate-x-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+              className="group inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-600 shadow-sm transition hover:-translate-x-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
             >
               <ArrowLeft
                 size={16}
@@ -997,7 +997,7 @@ export default function DeliveryRequestNewPage() {
 
             {/* IDENTITAS */}
 
-            <section className="rounded-[28px] border border-emerald-100 bg-white p-5 shadow-[0_12px_40px_rgba(6,78,59,0.045)] md:p-6">
+            <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_12px_40px_rgba(15,23,42,0.045)] md:p-6">
               <SectionHeader
                 icon={<User size={20} />}
                 eyebrow="01 · IDENTITAS"
@@ -1066,7 +1066,7 @@ export default function DeliveryRequestNewPage() {
 
             {/* TANGGAL */}
 
-            <section className="rounded-[28px] border border-emerald-100 bg-white p-5 shadow-[0_12px_40px_rgba(6,78,59,0.045)] md:p-6">
+            <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_12px_40px_rgba(15,23,42,0.045)] md:p-6">
               <SectionHeader
                 icon={<CalendarDays size={20} />}
                 eyebrow="02 · DELIVERY"
@@ -1083,10 +1083,10 @@ export default function DeliveryRequestNewPage() {
                     Tanggal Delivery / Transaksi
                   </label>
 
-                  <div className="group flex items-center rounded-2xl border border-emerald-100 bg-[#FAFDFC] px-4 transition focus-within:border-emerald-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-500/10">
+                  <div className="group flex items-center rounded-2xl border border-slate-200 bg-slate-50/70 px-4 transition focus-within:border-emerald-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-500/10">
                     <CalendarDays
                       size={18}
-                      className="shrink-0 text-emerald-600"
+                      className="shrink-0 text-emerald-700"
                     />
 
                     <input
@@ -1117,9 +1117,9 @@ export default function DeliveryRequestNewPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-teal-50/50 p-4">
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-600 shadow-sm">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm">
                       <Truck size={18} />
                     </div>
 
@@ -1147,7 +1147,7 @@ export default function DeliveryRequestNewPage() {
 
             {/* BARANG */}
 
-            <section className="overflow-visible rounded-[28px] border border-emerald-100 bg-white p-5 shadow-[0_12px_40px_rgba(6,78,59,0.045)] md:p-6">
+            <section className="overflow-visible rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_12px_40px_rgba(15,23,42,0.045)] md:p-6">
               <SectionHeader
                 icon={<Boxes size={20} />}
                 eyebrow="03 · ITEM REQUEST"
@@ -1157,7 +1157,7 @@ export default function DeliveryRequestNewPage() {
 
               {/* ADD FORM */}
 
-              <div className="mt-6 rounded-[24px] border border-emerald-100 bg-gradient-to-br from-[#F7FCF9] via-white to-emerald-50/40 p-4 md:p-5">
+              <div className="mt-6 rounded-[24px] border border-slate-200 bg-slate-50/60 p-4 md:p-5">
 
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
@@ -1188,12 +1188,12 @@ export default function DeliveryRequestNewPage() {
                       "flex items-center rounded-2xl border bg-white px-4 transition",
                       selectedBarang
                         ? "border-emerald-300 ring-4 ring-emerald-500/5"
-                        : "border-emerald-100 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10",
+                        : "border-slate-200 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10",
                     ].join(" ")}
                   >
                     <Search
                       size={18}
-                      className="shrink-0 text-emerald-600"
+                      className="shrink-0 text-emerald-700"
                     />
 
                     <input
@@ -1259,9 +1259,9 @@ export default function DeliveryRequestNewPage() {
                         }
                       />
 
-                      <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 max-h-[430px] overflow-y-auto rounded-[22px] border border-emerald-100 bg-white p-2 shadow-[0_30px_80px_rgba(6,78,59,0.18)]">
+                      <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 max-h-[430px] overflow-y-auto rounded-[22px] border border-slate-200 bg-white p-2 shadow-[0_30px_80px_rgba(15,23,42,0.14)]">
 
-                        <div className="sticky top-0 z-10 mb-1 flex items-center justify-between border-b border-emerald-50 bg-white px-3 py-3">
+                        <div className="sticky top-0 z-10 mb-1 flex items-center justify-between border-b border-slate-100 bg-white px-3 py-3">
                           <div>
                             <div className="text-[9px] font-black uppercase tracking-[0.15em] text-emerald-700">
                               Master Barang
@@ -1280,7 +1280,7 @@ export default function DeliveryRequestNewPage() {
                         {filteredBarang.length ===
                         0 ? (
                           <div className="px-4 py-12 text-center">
-                            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-500">
+                            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
                               <Package size={23} />
                             </div>
 
@@ -1314,7 +1314,7 @@ export default function DeliveryRequestNewPage() {
                                   }
                                   className="group flex w-full items-center gap-3 rounded-2xl px-3 py-3.5 text-left transition hover:bg-emerald-50"
                                 >
-                                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 transition group-hover:bg-emerald-600 group-hover:text-white">
+                                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 transition group-hover:bg-emerald-700 group-hover:text-white">
                                     <Package
                                       size={
                                         18
@@ -1383,7 +1383,7 @@ export default function DeliveryRequestNewPage() {
                                     </div>
                                   </div>
 
-                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 transition group-hover:bg-emerald-600 group-hover:text-white">
+                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 transition group-hover:bg-emerald-700 group-hover:text-white">
                                     <Plus
                                       size={
                                         17
@@ -1482,7 +1482,7 @@ export default function DeliveryRequestNewPage() {
                       Qty Request
                     </label>
 
-                    <div className="flex items-center rounded-2xl border border-emerald-100 bg-white p-1 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10">
+                    <div className="flex items-center rounded-2xl border border-slate-200 bg-white p-1 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10">
                       <button
                         type="button"
                         disabled={
@@ -1526,7 +1526,7 @@ export default function DeliveryRequestNewPage() {
                           )
                         }
                         placeholder="0"
-                        className="h-11 min-w-0 flex-1 border-x border-emerald-50 bg-transparent text-center text-sm font-black text-emerald-950 outline-none"
+                        className="h-11 min-w-0 flex-1 border-x border-slate-100 bg-transparent text-center text-sm font-black text-emerald-950 outline-none"
                       />
 
                       <button
@@ -1597,7 +1597,7 @@ export default function DeliveryRequestNewPage() {
                       disabled={
                         !selectedBarang
                       }
-                      className="w-full resize-none rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-xs font-medium leading-5 text-emerald-950 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                      className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-medium leading-5 text-emerald-950 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                     />
                   </div>
                 </div>
@@ -1612,7 +1612,7 @@ export default function DeliveryRequestNewPage() {
                   disabled={
                     !selectedBarang
                   }
-                  className="group mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-600 px-5 py-4 text-sm font-black text-white shadow-[0_14px_30px_rgba(5,150,105,0.20)] transition hover:-translate-y-0.5 hover:from-emerald-800 hover:via-emerald-700 hover:to-teal-700 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-40"
+                  className="group mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-5 py-4 text-sm font-black text-white shadow-[0_14px_30px_rgba(6,95,70,0.20)] transition hover:-translate-y-0.5 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-40"
                 >
                   <Plus
                     size={19}
@@ -1667,12 +1667,12 @@ export default function DeliveryRequestNewPage() {
               {/* EMPTY */}
 
               {items.length === 0 ? (
-                <div className="relative mt-4 overflow-hidden rounded-[24px] border border-dashed border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-white px-6 py-16 text-center">
+                <div className="relative mt-4 overflow-hidden rounded-[24px] border border-dashed border-emerald-200 bg-emerald-50/40 px-6 py-16 text-center">
                   <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-emerald-100/50" />
-                  <div className="absolute -bottom-20 -left-16 h-40 w-40 rounded-full bg-teal-50" />
+                  <div className="absolute -bottom-20 -left-16 h-40 w-40 rounded-full bg-slate-100" />
 
                   <div className="relative">
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-[0_12px_30px_rgba(6,78,59,0.08)]">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-emerald-700 shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
                       <ShoppingCart
                         size={27}
                       />
@@ -1699,14 +1699,14 @@ export default function DeliveryRequestNewPage() {
                   </div>
                 </div>
               ) : (
-                <div className="mt-4 overflow-hidden rounded-[24px] border border-emerald-100 bg-white shadow-sm">
+                <div className="mt-4 overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
 
                   {/* DESKTOP TABLE */}
 
                   <div className="hidden overflow-x-auto md:block">
                     <table className="w-full min-w-[900px] border-collapse">
                       <thead>
-                        <tr className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-teal-50/50">
+                        <tr className="border-b border-slate-200 bg-emerald-50/70">
                           <th className="px-4 py-3.5 text-left text-[8px] font-black uppercase tracking-[0.14em] text-emerald-700">
                             #
                           </th>
@@ -1835,7 +1835,7 @@ export default function DeliveryRequestNewPage() {
                                 </td>
 
                                 <td className="px-4 py-4 align-top">
-                                  <div className="mx-auto flex w-[130px] items-center rounded-xl border border-emerald-100 bg-white p-1">
+                                  <div className="mx-auto flex w-[130px] items-center rounded-xl border border-slate-200 bg-white p-1">
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -1876,7 +1876,7 @@ export default function DeliveryRequestNewPage() {
                                             .value
                                         )
                                       }
-                                      className="h-8 min-w-0 flex-1 border-x border-emerald-50 bg-transparent text-center text-xs font-black text-emerald-950 outline-none"
+                                      className="h-8 min-w-0 flex-1 border-x border-slate-100 bg-transparent text-center text-xs font-black text-emerald-950 outline-none"
                                     />
 
                                     <button
@@ -2022,7 +2022,7 @@ export default function DeliveryRequestNewPage() {
                             key={
                               item.barangId
                             }
-                            className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm"
+                            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
                           >
                             <div className="flex items-start gap-3">
                               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-[9px] font-black text-emerald-700">
@@ -2104,7 +2104,7 @@ export default function DeliveryRequestNewPage() {
                                 </div>
                               </div>
 
-                              <div className="rounded-xl border border-emerald-100 bg-white p-3">
+                              <div className="rounded-xl border border-slate-200 bg-white p-3">
                                 <div className="text-[8px] font-black uppercase tracking-wider text-slate-400">
                                   Status
                                 </div>
@@ -2147,7 +2147,7 @@ export default function DeliveryRequestNewPage() {
                                 Qty Request
                               </div>
 
-                              <div className="flex items-center rounded-xl border border-emerald-100 bg-white p-1">
+                              <div className="flex items-center rounded-xl border border-slate-200 bg-white p-1">
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -2188,7 +2188,7 @@ export default function DeliveryRequestNewPage() {
                                         .value
                                     )
                                   }
-                                  className="h-10 flex-1 border-x border-emerald-50 text-center text-sm font-black text-emerald-950 outline-none"
+                                  className="h-10 flex-1 border-x border-slate-100 text-center text-sm font-black text-emerald-950 outline-none"
                                 />
 
                                 <button
@@ -2260,7 +2260,7 @@ export default function DeliveryRequestNewPage() {
 
             {/* CATATAN REQUEST */}
 
-            <section className="rounded-[28px] border border-emerald-100 bg-white p-5 shadow-[0_12px_40px_rgba(6,78,59,0.045)] md:p-6">
+            <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_12px_40px_rgba(15,23,42,0.045)] md:p-6">
               <SectionHeader
                 icon={<ClipboardList size={20} />}
                 eyebrow="04 · INFORMASI"
@@ -2279,7 +2279,7 @@ export default function DeliveryRequestNewPage() {
                   rows={5}
                   maxLength={1000}
                   placeholder="Contoh: Mohon dikirim bersama delivery besok pagi..."
-                  className="w-full resize-none rounded-2xl border border-emerald-100 bg-[#FAFDFC] px-4 py-3.5 text-sm font-medium leading-6 text-emerald-950 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
+                  className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3.5 text-sm font-medium leading-6 text-emerald-950 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
                 />
 
                 <div className="mt-2 flex items-center justify-between">
@@ -2299,13 +2299,13 @@ export default function DeliveryRequestNewPage() {
           {/* RIGHT */}
 
           <aside className="xl:sticky xl:top-6 xl:h-fit">
-            <div className="overflow-hidden rounded-[30px] border border-emerald-100 bg-white shadow-[0_22px_70px_rgba(6,78,59,0.09)]">
+            <div className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_22px_70px_rgba(15,23,42,0.08)]">
 
               {/* HEADER */}
 
-              <div className="relative overflow-hidden border-b border-emerald-800/30 bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-900 p-5 text-white md:p-6">
+              <div className="relative overflow-hidden border-b border-emerald-800/30 bg-gradient-to-br from-emerald-950 via-emerald-900 to-emerald-800 p-5 text-white md:p-6">
                 <div className="absolute -right-16 -top-20 h-48 w-48 rounded-full bg-emerald-400/[0.08]" />
-                <div className="absolute -bottom-24 left-1/3 h-44 w-44 rounded-full bg-teal-300/[0.05]" />
+                <div className="absolute -bottom-24 left-1/3 h-44 w-44 rounded-full bg-white/[0.04]" />
 
                 <div className="relative flex items-center gap-3">
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 shadow-inner">
@@ -2433,7 +2433,7 @@ export default function DeliveryRequestNewPage() {
                 )}
 
                 {items.length > 0 && (
-                  <div className="mt-4 rounded-2xl border border-emerald-100 bg-[#FAFDFC] p-4">
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-[9px] font-black uppercase tracking-[0.16em] text-emerald-700">
@@ -2468,7 +2468,7 @@ export default function DeliveryRequestNewPage() {
                               key={
                                 item.barangId
                               }
-                              className="rounded-xl border border-emerald-100 bg-white p-3"
+                              className="rounded-xl border border-slate-200 bg-white p-3"
                             >
                               <div className="flex items-start gap-2.5">
                                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-[8px] font-black text-emerald-700">
@@ -2542,7 +2542,7 @@ export default function DeliveryRequestNewPage() {
                               </div>
 
                               {item.note.trim() && (
-                                <div className="mt-2 rounded-lg border border-emerald-50 bg-emerald-50/40 px-2.5 py-2">
+                                <div className="mt-2 rounded-lg border border-emerald-100 bg-emerald-50/40 px-2.5 py-2">
                                   <div className="text-[8px] font-black uppercase tracking-[0.12em] text-emerald-700">
                                     Catatan
                                   </div>
@@ -2560,7 +2560,7 @@ export default function DeliveryRequestNewPage() {
                   </div>
                 )}
 
-                <div className="my-6 border-t border-dashed border-emerald-100" />
+                <div className="my-6 border-t border-dashed border-slate-200" />
 
                 {/* FLOW */}
 
@@ -2648,9 +2648,9 @@ export default function DeliveryRequestNewPage() {
 
                 {/* BUSINESS RULE */}
 
-                <div className="mt-6 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/70 to-white p-4">
+                <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-600 shadow-sm">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm">
                       <CheckCircle2 size={17} />
                     </div>
 
@@ -2722,7 +2722,7 @@ export default function DeliveryRequestNewPage() {
                     items.length === 0
                   }
                   onClick={submitRequest}
-                  className="group mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-600 px-5 py-4 text-sm font-black text-white shadow-[0_16px_35px_rgba(5,150,105,0.22)] transition hover:-translate-y-0.5 hover:from-emerald-800 hover:via-emerald-700 hover:to-teal-700 hover:shadow-[0_20px_45px_rgba(5,150,105,0.28)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-40"
+                  className="group mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-5 py-4 text-sm font-black text-white shadow-[0_16px_35px_rgba(6,95,70,0.22)] transition hover:-translate-y-0.5 hover:bg-emerald-800 hover:shadow-[0_20px_45px_rgba(6,95,70,0.26)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-40"
                 >
                   {submitting ? (
                     <>
@@ -2779,8 +2779,8 @@ function HeaderBadge({
   text: string;
 }) {
   return (
-    <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-100 bg-white px-3 py-2 text-[10px] font-bold text-slate-600 shadow-sm">
-      <span className="text-emerald-600">
+    <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-600 shadow-sm">
+      <span className="text-emerald-700">
         {icon}
       </span>
 
@@ -2810,7 +2810,7 @@ function HeroMetric({
         "rounded-2xl border px-4 py-3.5",
         warning
           ? "border-amber-200 bg-amber-50"
-          : "border-emerald-100 bg-emerald-50/60",
+          : "border-emerald-100 bg-emerald-50/70",
       ].join(" ")}
     >
       <div className="flex items-center gap-2">
@@ -2819,7 +2819,7 @@ function HeroMetric({
             "flex h-7 w-7 items-center justify-center rounded-lg",
             warning
               ? "bg-amber-100 text-amber-600"
-              : "bg-white text-emerald-600",
+              : "bg-white text-emerald-700",
           ].join(" ")}
         >
           {icon}
@@ -2862,8 +2862,8 @@ function IdentityCard({
   verified: boolean;
 }) {
   return (
-    <div className="group flex items-center gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 transition hover:border-emerald-200 hover:bg-white hover:shadow-sm">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-600 shadow-sm">
+    <div className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 transition hover:border-emerald-200 hover:bg-white hover:shadow-sm">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm">
         {icon}
       </div>
 
@@ -2915,9 +2915,9 @@ function SummaryInfo({
   description: string;
 }) {
   return (
-    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
       <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-600 shadow-sm">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm">
           {icon}
         </div>
 
@@ -2953,9 +2953,9 @@ function MiniStat({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-emerald-100 bg-white p-3.5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm">
       <div className="flex items-center gap-1.5">
-        <span className="text-emerald-600">
+        <span className="text-emerald-700">
           {icon}
         </span>
 
@@ -2988,7 +2988,7 @@ function SectionHeader({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
         {icon}
       </div>
 
@@ -3032,8 +3032,8 @@ function FlowStep({
         className={[
           "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[10px] font-black",
           active
-            ? "bg-emerald-600 text-white shadow-[0_7px_18px_rgba(5,150,105,0.22)]"
-            : "bg-emerald-50 text-slate-400",
+            ? "bg-emerald-700 text-white shadow-[0_7px_18px_rgba(6,95,70,0.22)]"
+            : "bg-slate-100 text-slate-400",
         ].join(" ")}
       >
         {icon}
@@ -3073,7 +3073,7 @@ function FlowStep({
 
 function FlowLine() {
   return (
-    <div className="ml-[17px] h-3 border-l border-dashed border-emerald-200" />
+    <div className="ml-[17px] h-3 border-l border-dashed border-slate-200" />
   );
 }
 

@@ -37,6 +37,7 @@ import {
   ArrowDownRight,
   History,
   MessageSquare,
+  MessageCircle,
   AtSign,
   Check,
   Send,
@@ -127,6 +128,17 @@ type Purchase = {
   outlet: Outlet;
   supplier: Supplier;
   items: PurchaseItem[];
+
+  // Optional Purchase Payable data returned by the API.
+  // Kept flexible so this page remains compatible with
+  // existing Purchase responses that may use different
+  // relation/property names.
+  purchasePayable?: any | null;
+  payable?: any | null;
+  PurchasePayable?: any | null;
+  paymentStatus?: string | null;
+  paidAmount?: number | string | null;
+  outstanding?: number | string | null;
 };
 
 type Me = {
@@ -1190,6 +1202,140 @@ export default function PurchaseOutletDetailPage() {
         )
     );
 
+  /*
+   * ==========================================================
+   * PAYMENT BUSINESS RULE
+   * ==========================================================
+   *
+   * Payment button:
+   * - hanya untuk ADMIN / Admin Pusat
+   * - hanya Purchase dengan metode TEMPO
+   * - hanya tampil setelah Purchase berstatus RECEIVED
+   * - APPROVED belum boleh melakukan Payment
+   * - tidak tampil jika Purchase Payable sudah LUNAS
+   * - tidak tampil jika outstanding hutang <= 0
+   *
+   * Status lunas TIDAK ditentukan dari status Purchase.
+   * Yang menjadi acuan adalah Purchase Payable: outstanding
+   * dan/atau status PAID.
+   */
+
+  const isAdminPusat =
+    normalizedRole === "ADMIN";
+
+  const purchasePaymentMethod =
+    String(
+      purchase?.paymentMethod ||
+        ""
+    )
+      .trim()
+      .toUpperCase();
+
+  const payable =
+    purchase?.purchasePayable ??
+    purchase?.payable ??
+    purchase?.PurchasePayable ??
+    null;
+
+  const payableAmount =
+    Number(
+      payable?.amount ??
+        purchase?.total ??
+        0
+    );
+
+  const payablePaidAmount =
+    Number(
+      payable?.paidAmount ??
+        payable?.paid ??
+        purchase?.paidAmount ??
+        0
+    );
+
+  const payableOutstanding =
+    Number(
+      payable?.outstanding ??
+        purchase?.outstanding ??
+        Math.max(
+          0,
+          payableAmount -
+            payablePaidAmount
+        )
+    );
+
+  const payableStatus =
+    String(
+      payable?.status ??
+        purchase?.paymentStatus ??
+        ""
+    )
+      .trim()
+      .toUpperCase();
+
+  const isTempoPurchase =
+    purchasePaymentMethod ===
+    "TEMPO";
+
+  const hasPayable =
+    isTempoPurchase &&
+    (
+      !!payable ||
+      !!payableStatus ||
+      purchase?.outstanding != null ||
+      purchase?.paidAmount != null
+    );
+
+  const isTempoPaid =
+    isTempoPurchase &&
+    hasPayable &&
+    (
+      payableStatus === "PAID" ||
+      payableStatus === "LUNAS" ||
+      payableStatus === "SETTLED" ||
+      payableStatus === "COMPLETED" ||
+      payableOutstanding <= 0.01
+    );
+
+  /*
+   * Payment button hanya boleh muncul jika:
+   * 1. User adalah Admin Pusat.
+   * 2. Metode pembayaran adalah TEMPO.
+   * 3. Purchase sudah RECEIVED.
+   * 4. Purchase Payable masih memiliki outstanding/hutang.
+   *
+   * APPROVED sengaja TIDAK boleh menampilkan tombol Payment.
+   * Setelah hutang lunas, tombol juga langsung hilang.
+   */
+  const purchaseStatus =
+    String(purchase?.status || "")
+      .trim()
+      .toUpperCase();
+
+  const hasOutstandingDebt =
+    isTempoPurchase &&
+    hasPayable &&
+    !isTempoPaid &&
+    payableOutstanding > 0.01;
+
+  const canPayment =
+    Boolean(
+      purchase &&
+      isAdminPusat &&
+      isTempoPurchase &&
+      purchaseStatus === "RECEIVED" &&
+      hasOutstandingDebt
+    );
+
+  function handlePayment() {
+    if (!purchase || !canPayment) {
+      return;
+    }
+
+    router.push(
+      `/outlet/purchase/${purchase.id}/payment`
+    );
+  }
+
   const filteredBarang =
     useMemo(() => {
       const keyword =
@@ -1804,9 +1950,7 @@ export default function PurchaseOutletDetailPage() {
    */
   async function handleExportPDF() {
     if (!purchase) {
-      alert(
-        "Data Purchase Outlet belum tersedia"
-      );
+      alert("Data Purchase Outlet belum tersedia");
       return;
     }
 
@@ -1822,8 +1966,7 @@ export default function PurchaseOutletDetailPage() {
           (outlet) =>
             outlet.id ===
             Number(
-              isOutletUser &&
-              userOutletId != null
+              isOutletUser && userOutletId != null
                 ? userOutletId
                 : outletId
             )
@@ -1835,81 +1978,89 @@ export default function PurchaseOutletDetailPage() {
         purchase.supplier ||
         suppliers.find(
           (supplier) =>
-            supplier.id ===
-            Number(
-              supplierId
-            )
+            supplier.id === Number(supplierId)
         ) ||
         null;
 
-      const pdfItems =
-        items.map(
-          (item) => {
-            const itemQty =
-              toNumber(
-                item.qty
-              );
+      const pdfItems = items.map((item) => {
+        const itemQty = toNumber(item.qty);
+        const itemPrice = toNumber(item.price);
 
-            const itemPrice =
-              toNumber(
-                item.price
-              );
+        return {
+          ...item,
+          qty: itemQty,
+          price: itemPrice,
+          subtotal: itemQty * itemPrice,
+        };
+      });
 
-            return {
-              ...item,
+      const pdfTotal = pdfItems.reduce(
+        (sum, item) => sum + toNumber(item.subtotal),
+        0
+      );
 
-              qty:
-                itemQty,
-
-              price:
-                itemPrice,
-
-              subtotal:
-                itemQty *
-                itemPrice,
-            };
-          }
-        );
-
-      const pdfTotal =
-        pdfItems.reduce(
-          (
-            sum,
-            item
-          ) =>
-            sum +
-            toNumber(
-              item.subtotal
-            ),
-          0
-        );
-
+      /*
+       * Payload PDF dibuat lengkap supaya lib/exportPurchasePdf.ts
+       * mempunyai seluruh informasi yang dibutuhkan untuk membuat
+       * dokumen PO yang rapi, termasuk area tanda tangan.
+       *
+       * Catatan:
+       * - Tidak mengubah data database.
+       * - Nomor, barang, qty, harga dan total selalu mengambil data
+       *   yang sedang tampil pada halaman.
+       * - Area tanda tangan disiapkan sebagai bagian dari dokumen,
+       *   bukan sebagai tanda tangan digital palsu.
+       */
       const pdfData = {
         ...purchase,
 
+        id: purchase.id,
+        number: purchase.number,
+        documentTitle: "PURCHASE ORDER",
+        companyName: "PT.MITRA GARAM BOGATAMA",
+
         purchaseDate:
           purchase.purchaseDate ||
+          purchase.createdAt ||
           null,
 
-        outlet:
-          currentOutlet,
+        outlet: currentOutlet,
+        supplier: currentSupplier,
 
-        supplier:
-          currentSupplier,
+        remarks:
+          remarks.trim() ||
+          purchase.remarks ||
+          null,
 
-        remarks,
+        items: pdfItems,
+        total: pdfTotal,
 
-        items:
-          pdfItems,
-
-        total:
-          pdfTotal,
+        signature: {
+          enabled: true,
+          title: "TANDA TANGAN",
+          left: {
+            label: "Dibuat Oleh",
+            name: "",
+            role: "Outlet",
+            line: "____________________________",
+          },
+          middle: {
+            label: "Diperiksa Oleh",
+            name: "",
+            role: "Purchasing",
+            line: "____________________________",
+          },
+          right: {
+            label: "Disetujui Oleh",
+            name: "",
+            role: "Management",
+            line: "____________________________",
+          },
+        },
       };
 
       await Promise.resolve(
-        exportPurchasePDF(
-          pdfData
-        )
+        exportPurchasePDF(pdfData)
       );
     } catch (error) {
       console.error(
@@ -1917,14 +2068,139 @@ export default function PurchaseOutletDetailPage() {
         error
       );
 
-      alert(
-        "Gagal membuat PDF Purchase Outlet"
-      );
+      alert("Gagal membuat PDF Purchase Order");
     } finally {
-      setExporting(
-        false
-      );
+      setExporting(false);
     }
+  }
+
+  /*
+   * ==========================================================
+   * WHATSAPP PURCHASE ORDER
+   * ==========================================================
+   *
+   * Membuka WhatsApp Web dengan pesan PO yang sudah diformat
+   * premium dan siap dikirim.
+   *
+   * Format detail:
+   * 01. Nama Barang : qty satuan
+   *
+   * Harga per item tidak ditampilkan sesuai kebutuhan pesan.
+   * Total/Subtotal PO ditampilkan di bagian paling bawah.
+   */
+  function handleWhatsApp() {
+    if (!purchase) {
+      alert("Data Purchase Outlet belum tersedia");
+      return;
+    }
+
+    if (items.length === 0) {
+      alert("Purchase Order belum memiliki barang");
+      return;
+    }
+
+    const currentOutlet =
+      outlets.find(
+        (outlet) =>
+          outlet.id ===
+          Number(
+            isOutletUser && userOutletId != null
+              ? userOutletId
+              : outletId
+          )
+      ) ||
+      purchase.outlet ||
+      null;
+
+    const currentSupplier =
+      purchase.supplier ||
+      suppliers.find(
+        (supplier) =>
+          supplier.id === Number(supplierId)
+      ) ||
+      null;
+
+    const purchaseDate = formatPurchaseDate(
+      purchase.purchaseDate ||
+        purchase.createdAt ||
+        null
+    );
+
+    const formatWhatsappQty = (
+      value: number | string
+    ) => {
+      const numericValue = toNumber(value);
+
+      if (Number.isInteger(numericValue)) {
+        return numericValue.toLocaleString("id-ID");
+      }
+
+      return numericValue.toLocaleString("id-ID", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 3,
+      });
+    };
+
+    const detailLines = items.map(
+      (item, index) => {
+        const itemQty = formatWhatsappQty(
+          item.qty
+        );
+
+        const unit = String(
+          item.barang?.unit || ""
+        ).trim();
+
+        return `${index + 1}. ${
+          item.barang?.name || "Barang"
+        } : ${itemQty}${unit ? ` ${unit}` : ""}`;
+      }
+    );
+
+    /*
+     * Format dibuat mengikuti contoh WhatsApp yang diminta:
+     * - branding PT.MITRA GARAM BOGATAMA
+     * - PO / outlet / supplier / tanggal pengiriman
+     * - detail barang tanpa kode barang
+     * - nomor item sederhana 1., 2., 3.
+     * - subtotal di bagian paling bawah
+     */
+    const whatsappMessage = [
+      "🛒 *PURCHASE ORDER*",
+      "",
+      "━━━━━━━━━━━━━━━━━━━━",
+      "*PT.MITRA GARAM BOGATAMA*",
+      "━━━━━━━━━━━━━━━━━━━━",
+      "",
+      `📋 *PO* : ${purchase.number}`,
+      `🏪 *Outlet* : ${currentOutlet?.name || "-"}`,
+      `🏢 *Supplier* : ${currentSupplier?.name || "-"}`,
+      `📅 *Tanggal Pengiriman* : ${purchaseDate}`,
+      "",
+      "━━━━━━━━━━━━━━━━━━━━",
+      "> 📦 *DETAIL BARANG*",
+      "━━━━━━━━━━━━━━━━━━━━",
+      "",
+      ...detailLines,
+      "",
+      "━━━━━━━━━━━━━━━━━━━━",
+      `> 💰 *SUBTOTAL PO*  Rp ${formatRupiah(total)}`,
+      "━━━━━━━━━━━━━━━━━━━━",
+      "",
+      "Mohon diproses sesuai Purchase Order di atas.",
+      "Terima kasih. 🙏",
+    ].join("\n");
+
+    const whatsappUrl =
+      `https://web.whatsapp.com/send?text=${encodeURIComponent(
+        whatsappMessage
+      )}`;
+
+    window.open(
+      whatsappUrl,
+      "_blank",
+      "noopener,noreferrer"
+    );
   }
 
   /*
@@ -2494,6 +2770,28 @@ export default function PurchaseOutletDetailPage() {
                   : "Export PDF"}
               </button>
 
+              <button
+                type="button"
+                onClick={handleWhatsApp}
+                disabled={items.length === 0}
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <MessageCircle size={16} />
+                WhatsApp
+              </button>
+
+              {canPayment && (
+                <button
+                  type="button"
+                  onClick={handlePayment}
+                  title="Payment Purchase TEMPO - Admin Pusat"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-xs font-bold text-white shadow-[0_6px_18px_rgba(37,99,235,0.18)] transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-[0_9px_24px_rgba(37,99,235,0.24)] active:translate-y-0"
+                >
+                  <CreditCard size={16} />
+                  Payment
+                </button>
+              )}
+
               {canApprove && (
                 <button
                   type="button"
@@ -2848,6 +3146,15 @@ export default function PurchaseOutletDetailPage() {
                     {purchase.paymentMethod ||
                       "-"}
                   </p>
+
+                  {isAdminPusat &&
+                    isTempoPurchase &&
+                    isTempoPaid && (
+                      <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-emerald-700">
+                        <CircleCheck size={12} />
+                        Lunas
+                      </div>
+                    )}
 
                 </div>
 

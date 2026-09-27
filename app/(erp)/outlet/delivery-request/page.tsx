@@ -14,6 +14,7 @@ import {
   Eye,
   FileText,
   Loader2,
+  MessageCircle,
   Package,
   PackageCheck,
   Plus,
@@ -25,8 +26,6 @@ import {
   UserRound,
   XCircle,
 } from "lucide-react";
-
-import { useRouter } from "next/navigation";
 
 // ============================================================
 // TYPES
@@ -219,6 +218,22 @@ function normalizeRole(role: unknown) {
     .toUpperCase();
 }
 
+function normalizeWhatsAppPhone(value: string | null | undefined) {
+  let phone = String(value ?? "").replace(/\\D/g, "");
+
+  if (!phone) {
+    return "";
+  }
+
+  if (phone.startsWith("0")) {
+    phone = `62${phone.slice(1)}`;
+  } else if (phone.startsWith("8")) {
+    phone = `62${phone}`;
+  }
+
+  return phone;
+}
+
 // ============================================================
 // DELETE PERMISSION
 // ============================================================
@@ -388,8 +403,6 @@ function getStatusIcon(
 // ============================================================
 
 export default function DeliveryRequestPage() {
-  const router = useRouter();
-
   const [data, setData] =
     useState<DeliveryRequest[]>([]);
 
@@ -783,16 +796,6 @@ export default function DeliveryRequestPage() {
     };
   }, [filteredData]);
 
-  // ==========================================================
-  // ACTIONS
-  // ==========================================================
-
-  function handleCreate() {
-    router.push(
-      "/outlet/delivery-request/new"
-    );
-  }
-
   function handleOpenDetail(
     request: DeliveryRequest
   ) {
@@ -1010,14 +1013,6 @@ export default function DeliveryRequestPage() {
                   Refresh
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleCreate}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-black text-[#041C17] shadow-[0_10px_28px_rgba(16,185,129,0.22)] transition-all hover:-translate-y-0.5 hover:bg-emerald-400 hover:shadow-[0_15px_34px_rgba(16,185,129,0.30)]"
-                >
-                  <Package className="h-4 w-4" />
-                  Buat Delivery Request
-                </button>
               </div>
             </div>
 
@@ -1271,14 +1266,6 @@ export default function DeliveryRequestPage() {
               sesuai dengan filter saat ini.
             </p>
 
-            <button
-              type="button"
-              onClick={handleCreate}
-              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#09261F] px-5 py-2.5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(4,28,23,0.18)] transition hover:-translate-y-0.5 hover:bg-[#0D3329] hover:shadow-[0_14px_30px_rgba(4,28,23,0.22)]"
-            >
-              <Package className="h-4 w-4" />
-              Buat Delivery Request
-            </button>
           </div>
         ) : (
           /* ==================================================
@@ -1984,6 +1971,16 @@ function DetailModal({
       }>
     >([]);
 
+  // Form tambah barang baru pada bagian paling atas tabel edit.
+  const [newBarangId, setNewBarangId] =
+    useState<number | null>(null);
+
+  const [newBarangQty, setNewBarangQty] =
+    useState(1);
+
+  const [newBarangNote, setNewBarangNote] =
+    useState("");
+
   const totalQty =
     request.items.reduce(
       (sum, item) =>
@@ -2029,29 +2026,55 @@ function DetailModal({
       }))
     );
 
+    setNewBarangId(null);
+    setNewBarangQty(1);
+    setNewBarangNote("");
     setEditingRequest(true);
   }
 
   function cancelEditRequest() {
     setEditingRequest(false);
     setEditItems([]);
+    setNewBarangId(null);
+    setNewBarangQty(1);
+    setNewBarangNote("");
   }
 
   function addEditItem() {
-    const selectedIds = new Set(
-      editItems.map((item) =>
-        Number(item.barangId)
-      )
-    );
+    if (savingEdit || loadingBarang) {
+      return;
+    }
 
-    const available = barangs.find(
+    if (!newBarangId) {
+      window.alert("Pilih barang terlebih dahulu.");
+      return;
+    }
+
+    const qty = Number(newBarangQty);
+
+    if (!Number.isFinite(qty) || qty <= 0) {
+      window.alert("Qty barang harus lebih dari 0.");
+      return;
+    }
+
+    const selectedBarang = barangs.find(
       (barang) =>
-        !selectedIds.has(Number(barang.id))
+        Number(barang.id) === Number(newBarangId)
     );
 
-    if (!available) {
+    if (!selectedBarang) {
+      window.alert("Barang yang dipilih tidak ditemukan.");
+      return;
+    }
+
+    const alreadyExists = editItems.some(
+      (item) =>
+        Number(item.barangId) === Number(newBarangId)
+    );
+
+    if (alreadyExists) {
       window.alert(
-        "Semua barang yang tersedia sudah ada di request."
+        `Barang ${selectedBarang.name} sudah ada di tabel. Silakan ubah qty/catatan pada item tersebut.`
       );
       return;
     }
@@ -2059,11 +2082,15 @@ function DetailModal({
     setEditItems((previous) => [
       ...previous,
       {
-        barangId: Number(available.id),
-        qty: 1,
-        note: "",
+        barangId: Number(newBarangId),
+        qty,
+        note: newBarangNote.trim(),
       },
     ]);
+
+    setNewBarangId(null);
+    setNewBarangQty(1);
+    setNewBarangNote("");
   }
 
   function removeEditItem(index: number) {
@@ -2217,6 +2244,59 @@ function DetailModal({
     } finally {
       setSavingEdit(false);
     }
+  }
+
+  // ==========================================================
+  // WHATSAPP
+  // ==========================================================
+
+  function handleWhatsApp() {
+    const deliveryNumber =
+      request.delivery?.number || request.number;
+
+    const lines = [
+      `🏪  *${request.outlet?.name || "-"}*`,
+      "",
+      `*Nomor Delivery:* ${deliveryNumber}`,
+      `*Tanggal:* ${formatDate(request.requestDate)}`,
+      `*PIC:* ${
+        request.createdBy?.fullname ||
+        request.createdBy?.username ||
+        "-"
+      }`,
+      "",
+      `> 📦 *DETAIL BARANG*`,
+      "",
+      ...request.items.flatMap((item, index) => {
+        const note = item.note?.trim();
+        const qty = formatNumber(item.qty);
+        const unit = getTransactionUnit(item.barang);
+
+        const itemLines = [
+          `${index + 1}. ${item.barang?.name || "-"}  ( Qty: ${qty} ${unit} )`,
+        ];
+
+        // Catatan hanya ditampilkan jika memang ada.
+        // Tidak ada baris kosong antar-item agar daftar barang tetap rapat.
+        if (note) {
+          itemLines.push(`   Catatan: ${note}`);
+        }
+
+        return itemLines;
+      }),
+      "",
+      "Terimakasih 🙏🏻",
+    ];
+
+    const message = lines.join("\n");
+
+    // Jangan langsung mengarah ke nomor WhatsApp tertentu.
+    // WhatsApp Web akan dibuka ke halaman pemilihan kontak,
+    // sementara pesan sudah dipersiapkan di parameter text.
+    const url =
+      `https://web.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   // ==========================================================
@@ -3831,6 +3911,20 @@ function DetailModal({
 
               <button
                 type="button"
+                onClick={handleWhatsApp}
+                disabled={
+                  downloadingPdf ||
+                  isDeleting ||
+                  savingEdit
+                }
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300/20 bg-white/[0.055] px-4 text-sm font-black text-emerald-100 transition hover:border-emerald-300/40 hover:bg-emerald-300/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <MessageCircle className="h-4 w-4" />
+                WhatsApp
+              </button>
+
+              <button
+                type="button"
                 onClick={
                   handleDownloadPDF
                 }
@@ -4047,8 +4141,84 @@ function DetailModal({
                             Mode Edit Request
                           </p>
                           <p className="mt-1 text-xs leading-5 text-[#70817C]">
-                            Status masih Menunggu Approval. Kamu dapat mengubah qty, catatan, menghapus item, dan menambah barang baru. Qty tidak boleh melebihi stock Gudang Pusat.
+                            Status masih Menunggu Approval. Kamu dapat mengubah qty, catatan, menghapus item, dan menambah barang baru. Stock Gudang Pusat hanya ditampilkan sebagai informasi dan tidak menjadi syarat untuk membuat Delivery Request.
                           </p>
+                        </div>
+
+                      </div>
+                    </div>
+
+                    {/* FORM TAMBAH BARANG - SELALU DI ATAS TABEL */}
+                    <div className="border-b border-[#DCE7E3] bg-white p-4">
+                      <div className="mb-3 flex items-center gap-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF5F1] text-[#0B6B55]">
+                          <Plus className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-[#09261F]">
+                            Tambah Barang
+                          </p>
+                          <p className="text-[10px] text-[#70817C]">
+                            Pilih barang, isi qty dan catatan, lalu tambahkan ke tabel.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-[minmax(280px,2fr)_150px_minmax(220px,1.5fr)_auto] md:items-end">
+                        <div>
+                          <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-[#879892]">
+                            Barang
+                          </label>
+                          <SearchableBarangSelect
+                            value={Number(newBarangId ?? 0)}
+                            barangs={barangs}
+                            disabled={savingEdit || loadingBarang}
+                            excludeIds={
+                              new Set(
+                                editItems.map((item) =>
+                                  Number(item.barangId)
+                                )
+                              )
+                            }
+                            onChange={(barangId) =>
+                              setNewBarangId(Number(barangId))
+                            }
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-[#879892]">
+                            Qty
+                          </label>
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={newBarangQty}
+                            onChange={(event) =>
+                              setNewBarangQty(
+                                Number(event.target.value)
+                              )
+                            }
+                            disabled={savingEdit}
+                            className="h-11 w-full rounded-xl border border-[#DCE7E3] bg-[#F8FBFA] px-3 text-right text-sm font-black text-[#10201C] outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-[#879892]">
+                            Catatan
+                          </label>
+                          <input
+                            type="text"
+                            value={newBarangNote}
+                            onChange={(event) =>
+                              setNewBarangNote(event.target.value)
+                            }
+                            disabled={savingEdit}
+                            placeholder="Catatan barang (opsional)"
+                            className="h-11 w-full rounded-xl border border-[#DCE7E3] bg-[#F8FBFA] px-3 text-sm font-medium text-[#40534D] outline-none transition placeholder:text-[#9AA9A4] focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                          />
                         </div>
 
                         <button
@@ -4057,16 +4227,13 @@ function DetailModal({
                           disabled={
                             savingEdit ||
                             loadingBarang ||
+                            !newBarangId ||
                             editItems.length >= barangs.length
                           }
-                          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-[#EAF5F1] px-4 py-2.5 text-xs font-black text-[#0B6B55] transition hover:border-emerald-300 hover:bg-[#DDF1EA] disabled:cursor-not-allowed disabled:opacity-50"
+                          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#09261F] px-4 text-xs font-black text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#0B6B55] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {loadingBarang ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Plus className="h-4 w-4" />
-                          )}
-                          Tambah Barang
+                          <Plus className="h-4 w-4" />
+                          Tambah
                         </button>
                       </div>
                     </div>
@@ -4125,11 +4292,11 @@ function DetailModal({
                                   />
                                   <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-[#8A9B95]">
                                     <span>
-                                      Stock pusat: {formatNumber(selectedBarang?.stock ?? 0)}
+                                      Stock pusat saat ini: {formatNumber(selectedBarang?.stock ?? 0)}
                                     </span>
-                                    {selectedBarang && Number(item.qty) > Number(selectedBarang.stock ?? 0) && (
-                                      <span className="font-black text-red-600">
-                                        Melebihi stock
+                                    {selectedBarang && Number(selectedBarang.stock ?? 0) <= 0 && (
+                                      <span className="font-black text-amber-600">
+                                        Stock kosong — tetap dapat direquest
                                       </span>
                                     )}
                                   </div>
@@ -4540,6 +4707,20 @@ function DetailModal({
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleWhatsApp}
+              disabled={
+                savingEdit ||
+                isDeleting ||
+                downloadingPdf
+              }
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-black text-[#0B6B55] transition hover:border-emerald-300 hover:bg-[#EAF5F1] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <MessageCircle className="h-4 w-4" />
+              WhatsApp
+            </button>
+
             <button
               type="button"
               onClick={

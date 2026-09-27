@@ -54,18 +54,35 @@ Saldo       = Rp100.000
 OUT         = Rp150.000
 Saldo akhir = -Rp50.000
 
-DATE RULE
+DATE / TIME RULE
 -----------------------------------------------------------
 trxDate
-- adalah tanggal transaksi yang dipilih user
-- bukan createdAt
-- bukan waktu server saat record dibuat
+- tanggal mengikuti tanggal yang dipilih user
+- jam mengikuti waktu transaksi saat POST dibuat
+- timezone bisnis = Asia/Jakarta / WIB
+
+Contoh:
+
+User memilih:
+2026-09-25
+
+Transaksi dibuat:
+2026-09-26 13:47:32 WIB
+
+Maka:
+
+trxDate =
+2026-09-25 13:47:32 WIB
 
 createdAt
-- adalah waktu record dibuat oleh sistem
+- waktu sebenarnya record dibuat oleh sistem
 
 approvedAt
-- adalah waktu transaksi di-approve
+- waktu transaksi di-approve
+
+number
+- menggunakan waktu sebenarnya saat record dibuat
+- bukan business date
 
 PAYMENT RULE
 -----------------------------------------------------------
@@ -86,16 +103,28 @@ TEMPO
 
 /*
 ===========================================================
+BUSINESS TIMEZONE
+===========================================================
+*/
+
+const BUSINESS_TIMEZONE =
+  "Asia/Jakarta";
+
+/*
+===========================================================
 CURRENT USER
 ===========================================================
 */
 
 async function getCurrentUser() {
   try {
-    const cookieStore = await cookies();
+    const cookieStore =
+      await cookies();
 
     const session =
-      cookieStore.get("erp-session");
+      cookieStore.get(
+        "erp-session"
+      );
 
     if (!session?.value) {
       return null;
@@ -104,7 +133,10 @@ async function getCurrentUser() {
     let sessionData: any;
 
     try {
-      sessionData = JSON.parse(session.value);
+      sessionData =
+        JSON.parse(
+          session.value
+        );
     } catch {
       return null;
     }
@@ -113,31 +145,36 @@ async function getCurrentUser() {
       sessionData?.user ??
       sessionData;
 
-    const userId = Number(
-      sessionUser?.id
-    );
+    const userId =
+      Number(
+        sessionUser?.id
+      );
 
     if (
-      !Number.isInteger(userId) ||
+      !Number.isInteger(
+        userId
+      ) ||
       userId <= 0
     ) {
       return null;
     }
 
     const user =
-      await prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
+      await prisma.user.findUnique(
+        {
+          where: {
+            id: userId,
+          },
 
-        select: {
-          id: true,
-          fullname: true,
-          role: true,
-          active: true,
-          outletId: true,
-        },
-      });
+          select: {
+            id: true,
+            fullname: true,
+            role: true,
+            active: true,
+            outletId: true,
+          },
+        }
+      );
 
     if (
       !user ||
@@ -167,17 +204,102 @@ function getAccountBalance(account: {
   currentBalance?: unknown;
   openingBalance?: unknown;
 }) {
-  const value = Number(
-    account.currentBalance ??
-      account.openingBalance ??
-      0
-  );
+  const value =
+    Number(
+      account.currentBalance ??
+        account.openingBalance ??
+        0
+    );
 
-  if (!Number.isFinite(value)) {
+  if (
+    !Number.isFinite(
+      value
+    )
+  ) {
     return 0;
   }
 
-  return roundMoney(value);
+  return roundMoney(
+    value
+  );
+}
+
+/*
+===========================================================
+GET CURRENT WIB TIME
+===========================================================
+
+Mengambil waktu saat transaksi dibuat
+berdasarkan timezone Asia/Jakarta.
+
+Hasil:
+
+{
+  year,
+  month,
+  day,
+  hour,
+  minute,
+  second,
+  millisecond
+}
+
+Kita sengaja menggunakan Intl timezone
+agar hasil tidak bergantung pada timezone
+operating system/server.
+===========================================================
+*/
+
+function getJakartaDateTime(
+  now: Date = new Date()
+) {
+  const formatter =
+    new Intl.DateTimeFormat(
+      "en-US",
+      {
+        timeZone:
+          BUSINESS_TIMEZONE,
+
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+
+        hourCycle: "h23",
+      }
+    );
+
+  const parts =
+    formatter.formatToParts(
+      now
+    );
+
+  const getPart = (
+    type: string
+  ) => {
+    const part =
+      parts.find(
+        (item) =>
+          item.type === type
+      );
+
+    return Number(
+      part?.value ?? 0
+    );
+  };
+
+  return {
+    year: getPart("year"),
+    month: getPart("month"),
+    day: getPart("day"),
+    hour: getPart("hour"),
+    minute: getPart("minute"),
+    second: getPart("second"),
+    millisecond:
+      now.getMilliseconds(),
+  };
 }
 
 /*
@@ -191,33 +313,70 @@ YYYY-MM-DD
 
 Contoh:
 
-2026-09-07
+2026-09-25
 
-JANGAN menggunakan:
+ATURAN:
 
-new Date("2026-09-07")
+Tanggal:
+-> dari tanggal pilihan user
 
-untuk business date secara langsung karena
-Date parsing ISO dapat menyebabkan pergeseran
-hari ketika diproses dalam timezone tertentu.
+Jam:
+-> dari waktu transaksi saat POST
 
-Kita buat tanggal lokal secara eksplisit.
+Timezone:
+-> Asia/Jakarta / WIB
+
+Contoh:
+
+Sekarang:
+2026-09-26 13:47:32 WIB
+
+User memilih:
+2026-09-25
+
+Maka:
+
+trxDate =
+2026-09-25 13:47:32 WIB
+
+PENTING:
+
+Date JavaScript menyimpan instant UTC.
+
+Karena itu kita tidak langsung menggunakan:
+
+new Date(
+  year,
+  month - 1,
+  day,
+  hour,
+  minute,
+  second
+)
+
+karena timezone server dapat berbeda.
+
+Sebagai gantinya kita membuat instant
+yang merepresentasikan tanggal + jam WIB.
 ===========================================================
 */
 
 function parseTransactionDate(
-  value: unknown
+  value: unknown,
+  now: Date = new Date()
 ): Date | null {
   if (
-    typeof value !== "string"
+    typeof value !==
+    "string"
   ) {
     return null;
   }
 
-  const raw = value.trim();
+  const raw =
+    value.trim();
 
   /*
-  Hanya terima:
+  Hanya menerima:
 
   YYYY-MM-DD
   */
@@ -231,63 +390,117 @@ function parseTransactionDate(
     return null;
   }
 
-  const year = Number(
-    match[1]
-  );
+  const year =
+    Number(
+      match[1]
+    );
 
-  const month = Number(
-    match[2]
-  );
+  const month =
+    Number(
+      match[2]
+    );
 
-  const day = Number(
-    match[3]
-  );
+  const day =
+    Number(
+      match[3]
+    );
 
   if (
-    !Number.isInteger(year) ||
-    !Number.isInteger(month) ||
-    !Number.isInteger(day)
+    !Number.isInteger(
+      year
+    ) ||
+    !Number.isInteger(
+      month
+    ) ||
+    !Number.isInteger(
+      day
+    )
   ) {
     return null;
   }
 
   /*
-  Gunakan constructor lokal:
-
-  new Date(year, monthIndex, day)
-
-  sehingga tanggal bisnis tidak bergeser
-  karena UTC.
+  ==========================================================
+  VALIDATE TANGGAL
+  ==========================================================
   */
 
-  const date =
+  /*
+  Gunakan UTC untuk validasi
+  calendar date supaya tidak terpengaruh
+  timezone server.
+  */
+
+  const validationDate =
     new Date(
-      year,
-      month - 1,
-      day,
-      0,
-      0,
-      0,
-      0
+      Date.UTC(
+        year,
+        month - 1,
+        day
+      )
+    );
+
+  if (
+    validationDate.getUTCFullYear() !==
+      year ||
+    validationDate.getUTCMonth() !==
+      month - 1 ||
+    validationDate.getUTCDate() !==
+      day
+  ) {
+    return null;
+  }
+
+  /*
+  ==========================================================
+  AMBIL JAM TRANSAKSI WIB
+  ==========================================================
+  */
+
+  const jakartaNow =
+    getJakartaDateTime(
+      now
     );
 
   /*
-  Validasi overflow.
+  ==========================================================
+  BENTUK INSTANT WIB
+  ==========================================================
 
-  Contoh:
-  2026-02-31 harus ditolak.
+  Date.UTC menghasilkan angka timestamp
+  dengan angka tanggal/jam yang kita masukkan.
+
+  Karena timezone bisnis adalah WIB (UTC+7),
+  kita kurangi 7 jam untuk mendapatkan instant
+  UTC yang benar.
   */
 
+  const utcTimestamp =
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+      jakartaNow.hour,
+      jakartaNow.minute,
+      jakartaNow.second,
+      jakartaNow.millisecond
+    ) -
+    7 * 60 * 60 * 1000;
+
+  const transactionDate =
+    new Date(
+      utcTimestamp
+    );
+
   if (
-    date.getFullYear() !== year ||
-    date.getMonth() !==
-      month - 1 ||
-    date.getDate() !== day
+    Number.isNaN(
+      transactionDate.getTime()
+    )
   ) {
     return null;
   }
 
-  return date;
+  return transactionDate;
 }
 
 /*
@@ -305,7 +518,8 @@ export async function GET() {
       return NextResponse.json(
         {
           success: false,
-          message: "Tidak login",
+          message:
+            "Tidak login",
         },
         {
           status: 401,
@@ -319,7 +533,8 @@ export async function GET() {
     ========================================================
     */
 
-    const transactionWhere: any = {};
+    const transactionWhere: any =
+      {};
 
     /*
     --------------------------------------------------------
@@ -332,20 +547,22 @@ export async function GET() {
       Role.OUTLET_ADMIN
     ) {
       if (!user.outletId) {
-        return NextResponse.json({
-          success: true,
-          data: [],
-          accounts: [],
-          outlets: [],
-          outletBalances: [],
-          summary: {
-            totalIn: 0,
-            totalOut: 0,
-            currentBalance: 0,
-            totalOutletBalance: 0,
-            pusatBalance: 0,
-          },
-        });
+        return NextResponse.json(
+          {
+            success: true,
+            data: [],
+            accounts: [],
+            outlets: [],
+            outletBalances: [],
+            summary: {
+              totalIn: 0,
+              totalOut: 0,
+              currentBalance: 0,
+              totalOutletBalance: 0,
+              pusatBalance: 0,
+            },
+          }
+        );
       }
 
       transactionWhere.outletId =
@@ -359,57 +576,59 @@ export async function GET() {
     */
 
     const pettyCash =
-      await prisma.pettyCash.findMany({
-        where:
-          transactionWhere,
+      await prisma.pettyCash.findMany(
+        {
+          where:
+            transactionWhere,
 
-        include: {
-          outlet: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
+          include: {
+            outlet: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
             },
-          },
 
-          account: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              outletId: true,
-              openingBalance: true,
-              currentBalance: true,
-              isActive: true,
+            account: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                outletId: true,
+                openingBalance:
+                  true,
+                currentBalance:
+                  true,
+                isActive: true,
 
-              outlet: {
-                select: {
-                  id: true,
-                  code: true,
-                  name: true,
+                outlet: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                  },
                 },
               },
             },
           },
-        },
 
-        /*
-        PENTING:
+          /*
+          Rekening koran berdasarkan
+          tanggal + jam transaksi.
+          */
 
-        Rekening koran berdasarkan
-        tanggal transaksi, bukan
-        createdAt.
-        */
-
-        orderBy: [
-          {
-            trxDate: "desc",
-          },
-          {
-            id: "desc",
-          },
-        ],
-      });
+          orderBy: [
+            {
+              trxDate:
+                "desc",
+            },
+            {
+              id: "desc",
+            },
+          ],
+        }
+      );
 
     /*
     ========================================================
@@ -417,9 +636,10 @@ export async function GET() {
     ========================================================
     */
 
-    const accountWhere: any = {
-      isActive: true,
-    };
+    const accountWhere: any =
+      {
+        isActive: true,
+      };
 
     if (
       user.role ===
@@ -430,38 +650,43 @@ export async function GET() {
     }
 
     const rawAccounts =
-      await prisma.pettyCashAccount.findMany({
-        where:
-          accountWhere,
+      await prisma.pettyCashAccount.findMany(
+        {
+          where:
+            accountWhere,
 
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          outletId: true,
-          openingBalance: true,
-          currentBalance: true,
-          isActive: true,
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            outletId: true,
+            openingBalance:
+              true,
+            currentBalance:
+              true,
+            isActive: true,
 
-          outlet: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              active: true,
+            outlet: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                active: true,
+              },
             },
           },
-        },
 
-        orderBy: [
-          {
-            outletId: "asc",
-          },
-          {
-            id: "asc",
-          },
-        ],
-      });
+          orderBy: [
+            {
+              outletId:
+                "asc",
+            },
+            {
+              id: "asc",
+            },
+          ],
+        }
+      );
 
     /*
     ========================================================
@@ -497,9 +722,10 @@ export async function GET() {
     ========================================================
     */
 
-    const outletWhere: any = {
-      active: true,
-    };
+    const outletWhere: any =
+      {
+        active: true,
+      };
 
     if (
       user.role ===
@@ -510,21 +736,23 @@ export async function GET() {
     }
 
     const outlets =
-      await prisma.outlet.findMany({
-        where:
-          outletWhere,
+      await prisma.outlet.findMany(
+        {
+          where:
+            outletWhere,
 
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          active: true,
-        },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            active: true,
+          },
 
-        orderBy: {
-          id: "asc",
-        },
-      });
+          orderBy: {
+            id: "asc",
+          },
+        }
+      );
 
     /*
     ========================================================
@@ -536,13 +764,20 @@ export async function GET() {
       new Map<
         string,
         {
-          outletId: number | null;
-          outletCode: string;
-          outletName: string;
-          openingBalance: number;
-          balance: number;
-          accountCount: number;
-          accountId: number | null;
+          outletId:
+            number | null;
+          outletCode:
+            string;
+          outletName:
+            string;
+          openingBalance:
+            number;
+          balance:
+            number;
+          accountCount:
+            number;
+          accountId:
+            number | null;
         }
       >();
 
@@ -563,8 +798,11 @@ export async function GET() {
             null
         );
 
-      let pusatBalance = 0;
-      let pusatOpening = 0;
+      let pusatBalance =
+        0;
+
+      let pusatOpening =
+        0;
 
       let pusatAccountId:
         | number
@@ -603,7 +841,8 @@ export async function GET() {
       outletBalanceMap.set(
         "PUSAT",
         {
-          outletId: null,
+          outletId:
+            null,
 
           outletCode:
             "PUSAT",
@@ -633,7 +872,8 @@ export async function GET() {
     */
 
     for (
-      const outlet of outlets
+      const outlet of
+        outlets
     ) {
       const outletAccounts =
         accounts.filter(
@@ -642,8 +882,11 @@ export async function GET() {
             outlet.id
         );
 
-      let balance = 0;
-      let openingBalance = 0;
+      let balance =
+        0;
+
+      let openingBalance =
+        0;
 
       let accountId:
         | number
@@ -671,7 +914,8 @@ export async function GET() {
           );
 
         if (
-          accountId === null
+          accountId ===
+          null
         ) {
           accountId =
             account.id;
@@ -739,7 +983,8 @@ export async function GET() {
           (item) =>
             item.outletId ===
             null
-        )?.balance ?? 0
+        )?.balance ??
+          0
       );
 
     /*
@@ -775,7 +1020,8 @@ export async function GET() {
     ========================================================
     */
 
-    let currentBalance = 0;
+    let currentBalance =
+      0;
 
     if (
       user.role ===
@@ -787,7 +1033,8 @@ export async function GET() {
             (item) =>
               item.outletId ===
               user.outletId
-          )?.balance ?? 0
+          )?.balance ??
+            0
         );
     } else {
       currentBalance =
@@ -800,10 +1047,11 @@ export async function GET() {
     ========================================================
     */
 
-    const approvedWhere: any = {
-      status:
-        PettyCashStatus.APPROVED,
-    };
+    const approvedWhere: any =
+      {
+        status:
+          PettyCashStatus.APPROVED,
+      };
 
     if (
       user.role ===
@@ -817,18 +1065,23 @@ export async function GET() {
     }
 
     const approvedTransactions =
-      await prisma.pettyCash.findMany({
-        where:
-          approvedWhere,
+      await prisma.pettyCash.findMany(
+        {
+          where:
+            approvedWhere,
 
-        select: {
-          type: true,
-          amount: true,
-        },
-      });
+          select: {
+            type: true,
+            amount: true,
+          },
+        }
+      );
 
-    let totalIn = 0;
-    let totalOut = 0;
+    let totalIn =
+      0;
+
+    let totalOut =
+      0;
 
     for (
       const trx of
@@ -951,7 +1204,8 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message: "Tidak login",
+          message:
+            "Tidak login",
         },
         {
           status: 401,
@@ -1011,7 +1265,8 @@ export async function POST(
         undefined ||
       body.paymentId ===
         null ||
-      body.paymentId === ""
+      body.paymentId ===
+        ""
         ? null
         : Number(
             body.paymentId
@@ -1019,28 +1274,45 @@ export async function POST(
 
     /*
     ========================================================
-    4. TRANSACTION DATE
+    4. TRANSACTION DATE + TIME
     ========================================================
-
-    INI ADALAH PERBAIKAN UTAMA.
 
     Frontend mengirim:
 
       trxDate: "YYYY-MM-DD"
 
-    Backend sekarang benar-benar
-    menggunakan tanggal tersebut.
+    Backend:
 
-    Tidak lagi menggunakan:
+      tanggal = tanggal pilihan user
+      jam     = jam transaksi saat POST
 
-      const now = new Date()
-      trxDate: now
+    Contoh:
+
+      User pilih 2026-09-25
+      Saat POST = 2026-09-26 13:47:32 WIB
+
+    Maka:
+
+      trxDate =
+      2026-09-25 13:47:32 WIB
+
+    Ini berbeda dengan createdAt.
+
+    createdAt:
+      2026-09-26 13:47:32 WIB
+
+    trxDate:
+      2026-09-25 13:47:32 WIB
     ========================================================
     */
 
+    const now =
+      new Date();
+
     const trxDate =
       parseTransactionDate(
-        body.trxDate
+        body.trxDate,
+        now
       );
 
     if (!trxDate) {
@@ -1110,7 +1382,9 @@ export async function POST(
     */
 
     if (
-      !Number.isFinite(amount) ||
+      !Number.isFinite(
+        amount
+      ) ||
       amount <= 0
     ) {
       return NextResponse.json(
@@ -1175,10 +1449,11 @@ export async function POST(
 
       outletId =
         rawOutletId ===
-          undefined ||
+            undefined ||
         rawOutletId ===
-          null ||
-        rawOutletId === ""
+            null ||
+        rawOutletId ===
+            ""
           ? null
           : Number(
               rawOutletId
@@ -1270,7 +1545,8 @@ export async function POST(
         undefined &&
       body.accountId !==
         null &&
-      body.accountId !== ""
+      body.accountId !==
+        ""
     ) {
       accountId =
         Number(
@@ -1304,7 +1580,7 @@ export async function POST(
               "Akun Petty Cash tidak valid",
           },
           {
-            status: 400
+            status: 400,
           }
         );
       }
@@ -1405,7 +1681,8 @@ export async function POST(
               outletId:
                 outletId,
 
-              isActive: true,
+              isActive:
+                true,
             },
 
             orderBy: {
@@ -1422,7 +1699,8 @@ export async function POST(
 
       if (!account) {
         let code =
-          outletId === null
+          outletId ===
+          null
             ? "PC-PUSAT"
             : `PC-${outletId}`;
 
@@ -1441,7 +1719,8 @@ export async function POST(
 
         if (existingCode) {
           code =
-            outletId === null
+            outletId ===
+            null
               ? `PC-PUSAT-${Date.now()}`
               : `PC-${outletId}-${Date.now()}`;
         }
@@ -1466,7 +1745,8 @@ export async function POST(
 
                 outletId,
 
-                isActive: true,
+                isActive:
+                  true,
               },
             }
           );
@@ -1483,7 +1763,8 @@ export async function POST(
     */
 
     if (
-      paymentId !== null
+      paymentId !==
+      null
     ) {
       if (
         !Number.isInteger(
@@ -1511,8 +1792,11 @@ export async function POST(
             },
 
             include: {
-              purchase: true,
-              outletPurchase: true,
+              purchase:
+                true,
+
+              outletPurchase:
+                true,
             },
           }
         );
@@ -1710,17 +1994,23 @@ export async function POST(
     17. NUMBER
     ========================================================
 
-    Nomor tetap dibuat berdasarkan
-    waktu pembuatan sistem.
+    Nomor menggunakan waktu
+    sebenarnya saat transaksi dibuat.
 
-    Ini BENAR.
+    BUKAN trxDate business date.
 
-    Nomor transaksi bukan business date.
+    Misalnya:
+
+    trxDate:
+    2026-09-25 13:47:32 WIB
+
+    dibuat:
+    2026-09-26 13:47:32 WIB
+
+    generate number tetap menggunakan
+    waktu dibuat 26 September.
     ========================================================
     */
-
-    const now =
-      new Date();
 
     const number =
       await generatePettyCashNumber(
@@ -1733,88 +2023,87 @@ export async function POST(
     18. CREATE
     ========================================================
 
-    PERBEDAAN UTAMA:
+    trxDate:
+      tanggal pilihan user
+      + jam transaksi WIB
 
-    SEBELUM:
+    createdAt:
+      otomatis dari Prisma
 
-      trxDate: now
-
-    SEKARANG:
-
-      trxDate: trxDate
-
-    createdAt tetap otomatis dari Prisma.
+    approvedAt:
+      diisi saat approval
     ========================================================
     */
 
     const pettyCash =
-      await prisma.pettyCash.create({
-        data: {
-          number,
+      await prisma.pettyCash.create(
+        {
+          data: {
+            number,
 
-          /*
-          ================================================
-          TANGGAL TRANSAKSI USER
-          ================================================
-          */
+            /*
+            ================================================
+            TANGGAL + JAM TRANSAKSI
+            ================================================
+            */
 
-          trxDate,
+            trxDate,
 
-          type,
+            type,
 
-          category,
+            category,
 
-          description,
+            description,
 
-          amount,
+            amount,
 
-          /*
-          Nilai ini merupakan snapshot
-          ketika transaksi dibuat.
+            /*
+            Nilai ini merupakan snapshot
+            ketika transaksi dibuat.
 
-          Saat APPROVED, route approval
-          menghitung ulang berdasarkan
-          saldo account terbaru.
-          */
+            Saat APPROVED, route approval
+            menghitung ulang berdasarkan
+            saldo account terbaru.
+            */
 
-          balanceBefore,
+            balanceBefore,
 
-          balanceAfter,
+            balanceAfter,
 
-          accountId:
-            account.id,
+            accountId:
+              account.id,
 
-          paymentId,
+            paymentId,
 
-          outletId,
+            outletId,
 
-          createdBy:
-            user.id,
+            createdBy:
+              user.id,
 
-          /*
-          Semua transaksi manual tetap
-          menunggu approval.
+            /*
+            Semua transaksi manual tetap
+            menunggu approval.
 
-          Top Up dari frontend mengirim
-          status APPROVED, tetapi API
-          secara sengaja tidak mempercayai
-          status dari client.
-          */
+            API tidak mempercayai status
+            yang dikirim dari frontend.
+            */
 
-          status:
-            PettyCashStatus.PENDING,
-        },
-
-        include: {
-          account: {
-            include: {
-              outlet: true,
-            },
+            status:
+              PettyCashStatus.PENDING,
           },
 
-          outlet: true,
-        },
-      });
+          include: {
+            account: {
+              include: {
+                outlet:
+                  true,
+              },
+            },
+
+            outlet: true,
+          },
+        }
+      );
 
     /*
     ========================================================

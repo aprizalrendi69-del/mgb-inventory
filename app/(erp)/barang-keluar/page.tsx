@@ -1118,29 +1118,29 @@ export default function BarangKeluarPage() {
 
   function isWhatsAppEligibleRequest(request: any) {
     const status = String(request?.status || "").trim().toUpperCase();
+
+    // WhatsApp hanya untuk request yang masih menjadi
+    // permintaan aktif ke Gudang Pusat.
     return status === "DRAFT" || status === "PENDING";
   }
 
   function getWhatsAppStockMark(item: any) {
-    const stock = getCentralStock(item);
+    const stock = Number(getCentralStock(item) || 0);
     const requested = Number(item?.qty || 0);
 
-    return stock >= requested && requested > 0 ? "✅" : "❌";
-  }
-
-  function getWhatsAppStockStatus(item: any) {
-    const stock = getCentralStock(item);
-    const requested = Number(item?.qty || 0);
-
-    if (stock >= requested && requested > 0) {
-      return "TERSEDIA";
+    // Status stok untuk pesan WhatsApp:
+    // Stock cukup              : ✅
+    // Stok kurang / tidak cukup: ☑️
+    // Stock habis              : ❌
+    if (stock <= 0) {
+      return "❌";
     }
 
-    if (stock > 0) {
-      return "KURANG";
+    if (stock < requested) {
+      return "☑️";
     }
 
-    return "KOSONG";
+    return "✅";
   }
 
   function getWhatsAppRequestDate(request: any) {
@@ -1188,6 +1188,20 @@ export default function BarangKeluarPage() {
     });
   }
 
+  /**
+   * Format WhatsApp SINGLE DELIVERY REQUEST.
+   *
+   * Format dikunci mengikuti format bulk:
+   *
+   * 📦 *DELIVERY REQUEST OUTLET*
+   * *OUTLET → GUDANG PUSAT*
+   *
+   * ━━━━━━━━━━━━━━━━━━
+   * *1. NAMA OUTLET*
+   * 🔖 *DR-00016* • 26 Sep 2026 • PENDING
+   *
+   * ✅ 1. Nama Barang : Request (10 kg) • Catatan (Sisa 3)
+   */
   function buildDeliveryRequestWhatsAppMessage(request: any) {
     if (!isWhatsAppEligibleRequest(request)) {
       return "";
@@ -1201,42 +1215,46 @@ export default function BarangKeluarPage() {
       return "";
     }
 
-    const itemLines = items.map((item: any) => {
+    const outletName = getRequestOutlet(request);
+
+    const itemLines = items.map((item: any, itemIndex: number) => {
       const itemName =
         item?.barang?.name ||
         `Barang #${item?.barangId ?? "-"}`;
 
       const qty = Number(item?.qty || 0);
       const unit = getRequestItemUnit(item);
-      const stock = getCentralStock(item);
       const note =
         typeof item?.note === "string"
           ? item.note.trim()
           : "";
 
-      return [
-        `${getWhatsAppStockMark(item)} ${itemName}`,
-        `   Request (${formatNumber(qty)} ${unit}) • Stock Pusat (${formatNumber(stock)} ${unit}) • ${getWhatsAppStockStatus(item)}`,
-        note ? `   ↳ Catatan : ${note}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
+      return `${getWhatsAppStockMark(item)} ${itemIndex + 1}. ${itemName} : Request (${formatNumber(qty)} ${unit})${
+        note ? ` • Catatan (${note})` : ""
+      }`;
     });
 
     return [
-      "📦 *DELIVERY REQUEST*",
-      `*${getRequestOutlet(request)}* • ${getRequestNumber(request)}`,
-      `📅 ${getWhatsAppRequestDate(request)} • ${String(
-        request?.status || "-"
-      ).toUpperCase()}`,
+      "📦 *DELIVERY REQUEST OUTLET*",
+      "*OUTLET → GUDANG PUSAT*",
       "",
-      itemLines.join("\n"),
+      "━━━━━━━━━━━━━━━━━━",
+      `*1. ${outletName}*`,
+      `🔖 *${getRequestNumber(request)}* • ${getWhatsAppRequestDate(
+        request
+      )} • ${String(request?.status || "-").toUpperCase()}`,
+      "━━━━━━━━━━━━━━━━━━",
+      ...itemLines,
       "",
-      `*${items.length} jenis • ${formatNumber(
-        getRequestTotalQty(request)
-      )} qty*`,
+      ">  *Keterangan :*",
       "",
-      "MGB ERP • Gudang Pusat",
+      "Stock cukup : ✅ → _*stock ≥ request*_",
+      "Stok kurang : ☑️ → _*stock > 0 tetapi stock < request*_",
+      "Stock habis : ❌ → _*stock = 0*_",
+      "",
+      "Terimakasih 🙏🏻",
+      "",
+      "_***Pesan Otomatis Dari MGB•ERP***_",
     ].join("\n");
   }
 
@@ -1258,8 +1276,9 @@ export default function BarangKeluarPage() {
       ? json.data
       : [];
 
-    // WhatsApp HANYA mengirim request yang masih aktif:
-    // DRAFT atau PENDING. APPROVED / PROCESSING / COMPLETED /
+    // WhatsApp hanya mengirim request yang masih aktif:
+    // DRAFT atau PENDING.
+    // APPROVED / PROCESSING / COMPLETED /
     // REJECTED / CANCELLED tidak ikut dikirim.
     const eligibleRequests = allRequests.filter(
       (request: any) =>
@@ -1319,92 +1338,70 @@ export default function BarangKeluarPage() {
 
     const outletGroups = [...groups.values()];
 
-    const totalItems = validRequests.reduce(
-      (total, request) =>
-        total + request.items.length,
-      0
-    );
-
-    const totalQty = validRequests.reduce(
-      (total, request) =>
-        total + getRequestTotalQty(request),
-      0
-    );
-
-    const availableItems = validRequests.reduce(
-      (total, request) =>
-        total +
-        request.items.filter(
-          (item: any) =>
-            getCentralStock(item) >=
-              Number(item?.qty || 0) &&
-            Number(item?.qty || 0) > 0
-        ).length,
-      0
-    );
-
     const message: string[] = [
       "📦 *DELIVERY REQUEST OUTLET*",
-      "*MGB ERP • GUDANG PUSAT*",
+      "*OUTLET → GUDANG PUSAT*",
       "",
-      `🏪 ${outletGroups.length} outlet • 📋 ${validRequests.length} request`,
-      `📦 ${totalItems} jenis • 🔢 ${formatNumber(totalQty)} qty`,
-      "",
-      "━━━━━━━━━━━━━━━━━━",
     ];
 
     outletGroups.forEach((group, outletIndex) => {
       message.push(
+        "━━━━━━━━━━━━━━━━━━",
         `*${outletIndex + 1}. ${group.name}*`
       );
 
-      group.requests.forEach((request: any) => {
+      group.requests.forEach((request: any, requestIndex: number) => {
         message.push(
-          "",
-          `📋 *${getRequestNumber(request)}* • ${getWhatsAppRequestDate(
+          `🔖 *${getRequestNumber(request)}* • ${getWhatsAppRequestDate(
             request
-          )} • ${String(request?.status || "-").toUpperCase()}`
+          )} • ${String(request?.status || "-").toUpperCase()}`,
+          "━━━━━━━━━━━━━━━━━━"
         );
 
-        request.items.forEach((item: any) => {
+        request.items.forEach((item: any, itemIndex: number) => {
           const itemName =
             item?.barang?.name ||
             `Barang #${item?.barangId ?? "-"}`;
 
           const qty = Number(item?.qty || 0);
           const unit = getRequestItemUnit(item);
-          const stock = getCentralStock(item);
           const note =
             typeof item?.note === "string"
               ? item.note.trim()
               : "";
 
           message.push(
-            `${getWhatsAppStockMark(item)} ${itemName}`,
-            `   Request (${formatNumber(qty)} ${unit}) • Stock Pusat (${formatNumber(stock)} ${unit}) • ${getWhatsAppStockStatus(item)}`,
-            ...(note ? [`   ↳ Catatan : ${note}`] : [])
+            `${getWhatsAppStockMark(item)} ${itemIndex + 1}. ${itemName} : Request (${formatNumber(
+              qty
+            )} ${unit})${
+              note ? ` • Catatan (${note})` : ""
+            }`
           );
         });
 
-        message.push(
-          `   _${request.items.length} jenis • ${formatNumber(
-            getRequestTotalQty(request)
-          )} qty_`
-        );
+        // Jarak antar Delivery Request dalam outlet yang sama.
+        if (requestIndex < group.requests.length - 1) {
+          message.push("");
+          message.push("━━━━━━━━━━━━━━━━━━");
+        }
       });
 
       if (outletIndex < outletGroups.length - 1) {
-        message.push("", "━━━━━━━━━━━━━━━━━━");
+        message.push("");
       }
     });
 
     message.push(
       "",
-      "━━━━━━━━━━━━━━━━━━",
-      `📊 *Stock: ${availableItems}/${totalItems} item cukup*`,
-      "❌ = stock kosong / kurang",
+      "> 📌  *Keterangan :*",
       "",
-      "_Pesan otomatis dari MGB ERP._"
+      "Stock cukup : ✅ → _*stock ≥ request*_",
+      "Stok kurang : ☑️ → _*stock > 0 tetapi stock < request*_",
+      "Stock habis : ❌ → _*stock = 0*_",
+      "",
+      "Terimakasih 🙏🏻",
+      "",
+      "_***Pesan Otomatis Dari MGB•ERP***_"
     );
 
     return message.join("\n");
@@ -1500,6 +1497,7 @@ export default function BarangKeluarPage() {
       );
     }
   }
+
 
   // =========================================================
   // FORMAT DATE

@@ -6,28 +6,27 @@ import { COMPANY } from "@/lib/company";
 // MGB PREMIUM REPORT PDF
 // =====================================================
 //
-// DESIGN SYSTEM
+// DESIGN
 // -----------------------------------------------------
-// - MGB branding tanpa logo
-// - Corporate green
-// - A4 landscape untuk generic report tabel
-// - A4 portrait khusus Purchase Report
-// - Premium header
-// - KPI summary
-// - Zebra table
-// - Status badge
-// - Automatic number formatting
-// - Page numbering
-// - Safe filename
+// - Premium corporate MGB
+// - Clean executive-report layout
+// - Deep green / ivory / neutral palette
+// - Strong typography hierarchy
+// - Elegant KPI cards
+// - Compact zebra tables
+// - Modern status badges
+// - Supplier grouping
+// - Premium grand total
+// - Automatic page numbering
 // - Multi-page safe
+// - Safe filename
 //
-// COMPATIBILITY
+// EXPORTS
 // -----------------------------------------------------
-// exportReportPdf(title, columns, rows)
-// exportPurchaseReportPdf(title, columns, rows)
+// exportReportPdf()
+// exportPurchaseReportPdf()
 // exportReportPDF
 //
-// Tidak membutuhkan perubahan frontend.
 // =====================================================
 
 // =====================================================
@@ -35,34 +34,41 @@ import { COMPANY } from "@/lib/company";
 // =====================================================
 
 const COLORS = {
-  dark: [24, 53, 45] as [number, number, number],
-  dark2: [35, 74, 64] as [number, number, number],
+  dark: [22, 45, 38] as [number, number, number],
+  dark2: [36, 70, 59] as [number, number, number],
 
-  green: [73, 127, 112] as [number, number, number],
-  greenDark: [52, 103, 88] as [number, number, number],
-  greenLight: [234, 243, 239] as [number, number, number],
+  green: [58, 119, 98] as [number, number, number],
+  greenDark: [42, 91, 74] as [number, number, number],
+  greenMid: [91, 143, 123] as [number, number, number],
+
+  greenLight: [233, 243, 238] as [number, number, number],
   greenPale: [247, 250, 248] as [number, number, number],
 
-  blue: [55, 105, 160] as [number, number, number],
-  blueLight: [235, 243, 252] as [number, number, number],
+  ivory: [250, 249, 246] as [number, number, number],
 
-  orange: [180, 120, 45] as [number, number, number],
-  orangeLight: [252, 246, 232] as [number, number, number],
+  blue: [61, 106, 157] as [number, number, number],
+  blueLight: [236, 243, 250] as [number, number, number],
 
-  red: [175, 65, 65] as [number, number, number],
+  orange: [181, 119, 42] as [number, number, number],
+  orangeLight: [252, 246, 235] as [number, number, number],
+
+  red: [174, 69, 69] as [number, number, number],
   redLight: [253, 239, 239] as [number, number, number],
 
-  purple: [104, 82, 150] as [number, number, number],
-  purpleLight: [243, 239, 250] as [number, number, number],
+  purple: [105, 83, 148] as [number, number, number],
+  purpleLight: [244, 240, 250] as [number, number, number],
 
-  text: [45, 55, 51] as [number, number, number],
-  muted: [115, 125, 120] as [number, number, number],
+  text: [48, 58, 53] as [number, number, number],
+  muted: [116, 126, 121] as [number, number, number],
+  muted2: [151, 159, 154] as [number, number, number],
+
   border: [220, 228, 224] as [number, number, number],
+  borderDark: [204, 216, 210] as [number, number, number],
 
   white: [255, 255, 255] as [number, number, number],
   black: [20, 20, 20] as [number, number, number],
 
-  zebra: [250, 252, 251] as [number, number, number],
+  zebra: [249, 251, 250] as [number, number, number],
 };
 
 // =====================================================
@@ -70,7 +76,11 @@ const COLORS = {
 // =====================================================
 
 function parseNumericValue(value: any) {
-  if (value === null || value === undefined || value === "") {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
     return 0;
   }
 
@@ -84,8 +94,9 @@ function parseNumericValue(value: any) {
     return 0;
   }
 
-  // Support values already formatted as Indonesian Rupiah,
-  // for example: "Rp 25.000" or "Rp 25.000,50".
+  // Support Indonesian currency:
+  // Rp 25.000
+  // Rp 25.000,50
   if (/^rp\s*/i.test(text)) {
     const cleaned = text
       .replace(/^rp\s*/i, "")
@@ -94,12 +105,34 @@ function parseNumericValue(value: any) {
 
     const number = Number(cleaned);
 
-    return Number.isFinite(number) ? number : 0;
+    return Number.isFinite(number)
+      ? number
+      : 0;
+  }
+
+  // Support formatted number such as:
+  // 25.000
+  // 25.000,50
+  if (
+    text.includes(".") &&
+    text.includes(",")
+  ) {
+    const cleaned = text
+      .replace(/\./g, "")
+      .replace(/,/g, ".");
+
+    const number = Number(cleaned);
+
+    return Number.isFinite(number)
+      ? number
+      : 0;
   }
 
   const number = Number(text);
 
-  return Number.isFinite(number) ? number : 0;
+  return Number.isFinite(number)
+    ? number
+    : 0;
 }
 
 function formatRupiah(value: any) {
@@ -165,7 +198,9 @@ function safeFileName(value: string) {
 }
 
 function upper(value: any) {
-  return String(value ?? "").trim().toUpperCase();
+  return String(value ?? "")
+    .trim()
+    .toUpperCase();
 }
 
 function cleanText(value: any) {
@@ -180,6 +215,30 @@ function cleanText(value: any) {
   return String(value);
 }
 
+function truncateText(
+  doc: jsPDF,
+  value: string,
+  maxWidth: number
+) {
+  let result = value;
+
+  if (
+    doc.getTextWidth(result) <= maxWidth
+  ) {
+    return result;
+  }
+
+  while (
+    doc.getTextWidth(`${result}...`) >
+      maxWidth &&
+    result.length > 4
+  ) {
+    result = result.slice(0, -1);
+  }
+
+  return `${result}...`;
+}
+
 // =====================================================
 // COLUMN DETECTION
 // =====================================================
@@ -188,9 +247,8 @@ function findColumn(
   columns: string[],
   candidates: string[]
 ) {
-  const normalizedColumns = columns.map((column) =>
-    upper(column)
-  );
+  const normalizedColumns =
+    columns.map((column) => upper(column));
 
   for (const candidate of candidates) {
     const index =
@@ -210,15 +268,17 @@ function findColumnContains(
   columns: string[],
   candidates: string[]
 ) {
-  const normalizedColumns = columns.map((column) =>
-    upper(column)
-  );
+  const normalizedColumns =
+    columns.map((column) => upper(column));
 
   for (const candidate of candidates) {
-    const index = normalizedColumns.findIndex(
-      (column) =>
-        column.includes(upper(candidate))
-    );
+    const index =
+      normalizedColumns.findIndex(
+        (column) =>
+          column.includes(
+            upper(candidate)
+          )
+      );
 
     if (index >= 0) {
       return index;
@@ -233,8 +293,6 @@ function isCurrencyColumn(
 ) {
   const value = upper(columnName);
 
-  // Jangan menganggap kolom quantity/stock sebagai nominal
-  // hanya karena namanya mengandung kata TOTAL.
   if (isQuantityColumn(value)) {
     return false;
   }
@@ -296,7 +354,7 @@ function isStatusColumn(
 }
 
 // =====================================================
-// STATUS COLORS
+// STATUS STYLE
 // =====================================================
 
 function getStatusStyle(status: string) {
@@ -368,17 +426,15 @@ function detectDateRange(
   columns: string[],
   rows: any[][]
 ) {
-  const dateIndex = findColumnContains(
-    columns,
-    [
+  const dateIndex =
+    findColumnContains(columns, [
       "TANGGAL",
       "DATE",
       "WAKTU",
       "RECEIVED",
       "RECEIPT",
       "CREATED",
-    ]
-  );
+    ]);
 
   if (dateIndex < 0) {
     return "Semua Periode";
@@ -390,7 +446,9 @@ function detectDateRange(
     .map((value) => {
       const date = new Date(value);
 
-      if (Number.isNaN(date.getTime())) {
+      if (
+        Number.isNaN(date.getTime())
+      ) {
         return null;
       }
 
@@ -430,12 +488,10 @@ function detectDateRange(
 // =====================================================
 
 function generateReportId() {
-  return (
-    new Date()
-      .getTime()
-      .toString()
-      .slice(-8)
-  );
+  return new Date()
+    .getTime()
+    .toString()
+    .slice(-8);
 }
 
 // =====================================================
@@ -454,6 +510,11 @@ function drawPremiumHeader(
   const pageWidth =
     doc.internal.pageSize.getWidth();
 
+  const contentWidth =
+    pageWidth -
+    marginLeft -
+    marginRight;
+
   // ---------------------------------------------------
   // TOP ACCENT
   // ---------------------------------------------------
@@ -464,12 +525,23 @@ function drawPremiumHeader(
     0,
     0,
     pageWidth,
-    2.8,
+    3.2,
+    "F"
+  );
+
+  // Thin secondary accent
+  doc.setFillColor(...COLORS.greenLight);
+
+  doc.rect(
+    0,
+    3.2,
+    pageWidth,
+    1,
     "F"
   );
 
   // ---------------------------------------------------
-  // MGB BRAND
+  // BRAND
   // ---------------------------------------------------
 
   doc.setFont(
@@ -477,7 +549,7 @@ function drawPremiumHeader(
     "bold"
   );
 
-  doc.setFontSize(25);
+  doc.setFontSize(26);
 
   doc.setTextColor(...COLORS.dark);
 
@@ -487,12 +559,7 @@ function drawPremiumHeader(
     17
   );
 
-  doc.setFont(
-    "helvetica",
-    "bold"
-  );
-
-  doc.setFontSize(7.5);
+  doc.setFontSize(7.2);
 
   doc.setTextColor(...COLORS.green);
 
@@ -511,14 +578,14 @@ function drawPremiumHeader(
     "bold"
   );
 
-  doc.setFontSize(7);
+  doc.setFontSize(6.8);
 
-  doc.setTextColor(...COLORS.muted);
+  doc.setTextColor(...COLORS.greenDark);
 
   doc.text(
     upper(reportCategory),
     pageWidth - marginRight,
-    13,
+    12,
     {
       align: "right",
     }
@@ -529,12 +596,14 @@ function drawPremiumHeader(
     "normal"
   );
 
-  doc.setFontSize(7);
+  doc.setFontSize(6.8);
+
+  doc.setTextColor(...COLORS.muted);
 
   doc.text(
-    `Report ID : ${generateReportId()}`,
+    `REPORT ID  ${generateReportId()}`,
     pageWidth - marginRight,
-    18,
+    17,
     {
       align: "right",
     }
@@ -552,7 +621,7 @@ function drawPremiumHeader(
   doc.text(
     COMPANY.name,
     pageWidth - marginRight,
-    24,
+    23,
     {
       align: "right",
     }
@@ -583,13 +652,22 @@ function drawPremiumHeader(
   );
 
   doc.setFontSize(
-    title.length > 45 ? 14 : 17
+    title.length > 48
+      ? 13.5
+      : 17
   );
 
   doc.setTextColor(...COLORS.dark);
 
+  const safeTitle =
+    truncateText(
+      doc,
+      title,
+      contentWidth * 0.72
+    );
+
   doc.text(
-    title,
+    safeTitle,
     marginLeft,
     39
   );
@@ -599,7 +677,7 @@ function drawPremiumHeader(
     "normal"
   );
 
-  doc.setFontSize(8);
+  doc.setFontSize(7.8);
 
   doc.setTextColor(...COLORS.muted);
 
@@ -610,43 +688,52 @@ function drawPremiumHeader(
   );
 
   // ---------------------------------------------------
-  // META BOX
+  // META CARD
   // ---------------------------------------------------
 
   const metaY = 50;
-  const metaH = 13;
+  const metaH = 14;
 
-  const contentWidth =
-    pageWidth -
-    marginLeft -
-    marginRight;
-
-  doc.setFillColor(...COLORS.greenPale);
+  doc.setFillColor(
+    ...COLORS.greenPale
+  );
 
   doc.roundedRect(
     marginLeft,
     metaY,
     contentWidth,
     metaH,
-    2,
-    2,
+    2.5,
+    2.5,
     "F"
   );
 
-  // Period
+  // Small accent
+  doc.setFillColor(...COLORS.green);
 
+  doc.roundedRect(
+    marginLeft,
+    metaY,
+    2.5,
+    metaH,
+    1.2,
+    1.2,
+    "F"
+  );
+
+  // Period label
   doc.setFont(
     "helvetica",
     "bold"
   );
 
-  doc.setFontSize(6.5);
+  doc.setFontSize(6.2);
 
   doc.setTextColor(...COLORS.muted);
 
   doc.text(
     "PERIODE",
-    marginLeft + 5,
+    marginLeft + 7,
     metaY + 5
   );
 
@@ -661,16 +748,17 @@ function drawPremiumHeader(
 
   doc.text(
     periodText,
-    marginLeft + 5,
-    metaY + 9.5
+    marginLeft + 7,
+    metaY + 10
   );
 
   // Divider
-
   const dividerX =
     marginLeft + 100;
 
-  doc.setDrawColor(...COLORS.border);
+  doc.setDrawColor(
+    ...COLORS.border
+  );
 
   doc.line(
     dividerX,
@@ -680,19 +768,18 @@ function drawPremiumHeader(
   );
 
   // Printed
-
   doc.setFont(
     "helvetica",
     "bold"
   );
 
-  doc.setFontSize(6.5);
+  doc.setFontSize(6.2);
 
   doc.setTextColor(...COLORS.muted);
 
   doc.text(
     "DICETAK",
-    dividerX + 6,
+    dividerX + 7,
     metaY + 5
   );
 
@@ -707,18 +794,17 @@ function drawPremiumHeader(
 
   doc.text(
     formatDateTime(new Date()),
-    dividerX + 6,
-    metaY + 9.5
+    dividerX + 7,
+    metaY + 10
   );
 
   return metaY + metaH;
 }
 
 // =====================================================
-// COMPACT CONTINUATION HEADER
+// CONTINUATION HEADER
 // =====================================================
-// Dipakai pada halaman 2, 3, dst. supaya tabel tidak
-// menyisakan ruang kosong sebesar header premium.
+
 function drawContinuationHeader(
   doc: jsPDF,
   title: string,
@@ -729,30 +815,78 @@ function drawContinuationHeader(
     doc.internal.pageSize.getWidth();
 
   doc.setFillColor(...COLORS.green);
-  doc.rect(0, 0, pageWidth, 2.4, "F");
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(...COLORS.dark);
-  doc.text("MGB", marginLeft, 11);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
-  doc.setTextColor(...COLORS.green);
-  doc.text("INVENTORY SYSTEM", marginLeft + 18, 11);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(title.length > 65 ? 7 : 8);
-  doc.setTextColor(...COLORS.dark2);
-  doc.text(
-    `${title} — Lanjutan`,
-    pageWidth - marginRight,
-    11,
-    { align: "right" }
+  doc.rect(
+    0,
+    0,
+    pageWidth,
+    2.6,
+    "F"
   );
 
-  doc.setDrawColor(...COLORS.border);
+  doc.setFont(
+    "helvetica",
+    "bold"
+  );
+
+  doc.setFontSize(12);
+
+  doc.setTextColor(...COLORS.dark);
+
+  doc.text(
+    "MGB",
+    marginLeft,
+    11
+  );
+
+  doc.setFontSize(7);
+
+  doc.setTextColor(...COLORS.green);
+
+  doc.text(
+    "INVENTORY SYSTEM",
+    marginLeft + 18,
+    11
+  );
+
+  doc.setFont(
+    "helvetica",
+    "bold"
+  );
+
+  doc.setFontSize(
+    title.length > 65
+      ? 6.8
+      : 7.8
+  );
+
+  doc.setTextColor(...COLORS.dark2);
+
+  const continuationTitle =
+    truncateText(
+      doc,
+      `${title} — Lanjutan`,
+      pageWidth -
+        marginLeft -
+        marginRight -
+        55
+    );
+
+  doc.text(
+    continuationTitle,
+    pageWidth - marginRight,
+    11,
+    {
+      align: "right",
+    }
+  );
+
+  doc.setDrawColor(
+    ...COLORS.border
+  );
+
   doc.setLineWidth(0.25);
+
   doc.line(
     marginLeft,
     16,
@@ -779,7 +913,9 @@ function drawFooter(
   const footerY =
     pageHeight - 7;
 
-  doc.setDrawColor(...COLORS.border);
+  doc.setDrawColor(
+    ...COLORS.border
+  );
 
   doc.setLineWidth(0.2);
 
@@ -795,7 +931,7 @@ function drawFooter(
     "normal"
   );
 
-  doc.setFontSize(7.2);
+  doc.setFontSize(6.8);
 
   doc.setTextColor(...COLORS.muted);
 
@@ -813,12 +949,10 @@ function drawFooter(
       align: "center",
     }
   );
-
-  // Nomor halaman final digambar sekali oleh finalizePageNumbers().
 }
 
 // =====================================================
-// FINALIZE PAGE NUMBERS
+// PAGE NUMBERS
 // =====================================================
 
 function finalizePageNumbers(
@@ -845,7 +979,9 @@ function finalizePageNumbers(
   ) {
     doc.setPage(page);
 
-    doc.setDrawColor(...COLORS.border);
+    doc.setDrawColor(
+      ...COLORS.border
+    );
 
     doc.setLineWidth(0.2);
 
@@ -861,7 +997,7 @@ function finalizePageNumbers(
       "normal"
     );
 
-    doc.setFontSize(7.2);
+    doc.setFontSize(6.8);
 
     doc.setTextColor(...COLORS.muted);
 
@@ -879,6 +1015,13 @@ function finalizePageNumbers(
         align: "center",
       }
     );
+
+    doc.setFont(
+      "helvetica",
+      "bold"
+    );
+
+    doc.setTextColor(...COLORS.dark2);
 
     doc.text(
       `Page ${page} of ${totalPages}`,
@@ -904,9 +1047,12 @@ function drawKpiCard(
   value: string,
   accent: [number, number, number]
 ) {
+  // Outer
   doc.setFillColor(...COLORS.white);
 
-  doc.setDrawColor(...COLORS.border);
+  doc.setDrawColor(
+    ...COLORS.border
+  );
 
   doc.setLineWidth(0.25);
 
@@ -914,45 +1060,42 @@ function drawKpiCard(
     x,
     y,
     width,
-    20,
-    2,
-    2,
+    21,
+    2.5,
+    2.5,
     "FD"
   );
 
-  // Accent
-
+  // Accent bar
   doc.setFillColor(...accent);
 
   doc.roundedRect(
     x,
     y,
-    2.2,
-    20,
-    1,
-    1,
+    2.5,
+    21,
+    1.2,
+    1.2,
     "F"
   );
 
   // Label
-
   doc.setFont(
     "helvetica",
     "bold"
   );
 
-  doc.setFontSize(6.5);
+  doc.setFontSize(6.3);
 
   doc.setTextColor(...COLORS.muted);
 
   doc.text(
     upper(label),
     x + 7,
-    y + 6
+    y + 6.5
   );
 
   // Value
-
   doc.setFont(
     "helvetica",
     "bold"
@@ -960,11 +1103,11 @@ function drawKpiCard(
 
   let fontSize = 13;
 
-  if (value.length > 25) {
-    fontSize = 8.5;
-  } else if (value.length > 17) {
-    fontSize = 10;
-  } else if (value.length > 12) {
+  if (value.length > 26) {
+    fontSize = 8.2;
+  } else if (value.length > 19) {
+    fontSize = 9.5;
+  } else if (value.length > 14) {
     fontSize = 11;
   }
 
@@ -972,33 +1115,57 @@ function drawKpiCard(
 
   doc.setTextColor(...COLORS.dark);
 
+  const safeValue =
+    truncateText(
+      doc,
+      value,
+      width - 14
+    );
+
   doc.text(
-    value,
+    safeValue,
     x + 7,
-    y + 14
+    y + 15
+  );
+
+  // Bottom accent dot
+  doc.setFillColor(...accent);
+
+  doc.circle(
+    x + width - 7,
+    y + 7,
+    1.4,
+    "F"
   );
 }
 
 // =====================================================
-// GENERIC REPORT KPI DETECTION
+// GENERIC SUMMARY
 // =====================================================
 
 function buildGenericSummary(
   columns: string[],
   rows: any[][]
 ) {
-  const qtyIndex =
+  const qtyExact =
     findColumn(
       columns,
-      ["Qty", "Quantity", "Jumlah"]
-    ) >= 0
-      ? findColumn(
-          columns,
-          ["Qty", "Quantity", "Jumlah"]
-        )
+      [
+        "Qty",
+        "Quantity",
+        "Jumlah",
+      ]
+    );
+
+  const qtyIndex =
+    qtyExact >= 0
+      ? qtyExact
       : findColumnContains(
           columns,
-          ["QTY", "QUANTITY"]
+          [
+            "QTY",
+            "QUANTITY",
+          ]
         );
 
   const totalIndex =
@@ -1029,7 +1196,9 @@ function buildGenericSummary(
     totalQty = rows.reduce(
       (sum, row) =>
         sum +
-        Number(row[qtyIndex] ?? 0),
+        Number(
+          row[qtyIndex] ?? 0
+        ),
       0
     );
   }
@@ -1040,7 +1209,9 @@ function buildGenericSummary(
     grandTotal = rows.reduce(
       (sum, row) =>
         sum +
-        parseNumericValue(row[totalIndex]),
+        parseNumericValue(
+          row[totalIndex]
+        ),
       0
     );
   }
@@ -1050,7 +1221,9 @@ function buildGenericSummary(
       ? new Set(
           rows.map((row) =>
             String(
-              row[statusIndex] ?? ""
+              row[
+                statusIndex
+              ] ?? ""
             )
           )
         ).size
@@ -1070,16 +1243,6 @@ function buildGenericSummary(
 // =====================================================
 // GENERIC PREMIUM REPORT
 // =====================================================
-//
-// Dipakai oleh:
-// - Barang Masuk
-// - Barang Keluar
-// - Stock
-// - Transfer
-// - Report lain
-//
-// Signature sengaja dipertahankan.
-// =====================================================
 
 export function exportReportPdf(
   title: string,
@@ -1087,7 +1250,7 @@ export function exportReportPdf(
   rows: any[][]
 ) {
   // ===================================================
-  // AUTO LANDSCAPE
+  // DOCUMENT
   // ===================================================
 
   const isWide =
@@ -1143,23 +1306,33 @@ export function exportReportPdf(
     upper(title);
 
   if (
-    titleUpper.includes("BARANG MASUK")
+    titleUpper.includes(
+      "BARANG MASUK"
+    )
   ) {
     reportCategory =
       "INBOUND / RECEIVING";
   } else if (
-    titleUpper.includes("BARANG KELUAR")
+    titleUpper.includes(
+      "BARANG KELUAR"
+    )
   ) {
     reportCategory =
       "OUTBOUND / ISSUE";
   } else if (
-    titleUpper.includes("STOCK") ||
-    titleUpper.includes("STOK")
+    titleUpper.includes(
+      "STOCK"
+    ) ||
+    titleUpper.includes(
+      "STOK"
+    )
   ) {
     reportCategory =
       "INVENTORY / STOCK";
   } else if (
-    titleUpper.includes("TRANSFER")
+    titleUpper.includes(
+      "TRANSFER"
+    )
   ) {
     reportCategory =
       "INVENTORY TRANSFER";
@@ -1268,7 +1441,7 @@ export function exportReportPdf(
     );
   }
 
-  currentY += 26;
+  currentY += 27;
 
   // ===================================================
   // EMPTY STATE
@@ -1283,9 +1456,23 @@ export function exportReportPdf(
       marginLeft,
       currentY,
       contentWidth,
-      40,
+      45,
       3,
       3,
+      "F"
+    );
+
+    doc.setFillColor(
+      ...COLORS.green
+    );
+
+    doc.roundedRect(
+      pageWidth / 2 - 18,
+      currentY + 7,
+      36,
+      1.8,
+      0.9,
+      0.9,
       "F"
     );
 
@@ -1301,7 +1488,7 @@ export function exportReportPdf(
     doc.text(
       "Tidak Ada Data",
       pageWidth / 2,
-      currentY + 16,
+      currentY + 20,
       {
         align: "center",
       }
@@ -1319,7 +1506,7 @@ export function exportReportPdf(
     doc.text(
       "Tidak terdapat transaksi atau data pada periode yang dipilih.",
       pageWidth / 2,
-      currentY + 24,
+      currentY + 29,
       {
         align: "center",
       }
@@ -1339,14 +1526,16 @@ export function exportReportPdf(
   }
 
   // ===================================================
-  // TABLE
+  // TABLE DATA
   // ===================================================
 
-  // Gunakan nilai asli sebagai input AutoTable.
-  // Formatting dilakukan satu kali di didParseCell().
-  const bodyRows = rows.map((row) =>
-    columns.map((_, index) => row[index])
-  );
+  const bodyRows =
+    rows.map((row) =>
+      columns.map(
+        (_, index) =>
+          row[index]
+      )
+    );
 
   // ===================================================
   // COLUMN WIDTH
@@ -1354,7 +1543,10 @@ export function exportReportPdf(
 
   const dynamicCellWidth =
     contentWidth /
-    Math.max(columns.length, 1);
+    Math.max(
+      columns.length,
+      1
+    );
 
   const columnStyles: Record<
     number,
@@ -1457,8 +1649,9 @@ export function exportReportPdf(
     startY: currentY,
 
     head: [
-      columns.map((column) =>
-        upper(column)
+      columns.map(
+        (column) =>
+          upper(column)
       ),
     ],
 
@@ -1475,23 +1668,25 @@ export function exportReportPdf(
 
     styles: {
       font: "helvetica",
+
       fontSize: isWide
         ? 7
-        : 7.5,
+        : 7.4,
 
       cellPadding: {
-        top: 2.2,
-        right: 2.5,
-        bottom: 2.2,
-        left: 2.5,
+        top: 2.1,
+        right: 2.4,
+        bottom: 2.1,
+        left: 2.4,
       },
 
-      textColor: COLORS.text,
+      textColor:
+        COLORS.text,
 
       lineColor:
         COLORS.border,
 
-      lineWidth: 0.15,
+      lineWidth: 0.12,
 
       valign: "middle",
 
@@ -1499,7 +1694,8 @@ export function exportReportPdf(
     },
 
     headStyles: {
-      fillColor: COLORS.green,
+      fillColor:
+        COLORS.dark,
 
       textColor:
         COLORS.white,
@@ -1507,18 +1703,24 @@ export function exportReportPdf(
       fontStyle: "bold",
 
       fontSize: isWide
-        ? 6.7
-        : 7,
+        ? 6.6
+        : 6.9,
 
       halign: "center",
 
       valign: "middle",
 
-      cellPadding: 2.8,
+      cellPadding: {
+        top: 2.8,
+        right: 2,
+        bottom: 2.8,
+        left: 2,
+      },
     },
 
     alternateRowStyles: {
-      fillColor: COLORS.zebra,
+      fillColor:
+        COLORS.zebra,
     },
 
     columnStyles,
@@ -1537,7 +1739,9 @@ export function exportReportPdf(
         ];
 
       const originalRow =
-        rows[data.row.index];
+        rows[
+          data.row.index
+        ];
 
       if (!originalRow) {
         return;
@@ -1632,7 +1836,10 @@ export function exportReportPdf(
       const currentPage =
         doc.internal.getNumberOfPages();
 
-      if (currentPage > tableStartPage) {
+      if (
+        currentPage >
+        tableStartPage
+      ) {
         drawContinuationHeader(
           doc,
           title,
@@ -1667,23 +1874,6 @@ export function exportReportPdf(
 // =====================================================
 // PURCHASE REPORT PDF
 // =====================================================
-//
-// Purchase memiliki layout khusus:
-//
-// MGB
-// Purchase / Procurement
-// Period
-// KPI 2 x 2
-// Supplier Section
-// Purchase Detail
-// Supplier Total
-// Grand Total
-//
-// KHUSUS PURCHASE:
-// - A4 PORTRAIT
-// - Lebar tabel disesuaikan dengan 190mm content width
-// - Multi-page header aman
-// =====================================================
 
 export function exportPurchaseReportPdf(
   title: string,
@@ -1694,7 +1884,6 @@ export function exportPurchaseReportPdf(
   // DOCUMENT
   // ===================================================
 
-  // KHUSUS PURCHASE -> PORTRAIT
   const doc = new jsPDF(
     "p",
     "mm",
@@ -1708,6 +1897,7 @@ export function exportPurchaseReportPdf(
     doc.internal.pageSize.getHeight();
 
   const marginLeft = 10;
+
   const marginRight = 10;
 
   const contentWidth =
@@ -1719,15 +1909,15 @@ export function exportPurchaseReportPdf(
   // DATA INDEX
   // ===================================================
 
-  const supplierIndex =
+  const supplierExact =
     findColumn(
       columns,
       ["Supplier"]
-    ) >= 0
-      ? findColumn(
-          columns,
-          ["Supplier"]
-        )
+    );
+
+  const supplierIndex =
+    supplierExact >= 0
+      ? supplierExact
       : 3;
 
   const statusIndex =
@@ -1736,104 +1926,117 @@ export function exportPurchaseReportPdf(
       ["Status"]
     );
 
-  const subtotalIndex =
+  const subtotalExact =
     findColumn(
       columns,
-      ["Subtotal", "Total"]
-    ) >= 0
-      ? findColumn(
-          columns,
-          ["Subtotal", "Total"]
-        )
+      [
+        "Subtotal",
+        "Total",
+      ]
+    );
+
+  const subtotalIndex =
+    subtotalExact >= 0
+      ? subtotalExact
       : 10;
 
-  const qtyIndex =
+  const qtyExact =
     findColumn(
       columns,
-      ["Qty", "Quantity"]
-    ) >= 0
-      ? findColumn(
-          columns,
-          ["Qty", "Quantity"]
-        )
+      [
+        "Qty",
+        "Quantity",
+      ]
+    );
+
+  const qtyIndex =
+    qtyExact >= 0
+      ? qtyExact
       : 8;
 
-  const poIndex =
+  const poExact =
     findColumn(
       columns,
-      ["No PO", "PO", "Purchase Order"]
-    ) >= 0
-      ? findColumn(
-          columns,
-          ["No PO", "PO", "Purchase Order"]
-        )
+      [
+        "No PO",
+        "PO",
+        "Purchase Order",
+      ]
+    );
+
+  const poIndex =
+    poExact >= 0
+      ? poExact
       : 1;
 
-  const dateIndex =
+  const dateExact =
     findColumn(
       columns,
-      ["Tanggal", "Date"]
-    ) >= 0
-      ? findColumn(
-          columns,
-          ["Tanggal", "Date"]
-        )
+      [
+        "Tanggal",
+        "Date",
+      ]
+    );
+
+  const dateIndex =
+    dateExact >= 0
+      ? dateExact
       : 2;
 
-  const codeIndex =
+  const codeExact =
     findColumn(
       columns,
       [
         "Kode Barang",
         "Kode",
       ]
-    ) >= 0
-      ? findColumn(
-          columns,
-          [
-            "Kode Barang",
-            "Kode",
-          ]
-        )
+    );
+
+  const codeIndex =
+    codeExact >= 0
+      ? codeExact
       : 5;
 
-  const nameIndex =
+  const nameExact =
     findColumn(
       columns,
       [
         "Nama Barang",
         "Barang",
       ]
-    ) >= 0
-      ? findColumn(
-          columns,
-          [
-            "Nama Barang",
-            "Barang",
-          ]
-        )
+    );
+
+  const nameIndex =
+    nameExact >= 0
+      ? nameExact
       : 6;
 
-  const unitIndex =
+  const unitExact =
     findColumn(
       columns,
-      ["Satuan", "Unit"]
-    ) >= 0
-      ? findColumn(
-          columns,
-          ["Satuan", "Unit"]
-        )
+      [
+        "Satuan",
+        "Unit",
+      ]
+    );
+
+  const unitIndex =
+    unitExact >= 0
+      ? unitExact
       : 7;
 
-  const priceIndex =
+  const priceExact =
     findColumn(
       columns,
-      ["Harga", "Price"]
-    ) >= 0
-      ? findColumn(
-          columns,
-          ["Harga", "Price"]
-        )
+      [
+        "Harga",
+        "Price",
+      ]
+    );
+
+  const priceIndex =
+    priceExact >= 0
+      ? priceExact
       : 9;
 
   // ===================================================
@@ -1849,7 +2052,9 @@ export function exportPurchaseReportPdf(
   rows.forEach((row) => {
     const supplier =
       String(
-        row[supplierIndex] ??
+        row[
+          supplierIndex
+        ] ??
           "Tanpa Supplier"
       ).trim() ||
       "Tanpa Supplier";
@@ -1878,7 +2083,8 @@ export function exportPurchaseReportPdf(
     new Set(
       rows.map((row) =>
         String(
-          row[poIndex] ?? ""
+          row[poIndex] ??
+            ""
         )
       )
     ).size;
@@ -1903,7 +2109,11 @@ export function exportPurchaseReportPdf(
     rows.reduce(
       (sum, row) =>
         sum +
-        parseNumericValue(row[subtotalIndex]),
+        parseNumericValue(
+          row[
+            subtotalIndex
+          ]
+        ),
       0
     );
 
@@ -1953,7 +2163,7 @@ export function exportPurchaseReportPdf(
     header();
 
   // ===================================================
-  // KPI - PORTRAIT 2 x 2
+  // KPI
   // ===================================================
 
   currentY += 5;
@@ -1965,14 +2175,15 @@ export function exportPurchaseReportPdf(
     2;
 
   // Row 1
-
   drawKpiCard(
     doc,
     marginLeft,
     currentY,
     kpiCardWidth,
     "Total Purchase",
-    formatNumber(totalPO),
+    formatNumber(
+      totalPO
+    ),
     COLORS.green
   );
 
@@ -1984,12 +2195,13 @@ export function exportPurchaseReportPdf(
     currentY,
     kpiCardWidth,
     "Total Quantity",
-    formatNumber(totalQty),
+    formatNumber(
+      totalQty
+    ),
     COLORS.blue
   );
 
   // Row 2
-
   currentY += 24;
 
   drawKpiCard(
@@ -1998,7 +2210,9 @@ export function exportPurchaseReportPdf(
     currentY,
     kpiCardWidth,
     "Supplier",
-    formatNumber(totalSupplier),
+    formatNumber(
+      totalSupplier
+    ),
     COLORS.orange
   );
 
@@ -2016,7 +2230,7 @@ export function exportPurchaseReportPdf(
     COLORS.green
   );
 
-  currentY += 26;
+  currentY += 27;
 
   // ===================================================
   // EMPTY
@@ -2031,9 +2245,23 @@ export function exportPurchaseReportPdf(
       marginLeft,
       currentY,
       contentWidth,
-      40,
+      45,
       3,
       3,
+      "F"
+    );
+
+    doc.setFillColor(
+      ...COLORS.green
+    );
+
+    doc.roundedRect(
+      pageWidth / 2 - 18,
+      currentY + 7,
+      36,
+      1.8,
+      0.9,
+      0.9,
       "F"
     );
 
@@ -2049,7 +2277,7 @@ export function exportPurchaseReportPdf(
     doc.text(
       "Tidak Ada Data Purchase",
       pageWidth / 2,
-      currentY + 16,
+      currentY + 20,
       {
         align: "center",
       }
@@ -2067,7 +2295,7 @@ export function exportPurchaseReportPdf(
     doc.text(
       "Tidak terdapat transaksi purchase pada periode yang dipilih.",
       pageWidth / 2,
-      currentY + 24,
+      currentY + 29,
       {
         align: "center",
       }
@@ -2100,7 +2328,11 @@ export function exportPurchaseReportPdf(
       supplierRows.reduce(
         (sum, row) =>
           sum +
-          parseNumericValue(row[subtotalIndex]),
+          parseNumericValue(
+            row[
+              subtotalIndex
+            ]
+          ),
         0
       );
 
@@ -2109,7 +2341,9 @@ export function exportPurchaseReportPdf(
         (sum, row) =>
           sum +
           Number(
-            row[qtyIndex] ?? 0
+            row[
+              qtyIndex
+            ] ?? 0
           ),
         0
       );
@@ -2119,11 +2353,14 @@ export function exportPurchaseReportPdf(
         supplierRows.map(
           (row) =>
             String(
-              row[poIndex] ?? ""
+              row[
+                poIndex
+              ] ?? ""
             )
         )
       ).size;
 
+    // Main block
     doc.setFillColor(
       ...COLORS.dark
     );
@@ -2132,22 +2369,21 @@ export function exportPurchaseReportPdf(
       marginLeft,
       y,
       contentWidth,
-      13,
-      2,
-      2,
+      14,
+      2.5,
+      2.5,
       "F"
     );
 
-    // Supplier number
-
+    // Number badge
     doc.setFillColor(
       ...COLORS.green
     );
 
     doc.roundedRect(
       marginLeft + 3,
-      y + 2.5,
-      20,
+      y + 3,
+      22,
       8,
       1.5,
       1.5,
@@ -2159,7 +2395,7 @@ export function exportPurchaseReportPdf(
       "bold"
     );
 
-    doc.setFontSize(6.8);
+    doc.setFontSize(6.5);
 
     doc.setTextColor(
       ...COLORS.white
@@ -2167,14 +2403,26 @@ export function exportPurchaseReportPdf(
 
     doc.text(
       `SUPPLIER ${supplierNumber}`,
-      marginLeft + 13,
-      y + 7.7,
+      marginLeft + 14,
+      y + 8.2,
       {
         align: "center",
       }
     );
 
-    // Name
+    // Supplier name
+    const nameStartX =
+      marginLeft + 30;
+
+    const statsStartX =
+      pageWidth -
+      marginRight -
+      66;
+
+    const maxNameWidth =
+      statsStartX -
+      nameStartX -
+      4;
 
     doc.setFont(
       "helvetica",
@@ -2187,63 +2435,37 @@ export function exportPurchaseReportPdf(
       ...COLORS.white
     );
 
-    // Area nama dibuat lebih lebar
-    // karena portrait.
-
-    const nameStartX =
-      marginLeft + 28;
-
-    const statsStartX =
-      pageWidth -
-      marginRight -
-      62;
-
-    const maxNameWidth =
-      statsStartX -
-      nameStartX -
-      4;
-
-    let displayName =
-      supplierName;
-
-    while (
-      doc.getTextWidth(
-        displayName
-      ) > maxNameWidth &&
-      displayName.length > 5
-    ) {
-      displayName =
-        displayName.slice(
-          0,
-          -4
-        ) + "...";
-    }
+    const displayName =
+      truncateText(
+        doc,
+        supplierName,
+        maxNameWidth
+      );
 
     doc.text(
       displayName,
       nameStartX,
-      y + 7.8
+      y + 8.4
     );
 
     // Stats
-
     doc.setFont(
       "helvetica",
       "normal"
     );
 
-    doc.setFontSize(6.2);
+    doc.setFontSize(6.1);
 
     doc.setTextColor(
-      195,
-      215,
-      207
+      190,
+      213,
+      202
     );
 
     doc.text(
       `${formatNumber(
         supplierPO
-      )} PO • ${formatNumber(
+      )} PO  •  ${formatNumber(
         supplierQty
       )} Qty`,
       pageWidth -
@@ -2260,7 +2482,7 @@ export function exportPurchaseReportPdf(
       "bold"
     );
 
-    doc.setFontSize(7.2);
+    doc.setFontSize(7.3);
 
     doc.setTextColor(
       ...COLORS.white
@@ -2273,13 +2495,13 @@ export function exportPurchaseReportPdf(
       pageWidth -
         marginRight -
         5,
-      y + 9.5,
+      y + 10,
       {
         align: "right",
       }
     );
 
-    return y + 16;
+    return y + 17;
   }
 
   // ===================================================
@@ -2294,59 +2516,74 @@ export function exportPurchaseReportPdf(
       supplierRows.map(
         (row, index) => [
           index + 1,
+
           cleanText(
             row[poIndex]
           ),
+
           formatDate(
             row[dateIndex]
           ),
+
           cleanText(
             row[codeIndex]
           ),
+
           cleanText(
             row[nameIndex]
           ),
+
           cleanText(
             row[unitIndex]
           ),
+
           formatNumber(
             row[qtyIndex]
           ),
+
           formatRupiah(
             row[priceIndex]
           ),
+
           formatRupiah(
-            row[subtotalIndex]
+            row[
+              subtotalIndex
+            ]
           ),
         ]
       );
 
-    // ---------------------------------------------------
-    // Portrait width:
+    // =================================================
+    // PORTRAIT WIDTH
+    // =================================================
     //
-    // 6 + 19 + 19 + 21 + 43 + 11 + 12 + 29 + 29
+    // 6 + 19 + 19 + 21 + 43
+    // + 11 + 12 + 29 + 29
     // = 189mm
     //
-    // Content width = 190mm
+    // Content = 190mm
     //
-    // Jadi aman dengan margin 10mm.
-    // ---------------------------------------------------
+    // =================================================
 
     const purchaseColumnStyles = {
       0: {
         cellWidth: 6,
-        halign: "center" as const,
+        halign:
+          "center" as const,
       },
 
       1: {
         cellWidth: 19,
-        fontStyle: "bold" as const,
-        textColor: COLORS.dark,
+        fontStyle:
+          "bold" as const,
+        textColor:
+          COLORS.dark,
       },
 
       2: {
         cellWidth: 19,
-        halign: "center" as const,
+        halign:
+          "center" as const,
       },
 
       3: {
@@ -2359,31 +2596,34 @@ export function exportPurchaseReportPdf(
 
       5: {
         cellWidth: 11,
-        halign: "center" as const,
+        halign:
+          "center" as const,
       },
 
       6: {
         cellWidth: 12,
-        halign: "right" as const,
-        fontStyle: "bold" as const,
+        halign:
+          "right" as const,
+        fontStyle:
+          "bold" as const,
       },
 
       7: {
         cellWidth: 29,
-        halign: "right" as const,
+        halign:
+          "right" as const,
       },
 
       8: {
         cellWidth: 29,
-        halign: "right" as const,
-        fontStyle: "bold" as const,
-        textColor: COLORS.green,
+        halign:
+          "right" as const,
+        fontStyle:
+          "bold" as const,
+        textColor:
+          COLORS.green,
       },
     };
-
-    // Simpan nomor halaman tempat tabel dimulai.
-    // Dipakai agar header hanya digambar pada
-    // halaman lanjutan, bukan dua kali di halaman pertama.
 
     const tableStartPage =
       doc.internal.getNumberOfPages();
@@ -2419,14 +2659,13 @@ export function exportPurchaseReportPdf(
       styles: {
         font: "helvetica",
 
-        // Sedikit lebih kecil karena portrait.
-        fontSize: 6.2,
+        fontSize: 6.15,
 
         cellPadding: {
-          top: 1.8,
-          right: 1.4,
-          bottom: 1.8,
-          left: 1.4,
+          top: 1.75,
+          right: 1.35,
+          bottom: 1.75,
+          left: 1.35,
         },
 
         textColor:
@@ -2435,11 +2674,12 @@ export function exportPurchaseReportPdf(
         lineColor:
           COLORS.border,
 
-        lineWidth: 0.15,
+        lineWidth: 0.12,
 
         valign: "middle",
 
-        overflow: "linebreak",
+        overflow:
+          "linebreak",
       },
 
       headStyles: {
@@ -2449,18 +2689,21 @@ export function exportPurchaseReportPdf(
         textColor:
           COLORS.white,
 
-        fontStyle: "bold",
+        fontStyle:
+          "bold",
 
-        fontSize: 6,
+        fontSize: 5.9,
 
-        halign: "center",
+        halign:
+          "center",
 
-        valign: "middle",
+        valign:
+          "middle",
 
         cellPadding: {
-          top: 2,
+          top: 2.2,
           right: 1,
-          bottom: 2,
+          bottom: 2.2,
           left: 1,
         },
       },
@@ -2511,7 +2754,7 @@ export function exportPurchaseReportPdf(
         }
 
         // ------------------------------------------------
-        // HARGA
+        // PRICE
         // ------------------------------------------------
 
         if (
@@ -2550,19 +2793,12 @@ export function exportPurchaseReportPdf(
             "right";
         }
 
-        // ------------------------------------------------
-        // STATUS
-        //
-        // Status tidak ditampilkan sebagai kolom
-        // Purchase Detail saat ini, jadi tidak dipaksa
-        // masuk ke index tabel.
-        // ------------------------------------------------
-
+        // Status sengaja tidak ditampilkan
+        // pada purchase detail.
         if (
           statusIndex >= 0
         ) {
-          // Sengaja tidak melakukan styling status
-          // karena kolom status tidak ada di tabel.
+          // intentionally unused
         }
       },
 
@@ -2570,7 +2806,10 @@ export function exportPurchaseReportPdf(
         const currentPage =
           doc.internal.getNumberOfPages();
 
-        if (currentPage > tableStartPage) {
+        if (
+          currentPage >
+          tableStartPage
+        ) {
           drawContinuationHeader(
             doc,
             title,
@@ -2604,12 +2843,8 @@ export function exportPurchaseReportPdf(
       supplierNumber++;
 
       // ------------------------------------------------
-      // Page safety
+      // PAGE SAFETY
       // ------------------------------------------------
-
-      // Portrait lebih pendek daripada landscape,
-      // jadi supplier header + minimal table
-      // harus dijaga supaya tidak terlalu bawah.
 
       if (
         currentY >
@@ -2624,7 +2859,7 @@ export function exportPurchaseReportPdf(
       }
 
       // ------------------------------------------------
-      // Supplier
+      // SUPPLIER HEADER
       // ------------------------------------------------
 
       currentY =
@@ -2636,7 +2871,7 @@ export function exportPurchaseReportPdf(
         );
 
       // ------------------------------------------------
-      // Table
+      // SUPPLIER TABLE
       // ------------------------------------------------
 
       currentY =
@@ -2646,7 +2881,7 @@ export function exportPurchaseReportPdf(
         ) + 4;
 
       // ------------------------------------------------
-      // Supplier total
+      // SUPPLIER TOTAL
       // ------------------------------------------------
 
       const supplierTotal =
@@ -2654,7 +2889,9 @@ export function exportPurchaseReportPdf(
           (sum, row) =>
             sum +
             parseNumericValue(
-              row[subtotalIndex]
+              row[
+                subtotalIndex
+              ]
             ),
           0
         );
@@ -2671,6 +2908,7 @@ export function exportPurchaseReportPdf(
         currentY += 26;
       }
 
+      // Total card
       doc.setFillColor(
         ...COLORS.greenPale
       );
@@ -2679,18 +2917,34 @@ export function exportPurchaseReportPdf(
         marginLeft,
         currentY,
         contentWidth,
-        11,
-        2,
-        2,
+        12,
+        2.2,
+        2.2,
         "F"
       );
 
+      // Accent
+      doc.setFillColor(
+        ...COLORS.green
+      );
+
+      doc.roundedRect(
+        marginLeft,
+        currentY,
+        2.5,
+        12,
+        1.2,
+        1.2,
+        "F"
+      );
+
+      // Label
       doc.setFont(
         "helvetica",
         "bold"
       );
 
-      doc.setFontSize(7);
+      doc.setFontSize(6.8);
 
       doc.setTextColor(
         ...COLORS.dark2
@@ -2701,46 +2955,37 @@ export function exportPurchaseReportPdf(
           supplierName
         )}`;
 
-      // Supplier total label jangan terlalu
-      // panjang sampai mendekati nominal.
-
       const totalAmountX =
         pageWidth -
         marginRight -
         5;
 
       const maxTotalLabelWidth =
-        contentWidth - 65;
+        contentWidth - 68;
 
-      while (
-        doc.getTextWidth(
-          supplierTotalLabel
-        ) >
-          maxTotalLabelWidth &&
-        supplierTotalLabel.length > 15
-      ) {
-        supplierTotalLabel =
-          supplierTotalLabel.slice(
-            0,
-            -4
-          ) + "...";
-      }
+      supplierTotalLabel =
+        truncateText(
+          doc,
+          supplierTotalLabel,
+          maxTotalLabelWidth
+        );
 
       doc.text(
         supplierTotalLabel,
-        marginLeft + 5,
-        currentY + 7
+        marginLeft + 7,
+        currentY + 7.6
       );
 
+      // Amount
       doc.setFont(
         "helvetica",
         "bold"
       );
 
-      doc.setFontSize(8);
+      doc.setFontSize(8.2);
 
       doc.setTextColor(
-        ...COLORS.green
+        ...COLORS.greenDark
       );
 
       doc.text(
@@ -2748,13 +2993,13 @@ export function exportPurchaseReportPdf(
           supplierTotal
         ),
         totalAmountX,
-        currentY + 7,
+        currentY + 7.6,
         {
           align: "right",
         }
       );
 
-      currentY += 17;
+      currentY += 18;
     }
   );
 
@@ -2764,7 +3009,7 @@ export function exportPurchaseReportPdf(
 
   if (
     currentY >
-    pageHeight - 42
+    pageHeight - 45
   ) {
     doc.addPage();
 
@@ -2775,7 +3020,7 @@ export function exportPurchaseReportPdf(
   }
 
   // ===================================================
-  // GRAND TOTAL
+  // GRAND TOTAL CARD
   // ===================================================
 
   doc.setFillColor(
@@ -2786,14 +3031,13 @@ export function exportPurchaseReportPdf(
     marginLeft,
     currentY,
     contentWidth,
-    25,
-    3,
-    3,
+    28,
+    3.5,
+    3.5,
     "F"
   );
 
-  // Accent
-
+  // Left accent
   doc.setFillColor(
     ...COLORS.green
   );
@@ -2802,41 +3046,39 @@ export function exportPurchaseReportPdf(
     marginLeft,
     currentY,
     4,
-    25,
+    28,
     2,
     2,
     "F"
   );
 
-  // Summary label
-
+  // SUMMARY
   doc.setFont(
     "helvetica",
     "bold"
   );
 
-  doc.setFontSize(7);
+  doc.setFontSize(6.5);
 
   doc.setTextColor(
     185,
-    210,
+    211,
     201
   );
 
   doc.text(
-    "SUMMARY",
-    marginLeft + 10,
+    "PURCHASE SUMMARY",
+    marginLeft + 11,
     currentY + 7
   );
 
-  // Title
-
+  // Main title
   doc.setFont(
     "helvetica",
     "bold"
   );
 
-  doc.setFontSize(11);
+  doc.setFontSize(10.8);
 
   doc.setTextColor(
     ...COLORS.white
@@ -2844,80 +3086,118 @@ export function exportPurchaseReportPdf(
 
   doc.text(
     "GRAND TOTAL PURCHASE",
-    marginLeft + 10,
+    marginLeft + 11,
     currentY + 16
   );
 
-  // Amount
-
-  doc.setFont(
-    "helvetica",
-    "bold"
-  );
-
-  // Portrait -> nominal dibuat sedikit lebih kecil
-  // supaya tetap aman dengan lebar halaman.
-
-  doc.setFontSize(12.5);
-
-  doc.text(
-    formatRupiah(
-      grandTotal
-    ),
-    pageWidth -
-      marginRight -
-      8,
-    currentY + 14,
-    {
-      align: "right",
-    }
-  );
-
   // Meta
-
   doc.setFont(
     "helvetica",
     "normal"
   );
 
-  doc.setFontSize(6.3);
+  doc.setFontSize(6.2);
 
   doc.setTextColor(
-    190,
-    210,
-    202
+    185,
+    208,
+    199
   );
 
   doc.text(
     `${formatNumber(
       totalPO
     )} Purchase Order`,
-    marginLeft + 10,
-    currentY + 21
+    marginLeft + 11,
+    currentY + 23
   );
 
   doc.text(
     `${formatNumber(
       totalSupplier
     )} Supplier`,
-    marginLeft + 60,
-    currentY + 21
+    marginLeft + 61,
+    currentY + 23
   );
 
   doc.text(
     `${formatNumber(
       totalQty
     )} Quantity`,
-    marginLeft + 99,
-    currentY + 21
+    marginLeft + 101,
+    currentY + 23
   );
 
   doc.text(
     `${formatNumber(
       totalDetail
     )} Detail`,
-    marginLeft + 143,
-    currentY + 21
+    marginLeft + 144,
+    currentY + 23
+  );
+
+  // Amount background
+  const amountBoxWidth = 63;
+
+  const amountBoxX =
+    pageWidth -
+    marginRight -
+    amountBoxWidth -
+    6;
+
+  doc.setFillColor(
+    ...COLORS.dark2
+  );
+
+  doc.roundedRect(
+    amountBoxX,
+    currentY + 4,
+    amountBoxWidth,
+    18,
+    2.5,
+    2.5,
+    "F"
+  );
+
+  doc.setFont(
+    "helvetica",
+    "bold"
+  );
+
+  doc.setFontSize(6);
+
+  doc.setTextColor(
+    174,
+    201,
+    191
+  );
+
+  doc.text(
+    "TOTAL",
+    amountBoxX + 5,
+    currentY + 9
+  );
+
+  doc.setFontSize(11.5);
+
+  doc.setTextColor(
+    ...COLORS.white
+  );
+
+  const grandTotalText =
+    formatRupiah(
+      grandTotal
+    );
+
+  doc.text(
+    grandTotalText,
+    amountBoxX +
+      amountBoxWidth -
+      5,
+    currentY + 16.5,
+    {
+      align: "right",
+    }
   );
 
   // ===================================================

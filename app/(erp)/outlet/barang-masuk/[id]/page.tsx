@@ -153,7 +153,6 @@ type DiscussionComment = {
 
 type CommentImage = {
   url: string;
-  file: File;
   name?: string;
 };
 
@@ -427,19 +426,12 @@ export default function OutletBarangMasukDetailPage() {
           item?.text ??
           ""
       ),
-      imageUrl: normalizeCommentImageUrl(
+      imageUrl:
         item?.imageUrl ??
-          item?.image_url ??
-          item?.photo ??
-          item?.attachmentUrl ??
-          item?.attachment_url ??
-          item?.fileUrl ??
-          item?.file?.url ??
-          item?.file?.path ??
-          item?.attachment?.url ??
-          item?.attachment?.path ??
-          null
-      ),
+        item?.image_url ??
+        item?.attachmentUrl ??
+        item?.attachment_url ??
+        null,
       createdAt:
         item?.createdAt ??
         item?.created_at ??
@@ -572,8 +564,7 @@ export default function OutletBarangMasukDetailPage() {
             "Gagal mengambil daftar user untuk mention."
         );
       }
-console.log("COMMENT POST STATUS:", response.status);
-console.log("COMMENT POST RESULT:", result);
+
       const raw = Array.isArray(result?.data)
         ? result.data
         : Array.isArray(result?.users)
@@ -801,52 +792,6 @@ console.log("COMMENT POST RESULT:", result);
 
   const COMMENT_IMAGE_START = "\n\n<!--COMMENT_IMAGE:";
   const COMMENT_IMAGE_END = "-->";
-  /**
-   * Normalisasi URL/path foto dari API.
-   *
-   * Backend boleh mengembalikan:
-   * - https://domain.com/uploads/...
-   * - /uploads/...
-   * - uploads/...
-   * - \uploads\...
-   *
-   * Browser membutuhkan URL yang valid untuk src/img.
-   */
-  const normalizeCommentImageUrl = (value?: unknown) => {
-    if (typeof value !== "string") return null;
-
-    let url = value.trim();
-    if (!url) return null;
-
-    // Jika backend mengembalikan JSON-string / quoted value.
-    if (
-      (url.startsWith('"') && url.endsWith('"')) ||
-      (url.startsWith("'") && url.endsWith("'"))
-    ) {
-      url = url.slice(1, -1).trim();
-    }
-
-    // Normalisasi path Windows yang mungkin tersimpan dari server.
-    url = url.replace(/\\/g, "/");
-
-    // URL absolut tetap digunakan apa adanya.
-    if (/^(https?:|blob:|data:)/i.test(url)) {
-      return url;
-    }
-
-    // Protocol-relative URL.
-    if (url.startsWith("//")) {
-      return `${window.location.protocol}${url}`;
-    }
-
-    // Path relatif harus dimulai "/" agar browser tidak menganggap
-    // sebagai relative terhadap URL halaman detail.
-    if (!url.startsWith("/")) {
-      url = `/${url}`;
-    }
-
-    return url;
-  };
 
   const extractCommentImage = (content: string) => {
     const start = content.indexOf(COMMENT_IMAGE_START);
@@ -870,7 +815,7 @@ console.log("COMMENT POST RESULT:", result);
 
     return {
       text: content.slice(0, start).trimEnd(),
-      imageUrl: normalizeCommentImageUrl(content.slice(urlStart, end).trim()),
+      imageUrl: content.slice(urlStart, end).trim() || null,
     };
   };
 
@@ -924,6 +869,48 @@ console.log("COMMENT POST RESULT:", result);
     );
   };
 
+  const uploadCommentImage = async (file: File) => {
+    const compressedFile = await compressCommentImage(file);
+
+    const formData = new FormData();
+    formData.append("file", compressedFile);
+
+    const response = await fetch(
+      `/api/outlet/barang-masuk/${encodeURIComponent(id)}/comments/image`,
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        result?.message ||
+          result?.error ||
+          "Gagal meng-upload foto komentar."
+      );
+    }
+
+    const imageUrl =
+      result?.url ??
+      result?.imageUrl ??
+      result?.path ??
+      result?.data?.url ??
+      result?.data?.imageUrl ??
+      result?.data?.path ??
+      null;
+
+    if (!imageUrl || typeof imageUrl !== "string") {
+      throw new Error(
+        "Server upload tidak mengembalikan URL/path foto yang valid."
+      );
+    }
+
+    return imageUrl;
+  };
+
   const handleCommentImageChange = async (
     event: ChangeEvent<HTMLInputElement>
   ) => {
@@ -937,36 +924,21 @@ console.log("COMMENT POST RESULT:", result);
     try {
       setCommentImageLoading(true);
 
-      if (!file.type.startsWith("image/")) {
-        throw new Error("File yang dipilih harus berupa gambar.");
-      }
+      const imageUrl = await uploadCommentImage(file);
 
-      // Kompresi dilakukan di browser, tetapi FOTO BELUM di-upload
-      // pada tahap pemilihan. File akan dikirim bersama komentar
-      // melalui FormData saat tombol Kirim ditekan.
-      const compressedFile = await compressCommentImage(file);
-      const previewUrl = URL.createObjectURL(compressedFile);
-
-      setCommentImage((previous) => {
-        if (previous?.url?.startsWith("blob:")) {
-          URL.revokeObjectURL(previous.url);
-        }
-
-        return {
-          url: previewUrl,
-          file: compressedFile,
-          name: file.name,
-        };
+      setCommentImage({
+        url: imageUrl,
+        name: file.name,
       });
     } catch (error) {
-      console.error("COMMENT IMAGE PREPARE ERROR:", error);
+      console.error("COMMENT IMAGE UPLOAD ERROR:", error);
 
       showFeedback(
         "error",
-        "Foto Tidak Dapat Diproses",
+        "Foto Tidak Dapat Dikirim",
         error instanceof Error
           ? error.message
-          : "Gagal memproses foto komentar."
+          : "Gagal meng-upload foto komentar."
       );
     } finally {
       setCommentImageLoading(false);
@@ -974,13 +946,7 @@ console.log("COMMENT POST RESULT:", result);
   };
 
   const removeCommentImage = () => {
-    setCommentImage((previous) => {
-      if (previous?.url?.startsWith("blob:")) {
-        URL.revokeObjectURL(previous.url);
-      }
-
-      return null;
-    });
+    setCommentImage(null);
 
     if (commentImageInputRef.current) {
       commentImageInputRef.current.value = "";
@@ -992,10 +958,52 @@ console.log("COMMENT POST RESULT:", result);
     commentImageInputRef.current?.click();
   };
 
+  // =====================================================
+  // COMMENT IMAGE URL
+  // =====================================================
+  // API bisa mengembalikan path foto dalam beberapa bentuk:
+  // /uploads/..., uploads/..., \uploads\..., atau URL absolut.
+  // Normalisasi di client supaya foto komentar konsisten tampil
+  // baik untuk ADMIN maupun OUTLET_ADMIN.
+  const normalizeCommentImageUrl = (value?: string | null) => {
+    if (!value || typeof value !== "string") return null;
+
+    let url = value.trim();
+    if (!url) return null;
+
+    // JSON/API lama kadang menyimpan escaped slash/backslash.
+    url = url.replace(/\\/g, "/").replace(/\\\//g, "/");
+
+    // Jangan mengubah data URL atau URL absolut.
+    if (/^(data:|blob:|https?:\/\/)/i.test(url)) {
+      return url;
+    }
+
+    // Path filesystem yang mungkin ikut tersimpan jangan dikirim sebagai
+    // C:\... atau /public/... ke browser. Ambil bagian public/uploads.
+    const publicUploadsIndex = url.toLowerCase().lastIndexOf("/public/uploads/");
+    if (publicUploadsIndex >= 0) {
+      url = url.slice(publicUploadsIndex + "/public".length);
+    }
+
+    const uploadsIndex = url.toLowerCase().indexOf("/uploads/");
+    if (uploadsIndex >= 0) {
+      url = url.slice(uploadsIndex);
+    } else if (url.toLowerCase().startsWith("uploads/")) {
+      url = `/${url}`;
+    }
+
+    // Path yang bukan absolute browser path dianggap relative ke root.
+    if (!url.startsWith("/")) {
+      url = `/${url}`;
+    }
+
+    return url;
+  };
+
   const openImageViewer = (imageUrl: string) => {
     const normalizedUrl = normalizeCommentImageUrl(imageUrl);
-    if (!normalizedUrl) return;
-    setImageViewerUrl(normalizedUrl);
+    if (normalizedUrl) setImageViewerUrl(normalizedUrl);
   };
 
   const closeImageViewer = () => {
@@ -1022,17 +1030,8 @@ console.log("COMMENT POST RESULT:", result);
     };
   }, [imageViewerUrl]);
 
-  useEffect(() => {
-    return () => {
-      if (commentImage?.url?.startsWith("blob:")) {
-        URL.revokeObjectURL(commentImage.url);
-      }
-    };
-  }, [commentImage?.url]);
-
   const submitComment = async () => {
     const textContent = commentText.trim();
-    const selectedPhoto = commentImage?.file ?? null;
 
     if (textContent.length > COMMENT_MAX_LENGTH) {
       showFeedback(
@@ -1043,8 +1042,10 @@ console.log("COMMENT POST RESULT:", result);
       return;
     }
 
+    const imageUrl = commentImage?.url ?? null;
+
     // FOTO BOLEH DIKIRIM TANPA TEKS.
-    if (!textContent && !selectedPhoto) return;
+    if (!textContent && !imageUrl) return;
 
     if (commentSending || commentImageLoading) return;
 
@@ -1065,28 +1066,28 @@ console.log("COMMENT POST RESULT:", result);
         }
       );
 
-      // API comments menerima multipart/form-data secara langsung.
-      // Foto dikirim sebagai field `photo`, lalu server menyimpan
-      // file dan mengisi PurchaseComment.photo / OutletTransferComment.photo.
-      // Tidak ada base64 dan tidak perlu endpoint /comments/image.
-      const formData = new FormData();
-      formData.append("content", textContent);
-      formData.append("source", data?.sumber ?? "");
-      formData.append(
-        "mentionUserIds",
-        JSON.stringify(validMentionUserIds)
+      const response = await fetch(
+        commentsEndpoint,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            // IMPORTANT:
+            // content hanya teks, sehingga batas 500 karakter
+            // tidak tercampur dengan URL/path foto.
+            content: textContent,
+            imageUrl,
+            mentionUserIds: validMentionUserIds,
+          }),
+        }
       );
 
-      if (selectedPhoto) {
-        formData.append("photo", selectedPhoto, selectedPhoto.name);
-      }
-
-      const response = await fetch(commentsEndpoint, {
-        method: "POST",
-        body: formData,
-      });
-
-      const result = await response.json().catch(() => ({}));
+      const result =
+        await response.json().catch(
+          () => ({})
+        );
 
       if (!response.ok) {
         throw new Error(
@@ -1096,14 +1097,8 @@ console.log("COMMENT POST RESULT:", result);
         );
       }
 
-      const previousImageUrl = commentImage?.url ?? null;
-
       setCommentText("");
       setCommentImage(null);
-
-      if (previousImageUrl?.startsWith("blob:")) {
-        URL.revokeObjectURL(previousImageUrl);
-      }
 
       if (commentImageInputRef.current) {
         commentImageInputRef.current.value = "";
@@ -1113,11 +1108,16 @@ console.log("COMMENT POST RESULT:", result);
       setMentionQuery("");
       setSelectedMentionUserIds([]);
 
-      const created = result?.comment ?? result?.data ?? result;
-      const normalizedCreated = normalizeComments([created])[0];
+      const created =
+        result?.comment ??
+        result?.data ??
+        result;
 
-      if (normalizedCreated) {
-        setComments((prev) => [...prev, normalizedCreated]);
+      if (created?.content !== undefined || created?.imageUrl) {
+        setComments((prev) => [
+          ...prev,
+          normalizeComments([created])[0],
+        ]);
       } else {
         await loadComments();
       }
@@ -1263,14 +1263,33 @@ console.log("COMMENT POST RESULT:", result);
         detail.items
       )
         ? detail.items.map(
-            (item: Item) => ({
-              ...item,
-              voided:
-                item.voided ??
-                item.isVoided ??
-                item.is_voided ??
-                false,
-            })
+            (item: Item) => {
+              const raw = item as any;
+
+              // API lama/berbeda versi bisa mengirim nama field
+              // received dengan bentuk yang berbeda. Satukan semuanya
+              // menjadi receivedQty supaya angka penerimaan tidak hilang.
+              const normalizedReceivedQty = Math.max(
+                0,
+                Number(
+                  raw.receivedQty ??
+                    raw.received ??
+                    raw.qtyReceived ??
+                    raw.received_quantity ??
+                    0
+                )
+              );
+
+              return {
+                ...item,
+                receivedQty: normalizedReceivedQty,
+                voided:
+                  item.voided ??
+                  item.isVoided ??
+                  item.is_voided ??
+                  false,
+              };
+            }
           )
         : [];
 
@@ -1286,6 +1305,20 @@ console.log("COMMENT POST RESULT:", result);
         number
       > = {};
 
+      const detailStatus = normalizeStatus(
+        normalizedDetail.status
+      );
+
+      const detailPurchaseStatus =
+        normalizeStatus(
+          normalizedDetail.purchase?.status
+        );
+
+      const detailAlreadyReceived =
+        detailStatus === "RECEIVED" ||
+        detailStatus === "SELESAI" ||
+        detailPurchaseStatus === "RECEIVED";
+
       normalizedItems.forEach(
         (item: Item) => {
           if (isItemVoided(item)) {
@@ -1293,26 +1326,63 @@ console.log("COMMENT POST RESULT:", result);
             return;
           }
 
+          const orderedQty = Math.max(
+            0,
+            Number(item.qty || 0)
+          );
+
+          const persistedReceivedQty = Math.min(
+            orderedQty,
+            Math.max(
+              0,
+              Number(item.receivedQty ?? 0)
+            )
+          );
+
+          if (detailAlreadyReceived) {
+            /*
+             * SETELAH RECEIVE BERHASIL: tampilkan TOTAL QTY YANG
+             * BENAR-BENAR SUDAH DITERIMA.
+             *
+             * Bug sebelumnya untuk PURCHASE memakai:
+             *   orderedQty - previouslyReceived
+             *
+             * Jadi kalau qty kirim 10 dan receivedQty tersimpan 10,
+             * UI menghitung 10 - 10 = 0. Akibatnya setelah receive
+             * berhasil halaman reload dan Qty Diterima kembali 0.
+             *
+             * Untuk transaksi RECEIVED, receivedQty adalah angka
+             * authoritative dari server. Jika API lama belum mengirim
+             * field tersebut, fallback ke qty order agar data yang sudah
+             * selesai diterima tetap tampil benar.
+             */
+            initialReceived[item.id] =
+              persistedReceivedQty > 0
+                ? persistedReceivedQty
+                : orderedQty;
+            return;
+          }
+
           if (
             normalizedDetail.sumber ===
             "TRANSFER"
           ) {
+            // Transfer memakai total receivedQty yang sudah tersimpan.
             initialReceived[item.id] =
-              Number(
-                item.receivedQty ?? 0
-              );
-          } else {
-            // Penerimaan Purchase juga harus diisi manual per item.
-            // Jika sebelumnya sudah pernah menerima sebagian, tampilkan
-            // sisa yang belum diterima sebagai nilai awal.
-            const orderedQty = Number(item.qty || 0);
-            const previouslyReceived = Number(item.receivedQty ?? 0);
-
-            initialReceived[item.id] = Math.max(
-              0,
-              orderedQty - previouslyReceived
-            );
+              persistedReceivedQty;
+            return;
           }
+
+          /*
+           * PURCHASE yang belum selesai: field input adalah QTY YANG
+           * AKAN DITERIMA SEKARANG, jadi tampilkan sisa yang belum
+           * diterima. Ini hanya berlaku sebelum transaksi menjadi
+           * RECEIVED.
+           */
+          initialReceived[item.id] = Math.max(
+            0,
+            orderedQty - persistedReceivedQty
+          );
         }
       );
 
@@ -3900,11 +3970,9 @@ console.log("COMMENT POST RESULT:", result);
                           const visibleContent =
                             legacyContent.text;
 
-                          const imageUrl =
-                            normalizeCommentImageUrl(
-                              comment.imageUrl ||
-                                legacyContent.imageUrl
-                            );
+                          const imageUrl = normalizeCommentImageUrl(
+                            comment.imageUrl || legacyContent.imageUrl
+                          );
 
                           return (
                             <>
@@ -3933,6 +4001,14 @@ console.log("COMMENT POST RESULT:", result);
                                   <img
                                     src={imageUrl}
                                     alt="Lampiran komentar"
+                                    loading="lazy"
+                                    decoding="async"
+                                    referrerPolicy="no-referrer"
+                                    onError={(event) => {
+                                      // Hindari broken-image icon jika path lama
+                                      // memang sudah tidak tersedia.
+                                      event.currentTarget.style.display = "none";
+                                    }}
                                     className="max-h-[280px] max-w-full object-contain transition-transform duration-300 group-hover/image:scale-[1.02]"
                                   />
 
@@ -4031,7 +4107,7 @@ console.log("COMMENT POST RESULT:", result);
                 <input
                   ref={commentImageInputRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
+                  accept="image/*"
                   onChange={handleCommentImageChange}
                   className="hidden"
                 />
@@ -4773,6 +4849,9 @@ console.log("COMMENT POST RESULT:", result);
             <img
               src={imageViewerUrl}
               alt="Foto komentar"
+              loading="eager"
+              decoding="async"
+              referrerPolicy="no-referrer"
               className="max-h-[92vh] max-w-[94vw] rounded-2xl object-contain shadow-[0_30px_100px_rgba(0,0,0,0.45)] sm:rounded-3xl"
             />
           </div>

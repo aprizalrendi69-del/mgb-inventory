@@ -52,19 +52,51 @@ type Barang = {
   code: string;
   barcode?: string | null;
   name: string;
+
+  /*
+   * unit tetap dipakai sebagai fallback karena
+   * beberapa data lama mungkin belum memiliki baseUnit.
+   */
   unit: string;
-  purchasePrice?: number;
+
+  baseUnit?: string | null;
+
+  purchasePrice?: number | null;
 };
 
 type OutletBarang = {
-  id: number;
-  harga: number | null;
+  id?: number;
+
+  barangId?: number;
+  outletBarangId?: number | null;
+
+  harga?: number | null;
   hargaTerakhir?: number | null;
   hargaTerakhirTanggal?: string | null;
   hargaTerakhirPurchase?: string | null;
-  aktif: boolean;
-  outlet: Outlet;
+
+  aktif?: boolean;
+  aktifDiOutlet?: boolean;
+  terdaftarDiOutlet?: boolean;
+
+  stock?: number | null;
+
+  outlet?: Outlet | null;
+
   barang: Barang;
+
+  outletMappings?: Array<{
+    outlet?: Outlet | null;
+    outletId?: number;
+    aktif?: boolean;
+    harga?: number | null;
+  }>;
+
+  outletStocks?: Array<{
+    outletId?: number;
+    qty?: number;
+    stock?: number;
+  }>;
 };
 
 type PurchaseItem = {
@@ -225,13 +257,6 @@ function SummaryRow({
   );
 }
 
-/* ============================================================
-   PREMIUM PRICE WARNING
-   mode:
-   - normal : full horizontal card for Tambah Barang
-   - compact: compact warning inside Detail Barang table
-============================================================ */
-
 function PriceChangeWarning({
   previousPrice,
   currentPrice,
@@ -273,16 +298,13 @@ function PriceChangeWarning({
         badge:
           "border border-red-200 bg-red-100 text-red-700",
         description: "text-red-900/60",
-        priceBox:
-          "border-red-100 bg-white/80",
+        priceBox: "border-red-100 bg-white/80",
         priceLabel: "text-red-400",
         oldPrice: "text-[#35564C]",
-        newBox:
-          "border-red-200 bg-red-50",
+        newBox: "border-red-200 bg-red-50",
         newLabel: "text-red-500",
         newPrice: "text-red-700",
-        diffBox:
-          "border-orange-200 bg-orange-50",
+        diffBox: "border-orange-200 bg-orange-50",
         diffLabel: "text-orange-500",
         diffPrice: "text-orange-700",
         divider: "border-red-100",
@@ -298,27 +320,19 @@ function PriceChangeWarning({
         badge:
           "border border-emerald-200 bg-emerald-100 text-emerald-700",
         description: "text-emerald-900/60",
-        priceBox:
-          "border-emerald-100 bg-white/80",
+        priceBox: "border-emerald-100 bg-white/80",
         priceLabel: "text-emerald-400",
         oldPrice: "text-[#35564C]",
-        newBox:
-          "border-emerald-200 bg-emerald-50",
+        newBox: "border-emerald-200 bg-emerald-50",
         newLabel: "text-emerald-500",
         newPrice: "text-emerald-700",
-        diffBox:
-          "border-green-200 bg-green-50",
+        diffBox: "border-green-200 bg-green-50",
         diffLabel: "text-green-500",
         diffPrice: "text-green-700",
         divider: "border-emerald-100",
         infoIcon: "text-emerald-500",
         infoText: "text-emerald-900/60",
       };
-
-  /* ==========================================================
-     COMPACT
-     Dipakai di tabel Detail Barang.
-  ========================================================== */
 
   if (compact) {
     return (
@@ -430,12 +444,6 @@ function PriceChangeWarning({
     );
   }
 
-  /* ==========================================================
-     PREMIUM HORIZONTAL
-     Warning Tambah Barang dibuat melebar mengikuti seluruh
-     area form, bukan hanya kolom Harga.
-  ========================================================== */
-
   return (
     <div
       className={`relative mt-3 w-full overflow-hidden rounded-2xl border ${theme.shell}`}
@@ -446,7 +454,6 @@ function PriceChangeWarning({
 
       <div className="relative p-4 sm:p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
-          {/* LEFT */}
           <div className="flex min-w-0 items-start gap-3 xl:w-[34%]">
             <div
               className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${theme.icon}`}
@@ -488,7 +495,6 @@ function PriceChangeWarning({
             </div>
           </div>
 
-          {/* PRICE CARDS */}
           <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
             <div
               className={`rounded-xl border px-3 py-2.5 ${theme.priceBox}`}
@@ -540,7 +546,6 @@ function PriceChangeWarning({
             </div>
           </div>
 
-          {/* INFO */}
           <div
             className={`flex items-start gap-2 border-t pt-3 xl:w-[24%] xl:border-l xl:border-t-0 xl:pl-4 ${theme.divider}`}
           >
@@ -562,10 +567,6 @@ function PriceChangeWarning({
     </div>
   );
 }
-
-/* ============================================================
-   PORTAL DROPDOWN BARANG
-============================================================ */
 
 function BarangDropdown({
   open,
@@ -707,6 +708,11 @@ function BarangDropdown({
                 selectedBarangId ===
                 String(item.barang.id);
 
+              const unit =
+                item.barang.baseUnit ||
+                item.barang.unit ||
+                "-";
+
               return (
                 <button
                   key={item.barang.id}
@@ -731,7 +737,7 @@ function BarangDropdown({
 
                       <span>•</span>
 
-                      <span>{item.barang.unit}</span>
+                      <span>{unit}</span>
 
                       {item.barang.barcode && (
                         <>
@@ -743,6 +749,14 @@ function BarangDropdown({
                         </>
                       )}
                     </div>
+
+                    {!item.terdaftarDiOutlet && (
+                      <div className="mt-1">
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600">
+                          Belum terdaftar di outlet
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="shrink-0 text-right">
@@ -1128,6 +1142,36 @@ export default function PurchaseOutletNewPage() {
     loadOutletBarang(outletId);
   }, [outletId]);
 
+  /*
+   * ============================================================
+   * LOAD BARANG OUTLET
+   *
+   * FIX:
+   * Endpoint /api/outlet/master-barang sekarang mengembalikan
+   * katalog Barang Central, bukan hanya record OutletBarang.
+   *
+   * Response bisa:
+   *
+   * {
+   *   success: true,
+   *   data: [...]
+   * }
+   *
+   * atau:
+   *
+   * {
+   *   success: true,
+   *   data: {
+   *     items: [...]
+   *   }
+   * }
+   *
+   * Kita normalisasi keduanya.
+   *
+   * Jangan filter dengan item.aktif karena field tersebut
+   * sudah tidak menjadi field utama response.
+   * ============================================================
+   */
   async function loadOutletBarang(
     selectedOutletId: string
   ) {
@@ -1158,10 +1202,7 @@ export default function PurchaseOutletNewPage() {
         json = null;
       }
 
-      if (
-        !res.ok ||
-        !json?.success
-      ) {
+      if (!res.ok || !json?.success) {
         setOutletBarang([]);
 
         alert(
@@ -1172,14 +1213,128 @@ export default function PurchaseOutletNewPage() {
         return;
       }
 
-      const activeBarang =
-        (json.data || []).filter(
-          (item: OutletBarang) =>
-            item.aktif === true
-        );
+      /*
+       * Support beberapa bentuk response agar UI tidak
+       * kosong hanya karena wrapper response berubah.
+       */
+      const rawData = Array.isArray(json.data)
+        ? json.data
+        : Array.isArray(json.data?.items)
+          ? json.data.items
+          : Array.isArray(json.items)
+            ? json.items
+            : [];
+
+      /*
+       * Hanya validasi bahwa object mempunyai barang.
+       *
+       * Barang yang belum terdaftar pada outlet TETAP
+       * ditampilkan karena API sekarang memang berfungsi
+       * sebagai katalog Barang Central.
+       *
+       * Jangan lagi:
+       *
+       * .filter(item => item.aktif === true)
+       */
+      const normalizedBarang: OutletBarang[] =
+        rawData
+          .filter(
+            (item: any) =>
+              item &&
+              item.barang &&
+              Number(item.barang.id) > 0
+          )
+          .map((item: any) => {
+            const barang =
+              item.barang;
+
+            /*
+             * Cari mapping outlet jika response tidak
+             * mengirim field harga/hargaTerakhir langsung.
+             */
+            const mapping =
+              Array.isArray(
+                item.outletMappings
+              )
+                ? item.outletMappings.find(
+                    (mapping: any) =>
+                      Number(
+                        mapping?.outletId
+                      ) ===
+                      Number(
+                        selectedOutletId
+                      )
+                  )
+                : null;
+
+            const outletStock =
+              Array.isArray(
+                item.outletStocks
+              )
+                ? item.outletStocks.find(
+                    (stock: any) =>
+                      Number(
+                        stock?.outletId
+                      ) ===
+                      Number(
+                        selectedOutletId
+                      )
+                  )
+                : null;
+
+            return {
+              ...item,
+
+              barang: {
+                ...barang,
+
+                /*
+                 * Pastikan unit selalu tersedia.
+                 */
+                unit:
+                  barang.unit ||
+                  barang.baseUnit ||
+                  "-",
+              },
+
+              outletBarangId:
+                item.outletBarangId ??
+                item.id ??
+                null,
+
+              harga:
+                item.harga ??
+                mapping?.harga ??
+                null,
+
+              stock:
+                item.stock ??
+                outletStock?.qty ??
+                outletStock?.stock ??
+                0,
+
+              terdaftarDiOutlet:
+                item.terdaftarDiOutlet ??
+                Boolean(
+                  item.outletBarangId
+                ),
+
+              aktifDiOutlet:
+                item.aktifDiOutlet ??
+                item.aktif ??
+                Boolean(
+                  item.outletBarangId
+                ),
+
+              outlet:
+                item.outlet ??
+                mapping?.outlet ??
+                null,
+            };
+          });
 
       setOutletBarang(
-        activeBarang
+        normalizedBarang
       );
 
       setSelectedBarangId("");
@@ -1213,7 +1368,7 @@ export default function PurchaseOutletNewPage() {
       if (!keyword) {
         return outletBarang.slice(
           0,
-          50
+          100
         );
       }
 
@@ -1234,7 +1389,7 @@ export default function PurchaseOutletNewPage() {
               .includes(keyword)
           );
         })
-        .slice(0, 50);
+        .slice(0, 100);
     }, [
       outletBarang,
       barangSearch,
@@ -1315,7 +1470,9 @@ export default function PurchaseOutletNewPage() {
       getDefaultPurchasePrice(item);
 
     setPrice(
-      String(hargaDefault)
+      hargaDefault > 0
+        ? String(hargaDefault)
+        : ""
     );
 
     setBarangOpen(false);
@@ -1350,7 +1507,7 @@ export default function PurchaseOutletNewPage() {
 
     if (!selected) {
       alert(
-        "Barang tidak ditemukan di outlet"
+        "Barang tidak ditemukan di katalog"
       );
       return;
     }
@@ -2261,7 +2418,7 @@ export default function PurchaseOutletNewPage() {
                         </h2>
 
                         <p className="text-xs text-gray-500">
-                          Pilih barang yang terdaftar di Master Barang Outlet.
+                          Pilih barang dari katalog Master Barang Pusat.
                         </p>
                       </div>
                     </div>
@@ -2294,8 +2451,8 @@ export default function PurchaseOutletNewPage() {
                   ) : outletBarang.length === 0 ? (
                     <EmptyState
                       icon={<Package size={27} />}
-                      title="Belum ada barang di outlet ini"
-                      text="Tambahkan barang terlebih dahulu melalui Master Barang Outlet."
+                      title="Belum ada barang di Master Barang Pusat"
+                      text="Pastikan barang sudah tersedia di Master Barang Pusat."
                     />
                   ) : (
                     <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
@@ -2423,76 +2580,69 @@ export default function PurchaseOutletNewPage() {
                         </div>
 
                         {selectedOutletBarang && (
-                          <>
-                            <div className="mt-2 rounded-xl bg-[#F6FAF8] px-3 py-2">
-                              {Number(
-                                selectedOutletBarang.hargaTerakhir ??
-                                  0
-                              ) > 0 ? (
-                                <>
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div>
-                                      <p className="text-xs font-semibold text-[#497F70]">
-                                        Harga terakhir
-                                      </p>
+                          <div className="mt-2 rounded-xl bg-[#F6FAF8] px-3 py-2">
+                            {Number(
+                              selectedOutletBarang.hargaTerakhir ??
+                                0
+                            ) > 0 ? (
+                              <>
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-xs font-semibold text-[#497F70]">
+                                      Harga terakhir
+                                    </p>
 
-                                      <p className="mt-0.5 text-sm font-black text-[#18352D]">
-                                        Rp{" "}
-                                        {formatRupiah(
-                                          Number(
-                                            selectedOutletBarang.hargaTerakhir
-                                          )
-                                        )}
-                                      </p>
-                                    </div>
-
-                                    <div className="text-right">
-                                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                                        Histori
-                                      </p>
-
-                                      <p className="mt-0.5 text-[11px] text-gray-500">
-                                        {selectedOutletBarang.hargaTerakhirTanggal
-                                          ? new Date(
-                                              selectedOutletBarang.hargaTerakhirTanggal
-                                            ).toLocaleDateString(
-                                              "id-ID"
-                                            )
-                                          : "-"}
-                                      </p>
-                                    </div>
+                                    <p className="mt-0.5 text-sm font-black text-[#18352D]">
+                                      Rp{" "}
+                                      {formatRupiah(
+                                        Number(
+                                          selectedOutletBarang.hargaTerakhir
+                                        )
+                                      )}
+                                    </p>
                                   </div>
 
-                                  <p className="mt-1 text-[11px] text-gray-400">
-                                    PO{" "}
-                                    {selectedOutletBarang.hargaTerakhirPurchase ||
-                                      "-"}
-                                  </p>
-                                </>
-                              ) : (
-                                <div className="flex items-start gap-2">
-                                  <Info
-                                    size={14}
-                                    className="mt-0.5 shrink-0 text-[#497F70]"
-                                  />
+                                  <div className="text-right">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                      Histori
+                                    </p>
 
-                                  <p className="text-xs leading-5 text-gray-400">
-                                    Belum ada histori
-                                    pembelian. Harga
-                                    awal menggunakan
-                                    harga master.
-                                  </p>
+                                    <p className="mt-0.5 text-[11px] text-gray-500">
+                                      {selectedOutletBarang.hargaTerakhirTanggal
+                                        ? new Date(
+                                            selectedOutletBarang.hargaTerakhirTanggal
+                                          ).toLocaleDateString(
+                                            "id-ID"
+                                          )
+                                        : "-"}
+                                    </p>
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          </>
+
+                                <p className="mt-1 text-[11px] text-gray-400">
+                                  PO{" "}
+                                  {selectedOutletBarang.hargaTerakhirPurchase ||
+                                    "-"}
+                                </p>
+                              </>
+                            ) : (
+                              <div className="flex items-start gap-2">
+                                <Info
+                                  size={14}
+                                  className="mt-0.5 shrink-0 text-[#497F70]"
+                                />
+
+                                <p className="text-xs leading-5 text-gray-400">
+                                  Belum ada histori
+                                  pembelian. Harga
+                                  awal menggunakan
+                                  harga master.
+                                </p>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </Field>
-
-                      {/* =====================================================
-                          WARNING HARGA SEKARANG DILETAKKAN DI LUAR GRID
-                          AGAR MELEBAR PENUH DI AREA TAMBAH BARANG
-                      ====================================================== */}
 
                       {priceChange && (
                         <div className="lg:col-span-12">
@@ -2684,7 +2834,8 @@ export default function PurchaseOutletNewPage() {
                                 </td>
 
                                 <td className="px-5 py-4 text-gray-600">
-                                  {item.barang.unit ||
+                                  {item.barang.baseUnit ||
+                                    item.barang.unit ||
                                     "-"}
                                 </td>
 

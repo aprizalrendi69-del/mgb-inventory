@@ -555,6 +555,41 @@ export async function GET(
 
           supplier: true,
 
+          // =================================================
+          // PURCHASE PAYABLE
+          // =================================================
+          //
+          // Purchase TEMPO membuat payable saat RECEIVE.
+          //
+          // GET detail wajib membawa payable supaya:
+          //
+          // TEMPO
+          // -> RECEIVED
+          // -> PurchasePayable
+          // -> Payment
+          //
+          // dapat dibaca frontend secara konsisten.
+          //
+          // Tidak membuat payable baru di sini.
+          //
+          // =================================================
+
+          payable: {
+            select: {
+              id: true,
+              outletPurchaseId: true,
+              supplierId: true,
+              outletId: true,
+              invoiceNumber: true,
+              invoiceDate: true,
+              dueDate: true,
+              amount: true,
+              paidAmount: true,
+              outstanding: true,
+              status: true,
+            },
+          },
+
           items: {
             include: {
               barang: true,
@@ -952,6 +987,49 @@ export async function GET(
 
       data: {
         ...purchase,
+
+        /*
+         * Purchase Payable TEMPO.
+         *
+         * Relation ini berasal langsung dari database.
+         * Tidak membuat atau mengubah payable.
+         */
+        payable:
+          purchase.payable
+            ? {
+                ...purchase.payable,
+
+                amount:
+                  Number(
+                    purchase.payable
+                      .amount
+                  ),
+
+                paidAmount:
+                  Number(
+                    purchase.payable
+                      .paidAmount
+                  ),
+
+                outstanding:
+                  Number(
+                    purchase.payable
+                      .outstanding
+                  ),
+
+                invoiceDate:
+                  purchase.payable
+                    .invoiceDate
+                    ?.toISOString() ??
+                  null,
+
+                dueDate:
+                  purchase.payable
+                    .dueDate
+                    ?.toISOString() ??
+                  null,
+              }
+            : null,
 
         /*
          * Items diperkaya.
@@ -1628,7 +1706,7 @@ export async function PATCH(
               `Subtotal barang ${barang.name} tidak valid`,
           },
           {
-            status: 400,
+            status: 400
           }
         );
       }

@@ -309,6 +309,46 @@ function getTodayInput() {
   return `${year}-${month}-${day}`;
 }
 
+function getCurrentDateTimeInput() {
+  const date = new Date();
+
+  const year = date.getFullYear();
+
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, "0");
+
+  const day = String(
+    date.getDate()
+  ).padStart(2, "0");
+
+  const hours = String(
+    date.getHours()
+  ).padStart(2, "0");
+
+  const minutes = String(
+    date.getMinutes()
+  ).padStart(2, "0");
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function toTransactionDateTimeISO(
+  value: string
+) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString();
+}
+
 function isMoneyIn(type: string) {
   return type === "IN";
 }
@@ -340,7 +380,7 @@ function StatusBadge({
 }) {
   if (status === "APPROVED") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold tracking-wide text-emerald-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-extrabold tracking-wide text-emerald-700">
         <Check size={10} />
         APPROVED
       </span>
@@ -349,7 +389,7 @@ function StatusBadge({
 
   if (status === "PENDING") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[9px] font-bold tracking-wide text-sky-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-[10px] font-extrabold tracking-wide text-sky-700">
         <Clock3 size={10} />
         PENDING
       </span>
@@ -358,7 +398,7 @@ function StatusBadge({
 
   if (status === "REJECTED") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[9px] font-bold tracking-wide text-red-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] font-extrabold tracking-wide text-red-700">
         <CircleX size={10} />
         REJECTED
       </span>
@@ -1314,7 +1354,7 @@ export default function PettyCashPage() {
 
     if (!topUpDate) {
       alert(
-        "Tanggal Top Up wajib dipilih."
+        "Tanggal & Jam Top Up wajib dipilih."
       );
       return;
     }
@@ -2101,7 +2141,7 @@ function exportPettyCashPDF() {
   */
 
   return (
-    <div className="min-h-screen bg-[#F4F8FB] text-[#173D59]">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,_rgba(0,82,156,0.08),_transparent_28%),linear-gradient(180deg,#F7FAFC_0%,#EEF4F8_100%)] text-[#173D59]">
 
       {/* =================================================
           TOP HEADER
@@ -2279,7 +2319,7 @@ function exportPettyCashPDF() {
           MAIN
           ================================================= */}
 
-      <main className="px-5 py-6 lg:px-8">
+      <main className="px-4 py-6 sm:px-5 lg:px-8 lg:py-7">
 
         {/* =================================================
             HERO / BALANCE
@@ -2522,7 +2562,7 @@ function exportPettyCashPDF() {
 
         <section className="mt-4 grid gap-3 sm:grid-cols-3">
 
-          <div className="flex items-center justify-between rounded-xl border border-[#DCE8EF] bg-white px-4 py-3 shadow-sm">
+          <div className="flex items-center justify-between rounded-2xl border border-[#D7E4EC] bg-white/95 px-4 py-3.5 shadow-[0_8px_24px_rgba(18,59,93,0.06)] backdrop-blur-sm">
 
             <div className="flex items-center gap-2.5">
 
@@ -2548,7 +2588,7 @@ function exportPettyCashPDF() {
 
           </div>
 
-          <div className="flex items-center justify-between rounded-xl border border-[#DCE8EF] bg-white px-4 py-3 shadow-sm">
+          <div className="flex items-center justify-between rounded-2xl border border-[#D7E4EC] bg-white/95 px-4 py-3.5 shadow-[0_8px_24px_rgba(18,59,93,0.06)] backdrop-blur-sm">
 
             <div className="flex items-center gap-2.5">
 
@@ -2574,7 +2614,7 @@ function exportPettyCashPDF() {
 
           </div>
 
-          <div className="flex items-center justify-between rounded-xl border border-[#DCE8EF] bg-white px-4 py-3 shadow-sm">
+          <div className="flex items-center justify-between rounded-2xl border border-[#D7E4EC] bg-white/95 px-4 py-3.5 shadow-[0_8px_24px_rgba(18,59,93,0.06)] backdrop-blur-sm">
 
             <div className="flex items-center gap-2.5">
 
@@ -2606,11 +2646,11 @@ function exportPettyCashPDF() {
             REKENING KORAN
             ================================================= */}
 
-        <section className="mt-5 overflow-hidden rounded-2xl border border-[#D5E3EB] bg-white shadow-[0_12px_38px_rgba(22,75,110,0.07)]">
+        <section className="mt-5 overflow-hidden rounded-[22px] border border-[#D2E0E8] bg-white shadow-[0_18px_55px_rgba(18,59,93,0.09)] ring-1 ring-white">
 
           {/* SECTION HEADER */}
 
-          <div className="border-b border-[#DCE8EF] bg-gradient-to-r from-[#F5F9FC] via-white to-[#F8FBFD] px-5 py-5 lg:px-6">
+          <div className="border-b border-[#D5E3EB] bg-[linear-gradient(135deg,#F8FBFD_0%,#FFFFFF_48%,#F2F8FC_100%)] px-5 py-5 lg:px-6">
 
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
 
@@ -2685,7 +2725,7 @@ function exportPettyCashPDF() {
 
             {/* FILTER BAR */}
 
-            <div className="mt-5 rounded-xl border border-[#D8E5EC] bg-[#F7FAFC] p-3">
+            <div className="mt-5 rounded-2xl border border-[#D7E5EC] bg-[#F4F8FB] p-3.5 shadow-inner">
 
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr_auto]">
 
@@ -2831,7 +2871,7 @@ function exportPettyCashPDF() {
 
           {/* LOCATION BAR */}
 
-          <div className="flex flex-col gap-3 border-b border-[#DCE8EF] bg-[#F5F9FC] px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between lg:px-6">
+          <div className="flex flex-col gap-3 border-b border-[#D7E4EC] bg-[#F5F9FC] px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between lg:px-6">
 
             <div className="flex items-center gap-2.5">
 
@@ -2897,51 +2937,51 @@ function exportPettyCashPDF() {
               TABLE
               ================================================= */}
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto bg-[#F9FBFC]">
 
-            <table className="min-w-[1180px] w-full border-collapse">
+            <table className="min-w-[1280px] w-full border-separate border-spacing-0">
 
               <thead>
 
-                <tr className="border-b border-[#C5D9E5] bg-[#EAF3F8]">
+                <tr className="bg-[linear-gradient(180deg,#0B4268_0%,#073754_100%)]">
 
-                  <th className="w-[55px] px-4 py-3.5 text-center text-[8px] font-extrabold uppercase tracking-[0.12em] text-[#547187]">
+                  <th className="w-[55px] px-4 py-4 text-center text-[10px] font-extrabold uppercase tracking-[0.12em] text-white">
                     No
                   </th>
 
-                  <th className="w-[125px] px-4 py-3.5 text-left text-[8px] font-extrabold uppercase tracking-[0.12em] text-[#547187]">
+                  <th className="w-[125px] px-4 py-4 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-white">
                     Tanggal
                   </th>
 
-                  <th className="w-[170px] px-4 py-3.5 text-left text-[8px] font-extrabold uppercase tracking-[0.12em] text-[#547187]">
+                  <th className="w-[170px] px-4 py-4 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-white">
                     Nomor Transaksi
                   </th>
 
-                  <th className="min-w-[290px] px-4 py-3.5 text-left text-[8px] font-extrabold uppercase tracking-[0.12em] text-[#547187]">
+                  <th className="min-w-[290px] px-4 py-4 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-white">
                     Keterangan
                   </th>
 
-                  <th className="w-[140px] px-4 py-3.5 text-left text-[8px] font-extrabold uppercase tracking-[0.12em] text-[#547187]">
+                  <th className="w-[140px] px-4 py-4 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-white">
                     Kategori
                   </th>
 
-                  <th className="w-[160px] px-4 py-3.5 text-right text-[8px] font-extrabold uppercase tracking-[0.12em] text-[#547187]">
+                  <th className="w-[160px] px-4 py-4 text-right text-[10px] font-extrabold uppercase tracking-[0.12em] text-white">
                     Keluar
                   </th>
 
-                  <th className="w-[160px] px-4 py-3.5 text-right text-[8px] font-extrabold uppercase tracking-[0.12em] text-[#547187]">
+                  <th className="w-[160px] px-4 py-4 text-right text-[10px] font-extrabold uppercase tracking-[0.12em] text-white">
                     Masuk
                   </th>
 
-                  <th className="w-[170px] px-4 py-3.5 text-right text-[8px] font-extrabold uppercase tracking-[0.12em] text-[#547187]">
+                  <th className="w-[170px] px-4 py-4 text-right text-[10px] font-extrabold uppercase tracking-[0.12em] text-white">
                     Saldo
                   </th>
 
-                  <th className="w-[120px] px-4 py-3.5 text-center text-[8px] font-extrabold uppercase tracking-[0.12em] text-[#547187]">
+                  <th className="w-[120px] px-4 py-4 text-center text-[10px] font-extrabold uppercase tracking-[0.12em] text-white">
                     Status
                   </th>
 
-                  <th className="w-[170px] px-4 py-3.5 text-center text-[8px] font-extrabold uppercase tracking-[0.12em] text-[#547187]">
+                  <th className="w-[170px] px-4 py-4 text-center text-[10px] font-extrabold uppercase tracking-[0.12em] text-white">
                     Aksi
                   </th>
 
@@ -3067,14 +3107,14 @@ function exportPettyCashPDF() {
                             transaction.id
                           }
                           className={
-                            "group border-b border-[#E6EEF3] transition-all " +
+                            "group border-b border-[#DCE7ED] transition-all duration-200 " +
                             (isPending
-                              ? "bg-[#F8FCFE] hover:bg-[#EFF8FC]"
+                              ? "bg-[#EEF8FC] hover:bg-[#E5F3F9] shadow-[inset_3px_0_0_#00529C]"
                               : index %
                                     2 ===
                                   0
-                                ? "bg-white hover:bg-[#F7FBFD]"
-                                : "bg-[#FBFCFD] hover:bg-[#F5F9FC]")
+                                ? "bg-white hover:bg-[#F4F9FC]"
+                                : "bg-[#F8FAFC] hover:bg-[#F1F6F9]")
                           }
                         >
 
@@ -3082,7 +3122,7 @@ function exportPettyCashPDF() {
 
                           <td className="px-4 py-4 text-center align-middle">
 
-                            <span className="text-[9px] font-bold text-[#8AA0AE]">
+                            <span className="text-[11px] font-extrabold tabular-nums text-[#6C8291]">
                               {String(
                                 index + 1
                               ).padStart(
@@ -3109,13 +3149,14 @@ function exportPettyCashPDF() {
 
                               <div>
 
-                                <div className="whitespace-nowrap text-[10px] font-extrabold text-[#365A70]">
+                                <div className="whitespace-nowrap text-[11px] font-extrabold text-[#173D59]">
                                   {formatDateOnly(
                                     transaction.trxDate
                                   )}
                                 </div>
 
-                                <div className="mt-0.5 whitespace-nowrap text-[8px] text-[#99A9B4]">
+                                <div className="mt-1 inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-[#DCE7ED] bg-white px-2 py-1 text-[9px] font-bold text-[#5C7484]">
+                                  <Clock3 size={9} />
                                   {formatDateTime(
                                     transaction.trxDate
                                   )
@@ -3140,13 +3181,13 @@ function exportPettyCashPDF() {
 
                           <td className="px-4 py-4 align-middle">
 
-                            <div className="text-[10px] font-extrabold text-[#00529C]">
+                            <div className="text-[11px] font-extrabold tracking-tight text-[#00529C]">
                               {transaction.number ||
                                 "-"}
                             </div>
 
                             {transaction.referenceNumber && (
-                              <div className="mt-1 max-w-[145px] truncate text-[8px] text-[#879AA7]">
+                              <div className="mt-1 max-w-[145px] truncate text-[9px] font-semibold text-[#6D8290]">
                                 Ref.{" "}
                                 {
                                   transaction.referenceNumber
@@ -3155,7 +3196,7 @@ function exportPettyCashPDF() {
                             )}
 
                             {transaction.paymentId && (
-                              <div className="mt-1 inline-flex items-center gap-1 rounded-md bg-[#F1F6F9] px-1.5 py-0.5 text-[7px] font-bold text-[#718896]">
+                              <div className="mt-1 inline-flex items-center gap-1 rounded-md bg-[#F1F6F9] px-1.5 py-0.5 text-[8px] font-bold text-[#5F7685]">
                                 Payment #
                                 {
                                   transaction.paymentId
@@ -3194,7 +3235,7 @@ function exportPettyCashPDF() {
 
                               <div className="min-w-0">
 
-                                <div className="max-w-[330px] truncate text-[10px] font-bold text-[#344D5C]">
+                                <div className="max-w-[330px] truncate text-[11px] font-extrabold text-[#243F50]">
                                   {transaction.description ||
                                     "Tanpa keterangan"}
                                 </div>
@@ -3208,7 +3249,7 @@ function exportPettyCashPDF() {
                                         className="text-[#8AA0AE]"
                                       />
 
-                                      <span className="max-w-[230px] truncate text-[8px] text-[#8AA0AE]">
+                                      <span className="max-w-[230px] truncate text-[9px] font-semibold text-[#657D8D]">
                                         {
                                           transaction
                                             .outlet
@@ -3229,7 +3270,7 @@ function exportPettyCashPDF() {
                                         className="text-[#8AA0AE]"
                                       />
 
-                                      <span className="text-[8px] text-[#8AA0AE]">
+                                      <span className="text-[9px] font-semibold text-[#657D8D]">
                                         Petty Cash Pusat
                                       </span>
                                     </>
@@ -3249,7 +3290,7 @@ function exportPettyCashPDF() {
 
                             {transaction.category ===
                             "LALAMOVE" ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#C7DDE9] bg-[#EFF7FB] px-2.5 py-1.5 text-[8px] font-extrabold tracking-wide text-[#00529C]">
+                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#C7DDE9] bg-[#EFF7FB] px-3 py-1.5 text-[9px] font-extrabold tracking-[0.04em] text-[#00529C]">
 
                                 <Truck size={10} />
 
@@ -3274,7 +3315,7 @@ function exportPettyCashPDF() {
 
                                 <div
                                   className={
-                                    "text-[10px] font-extrabold tabular-nums " +
+                                    "text-[11px] font-extrabold tabular-nums " +
                                     (transaction.status ===
                                     "APPROVED"
                                       ? "text-[#C62828]"
@@ -3288,7 +3329,7 @@ function exportPettyCashPDF() {
 
                                 {transaction.status !==
                                   "APPROVED" && (
-                                  <div className="mt-0.5 text-[7px] font-semibold text-[#A5B3BC]">
+                                  <div className="mt-0.5 text-[8px] font-bold text-[#8B9EA8]">
                                     Belum diposting
                                   </div>
                                 )}
@@ -3311,7 +3352,7 @@ function exportPettyCashPDF() {
 
                                 <div
                                   className={
-                                    "text-[10px] font-extrabold tabular-nums " +
+                                    "text-[11px] font-extrabold tabular-nums " +
                                     (transaction.status ===
                                     "APPROVED"
                                       ? "text-[#006BBA]"
@@ -3325,7 +3366,7 @@ function exportPettyCashPDF() {
 
                                 {transaction.status !==
                                   "APPROVED" && (
-                                  <div className="mt-0.5 text-[7px] font-semibold text-[#A5B3BC]">
+                                  <div className="mt-0.5 text-[8px] font-bold text-[#8B9EA8]">
                                     Belum diposting
                                   </div>
                                 )}
@@ -3349,7 +3390,7 @@ function exportPettyCashPDF() {
 
                                 <div
                                   className={
-                                    "text-[10px] font-extrabold tabular-nums " +
+                                    "text-[11px] font-extrabold tabular-nums " +
                                     (transactionBalance <
                                     0
                                       ? "text-[#C62828]"
@@ -3361,13 +3402,13 @@ function exportPettyCashPDF() {
                                   )}
                                 </div>
 
-                                <div className="mt-0.5 text-[7px] text-[#9AAAB4]">
+                                <div className="mt-0.5 text-[8px] font-semibold text-[#7E929F]">
                                   Saldo akhir
                                 </div>
 
                               </div>
                             ) : (
-                              <span className="inline-flex rounded-md bg-[#F4F7F9] px-2 py-1 text-[8px] font-bold text-[#9EAFBA]">
+                              <span className="inline-flex rounded-lg border border-[#DCE5EA] bg-[#F4F7F9] px-2.5 py-1.5 text-[9px] font-bold text-[#7C919E]">
                                 Belum diposting
                               </span>
                             )}
@@ -3458,7 +3499,7 @@ function exportPettyCashPDF() {
 
                               </div>
                             ) : (
-                              <span className="text-[10px] font-medium text-[#C0CCD3]">
+                              <span className="text-[11px] font-bold text-[#B2C0C9]">
                                 —
                               </span>
                             )}
@@ -3483,7 +3524,7 @@ function exportPettyCashPDF() {
             !loadingUser &&
             filteredTransactions.length >
               0 && (
-              <div className="flex flex-col gap-3 border-t border-[#DCE8EF] bg-[#F7FAFC] px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between lg:px-6">
+              <div className="flex flex-col gap-3 border-t border-[#D5E2E9] bg-[#F5F9FC] px-5 py-4 sm:flex-row sm:items-center sm:justify-between lg:px-6">
 
                 <div className="flex items-center gap-2">
 
@@ -3650,7 +3691,7 @@ function exportPettyCashPDF() {
 
                   <div>
 
-                    <div className="text-[10px] font-extrabold text-[#00529C]">
+                    <div className="text-[11px] font-extrabold tracking-tight text-[#00529C]">
                       KELUAR
                     </div>
 
@@ -3813,7 +3854,7 @@ function exportPettyCashPDF() {
                   </div>
 
                   <p className="mt-1.5 text-[8px] text-[#91A1AC]">
-                    Tanggal ini disimpan sebagai tanggal transaksi.
+                    Format tanggal: YYYY-MM-DD.
                   </p>
 
                 </div>
@@ -4122,7 +4163,7 @@ function exportPettyCashPDF() {
                 <div>
 
                   <label className="mb-2 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#657B8A]">
-                    Tanggal Top Up
+                    Tanggal & Jam Top Up
                   </label>
 
                   <div className="relative">
@@ -4133,7 +4174,7 @@ function exportPettyCashPDF() {
                     />
 
                     <input
-                      type="date"
+                      type="datetime-local"
                       value={
                         topUpDate
                       }
@@ -4148,7 +4189,7 @@ function exportPettyCashPDF() {
                   </div>
 
                   <p className="mt-1.5 text-[8px] text-[#91A1AC]">
-                    Tanggal ini digunakan sebagai trxDate.
+                    Tanggal & jam ini digunakan sebagai trxDate.
                   </p>
 
                 </div>

@@ -968,9 +968,8 @@ export default function DetailPurchase() {
       "COMPLETED" &&
     purchase.status !==
       "CANCELLED" &&
-    !!purchasePaymentMethod &&
+    isTempoPurchase &&
     (
-      !isTempoPurchase ||
       isTempoInitialPayment ||
       isTempoSettlement
     );

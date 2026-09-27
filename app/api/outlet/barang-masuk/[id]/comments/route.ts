@@ -1,5 +1,3 @@
-// app/api/outlet/barang-masuk/[id]/comments/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { mkdir, writeFile } from "fs/promises";
@@ -29,6 +27,14 @@ type RouteContext = {
   }>;
 };
 
+type ParsedCommentBody = {
+  content: string;
+  photo: string | null;
+  source: TransactionSource | null;
+  mentionUserIds: number[];
+  photoFile: File | null;
+};
+
 // ============================================================
 // COMMENT PHOTO CONFIG
 // ============================================================
@@ -50,19 +56,295 @@ const COMMENT_PHOTO_EXTENSIONS: Record<string, string> = {
 };
 
 // ============================================================
-// SAVE COMMENT PHOTO
+// ERROR RESPONSE
+// ============================================================
+
+function errorResponse(
+  message: string,
+  status = 400
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      message,
+      error: message,
+    },
+    {
+      status,
+    }
+  );
+}
+
+// ============================================================
+// PHOTO URL NORMALIZER
 // ============================================================
 //
-// Foto komentar disimpan sebagai file:
+// Tujuan:
 //
-// public/uploads/comments/<filename>
+// Database lama mungkin menyimpan:
 //
-// Database hanya menyimpan:
+// /uploads/comments/file.jpg
+// uploads/comments/file.jpg
+// \uploads\comments\file.jpg
+// C:\...\public\uploads\comments\file.jpg
+// D:\project\public\uploads\comments\file.jpg
+// http://localhost:3000/uploads/comments/file.jpg
+// https://domain.com/uploads/comments/file.jpg
 //
-// /uploads/comments/<filename>
+// Browser membutuhkan:
 //
-// Tidak menyimpan base64.
+// /uploads/comments/file.jpg
 //
+// Fungsi ini HANYA mengubah nilai yang dikirim ke client.
+// Tidak mengubah data database.
+// ============================================================
+
+function normalizeCommentPhoto(
+  value: unknown
+): string | null {
+  if (
+    typeof value !== "string"
+  ) {
+    return null;
+  }
+
+  let raw =
+    value.trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  // ----------------------------------------------------------
+  // Decode URL bila pernah tersimpan encoded
+  // ----------------------------------------------------------
+
+  try {
+    raw =
+      decodeURIComponent(raw);
+  } catch {
+    // Biarkan nilai asli jika bukan encoded URL yang valid.
+  }
+
+  // ----------------------------------------------------------
+  // Normalisasi slash Windows
+  // ----------------------------------------------------------
+
+  raw =
+    raw.replace(/\\/g, "/");
+
+  // ----------------------------------------------------------
+  // Trim quote yang mungkin tersimpan dari marker lama
+  // ----------------------------------------------------------
+
+  raw =
+    raw.replace(/^["']+|["']+$/g, "")
+      .trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  // ----------------------------------------------------------
+  // Absolute URL
+  //
+  // http://domain/uploads/comments/a.jpg
+  // https://domain/uploads/comments/a.jpg
+  //
+  // Kita tetap mengembalikan URL absolut jika memang berasal
+  // dari URL web yang valid dan memiliki /uploads/comments/.
+  // ----------------------------------------------------------
+
+  try {
+    const parsedUrl =
+      new URL(raw);
+
+    const pathname =
+      parsedUrl.pathname.replace(
+        /\/+/g,
+        "/"
+      );
+
+    const uploadIndex =
+      pathname
+        .toLowerCase()
+        .indexOf(
+          "/uploads/comments/"
+        );
+
+    if (
+      uploadIndex >= 0
+    ) {
+      return `${pathname.slice(
+        uploadIndex
+      )}${parsedUrl.search}${parsedUrl.hash}`;
+    }
+
+    // URL external bukan path foto komentar lokal.
+    // Jangan dipaksakan menjadi /uploads.
+    return null;
+  } catch {
+    // Bukan URL absolute.
+  }
+
+  // ----------------------------------------------------------
+  // Data URI lama
+  //
+  // Tidak dipakai sebagai source foto komentar karena browser
+  // tidak perlu dan sistem komentar kita menggunakan upload
+  // lokal.
+  // ----------------------------------------------------------
+
+  if (
+    raw
+      .toLowerCase()
+      .startsWith("data:image/")
+  ) {
+    return null;
+  }
+
+  // ----------------------------------------------------------
+  // Cari marker /uploads/comments/
+  //
+  // Ini menangani:
+  //
+  // uploads/comments/file.jpg
+  // /uploads/comments/file.jpg
+  // C:/project/public/uploads/comments/file.jpg
+  // C:/project/public/uploads/comments/file.jpg?x
+  // ----------------------------------------------------------
+
+  const normalizedLower =
+    raw.toLowerCase();
+
+  const marker =
+    "/uploads/comments/";
+
+  const markerIndex =
+    normalizedLower.indexOf(
+      marker
+    );
+
+  if (
+    markerIndex >= 0
+  ) {
+    let result =
+      raw.slice(
+        markerIndex
+      );
+
+    result =
+      result.replace(
+        /\/+/g,
+        "/"
+      );
+
+    if (
+      !result.startsWith(
+        "/"
+      )
+    ) {
+      result =
+        `/${result}`;
+    }
+
+    return result;
+  }
+
+  // ----------------------------------------------------------
+  // Handle tanpa slash awal
+  // ----------------------------------------------------------
+
+  const markerWithoutSlash =
+    "uploads/comments/";
+
+  const markerWithoutSlashIndex =
+    normalizedLower.indexOf(
+      markerWithoutSlash
+    );
+
+  if (
+    markerWithoutSlashIndex >= 0
+  ) {
+    let result =
+      raw.slice(
+        markerWithoutSlashIndex
+      );
+
+    result =
+      result.replace(
+        /\/+/g,
+        "/"
+      );
+
+    return `/${result}`;
+  }
+
+  // ----------------------------------------------------------
+  // Legacy marker kemungkinan:
+  //
+  // comments/xxx.jpg
+  // comment-xxx.jpg
+  //
+  // Hanya ambil jika nama file memang terlihat seperti file
+  // komentar. Jangan mengubah sembarang string menjadi URL.
+  // ----------------------------------------------------------
+
+  const basename =
+    path
+      .basename(raw)
+      .replace(
+        /\\/g,
+        "/"
+      );
+
+  const safeBasename =
+    basename
+      .split("?")[0]
+      .split("#")[0]
+      .trim();
+
+  if (
+    /^comment-\d+-[a-f0-9]+\.(jpg|jpeg|png|webp|gif)$/i.test(
+      safeBasename
+    )
+  ) {
+    return `/uploads/comments/${safeBasename}`;
+  }
+
+  // ----------------------------------------------------------
+  // Jika value sudah berupa relative /uploads path tetapi
+  // formatnya sedikit berbeda.
+  // ----------------------------------------------------------
+
+  if (
+    normalizedLower.startsWith(
+      "uploads/"
+    )
+  ) {
+    const relative =
+      raw.replace(
+        /^\/+/,
+        ""
+      );
+
+    if (
+      relative
+        .toLowerCase()
+        .startsWith(
+          "uploads/comments/"
+        )
+    ) {
+      return `/${relative}`;
+    }
+  }
+
+  return null;
+}
+
+// ============================================================
+// SAVE COMMENT PHOTO
+// ============================================================
 
 async function saveCommentPhoto(
   file: File
@@ -91,7 +373,9 @@ async function saveCommentPhoto(
   const mimeType =
     String(file.type ?? "")
       .trim()
-      .toLowerCase();
+      .toLowerCase()
+      .split(";")[0]
+      .trim();
 
   if (
     !COMMENT_PHOTO_MIME_TYPES.has(
@@ -106,7 +390,13 @@ async function saveCommentPhoto(
   const extension =
     COMMENT_PHOTO_EXTENSIONS[
       mimeType
-    ] ?? ".jpg";
+    ];
+
+  if (!extension) {
+    throw new Error(
+      "Extension foto tidak valid."
+    );
+  }
 
   const uploadDirectory =
     path.join(
@@ -124,7 +414,9 @@ async function saveCommentPhoto(
   );
 
   const filename =
-    `comment-${Date.now()}-${crypto.randomBytes(8).toString("hex")}${extension}`;
+    `comment-${Date.now()}-${crypto
+      .randomBytes(8)
+      .toString("hex")}${extension}`;
 
   const filePath =
     path.join(
@@ -151,68 +443,17 @@ async function saveCommentPhoto(
 // ============================================================
 
 async function getCurrentUser(): Promise<SessionUser | null> {
-  const cookieStore = await cookies();
+  const cookieStore =
+    await cookies();
 
   const sessionCookie =
-    cookieStore.get("erp-session") ??
-    cookieStore.get("session");
+    cookieStore.get(
+      "erp-session"
+    );
 
   if (!sessionCookie?.value) {
     return null;
   }
-
-  // ----------------------------------------------------------
-  // DATABASE SESSION
-  // ----------------------------------------------------------
-
-  try {
-    const session =
-      await prisma.session.findUnique({
-        where: {
-          token:
-            sessionCookie.value,
-        },
-
-        select: {
-          expiresAt: true,
-
-          user: {
-            select: {
-              id: true,
-              username: true,
-              fullname: true,
-              role: true,
-              active: true,
-              outletId: true,
-            },
-          },
-        },
-      });
-
-    if (session) {
-      if (
-        session.expiresAt <
-        new Date()
-      ) {
-        return null;
-      }
-
-      if (!session.user.active) {
-        return null;
-      }
-
-      return session.user;
-    }
-  } catch (error) {
-    console.error(
-      "BARANG MASUK COMMENTS DATABASE SESSION ERROR:",
-      error
-    );
-  }
-
-  // ----------------------------------------------------------
-  // JSON SESSION FALLBACK
-  // ----------------------------------------------------------
 
   try {
     const parsed =
@@ -220,11 +461,12 @@ async function getCurrentUser(): Promise<SessionUser | null> {
         sessionCookie.value
       );
 
-    const userId = Number(
-      parsed?.user?.id ??
-        parsed?.id ??
-        0
-    );
+    const userId =
+      Number(
+        parsed?.user?.id ??
+          parsed?.id ??
+          0
+      );
 
     if (
       !Number.isInteger(
@@ -251,14 +493,17 @@ async function getCurrentUser(): Promise<SessionUser | null> {
         },
       });
 
-    if (!user || !user.active) {
+    if (
+      !user ||
+      !user.active
+    ) {
       return null;
     }
 
     return user;
   } catch (error) {
     console.error(
-      "BARANG MASUK COMMENTS JSON SESSION ERROR:",
+      "BARANG MASUK COMMENTS SESSION ERROR:",
       error
     );
 
@@ -290,9 +535,10 @@ async function getRouteKey(
   const params =
     await context.params;
 
-  const rawId = String(
-    params?.id ?? ""
-  ).trim();
+  const rawId =
+    String(
+      params?.id ?? ""
+    ).trim();
 
   if (!rawId) {
     return null;
@@ -311,11 +557,10 @@ function parseSource(
     | null
     | undefined
 ): TransactionSource | null {
-  const source = String(
-    value ?? ""
-  )
-    .trim()
-    .toUpperCase();
+  const source =
+    String(value ?? "")
+      .trim()
+      .toUpperCase();
 
   if (
     source === "PURCHASE"
@@ -380,10 +625,6 @@ async function getOutletPurchaseForUser(
     | number
     | null = null;
 
-  // ----------------------------------------------------------
-  // PURCHASE-36
-  // ----------------------------------------------------------
-
   const purchaseMatch =
     normalizedKey.match(
       /^PURCHASE-(\d+)$/i
@@ -401,13 +642,10 @@ async function getOutletPurchaseForUser(
       ) &&
       parsedId > 0
     ) {
-      purchaseId = parsedId;
+      purchaseId =
+        parsedId;
     }
   }
-
-  // ----------------------------------------------------------
-  // PLAIN NUMERIC ID
-  // ----------------------------------------------------------
 
   if (!purchaseId) {
     const parsedId =
@@ -421,15 +659,12 @@ async function getOutletPurchaseForUser(
       ) &&
       parsedId > 0
     ) {
-      purchaseId = parsedId;
+      purchaseId =
+        parsedId;
     }
   }
 
-  // ----------------------------------------------------------
-  // FIND PURCHASE
-  // ----------------------------------------------------------
-
-  const purchase =
+  let purchase =
     purchaseId
       ? await prisma.outletPurchase.findUnique(
           {
@@ -459,7 +694,12 @@ async function getOutletPurchaseForUser(
             },
           }
         )
-      : await prisma.outletPurchase.findUnique(
+      : null;
+
+  if (!purchase) {
+    try {
+      purchase =
+        await prisma.outletPurchase.findUnique(
           {
             where: {
               number:
@@ -488,14 +728,17 @@ async function getOutletPurchaseForUser(
             },
           }
         );
+    } catch (error) {
+      console.error(
+        "PURCHASE NUMBER LOOKUP ERROR:",
+        error
+      );
+    }
+  }
 
   if (!purchase) {
     return null;
   }
-
-  // ----------------------------------------------------------
-  // OUTLET ADMIN ACCESS
-  // ----------------------------------------------------------
 
   if (
     user.role ===
@@ -526,10 +769,6 @@ async function getOutletTransferForUser(
     | number
     | null = null;
 
-  // ----------------------------------------------------------
-  // TRANSFER-147
-  // ----------------------------------------------------------
-
   const transferMatch =
     normalizedKey.match(
       /^TRANSFER-(\d+)$/i
@@ -547,13 +786,10 @@ async function getOutletTransferForUser(
       ) &&
       parsedId > 0
     ) {
-      transferId = parsedId;
+      transferId =
+        parsedId;
     }
   }
-
-  // ----------------------------------------------------------
-  // PLAIN NUMERIC ID
-  // ----------------------------------------------------------
 
   if (!transferId) {
     const parsedId =
@@ -567,15 +803,12 @@ async function getOutletTransferForUser(
       ) &&
       parsedId > 0
     ) {
-      transferId = parsedId;
+      transferId =
+        parsedId;
     }
   }
 
-  // ----------------------------------------------------------
-  // FIND TRANSFER
-  // ----------------------------------------------------------
-
-  const transfer =
+  let transfer =
     transferId
       ? await prisma.outletTransfer.findUnique(
           {
@@ -610,7 +843,12 @@ async function getOutletTransferForUser(
             },
           }
         )
-      : await prisma.outletTransfer.findUnique(
+      : null;
+
+  if (!transfer) {
+    try {
+      transfer =
+        await prisma.outletTransfer.findUnique(
           {
             where: {
               number:
@@ -644,14 +882,17 @@ async function getOutletTransferForUser(
             },
           }
         );
+    } catch (error) {
+      console.error(
+        "TRANSFER NUMBER LOOKUP ERROR:",
+        error
+      );
+    }
+  }
 
   if (!transfer) {
     return null;
   }
-
-  // ----------------------------------------------------------
-  // OUTLET ADMIN ACCESS
-  // ----------------------------------------------------------
 
   if (
     user.role ===
@@ -676,10 +917,6 @@ async function resolveTransaction(
     | null,
   user: SessionUser
 ) {
-  // ----------------------------------------------------------
-  // EXPLICIT TRANSFER
-  // ----------------------------------------------------------
-
   if (
     source === "TRANSFER"
   ) {
@@ -700,10 +937,6 @@ async function resolveTransaction(
         transfer,
     };
   }
-
-  // ----------------------------------------------------------
-  // EXPLICIT PURCHASE
-  // ----------------------------------------------------------
 
   if (
     source === "PURCHASE"
@@ -726,18 +959,10 @@ async function resolveTransaction(
     };
   }
 
-  // ----------------------------------------------------------
-  // AUTO DETECT SOURCE
-  // ----------------------------------------------------------
-
   const detectedSource =
     detectSourceFromNumber(
       transactionKey
     );
-
-  // ----------------------------------------------------------
-  // AUTO DETECT TRANSFER
-  // ----------------------------------------------------------
 
   if (
     detectedSource ===
@@ -761,10 +986,6 @@ async function resolveTransaction(
     };
   }
 
-  // ----------------------------------------------------------
-  // AUTO DETECT PURCHASE
-  // ----------------------------------------------------------
-
   if (
     detectedSource ===
     "PURCHASE"
@@ -787,10 +1008,6 @@ async function resolveTransaction(
     };
   }
 
-  // ----------------------------------------------------------
-  // TRY PURCHASE
-  // ----------------------------------------------------------
-
   const purchase =
     await getOutletPurchaseForUser(
       transactionKey,
@@ -805,10 +1022,6 @@ async function resolveTransaction(
         purchase,
     };
   }
-
-  // ----------------------------------------------------------
-  // FALLBACK TRANSFER
-  // ----------------------------------------------------------
 
   const transfer =
     await getOutletTransferForUser(
@@ -842,9 +1055,19 @@ function normalizePurchaseComment(
     content:
       comment.comment,
 
+    // IMPORTANT:
+    // Selalu kirim URL browser yang sudah dinormalisasi.
     photo:
-      comment.photo ??
-      null,
+      normalizeCommentPhoto(
+        comment.photo
+      ),
+
+    // Alias imageUrl agar frontend lama maupun baru
+    // sama-sama bisa membaca foto.
+    imageUrl:
+      normalizeCommentPhoto(
+        comment.photo
+      ),
 
     createdAt:
       comment.createdAt,
@@ -927,8 +1150,14 @@ function normalizeTransferComment(
       comment.comment,
 
     photo:
-      comment.photo ??
-      null,
+      normalizeCommentPhoto(
+        comment.photo
+      ),
+
+    imageUrl:
+      normalizeCommentPhoto(
+        comment.photo
+      ),
 
     createdAt:
       comment.createdAt,
@@ -1120,6 +1349,281 @@ async function loadTransferComments(
 }
 
 // ============================================================
+// PARSE MENTION IDS
+// ============================================================
+
+function parseMentionUserIds(
+  value: unknown
+): number[] {
+  if (
+    Array.isArray(value)
+  ) {
+    return Array.from(
+      new Set(
+        value
+          .map(
+            (
+              item: unknown
+            ) =>
+              Number(item)
+          )
+          .filter(
+            (
+              item: number
+            ) =>
+              Number.isInteger(
+                item
+              ) &&
+              item > 0
+          )
+      )
+    );
+  }
+
+  if (
+    typeof value !==
+    "string"
+  ) {
+    return [];
+  }
+
+  const trimmed =
+    value.trim();
+
+  if (!trimmed) {
+    return [];
+  }
+
+  try {
+    const parsed =
+      JSON.parse(
+        trimmed
+      );
+
+    if (
+      !Array.isArray(
+        parsed
+      )
+    ) {
+      return [];
+    }
+
+    return Array.from(
+      new Set(
+        parsed
+          .map(
+            (
+              item: unknown
+            ) =>
+              Number(item)
+          )
+          .filter(
+            (
+              item: number
+            ) =>
+              Number.isInteger(
+                item
+              ) &&
+              item > 0
+          )
+      )
+    );
+  } catch {
+    return [];
+  }
+}
+
+// ============================================================
+// PARSE COMMENT BODY
+// ============================================================
+
+async function parseCommentBody(
+  request: NextRequest
+): Promise<ParsedCommentBody> {
+  const contentType =
+    String(
+      request.headers.get(
+        "content-type"
+      ) ?? ""
+    ).toLowerCase();
+
+  // ==========================================================
+  // JSON
+  // ==========================================================
+
+  if (
+    contentType.includes(
+      "application/json"
+    )
+  ) {
+    let body: any;
+
+    try {
+      body =
+        await request.json();
+    } catch {
+      throw new Error(
+        "Body JSON tidak valid."
+      );
+    }
+
+    const content =
+      typeof body?.content ===
+      "string"
+        ? body.content.trim()
+        : "";
+
+    const rawPhoto =
+      typeof body?.photo ===
+        "string" &&
+      body.photo.trim()
+        ? body.photo.trim()
+        : typeof body?.image ===
+            "string" &&
+          body.image.trim()
+        ? body.image.trim()
+        : typeof body?.imageUrl ===
+            "string" &&
+          body.imageUrl.trim()
+        ? body.imageUrl.trim()
+        : null;
+
+    const photo =
+      normalizeCommentPhoto(
+        rawPhoto
+      );
+
+    const source =
+      parseSource(
+        typeof body?.source ===
+          "string"
+          ? body.source
+          : null
+      );
+
+    const mentionUserIds =
+      parseMentionUserIds(
+        body?.mentionUserIds
+      );
+
+    return {
+      content,
+      photo,
+      source,
+      mentionUserIds,
+      photoFile: null,
+    };
+  }
+
+  // ==========================================================
+  // FORM DATA
+  // ==========================================================
+
+  if (
+    contentType.includes(
+      "multipart/form-data"
+    ) ||
+    contentType.includes(
+      "application/x-www-form-urlencoded"
+    )
+  ) {
+    let formData: FormData;
+
+    try {
+      formData =
+        await request.formData();
+    } catch {
+      throw new Error(
+        "Body FormData tidak valid."
+      );
+    }
+
+    const contentValue =
+      formData.get("content");
+
+    const content =
+      typeof contentValue ===
+      "string"
+        ? contentValue.trim()
+        : "";
+
+    const photoValue =
+      formData.get("photo") ??
+      formData.get("image");
+
+    const photoFile =
+      photoValue instanceof File &&
+      photoValue.size > 0
+        ? photoValue
+        : null;
+
+    const photoUrl =
+      typeof photoValue ===
+        "string" &&
+      photoValue.trim()
+        ? normalizeCommentPhoto(
+            photoValue
+          )
+        : null;
+
+    const imageUrlValue =
+      formData.get(
+        "imageUrl"
+      );
+
+    const imageUrl =
+      typeof imageUrlValue ===
+        "string" &&
+      imageUrlValue.trim()
+        ? normalizeCommentPhoto(
+            imageUrlValue
+          )
+        : null;
+
+    const sourceValue =
+      formData.get(
+        "source"
+      );
+
+    const source =
+      parseSource(
+        typeof sourceValue ===
+          "string"
+          ? sourceValue
+          : null
+      );
+
+    const mentionUserIds =
+      parseMentionUserIds(
+        formData.get(
+          "mentionUserIds"
+        )
+      );
+
+    return {
+      content,
+
+      photo:
+        photoUrl ??
+        imageUrl,
+
+      source,
+
+      mentionUserIds,
+
+      photoFile,
+    };
+  }
+
+  throw new Error(
+    `Content-Type request tidak didukung: ${
+      contentType ||
+      "tidak ada"
+    }`
+  );
+}
+
+// ============================================================
 // GET
 // ============================================================
 
@@ -1128,50 +1632,26 @@ export async function GET(
   context: RouteContext
 ) {
   try {
-    // --------------------------------------------------------
-    // AUTH
-    // --------------------------------------------------------
-
     const user =
       await getCurrentUser();
 
     if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Tidak login atau session tidak valid.",
-        },
-        {
-          status: 401,
-        }
+      return errorResponse(
+        "Tidak login atau session tidak valid.",
+        401
       );
     }
-
-    // --------------------------------------------------------
-    // ROLE
-    // --------------------------------------------------------
 
     if (
       !canAccessComments(
         user.role
       )
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Anda tidak memiliki akses ke diskusi Barang Masuk outlet.",
-        },
-        {
-          status: 403,
-        }
+      return errorResponse(
+        "Anda tidak memiliki akses ke diskusi Barang Masuk outlet.",
+        403
       );
     }
-
-    // --------------------------------------------------------
-    // TRANSACTION KEY
-    // --------------------------------------------------------
 
     const transactionKey =
       await getRouteKey(
@@ -1179,21 +1659,11 @@ export async function GET(
       );
 
     if (!transactionKey) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Nomor transaksi tidak valid.",
-        },
-        {
-          status: 400,
-        }
+      return errorResponse(
+        "Nomor transaksi tidak valid.",
+        400
       );
     }
-
-    // --------------------------------------------------------
-    // SOURCE
-    // --------------------------------------------------------
 
     const source =
       parseSource(
@@ -1201,10 +1671,6 @@ export async function GET(
           .searchParams
           .get("source")
       );
-
-    // --------------------------------------------------------
-    // RESOLVE
-    // --------------------------------------------------------
 
     const resolved =
       await resolveTransaction(
@@ -1214,15 +1680,9 @@ export async function GET(
       );
 
     if (!resolved) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Transaksi tidak ditemukan atau Anda tidak memiliki akses.",
-        },
-        {
-          status: 404,
-        }
+      return errorResponse(
+        "Transaksi tidak ditemukan atau Anda tidak memiliki akses.",
+        404
       );
     }
 
@@ -1327,16 +1787,10 @@ export async function GET(
       error
     );
 
-    return NextResponse.json(
-      {
-        success: false,
-        message:
-          error?.message ||
-          "Gagal memuat diskusi Barang Masuk.",
-      },
-      {
-        status: 500,
-      }
+    return errorResponse(
+      error?.message ||
+        "Gagal memuat diskusi Barang Masuk.",
+      500
     );
   }
 }
@@ -1362,15 +1816,9 @@ export async function POST(
       await getCurrentUser();
 
     if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Tidak login atau session tidak valid.",
-        },
-        {
-          status: 401,
-        }
+      return errorResponse(
+        "Tidak login atau session tidak valid.",
+        401
       );
     }
 
@@ -1383,15 +1831,9 @@ export async function POST(
         user.role
       )
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Anda tidak memiliki akses untuk menambahkan diskusi.",
-        },
-        {
-          status: 403,
-        }
+      return errorResponse(
+        "Anda tidak memiliki akses untuk menambahkan diskusi.",
+        403
       );
     }
 
@@ -1405,131 +1847,60 @@ export async function POST(
       );
 
     if (!transactionKey) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Nomor transaksi tidak valid.",
-        },
-        {
-          status: 400,
-        }
+      return errorResponse(
+        "Nomor transaksi tidak valid.",
+        400
       );
     }
 
     // --------------------------------------------------------
     // BODY
     // --------------------------------------------------------
-    //
-    // FRONTEND TERBARU MENGIRIM multipart/form-data.
-    //
-    // Jangan gunakan request.json() di sini.
-    //
 
-    let formData: FormData;
+    let parsedBody: ParsedCommentBody;
 
     try {
-      formData =
-        await request.formData();
-    } catch (error) {
+      parsedBody =
+        await parseCommentBody(
+          request
+        );
+    } catch (error: any) {
       console.error(
-        "BARANG MASUK COMMENTS FORM DATA ERROR:",
+        "BARANG MASUK COMMENTS BODY PARSE ERROR:",
         error
       );
 
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Body request tidak valid. Gunakan multipart/form-data.",
-        },
-        {
-          status: 400,
-        }
+      return errorResponse(
+        error?.message ||
+          "Body request tidak valid.",
+        400
       );
     }
 
-    // --------------------------------------------------------
-    // SOURCE
-    // --------------------------------------------------------
-
-    const sourceValue =
-      formData.get("source");
-
-    const source =
-      parseSource(
-        typeof sourceValue ===
-          "string"
-          ? sourceValue
-          : request.nextUrl
-              .searchParams
-              .get("source")
-      );
+    const {
+      content,
+      photo,
+      source,
+      mentionUserIds,
+      photoFile,
+    } = parsedBody;
 
     // --------------------------------------------------------
-    // CONTENT
+    // CONTENT LENGTH
     // --------------------------------------------------------
-
-    const contentValue =
-      formData.get("content");
-
-    const content =
-      typeof contentValue ===
-      "string"
-        ? contentValue.trim()
-        : "";
 
     if (
       content.length >
       5000
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Komentar terlalu panjang. Maksimal 5.000 karakter.",
-        },
-        {
-          status: 400,
-        }
+      return errorResponse(
+        "Komentar terlalu panjang. Maksimal 5.000 karakter.",
+        400
       );
     }
 
     // --------------------------------------------------------
     // PHOTO
-    // --------------------------------------------------------
-
-    const photoValue =
-      formData.get("photo");
-
-    const photoFile =
-      photoValue instanceof File &&
-      photoValue.size > 0
-        ? photoValue
-        : null;
-
-    // --------------------------------------------------------
-    // TEXT + PHOTO EMPTY CHECK
-    // --------------------------------------------------------
-
-    if (
-      !content &&
-      !photoFile
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Komentar atau foto wajib diisi.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    // --------------------------------------------------------
-    // SAVE PHOTO
     // --------------------------------------------------------
 
     if (photoFile) {
@@ -1539,99 +1910,67 @@ export async function POST(
             photoFile
           );
       } catch (error: any) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              error?.message ||
-              "Gagal menyimpan foto komentar.",
-          },
-          {
-            status: 400,
-          }
+        return errorResponse(
+          error?.message ||
+            "Gagal menyimpan foto komentar.",
+          400
         );
       }
+    } else if (
+      typeof photo ===
+        "string" &&
+      photo.trim()
+    ) {
+      /**
+       * IMPORTANT:
+       *
+       * photo sudah dinormalisasi oleh parseCommentBody().
+       *
+       * Jadi data lama seperti:
+       *
+       * C:\project\public\uploads\comments\a.jpg
+       *
+       * akan menjadi:
+       *
+       * /uploads/comments/a.jpg
+       *
+       * tanpa mengubah database lama.
+       */
+      savedPhotoPath =
+        normalizeCommentPhoto(
+          photo
+        );
     }
 
     // --------------------------------------------------------
-    // MENTION IDS
+    // TEXT + PHOTO EMPTY CHECK
     // --------------------------------------------------------
-
-    const rawMentionValue =
-      formData.get(
-        "mentionUserIds"
-      );
-
-    let rawMentionUserIds:
-      | unknown[]
-      | null = null;
 
     if (
-      typeof rawMentionValue ===
-      "string" &&
-      rawMentionValue.trim()
+      !content &&
+      !savedPhotoPath
     ) {
-      try {
-        const parsed =
-          JSON.parse(
-            rawMentionValue
-          );
-
-        if (
-          !Array.isArray(parsed)
-        ) {
-          return NextResponse.json(
-            {
-              success: false,
-              message:
-                "Format mentionUserIds tidak valid.",
-            },
-            {
-              status: 400,
-            }
-          );
-        }
-
-        rawMentionUserIds =
-          parsed;
-      } catch {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Format mentionUserIds tidak valid.",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-    } else {
-      rawMentionUserIds =
-        [];
+      return errorResponse(
+        "Komentar atau foto wajib diisi.",
+        400
+      );
     }
 
-    const mentionUserIds =
-      Array.from(
-        new Set(
-          rawMentionUserIds
-            .map(
-              (
-                value: unknown
-              ) =>
-                Number(value)
-            )
-            .filter(
-              (
-                value: number
-              ) =>
-                Number.isInteger(
-                  value
-                ) &&
-                value > 0
-            )
-        )
+    // --------------------------------------------------------
+    // VALIDATE PHOTO URL
+    // --------------------------------------------------------
+
+    if (
+      savedPhotoPath &&
+      !savedPhotoPath.startsWith(
+        "/uploads/comments/"
+      )
+    ) {
+      return errorResponse(
+        "Path foto komentar tidak valid.",
+        400
       );
+    }
 
     // --------------------------------------------------------
     // VALIDATE MENTION USERS
@@ -1672,15 +2011,9 @@ export async function POST(
         validMentionUsers.length !==
         mentionUserIds.length
       ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Salah satu user yang di-mention tidak valid atau sudah tidak aktif.",
-          },
-          {
-            status: 400,
-          }
+        return errorResponse(
+          "Salah satu user yang di-mention tidak valid atau sudah tidak aktif.",
+          400
         );
       }
     }
@@ -1697,15 +2030,9 @@ export async function POST(
       );
 
     if (!resolved) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Transaksi tidak ditemukan atau Anda tidak memiliki akses.",
-        },
-        {
-          status: 404,
-        }
+      return errorResponse(
+        "Transaksi tidak ditemukan atau Anda tidak memiliki akses.",
+        404
       );
     }
 
@@ -1838,10 +2165,6 @@ export async function POST(
         createdComment
       );
 
-    // --------------------------------------------------------
-    // RESPONSE
-    // --------------------------------------------------------
-
     return NextResponse.json(
       {
         success: true,
@@ -1871,16 +2194,10 @@ export async function POST(
       error
     );
 
-    return NextResponse.json(
-      {
-        success: false,
-        message:
-          error?.message ||
-          "Gagal menyimpan komentar Barang Masuk.",
-      },
-      {
-        status: 500,
-      }
+    return errorResponse(
+      error?.message ||
+        "Gagal menyimpan komentar Barang Masuk.",
+      500
     );
   }
 }

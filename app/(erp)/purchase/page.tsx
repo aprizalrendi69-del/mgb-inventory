@@ -139,7 +139,8 @@ export default function PurchasePage() {
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("SEMUA");
-  const [source, setSource] = useState("SEMUA");
+  // Admin masuk langsung ke tampilan Purchase Pusat.
+  const [source, setSource] = useState("PUSAT");
   const [paymentFilter, setPaymentFilter] = useState("SEMUA");
 
   useEffect(() => {
@@ -505,13 +506,13 @@ export default function PurchasePage() {
   const hasFilter =
     !!search ||
     status !== "SEMUA" ||
-    source !== "SEMUA" ||
+    source !== "PUSAT" ||
     paymentFilter !== "SEMUA";
 
   function resetFilter() {
     setSearch("");
     setStatus("SEMUA");
-    setSource("SEMUA");
+    setSource("PUSAT");
     setPaymentFilter("SEMUA");
   }
 
@@ -689,6 +690,44 @@ export default function PurchasePage() {
         </div>
 
       </section>
+
+      {/* =====================================================
+          DRAFT ALERT / ACTIONABLE INFO
+      ===================================================== */}
+
+      {totalDraft > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            setStatus("DRAFT");
+            setPaymentFilter("SEMUA");
+          }}
+          className="group mb-6 flex w-full items-center gap-4 overflow-hidden rounded-[23px] border border-amber-200 bg-gradient-to-r from-amber-50 via-white to-[#F8FBF9] p-4 text-left shadow-[0_8px_28px_rgba(180,130,30,0.07)] transition-all hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-[0_14px_35px_rgba(180,130,30,0.11)] md:p-5"
+        >
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 shadow-sm">
+            <Clock3 size={21} />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-black text-[#35564C]">
+                Ada {totalDraft} Purchase yang masih Draft
+              </p>
+              <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-700">
+                Perlu perhatian
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-gray-500">
+              Purchase berstatus Draft belum masuk tahap approval. Klik informasi ini untuk langsung menampilkan daftar Draft.
+            </p>
+          </div>
+
+          <ArrowUpRight
+            size={18}
+            className="shrink-0 text-amber-600 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+          />
+        </button>
+      )}
 
       {/* =====================================================
           KPI GRID
@@ -1079,15 +1118,77 @@ export default function PurchasePage() {
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 xl:flex">
 
-                <FilterSelect
-                  value={source}
-                  onChange={setSource}
-                  options={[
-                    ["SEMUA", "Semua Purchase"],
-                    ["PUSAT", "Purchase Pusat"],
-                    ["OUTLET", "Purchase Outlet"],
-                  ]}
-                />
+                {/* SOURCE / JENIS PURCHASE — BUTTONS, BUKAN DROPDOWN */}
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-2xl border border-[#DCE7E1] bg-white p-1.5 shadow-sm xl:min-w-[430px]">
+
+                  {[
+                    {
+                      value: "PUSAT",
+                      label: "Purchase Pusat",
+                      shortLabel: "Pusat",
+                      icon: Building2,
+                      count: totalPusat,
+                    },
+                    {
+                      value: "OUTLET",
+                      label: "Purchase Outlet",
+                      shortLabel: "Outlet",
+                      icon: Store,
+                      count: totalOutlet,
+                    },
+                    {
+                      value: "SEMUA",
+                      label: "Semua Purchase",
+                      shortLabel: "Semua",
+                      icon: Layers3,
+                      count: totalPurchase,
+                    },
+                  ].map((item) => {
+                    const Icon = item.icon;
+                    const active = source === item.value;
+
+                    return (
+                      <button
+                        key={item.value}
+                        type="button"
+                        onClick={() => setSource(item.value)}
+                        className={`group inline-flex min-w-[112px] flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-all duration-200 ${
+                          active
+                            ? "bg-[#18352D] text-white shadow-[0_7px_18px_rgba(24,53,45,0.18)]"
+                            : "text-[#58736A] hover:bg-[#F1F7F4] hover:text-[#315E51]"
+                        }`}
+                      >
+                        <span
+                          className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
+                            active
+                              ? "bg-white/12 text-emerald-200"
+                              : "bg-[#EAF3EF] text-[#497F70] group-hover:bg-white"
+                          }`}
+                        >
+                          <Icon size={14} />
+                        </span>
+
+                        <span className="hidden sm:inline">
+                          {item.label}
+                        </span>
+                        <span className="sm:hidden">
+                          {item.shortLabel}
+                        </span>
+
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[9px] font-black ${
+                            active
+                              ? "bg-white/12 text-white"
+                              : "bg-[#F1F6F3] text-[#6A837A]"
+                          }`}
+                        >
+                          {item.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                </div>
 
                 <FilterSelect
                   value={status}

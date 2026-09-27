@@ -711,6 +711,15 @@ export default function PaymentPage() {
   const [paymentPayableId, setPaymentPayableId] =
     useState("");
 
+  const [paymentPayableSearch, setPaymentPayableSearch] =
+    useState("");
+
+  const [paymentPayableScope, setPaymentPayableScope] =
+    useState<"ALL" | "PUSAT" | "OUTLET">("ALL");
+
+  const [paymentPayableDropdownOpen, setPaymentPayableDropdownOpen] =
+    useState(false);
+
   const [paymentAmount, setPaymentAmount] =
     useState("");
 
@@ -1636,6 +1645,9 @@ export default function PaymentPage() {
   function resetPaymentForm() {
     setSelectedPayable(null);
     setPaymentPayableId("");
+    setPaymentPayableSearch("");
+    setPaymentPayableScope("ALL");
+    setPaymentPayableDropdownOpen(false);
     setPaymentAmount("");
     setPaymentMethod(
       "PETTY_CASH"
@@ -1755,10 +1767,142 @@ export default function PaymentPage() {
       )
     );
 
+    setPaymentPayableSearch(
+      payable.invoiceNumber ||
+        `PAYABLE-${payable.id}`
+    );
+
+    setPaymentPayableDropdownOpen(false);
+
     setPaymentAmount(
       formatRupiah(
         payable.outstanding
       )
+    );
+  }
+
+  /* =======================================================
+     PAYMENT PAYABLE SEARCH
+  ======================================================= */
+
+  const paymentPayableOptions =
+    useMemo(() => {
+      const keyword =
+        paymentPayableSearch
+          .trim()
+          .toLowerCase();
+
+      return payables
+        .filter(
+          (payable) =>
+            payable.outstanding > 0
+        )
+        .filter((payable) => {
+          if (
+            paymentPayableScope ===
+            "ALL"
+          ) {
+            return true;
+          }
+
+          const scope =
+            payable.purchaseId ||
+            payable.purchase?.id
+              ? "PUSAT"
+              : payable.outletPurchaseId ||
+                payable.outletPurchase?.id
+              ? "OUTLET"
+              : "LAINNYA";
+
+          return (
+            scope ===
+            paymentPayableScope
+          );
+        })
+        .filter((payable) => {
+          if (!keyword) return true;
+
+          const invoice =
+            payable.invoiceNumber ||
+            "";
+
+          const po =
+            payable.purchase?.number ||
+            payable.outletPurchase
+              ?.number ||
+            payable.transactionNumber ||
+            "";
+
+          const supplier =
+            payable.supplier?.name ||
+            payable.supplierName ||
+            "";
+
+          const supplierCode =
+            payable.supplier?.code ||
+            "";
+
+          const payableNumber =
+            `PAYABLE-${payable.id}`;
+
+          const payableId =
+            String(payable.id);
+
+          const outlet =
+            payable.outlet?.name ||
+            payable.outletName ||
+            payable.outletPurchase
+              ?.outlet?.name ||
+            "";
+
+          const haystack = [
+            invoice,
+            po,
+            supplier,
+            supplierCode,
+            payableNumber,
+            payableId,
+            outlet,
+          ]
+            .join(" ")
+            .toLowerCase();
+
+          return haystack.includes(
+            keyword
+          );
+        });
+    }, [
+      payables,
+      paymentPayableSearch,
+      paymentPayableScope,
+    ]);
+
+  function getPayableScope(
+    payable: Payable
+  ) {
+    if (
+      payable.purchaseId ||
+      payable.purchase?.id
+    ) {
+      return "PUSAT";
+    }
+
+    if (
+      payable.outletPurchaseId ||
+      payable.outletPurchase?.id
+    ) {
+      return "OUTLET";
+    }
+
+    return "LAINNYA";
+  }
+
+  function getPayableSearchLabel(
+    payable: Payable
+  ) {
+    return (
+      payable.invoiceNumber ||
+      `PAYABLE-${payable.id}`
     );
   }
 
@@ -3676,7 +3820,7 @@ export default function PaymentPage() {
 
                 <div className="space-y-5 p-6">
 
-                  {/* PAYABLE */}
+                  {/* PAYABLE / SEARCHABLE INVOICE */}
 
                   <div>
 
@@ -3694,96 +3838,383 @@ export default function PaymentPage() {
 
                     <div className="relative">
 
-                      <select
-                        value={
-                          paymentPayableId
-                        }
-                        onChange={(e) =>
-                          handleSelectPayable(
-                            e.target.value
-                          )
-                        }
-                        disabled={
-                          savingPayment ||
-                          loadingPayables
-                        }
-                        className="w-full appearance-none rounded-xl border border-[#D1E1F0] bg-[#FAFCFB] px-4 py-3.5 pr-10 text-xs font-semibold text-gray-700 outline-none transition focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10 disabled:bg-gray-100"
-                      >
+                      <div className="relative">
 
-                        <option value="">
-                          {loadingPayables
-                            ? "Memuat invoice..."
-                            : payables.length ===
-                              0
-                            ? "Tidak ada invoice outstanding"
-                            : "Pilih invoice / payable"}
-                        </option>
+                        <Search
+                          size={16}
+                          className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                        />
 
-                        {payables
-                          .filter(
-                            (
-                              payable
-                            ) =>
-                              payable.outstanding >
-                              0
-                          )
-                          .map(
-                            (
-                              payable
-                            ) => {
-
-                              const poNumber =
-                                payable.purchase?.number ||
-                                payable.outletPurchase?.number ||
-                                payable.transactionNumber ||
-                                "-";
-
-                              const supplier =
-                                payable.supplier?.name ||
-                                payable.supplierName ||
-                                "-";
-
-                              const payableScope =
-                                payable.purchaseId ||
-                                payable.purchase?.id
-                                  ? "PUSAT"
-                                  : payable.outletPurchaseId ||
-                                    payable.outletPurchase?.id
-                                  ? "OUTLET"
-                                  : "LAINNYA";
-
-                              return (
-                                <option
-                                  key={
-                                    payable.id
-                                  }
-                                  value={String(
-                                    payable.id
-                                  )}
-                                >
-                                  {payableScope}
-                                  {" — "}
-                                  {payable.invoiceNumber ||
-                                    `PAYABLE-${payable.id}`}
-                                  {" — "}
-                                  {supplier}
-                                  {" — PO "}
-                                  {poNumber}
-                                  {" — Rp "}
-                                  {formatRupiah(
-                                    payable.outstanding
-                                  )}
-                                </option>
+                        <input
+                          type="text"
+                          value={
+                            paymentPayableSearch
+                          }
+                          onFocus={() => {
+                            if (!savingPayment) {
+                              setPaymentPayableDropdownOpen(
+                                true
                               );
                             }
-                          )}
+                          }}
+                          onChange={(e) => {
+                            setPaymentPayableSearch(
+                              e.target.value
+                            );
+                            setPaymentPayableDropdownOpen(
+                              true
+                            );
 
-                      </select>
+                            if (
+                              selectedPayable &&
+                              e.target.value !==
+                                getPayableSearchLabel(
+                                  selectedPayable
+                                )
+                            ) {
+                              setSelectedPayable(
+                                null
+                              );
+                              setPaymentPayableId(
+                                ""
+                              );
+                              setPaymentAmount(
+                                ""
+                              );
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (
+                              e.key === "Escape"
+                            ) {
+                              setPaymentPayableDropdownOpen(
+                                false
+                              );
+                            }
+                          }}
+                          disabled={
+                            savingPayment ||
+                            loadingPayables
+                          }
+                          placeholder={
+                            loadingPayables
+                              ? "Memuat invoice..."
+                              : "Ketik invoice, nomor PO, nomor payable, atau supplier..."
+                          }
+                          className="h-14 w-full rounded-xl border border-[#D1E1F0] bg-[#FAFCFB] py-3 pl-10 pr-11 text-xs font-semibold text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10 disabled:bg-gray-100"
+                        />
 
-                      <ChevronDown
-                        size={17}
-                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
-                      />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              !savingPayment
+                            ) {
+                              setPaymentPayableDropdownOpen(
+                                (
+                                  current
+                                ) =>
+                                  !current
+                              );
+                            }
+                          }}
+                          disabled={
+                            savingPayment
+                          }
+                          className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-[#00529C] disabled:opacity-50"
+                          aria-label="Buka daftar invoice"
+                        >
+                          <ChevronDown
+                            size={17}
+                            className={
+                              paymentPayableDropdownOpen
+                                ? "rotate-180 transition-transform"
+                                : "transition-transform"
+                            }
+                          />
+                        </button>
+
+                      </div>
+
+                      {paymentPayableDropdownOpen && (
+                        <>
+
+                          <button
+                            type="button"
+                            aria-label="Tutup daftar invoice"
+                            className="fixed inset-0 z-10 cursor-default"
+                            onClick={() =>
+                              setPaymentPayableDropdownOpen(
+                                false
+                              )
+                            }
+                          />
+
+                          <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-2xl border border-[#D1E1F0] bg-white shadow-[0_20px_60px_rgba(0,59,115,0.16)]">
+
+                            <div className="border-b border-[#E4EDF5] bg-[#F8FBFE] p-3">
+
+                              <div className="mb-2 flex items-center justify-between gap-2">
+
+                                <p className="text-[9px] font-extrabold uppercase tracking-[0.13em] text-[#426B89]">
+                                  Filter Lokasi
+                                </p>
+
+                                <span className="text-[9px] font-medium text-gray-400">
+                                  {paymentPayableOptions.length} invoice
+                                </span>
+
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-2">
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setPaymentPayableScope(
+                                      "ALL"
+                                    )
+                                  }
+                                  className={`inline-flex items-center justify-center gap-1.5 rounded-lg border px-2.5 py-2 text-[9px] font-extrabold transition ${
+                                    paymentPayableScope ===
+                                    "ALL"
+                                      ? "border-[#00529C] bg-[#E8F2FB] text-[#00529C] shadow-sm"
+                                      : "border-[#D7E5F0] bg-white text-gray-500 hover:border-[#A9C8E6] hover:text-[#00529C]"
+                                  }`}
+                                >
+                                  Semua
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setPaymentPayableScope(
+                                      "PUSAT"
+                                    )
+                                  }
+                                  className={`inline-flex items-center justify-center gap-1.5 rounded-lg border px-2.5 py-2 text-[9px] font-extrabold transition ${
+                                    paymentPayableScope ===
+                                    "PUSAT"
+                                      ? "border-[#00529C] bg-[#E8F2FB] text-[#00529C] shadow-sm"
+                                      : "border-[#D7E5F0] bg-white text-gray-500 hover:border-[#A9C8E6] hover:text-[#00529C]"
+                                  }`}
+                                >
+                                  <Landmark size={11} />
+                                  Pusat
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setPaymentPayableScope(
+                                      "OUTLET"
+                                    )
+                                  }
+                                  className={`inline-flex items-center justify-center gap-1.5 rounded-lg border px-2.5 py-2 text-[9px] font-extrabold transition ${
+                                    paymentPayableScope ===
+                                    "OUTLET"
+                                      ? "border-blue-600 bg-blue-50 text-blue-700 shadow-sm"
+                                      : "border-[#D7E5F0] bg-white text-gray-500 hover:border-blue-200 hover:text-blue-700"
+                                  }`}
+                                >
+                                  <Building2 size={11} />
+                                  Outlet
+                                </button>
+
+                              </div>
+
+                            </div>
+
+                            <div className="max-h-72 overflow-y-auto p-2">
+
+                              {loadingPayables ? (
+                                <div className="px-4 py-8 text-center">
+
+                                  <RefreshCw
+                                    size={18}
+                                    className="mx-auto animate-spin text-[#00529C]"
+                                  />
+
+                                  <p className="mt-2 text-[10px] font-semibold text-gray-400">
+                                    Memuat invoice outstanding...
+                                  </p>
+
+                                </div>
+                              ) : paymentPayableOptions.length ===
+                                0 ? (
+                                <div className="px-4 py-8 text-center">
+
+                                  <Search
+                                    size={20}
+                                    className="mx-auto text-gray-300"
+                                  />
+
+                                  <p className="mt-2 text-xs font-extrabold text-gray-500">
+                                    Invoice tidak ditemukan
+                                  </p>
+
+                                  <p className="mt-1 text-[9px] leading-4 text-gray-400">
+                                    Coba ketik nomor invoice,
+                                    nomor PO, nomor payable,
+                                    atau nama supplier.
+                                  </p>
+
+                                </div>
+                              ) : (
+                                <div className="space-y-1">
+
+                                  {paymentPayableOptions.map(
+                                    (
+                                      payable
+                                    ) => {
+
+                                      const payableScope =
+                                        getPayableScope(
+                                          payable
+                                        );
+
+                                      const poNumber =
+                                        payable.purchase
+                                          ?.number ||
+                                        payable
+                                          .outletPurchase
+                                          ?.number ||
+                                        payable.transactionNumber ||
+                                        "-";
+
+                                      const supplier =
+                                        payable.supplier
+                                          ?.name ||
+                                        payable.supplierName ||
+                                        "-";
+
+                                      const invoiceNumber =
+                                        getPayableSearchLabel(
+                                          payable
+                                        );
+
+                                      const isSelected =
+                                        String(
+                                          payable.id
+                                        ) ===
+                                        paymentPayableId;
+
+                                      return (
+                                        <button
+                                          key={
+                                            payable.id
+                                          }
+                                          type="button"
+                                          onClick={() =>
+                                            handleSelectPayable(
+                                              String(
+                                                payable.id
+                                              )
+                                            )
+                                          }
+                                          className={`w-full rounded-xl border px-3.5 py-3 text-left transition ${
+                                            isSelected
+                                              ? "border-[#8CB5A6] bg-[#F0F7F3] shadow-sm"
+                                              : "border-transparent hover:border-[#D9E7F4] hover:bg-[#F7FAFC]"
+                                          }`}
+                                        >
+
+                                          <div className="flex items-start justify-between gap-3">
+
+                                            <div className="min-w-0 flex-1">
+
+                                              <div className="flex flex-wrap items-center gap-1.5">
+
+                                                <span
+                                                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[8px] font-extrabold ${
+                                                    payableScope ===
+                                                    "PUSAT"
+                                                      ? "bg-[#E8F2FB] text-[#00529C]"
+                                                      : payableScope ===
+                                                        "OUTLET"
+                                                      ? "bg-blue-50 text-blue-700"
+                                                      : "bg-slate-100 text-slate-600"
+                                                  }`}
+                                                >
+                                                  {payableScope ===
+                                                  "PUSAT" ? (
+                                                    <Landmark
+                                                      size={9}
+                                                    />
+                                                  ) : (
+                                                    <Building2
+                                                      size={9}
+                                                    />
+                                                  )}
+                                                  {payableScope}
+                                                </span>
+
+                                                <span className="truncate text-[11px] font-black text-[#003B73]">
+                                                  {invoiceNumber}
+                                                </span>
+
+                                              </div>
+
+                                              <p className="mt-1 truncate text-[10px] font-bold text-gray-600">
+                                                {supplier}
+                                                {payable.supplier
+                                                  ?.code
+                                                  ? ` • ${payable.supplier.code}`
+                                                  : ""}
+                                              </p>
+
+                                              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-gray-400">
+
+                                                <span>
+                                                  PO:{" "}
+                                                  <b className="font-extrabold text-gray-500">
+                                                    {poNumber}
+                                                  </b>
+                                                </span>
+
+                                                <span>
+                                                  Payable ID:{" "}
+                                                  <b className="font-extrabold text-gray-500">
+                                                    {payable.id}
+                                                  </b>
+                                                </span>
+
+                                              </div>
+
+                                            </div>
+
+                                            <div className="shrink-0 text-right">
+
+                                              <p className="text-[8px] font-extrabold uppercase tracking-wide text-gray-400">
+                                                Outstanding
+                                              </p>
+
+                                              <p className="mt-0.5 text-[11px] font-black text-red-600">
+                                                Rp{" "}
+                                                {formatRupiah(
+                                                  payable.outstanding
+                                                )}
+                                              </p>
+
+                                            </div>
+
+                                          </div>
+
+                                        </button>
+                                      );
+                                    }
+                                  )}
+
+                                </div>
+                              )}
+
+                            </div>
+
+                          </div>
+
+                        </>
+
+                      )}
 
                     </div>
 
@@ -3800,7 +4231,8 @@ export default function PaymentPage() {
                       </span>
 
                       <span className="text-[9px] text-gray-400">
-                        Scope ditentukan dari PO
+                        Cari berdasarkan invoice, PO,
+                        payable ID, atau supplier
                       </span>
 
                     </div>
