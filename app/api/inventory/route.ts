@@ -41,10 +41,7 @@ async function getCurrentUser() {
 
     return user;
   } catch (error) {
-    console.error(
-      "GET CURRENT USER ERROR:",
-      error
-    );
+    console.error("GET CURRENT USER ERROR:", error);
 
     return null;
   }
@@ -54,11 +51,22 @@ async function getCurrentUser() {
  * =========================================================
  * GET INVENTORY
  *
- * SOURCE:
+ * ATURAN UTAMA:
+ *
+ * 1. Inventory pusat hanya menampilkan Barang CENTRAL.
+ * 2. Barang CENTRAL yang belum memiliki transaksi tidak
+ *    ditampilkan.
+ * 3. Transaksi yang tersedia secara eksplisit pada schema
+ *    file ini adalah purchaseItems.
+ * 4. Tidak membuat endpoint baru.
+ * 5. Source OUTLET tetap dipertahankan untuk kompatibilitas
+ *    API, tetapi halaman Inventory Pusat dapat menggunakan
+ *    source=CENTRAL.
  *
  * CENTRAL
+ * -> Barang
  * -> Inventory
- * -> Barang.stock
+ * -> PurchaseItem sebagai indikator transaksi
  *
  * OUTLET
  * -> OutletStock
@@ -86,11 +94,9 @@ export async function GET(req: NextRequest) {
     const category =
       searchParams.get("category")?.trim() || "";
 
-    const source =
-      (
-        searchParams.get("source") ||
-        "CENTRAL"
-      ).toUpperCase();
+    const source = (
+      searchParams.get("source") || "CENTRAL"
+    ).toUpperCase();
 
     const queryOutletId = Number(
       searchParams.get("outletId") || 0
@@ -109,8 +115,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Source inventory tidak valid",
+          message: "Source inventory tidak valid",
         },
         {
           status: 400,
@@ -173,17 +178,43 @@ export async function GET(req: NextRequest) {
      * =====================================================
      * SOURCE CENTRAL
      *
-     * HANYA AMBIL INVENTORY PUSAT
+     * HANYA AMBIL:
+     *
+     * - Barang source CENTRAL
+     * - Barang yang memiliki transaksi
+     *
+     * TRANSAKSI:
+     * purchaseItems
+     *
+     * Dengan `some: {}`, barang tanpa satupun
+     * PurchaseItem tidak akan ikut masuk.
      * =====================================================
      */
 
     if (source === "CENTRAL") {
       const barangWhere: any = {
+        /*
+         * HANYA BARANG PUSAT
+         */
         source: "CENTRAL",
+
+        /*
+         * =================================================
+         * WAJIB MEMILIKI TRANSAKSI
+         *
+         * Barang master yang belum pernah digunakan
+         * dalam Purchase/PO tidak ditampilkan.
+         * =================================================
+         */
+        purchaseItems: {
+          some: {},
+        },
       };
 
       /*
+       * ===================================================
        * SEARCH
+       * ===================================================
        */
 
       if (search) {
@@ -207,7 +238,9 @@ export async function GET(req: NextRequest) {
       }
 
       /*
+       * ===================================================
        * CATEGORY
+       * ===================================================
        */
 
       if (category) {
@@ -217,6 +250,8 @@ export async function GET(req: NextRequest) {
       /*
        * ===================================================
        * GET BARANG CENTRAL
+       *
+       * HANYA BARANG DENGAN TRANSAKSI
        * ===================================================
        */
 
@@ -229,6 +264,10 @@ export async function GET(req: NextRequest) {
 
             priceSummary: true,
 
+            /*
+             * Ambil transaksi Purchase terakhir
+             * untuk informasi supplier dan transaksi.
+             */
             purchaseItems: {
               orderBy: {
                 purchase: {
@@ -260,81 +299,87 @@ export async function GET(req: NextRequest) {
        */
 
       const data = barang.map((item) => {
-        const inventory =
-          item.inventory;
+        const inventory = item.inventory;
 
-        const stock =
-          Number(
-            inventory?.stock ??
-              item.stock ??
-              0
-          );
+        const stock = Number(
+          inventory?.stock ??
+            item.stock ??
+            0
+        );
 
-        const availableStock =
-          Number(
-            inventory?.availableStock ??
-              stock
-          );
+        const availableStock = Number(
+          inventory?.availableStock ??
+            stock
+        );
 
-        const reservedStock =
-          Number(
-            inventory?.reservedStock ?? 0
-          );
+        const reservedStock = Number(
+          inventory?.reservedStock ?? 0
+        );
 
-        const minimumStock =
-          Number(
-            inventory?.minimumStock ??
-              item.minimumStock ??
-              0
-          );
+        const minimumStock = Number(
+          inventory?.minimumStock ??
+            item.minimumStock ??
+            0
+        );
 
-        const maximumStock =
-          Number(
-            inventory?.maximumStock ?? 0
-          );
+        const maximumStock = Number(
+          inventory?.maximumStock ?? 0
+        );
 
-        const averageCost =
-          Number(
-            inventory?.averageCost ??
-              item.priceSummary
-                ?.averagePrice ??
-              item.purchasePrice ??
-              0
-          );
+        const averageCost = Number(
+          inventory?.averageCost ??
+            item.priceSummary
+              ?.averagePrice ??
+            item.purchasePrice ??
+            0
+        );
 
-        const lastPurchase =
-          Number(
-            inventory?.lastPurchase ??
-              item.purchasePrice ??
-              0
-          );
+        const lastPurchase = Number(
+          inventory?.lastPurchase ??
+            item.purchasePrice ??
+            0
+        );
 
         /*
+         * =================================================
          * STOCK STATUS
+         * =================================================
          */
 
-        let stockStatus =
-          "AMAN";
+        let stockStatus = "AMAN";
 
         if (stock <= 0) {
           stockStatus = "HABIS";
-        } else if (
-          stock <= minimumStock
-        ) {
+        } else if (stock <= minimumStock) {
           stockStatus = "MENIPIS";
         }
 
         /*
-         * SUPPLIER TERAKHIR
+         * =================================================
+         * TRANSAKSI TERAKHIR
+         * =================================================
          */
 
         const lastPurchaseItem =
-          item.purchaseItems?.[0];
+          item.purchaseItems?.[0] ?? null;
+
+        const lastPurchaseTransaction =
+          lastPurchaseItem?.purchase ?? null;
+
+        /*
+         * =================================================
+         * SUPPLIER TERAKHIR
+         * =================================================
+         */
 
         const supplier =
-          lastPurchaseItem
-            ?.purchase
-            ?.supplier;
+          lastPurchaseTransaction?.supplier ?? null;
+
+        /*
+         * =================================================
+         * RETURN CENTRAL
+         * =================================================
+         */
 
         return {
           id: item.id,
@@ -352,13 +397,17 @@ export async function GET(req: NextRequest) {
           unit: item.unit,
 
           /*
+           * =================================================
            * SOURCE
+           * =================================================
            */
 
           source: "CENTRAL",
 
           /*
+           * =================================================
            * STOCK
+           * =================================================
            */
 
           stock,
@@ -370,7 +419,9 @@ export async function GET(req: NextRequest) {
           reservedStock,
 
           /*
+           * =================================================
            * MIN / MAX
+           * =================================================
            */
 
           minimumStock,
@@ -378,7 +429,9 @@ export async function GET(req: NextRequest) {
           maximumStock,
 
           /*
+           * =================================================
            * COST
+           * =================================================
            */
 
           averageCost,
@@ -392,7 +445,9 @@ export async function GET(req: NextRequest) {
             item.sellingPrice,
 
           /*
+           * =================================================
            * WAREHOUSE
+           * =================================================
            */
 
           warehouse:
@@ -400,19 +455,25 @@ export async function GET(req: NextRequest) {
             "MAIN",
 
           /*
+           * =================================================
            * STATUS
+           * =================================================
            */
 
           stockStatus,
 
           /*
+           * =================================================
            * ACTIVE
+           * =================================================
            */
 
           active: item.active,
 
           /*
+           * =================================================
            * SUPPLIER
+           * =================================================
            */
 
           supplier: supplier
@@ -424,10 +485,40 @@ export async function GET(req: NextRequest) {
             : null,
 
           /*
+           * =================================================
+           * TRANSACTION
+           *
+           * Informasi ini berasal dari purchaseItems
+           * yang memang sudah ada pada query.
+           * =================================================
+           */
+
+          transaction: lastPurchaseTransaction
+            ? {
+                id: lastPurchaseTransaction.id,
+                purchaseDate:
+                  lastPurchaseTransaction.purchaseDate,
+              }
+            : null,
+
+          /*
+           * =================================================
+           * TRANSACTION FLAG
+           * =================================================
+           *
+           * Berguna untuk frontend jika ingin memastikan
+           * item memang memiliki transaksi.
+           */
+
+          hasTransaction:
+            item.purchaseItems.length > 0,
+
+          /*
+           * =================================================
            * OUTLET
            *
-           * CENTRAL tidak mempunyai
-           * outlet stock.
+           * CENTRAL tidak mempunyai OutletStock.
+           * =================================================
            */
 
           outlet: null,
@@ -435,7 +526,9 @@ export async function GET(req: NextRequest) {
           outletId: null,
 
           /*
+           * =================================================
            * TIMESTAMP
+           * =================================================
            */
 
           createdAt:
@@ -460,6 +553,11 @@ export async function GET(req: NextRequest) {
 
         outletId: null,
 
+        /*
+         * Total sekarang hanya menghitung
+         * barang pusat yang mempunyai transaksi.
+         */
+
         total: data.length,
 
         data,
@@ -470,7 +568,7 @@ export async function GET(req: NextRequest) {
      * =====================================================
      * SOURCE OUTLET
      *
-     * HANYA AMBIL OutletStock
+     * BAGIAN INI DIPERTAHANKAN
      * =====================================================
      */
 
@@ -575,24 +673,21 @@ export async function GET(req: NextRequest) {
         const barang =
           outletStock.barang;
 
-        const stock =
-          Number(
-            outletStock.stock ?? 0
-          );
+        const stock = Number(
+          outletStock.stock ?? 0
+        );
 
-        const minimumStock =
-          Number(
-            outletStock.minimumStock ?? 0
-          );
+        const minimumStock = Number(
+          outletStock.minimumStock ?? 0
+        );
 
-        const averageCost =
-          Number(
-            outletStock.averageCost ??
-              barang.priceSummary
-                ?.averagePrice ??
-              barang.purchasePrice ??
-              0
-          );
+        const averageCost = Number(
+          outletStock.averageCost ??
+            barang.priceSummary
+              ?.averagePrice ??
+            barang.purchasePrice ??
+            0
+        );
 
         /*
          * =================================================
@@ -600,14 +695,11 @@ export async function GET(req: NextRequest) {
          * =================================================
          */
 
-        let stockStatus =
-          "AMAN";
+        let stockStatus = "AMAN";
 
         if (stock <= 0) {
           stockStatus = "HABIS";
-        } else if (
-          stock <= minimumStock
-        ) {
+        } else if (stock <= minimumStock) {
           stockStatus = "MENIPIS";
         }
 
@@ -635,19 +727,15 @@ export async function GET(req: NextRequest) {
 
           code: barang.code,
 
-          barcode:
-            barang.barcode,
+          barcode: barang.barcode,
 
           name: barang.name,
 
-          category:
-            barang.category,
+          category: barang.category,
 
-          brand:
-            barang.brand,
+          brand: barang.brand,
 
-          unit:
-            barang.unit,
+          unit: barang.unit,
 
           /*
            * SOURCE
@@ -671,17 +759,15 @@ export async function GET(req: NextRequest) {
            * stock outlet.
            */
 
-          centralStock:
-            Number(
-              barang.stock ?? 0
-            ),
+          centralStock: Number(
+            barang.stock ?? 0
+          ),
 
           /*
            * OUTLET STOCK
            */
 
-          availableStock:
-            stock,
+          availableStock: stock,
 
           reservedStock: 0,
 
@@ -720,8 +806,7 @@ export async function GET(req: NextRequest) {
            */
 
           outlet: {
-            id:
-              outletStock.outlet.id,
+            id: outletStock.outlet.id,
 
             code:
               outletStock.outlet.code,

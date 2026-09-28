@@ -9,7 +9,14 @@ type ImportError = {
   message: string;
 };
 
-type DeactivatedDetail = {
+type RemovedDetail = {
+  id: number;
+  code: string;
+  name: string;
+  message: string;
+};
+
+type PreservedDetail = {
   id: number;
   code: string;
   name: string;
@@ -24,9 +31,23 @@ type ImportResult = {
     total?: number;
     imported?: number;
     updated?: number;
+
+    /**
+     * Jumlah barang lama yang benar-benar
+     * dihapus karena belum pernah dipakai
+     * transaksi pusat.
+     */
+    removed?: number;
+
+    /**
+     * Backward compatibility jika API lama
+     * masih mengirim deactivated.
+     */
     deactivated?: number;
+
     skipped?: number;
     failed?: number;
+
     errors?: ImportError[];
   };
 
@@ -34,7 +55,17 @@ type ImportResult = {
     totalExcel?: number;
     baru?: number;
     update?: number;
+
+    /**
+     * Barang lama yang dihapus.
+     */
+    dihapus?: number;
+
+    /**
+     * Backward compatibility.
+     */
     dinonaktifkan?: number;
+
     dilewati?: number;
     gagal?: number;
   };
@@ -43,7 +74,23 @@ type ImportResult = {
 
   failedDetails?: ImportError[];
 
-  deactivatedDetails?: DeactivatedDetail[];
+  /**
+   * Detail barang lama yang benar-benar
+   * dihapus dari master.
+   */
+  removedDetails?: RemovedDetail[];
+
+  /**
+   * Backward compatibility dengan API lama.
+   */
+  deactivatedDetails?: RemovedDetail[];
+
+  /**
+   * Barang lama yang tidak ada di Excel
+   * tetapi dipertahankan karena sudah
+   * mempunyai histori transaksi pusat.
+   */
+  preservedDetails?: PreservedDetail[];
 };
 
 export default function ImportBarangModal({
@@ -147,15 +194,28 @@ export default function ImportBarangModal({
      * KONFIRMASI
      * =======================================================
      *
-     * Karena barang lama yang tidak ada di Excel
-     * akan otomatis menjadi inactive.
+     * ATURAN IMPORT:
      *
-     * Data TIDAK dihapus.
+     * 1. Barang yang ada di Excel baru:
+     *    - jika kode sudah ada -> update
+     *    - jika belum ada -> buat baru
+     *
+     * 2. Barang lama yang tidak ada di Excel:
+     *    - sudah pernah dipakai transaksi pusat
+     *      -> PERTAHANKAN
+     *
+     *    - belum pernah dipakai transaksi pusat
+     *      -> HAPUS
+     *
+     * 3. Barang OUTLET tidak disentuh.
+     *
+     * 4. ID barang yang sudah mempunyai
+     *    histori transaksi harus dipertahankan.
      */
 
     const confirmed =
       window.confirm(
-        "Import ini akan memperbarui master barang berdasarkan Excel baru. Barang CENTRAL lama yang tidak ada di Excel akan otomatis dinonaktifkan, tetapi TIDAK dihapus dan histori transaksi tetap aman. Lanjutkan?"
+        "Import Master Barang baru akan menggantikan daftar master barang CENTRAL. Barang lama yang tidak ada di Excel akan diperiksa berdasarkan histori transaksi pusat: barang yang sudah pernah dipakai transaksi akan DIPERTAHANKAN, sedangkan barang yang belum pernah dipakai transaksi akan DIHAPUS. Barang OUTLET tidak disentuh. Lanjutkan?"
       );
 
     if (!confirmed) {
@@ -203,8 +263,9 @@ export default function ImportBarangModal({
       setResult(json);
 
       /*
-       * Reload hanya jika request
-       * benar-benar berhasil.
+       * =====================================================
+       * RELOAD
+       * =====================================================
        */
 
       if (
@@ -252,9 +313,82 @@ export default function ImportBarangModal({
     result?.data?.errors ||
     [];
 
-  const deactivated =
+  /*
+   * API BARU:
+   * removedDetails
+   *
+   * API LAMA:
+   * deactivatedDetails
+   *
+   * Keduanya diterima supaya frontend tetap
+   * kompatibel saat backend sedang diperbarui.
+   */
+
+  const removed =
+    result?.removedDetails ||
     result?.deactivatedDetails ||
     [];
+
+  const preserved =
+    result?.preservedDetails ||
+    [];
+
+  /*
+   * =========================================================
+   * JUMLAH DIHAPUS
+   * =========================================================
+   */
+
+  const removedCount =
+    data?.removed ??
+    data?.deactivated ??
+    result?.summary?.dihapus ??
+    result?.summary?.dinonaktifkan ??
+    removed.length;
+
+  /*
+   * =========================================================
+   * JUMLAH TOTAL
+   * =========================================================
+   */
+
+  const total =
+    data?.total ??
+    result?.summary?.totalExcel ??
+    0;
+
+  /*
+   * =========================================================
+   * JUMLAH BARU
+   * =========================================================
+   */
+
+  const imported =
+    data?.imported ??
+    result?.summary?.baru ??
+    0;
+
+  /*
+   * =========================================================
+   * JUMLAH UPDATE
+   * =========================================================
+   */
+
+  const updated =
+    data?.updated ??
+    result?.summary?.update ??
+    0;
+
+  /*
+   * =========================================================
+   * JUMLAH DILEWATI
+   * =========================================================
+   */
+
+  const skipped =
+    data?.skipped ??
+    result?.summary?.dilewati ??
+    0;
 
   /*
    * =========================================================
@@ -318,8 +452,8 @@ export default function ImportBarangModal({
                 text-gray-500
               "
             >
-              Import master barang pusat dari
-              file Excel
+              Ganti master barang CENTRAL
+              menggunakan file Excel baru
             </p>
           </div>
 
@@ -359,7 +493,7 @@ export default function ImportBarangModal({
           "
         >
           {/* =================================================
-              PENJELASAN IMPORT
+              CARA KERJA IMPORT
           ================================================= */}
 
           <div
@@ -397,23 +531,33 @@ export default function ImportBarangModal({
               </li>
 
               <li>
-                • Barang dengan nama yang sama
-                tidak akan dibuat duplikat.
+                • ID barang lama tetap
+                dipertahankan ketika barang
+                tersebut sudah mempunyai
+                histori transaksi.
               </li>
 
               <li>
-                • Barang baru akan dibuat sebagai
-                barang CENTRAL.
+                • Barang baru di Excel akan
+                dibuat sebagai barang CENTRAL.
               </li>
 
               <li>
-                • Barang CENTRAL lama yang tidak
-                ada di Excel akan otomatis
-                dinonaktifkan.
+                • Barang CENTRAL lama yang
+                tidak ada di Excel akan
+                diperiksa histori transaksinya.
               </li>
 
               <li>
-                • Barang lama TIDAK dihapus.
+                • Barang yang sudah pernah
+                dipakai transaksi pusat akan
+                DIPERTAHANKAN.
+              </li>
+
+              <li>
+                • Barang yang belum pernah
+                dipakai transaksi pusat akan
+                DIHAPUS.
               </li>
 
               <li>
@@ -421,8 +565,8 @@ export default function ImportBarangModal({
               </li>
 
               <li>
-                • ID barang lama dipertahankan
-                agar histori transaksi tetap aman.
+                • Histori transaksi tidak
+                dihapus.
               </li>
             </ul>
           </div>
@@ -449,7 +593,7 @@ export default function ImportBarangModal({
                 text-amber-800
               "
             >
-              Perhatian
+              Perhatian sebelum import
             </div>
 
             <ul
@@ -474,7 +618,8 @@ export default function ImportBarangModal({
               </li>
 
               <li>
-                • Spasi berlebih akan diabaikan.
+                • Spasi berlebih akan
+                diabaikan.
               </li>
 
               <li>
@@ -483,9 +628,26 @@ export default function ImportBarangModal({
               </li>
 
               <li>
-                • Barang lama yang tidak ada di
-                Excel menjadi inactive, bukan
-                dihapus.
+                • Barang lama yang tidak ada
+                di Excel TIDAK otomatis
+                dihapus semuanya.
+              </li>
+
+              <li>
+                • Barang yang sudah mempunyai
+                transaksi pusat akan tetap
+                dipertahankan.
+              </li>
+
+              <li>
+                • Hanya barang lama yang belum
+                pernah dipakai transaksi pusat
+                yang boleh dihapus.
+              </li>
+
+              <li>
+                • Histori transaksi tidak boleh
+                ikut terhapus.
               </li>
             </ul>
           </div>
@@ -614,7 +776,8 @@ export default function ImportBarangModal({
                       text-green-700
                     "
                   >
-                    {result.message}
+                    {result.message ||
+                      "Master barang berhasil diperbarui."}
                   </div>
 
                   {/* =======================================
@@ -647,8 +810,7 @@ export default function ImportBarangModal({
                           text-[#18352D]
                         "
                       >
-                        {data?.total ??
-                          0}
+                        {total}
                       </div>
 
                       <div
@@ -657,7 +819,7 @@ export default function ImportBarangModal({
                           text-gray-500
                         "
                       >
-                        Total
+                        Total Excel
                       </div>
                     </div>
 
@@ -678,8 +840,7 @@ export default function ImportBarangModal({
                           text-green-600
                         "
                       >
-                        {data?.imported ??
-                          0}
+                        {imported}
                       </div>
 
                       <div
@@ -709,8 +870,7 @@ export default function ImportBarangModal({
                           text-blue-600
                         "
                       >
-                        {data?.updated ??
-                          0}
+                        {updated}
                       </div>
 
                       <div
@@ -723,7 +883,7 @@ export default function ImportBarangModal({
                       </div>
                     </div>
 
-                    {/* NONAKTIF */}
+                    {/* DIHAPUS */}
 
                     <div
                       className="
@@ -737,11 +897,10 @@ export default function ImportBarangModal({
                         className="
                           text-lg
                           font-bold
-                          text-amber-600
+                          text-red-600
                         "
                       >
-                        {data?.deactivated ??
-                          0}
+                        {removedCount}
                       </div>
 
                       <div
@@ -750,11 +909,11 @@ export default function ImportBarangModal({
                           text-gray-500
                         "
                       >
-                        Nonaktif
+                        Dihapus
                       </div>
                     </div>
 
-                    {/* DUPLIKAT */}
+                    {/* DILEWATI */}
 
                     <div
                       className="
@@ -771,8 +930,7 @@ export default function ImportBarangModal({
                           text-orange-600
                         "
                       >
-                        {data?.skipped ??
-                          0}
+                        {skipped}
                       </div>
 
                       <div
@@ -825,10 +983,10 @@ export default function ImportBarangModal({
               )}
 
               {/* =============================================
-                  BARANG NONAKTIF
+                  BARANG DIHAPUS
               ============================================= */}
 
-              {deactivated.length >
+              {removed.length >
                 0 && (
                 <div
                   className="
@@ -836,14 +994,14 @@ export default function ImportBarangModal({
                     overflow-hidden
                     rounded-xl
                     border
-                    border-amber-200
+                    border-red-200
                   "
                 >
                   <div
                     className="
                       border-b
-                      border-amber-200
-                      bg-amber-50
+                      border-red-200
+                      bg-red-50
                       px-4
                       py-3
                     "
@@ -852,23 +1010,23 @@ export default function ImportBarangModal({
                       className="
                         text-sm
                         font-semibold
-                        text-amber-800
+                        text-red-800
                       "
                     >
-                      Barang otomatis
-                      dinonaktifkan
+                      Barang dihapus dari master
                     </div>
 
                     <div
                       className="
                         mt-0.5
                         text-xs
-                        text-amber-700
+                        text-red-700
                       "
                     >
-                      Barang tidak ditemukan
-                      dalam Excel baru. Data
-                      tetap disimpan.
+                      Barang berikut tidak ada
+                      dalam Excel baru dan belum
+                      pernah dipakai transaksi
+                      pusat.
                     </div>
                   </div>
 
@@ -879,7 +1037,7 @@ export default function ImportBarangModal({
                       bg-white
                     "
                   >
-                    {deactivated.map(
+                    {removed.map(
                       (item) => (
                         <div
                           key={item.id}
@@ -916,10 +1074,117 @@ export default function ImportBarangModal({
                             className="
                               mt-1
                               text-xs
-                              text-amber-600
+                              text-red-600
                             "
                           >
-                            {item.message}
+                            {item.message ||
+                              "Belum pernah dipakai transaksi pusat dan dihapus dari master."}
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* =============================================
+                  BARANG DIPERTAHANKAN
+              ============================================= */}
+
+              {preserved.length >
+                0 && (
+                <div
+                  className="
+                    mt-4
+                    overflow-hidden
+                    rounded-xl
+                    border
+                    border-blue-200
+                  "
+                >
+                  <div
+                    className="
+                      border-b
+                      border-blue-200
+                      bg-blue-50
+                      px-4
+                      py-3
+                    "
+                  >
+                    <div
+                      className="
+                        text-sm
+                        font-semibold
+                        text-blue-800
+                      "
+                    >
+                      Barang lama dipertahankan
+                    </div>
+
+                    <div
+                      className="
+                        mt-0.5
+                        text-xs
+                        text-blue-700
+                      "
+                    >
+                      Barang berikut tidak ada
+                      dalam Excel baru, tetapi
+                      tetap dipertahankan karena
+                      sudah mempunyai histori
+                      transaksi pusat.
+                    </div>
+                  </div>
+
+                  <div
+                    className="
+                      max-h-56
+                      overflow-y-auto
+                      bg-white
+                    "
+                  >
+                    {preserved.map(
+                      (item) => (
+                        <div
+                          key={item.id}
+                          className="
+                            border-b
+                            border-gray-100
+                            px-4
+                            py-3
+                            last:border-b-0
+                          "
+                        >
+                          <div
+                            className="
+                              text-sm
+                              font-semibold
+                              text-[#18352D]
+                            "
+                          >
+                            {item.name}
+                          </div>
+
+                          <div
+                            className="
+                              mt-0.5
+                              text-xs
+                              text-gray-500
+                            "
+                          >
+                            Kode:{" "}
+                            {item.code}
+                          </div>
+
+                          <div
+                            className="
+                              mt-1
+                              text-xs
+                              text-blue-600
+                            "
+                          >
+                            {item.message ||
+                              "Dipertahankan karena mempunyai histori transaksi pusat."}
                           </div>
                         </div>
                       )
@@ -1123,7 +1388,7 @@ export default function ImportBarangModal({
             >
               {loading
                 ? "Mengimport..."
-                : "Import"}
+                : "Import Master Baru"}
             </button>
           )}
         </div>

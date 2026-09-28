@@ -68,7 +68,6 @@ type PaymentMethod =
   | "CASH"
   | "COD"
   | "CBD"
-  | "TEMPO"
   | string;
 
 type PaymentStatus =
@@ -286,6 +285,19 @@ function sanitizeRupiahInput(value: string) {
   return raw;
 }
 
+function formatPaymentInput(value: number) {
+  const numeric = Number(value);
+
+  if (!Number.isFinite(numeric)) return "";
+
+  const fixed = numeric.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+  const [integerPart, decimalPart] = fixed.split(".");
+
+  return decimalPart
+    ? `${integerPart},${decimalPart}`
+    : integerPart;
+}
+
 function formatDate(value?: string | null) {
   if (!value) return "-";
 
@@ -336,9 +348,6 @@ function getPaymentMethodLabel(method: string) {
 
     case "CBD":
       return "CBD";
-
-    case "TEMPO":
-      return "TEMPO";
 
     default:
       return method || "-";
@@ -443,9 +452,6 @@ function getMethodClass(method: string) {
 
     case "CBD":
       return "border-cyan-200 bg-cyan-50 text-cyan-700";
-
-    case "TEMPO":
-      return "border-slate-200 bg-slate-100 text-slate-700";
 
     default:
       return "border-slate-200 bg-slate-50 text-slate-600";
@@ -1650,7 +1656,7 @@ export default function PaymentPage() {
     setPaymentPayableDropdownOpen(false);
     setPaymentAmount("");
     setPaymentMethod(
-      "PETTY_CASH"
+      "TRANSFER"
     );
 
     setPaymentDate(
@@ -1716,7 +1722,7 @@ export default function PaymentPage() {
         );
 
         setPaymentAmount(
-          formatRupiah(
+          formatPaymentInput(
             selected.outstanding
           )
         );
@@ -1775,7 +1781,7 @@ export default function PaymentPage() {
     setPaymentPayableDropdownOpen(false);
 
     setPaymentAmount(
-      formatRupiah(
+      formatPaymentInput(
         payable.outstanding
       )
     );
@@ -2065,17 +2071,6 @@ export default function PaymentPage() {
     if (!paymentMethod) {
       alert(
         "Pilih metode pembayaran."
-      );
-
-      return;
-    }
-
-    if (
-      paymentMethod ===
-      "TEMPO"
-    ) {
-      alert(
-        "Metode TEMPO tidak dapat digunakan untuk pembayaran hutang."
       );
 
       return;
@@ -4551,12 +4546,12 @@ export default function PaymentPage() {
                         className="h-12 w-full appearance-none rounded-xl border border-[#D1E1F0] bg-[#FAFCFB] px-4 pr-10 text-xs font-bold text-gray-700 outline-none focus:border-[#00529C] focus:ring-4 focus:ring-[#00529C]/10"
                       >
 
-                        <option value="PETTY_CASH">
-                          Petty Cash
-                        </option>
-
                         <option value="TRANSFER">
                           Transfer
+                        </option>
+
+                        <option value="PETTY_CASH">
+                          Petty Cash
                         </option>
 
                         <option value="CASH">
@@ -4571,9 +4566,6 @@ export default function PaymentPage() {
                           CBD
                         </option>
 
-                        <option value="TEMPO">
-                          Tempo
-                        </option>
 
                       </select>
 
@@ -4584,15 +4576,6 @@ export default function PaymentPage() {
 
                     </div>
 
-                    {paymentMethod ===
-                      "TEMPO" && (
-                      <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[10px] font-medium leading-5 text-amber-700">
-                        TEMPO digunakan ketika
-                        membuat hutang supplier,
-                        bukan untuk membayar
-                        hutang yang sudah ada.
-                      </p>
-                    )}
 
                   </div>
 
@@ -4713,8 +4696,6 @@ export default function PaymentPage() {
                     !paymentPayableId ||
                     !paymentAmount ||
                     !paymentMethod ||
-                    paymentMethod ===
-                      "TEMPO" ||
                     !selectedPayable ||
                     (
                       !selectedPayable.purchaseId &&

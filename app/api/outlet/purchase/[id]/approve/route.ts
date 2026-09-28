@@ -57,6 +57,21 @@ Purchase Outlet SELALU:
 Tidak boleh menggunakan:
     account Pusat
     account Outlet lain
+
+PENTING:
+    Saldo Petty Cash BOLEH NEGATIF.
+
+    Approval Purchase CASH / COD / CBD
+    TIDAK boleh ditolak hanya karena
+    saldo Petty Cash kurang dari nilai Purchase.
+
+    Contoh:
+        saldo sebelum = Rp 100.000
+        purchase      = Rp 250.000
+        saldo sesudah = -Rp 150.000
+
+    Tidak perlu top-up / menaikkan saldo
+    secara manual hanya agar Purchase bisa approve.
 ===========================================================
 */
 
@@ -654,10 +669,19 @@ export async function POST(
           RULE:
 
           - harus memakai Petty Cash outlet
-          - saldo harus cukup
+          - saldo BOLEH KURANG / NEGATIF
           - Payment langsung PAID
           - Petty Cash langsung berkurang
           - Petty Cash transaction langsung APPROVED
+
+          PENTING:
+
+          Tidak ada minimum balance requirement.
+
+          Contoh:
+            balanceBefore = 100.000
+            total         = 250.000
+            balanceAfter  = -150.000
           ==================================================
           */
 
@@ -709,6 +733,12 @@ export async function POST(
             ------------------------------------------------
             SALDO
             ------------------------------------------------
+
+            Saldo boleh negatif.
+
+            Yang divalidasi hanya bahwa nilai saldo
+            yang akan dipakai benar-benar angka valid.
+            ------------------------------------------------
             */
 
             const balanceBefore =
@@ -728,18 +758,19 @@ export async function POST(
               );
             }
 
-            if (
-              balanceBefore <
-              total
-            ) {
-              throw new Error(
-                `Saldo Petty Cash outlet ${purchase.outlet.name} tidak mencukupi. Saldo tersedia Rp ${balanceBefore.toLocaleString(
-                  "id-ID"
-                )}, pembayaran Rp ${total.toLocaleString(
-                  "id-ID"
-                )}.`
-              );
-            }
+            /*
+            ------------------------------------------------
+            HITUNG SALDO SESUDAH
+            ------------------------------------------------
+
+            Tidak ada pengecekan:
+
+              balanceBefore >= total
+
+            karena Petty Cash memang diperbolehkan
+            menjadi negatif.
+            ------------------------------------------------
+            */
 
             const balanceAfter =
               balanceBefore -
@@ -805,6 +836,24 @@ export async function POST(
             ------------------------------------------------
             UPDATE PETTY CASH ACCOUNT
             ------------------------------------------------
+
+            PENTING:
+
+            Jangan menggunakan:
+
+              currentBalance: {
+                gte: total
+              }
+
+            karena saldo boleh menjadi negatif.
+
+            Account tetap dibatasi dengan:
+              - id account yang ditemukan
+              - isActive
+              - outletId purchase
+
+            sehingga tidak mengurangi account outlet lain.
+            ------------------------------------------------
             */
 
             const updatedAccount =
@@ -817,10 +866,6 @@ export async function POST(
 
                   outletId:
                     purchase.outletId,
-
-                  currentBalance: {
-                    gte: total,
-                  },
                 },
 
                 data: {
@@ -834,7 +879,7 @@ export async function POST(
               1
             ) {
               throw new Error(
-                "Saldo Petty Cash berubah atau tidak mencukupi. Silakan refresh dan coba lagi."
+                "Akun Petty Cash berubah atau tidak dapat diperbarui. Silakan refresh dan coba lagi."
               );
             }
 
@@ -1019,9 +1064,9 @@ export async function POST(
             Invoice akan dimasukkan manual pada:
 
               Barang Masuk Outlet
-                  ->
+                ->
               Goods Receipt
-                  ->
+                ->
               PurchasePayable
             */
 
@@ -1289,9 +1334,6 @@ export async function POST(
       ) ||
       message.includes(
         "tidak valid"
-      ) ||
-      message.includes(
-        "tidak mencukupi"
       ) ||
       message.includes(
         "belum"

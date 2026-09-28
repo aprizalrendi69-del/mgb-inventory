@@ -235,6 +235,11 @@ export default function PurchaseOutletDetailPage() {
   const [remarks, setRemarks] =
     useState("");
 
+  // Metode pembayaran Purchase.
+  // Hanya dapat diubah ketika Purchase masih DRAFT.
+  const [paymentMethod, setPaymentMethod] =
+    useState("TRANSFER");
+
   const [barangSearch, setBarangSearch] =
     useState("");
 
@@ -1095,6 +1100,15 @@ export default function PurchaseOutletDetailPage() {
         data.remarks || ""
       );
 
+      setPaymentMethod(
+        String(
+          data.paymentMethod ||
+            "TRANSFER"
+        )
+          .trim()
+          .toUpperCase()
+      );
+
       setItems(
         normalizedItems
       );
@@ -1218,6 +1232,9 @@ export default function PurchaseOutletDetailPage() {
    * Status lunas TIDAK ditentukan dari status Purchase.
    * Yang menjadi acuan adalah Purchase Payable: outstanding
    * dan/atau status PAID.
+   *
+   * CASH / COD / CBD tidak diblokir oleh saldo petty cash
+   * pada halaman Purchase ini. Petty cash boleh menjadi minus.
    */
 
   const isAdminPusat =
@@ -2344,6 +2361,9 @@ export default function PurchaseOutletDetailPage() {
                     supplierId
                   ),
 
+                paymentMethod:
+                  paymentMethod,
+
                 remarks:
                   remarks.trim() ||
                   null,
@@ -3142,10 +3162,34 @@ export default function PurchaseOutletDetailPage() {
                     Metode Pembayaran
                   </div>
 
-                  <p className="text-sm font-black text-[#18352D]">
-                    {purchase.paymentMethod ||
-                      "-"}
-                  </p>
+                  {isDraft ? (
+                    <select
+                      value={paymentMethod}
+                      onChange={(e) =>
+                        setPaymentMethod(
+                          e.target.value
+                        )
+                      }
+                      className="h-11 w-full rounded-xl border border-[#D5E5DC] bg-white px-3 text-sm font-bold text-[#18352D] outline-none transition focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                    >
+                      <option value="TRANSFER">Transfer</option>
+                      <option value="CASH">Cash</option>
+                      <option value="COD">COD</option>
+                      <option value="CBD">CBD</option>
+                      <option value="TEMPO">Tempo</option>
+                    </select>
+                  ) : (
+                    <p className="text-sm font-black text-[#18352D]">
+                      {purchase.paymentMethod ||
+                        "-"}
+                    </p>
+                  )}
+
+                  {isDraft && (
+                    <p className="mt-2 text-[10px] font-medium leading-4 text-gray-400">
+                      Metode pembayaran masih dapat diubah selama status masih Draft.
+                    </p>
+                  )}
 
                   {isAdminPusat &&
                     isTempoPurchase &&

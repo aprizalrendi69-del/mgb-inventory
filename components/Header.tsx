@@ -3,16 +3,27 @@
 import {
   ArrowLeft,
   Bell,
+  CalendarDays,
   Check,
+  ChevronDown,
   ChevronRight,
   ExternalLink,
+  Filter,
   LogOut,
   Menu,
   MessageCircle,
+  RotateCcw,
+  Search,
   ShieldCheck,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 interface HeaderProps {
@@ -82,6 +93,13 @@ interface NotificationsResponse {
   unreadCount?: number;
   count?: number;
 }
+
+type DateFilter =
+  | "all"
+  | "today"
+  | "7days"
+  | "30days"
+  | "custom";
 
 function normalizeNotifications(
   payload:
@@ -266,6 +284,80 @@ function formatRelativeTime(
   );
 }
 
+function formatDateLabel(
+  value: string
+): string {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(
+    `${value}T00:00:00`
+  );
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString(
+    "id-ID",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }
+  );
+}
+
+function getTodayInputValue(): string {
+  const now = new Date();
+
+  const year =
+    now.getFullYear();
+
+  const month = String(
+    now.getMonth() + 1
+  ).padStart(2, "0");
+
+  const day = String(
+    now.getDate()
+  ).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function startOfDay(
+  date: Date
+): Date {
+  const result =
+    new Date(date);
+
+  result.setHours(
+    0,
+    0,
+    0,
+    0
+  );
+
+  return result;
+}
+
+function endOfDay(
+  date: Date
+): Date {
+  const result =
+    new Date(date);
+
+  result.setHours(
+    23,
+    59,
+    59,
+    999
+  );
+
+  return result;
+}
+
 export default function Header({
   onMenuClick,
 }: HeaderProps) {
@@ -312,6 +404,35 @@ export default function Header({
     markingRead,
     setMarkingRead,
   ] = useState(false);
+
+  // =========================================================
+  // FILTER STATE
+  // =========================================================
+
+  const [
+    filterOpen,
+    setFilterOpen,
+  ] = useState(false);
+
+  const [
+    searchQuery,
+    setSearchQuery,
+  ] = useState("");
+
+  const [
+    dateFilter,
+    setDateFilter,
+  ] = useState<DateFilter>("all");
+
+  const [
+    customStartDate,
+    setCustomStartDate,
+  ] = useState("");
+
+  const [
+    customEndDate,
+    setCustomEndDate,
+  ] = useState("");
 
   // =========================================================
   // GLOBAL MODAL DETECTION
@@ -473,6 +594,7 @@ export default function Header({
 
     return () => {
       cancelled = true;
+
       window.clearInterval(
         interval
       );
@@ -574,6 +696,7 @@ export default function Header({
 
     return () => {
       mounted = false;
+
       window.clearInterval(
         interval
       );
@@ -607,6 +730,7 @@ export default function Header({
         setNotificationOpen(
           false
         );
+        setFilterOpen(false);
       }
     };
 
@@ -620,6 +744,8 @@ export default function Header({
         setNotificationOpen(
           false
         );
+
+        setFilterOpen(false);
 
         notificationButtonRef.current?.focus();
       }
@@ -664,6 +790,195 @@ export default function Header({
 
   const hasUnread =
     unreadCount > 0;
+
+  // =========================================================
+  // FILTERED NOTIFICATIONS
+  // =========================================================
+
+  const filteredNotifications =
+    useMemo(() => {
+      const query =
+        searchQuery
+          .trim()
+          .toLowerCase();
+
+      let startDate: Date | null =
+        null;
+
+      let endDate: Date | null =
+        null;
+
+      const now = new Date();
+
+      if (
+        dateFilter ===
+        "today"
+      ) {
+        startDate =
+          startOfDay(now);
+
+        endDate =
+          endOfDay(now);
+      }
+
+      if (
+        dateFilter ===
+        "7days"
+      ) {
+        const date =
+          new Date(now);
+
+        date.setDate(
+          date.getDate() - 6
+        );
+
+        startDate =
+          startOfDay(date);
+
+        endDate =
+          endOfDay(now);
+      }
+
+      if (
+        dateFilter ===
+        "30days"
+      ) {
+        const date =
+          new Date(now);
+
+        date.setDate(
+          date.getDate() - 29
+        );
+
+        startDate =
+          startOfDay(date);
+
+        endDate =
+          endOfDay(now);
+      }
+
+      if (
+        dateFilter ===
+          "custom" &&
+        customStartDate
+      ) {
+        startDate =
+          startOfDay(
+            new Date(
+              `${customStartDate}T00:00:00`
+            )
+          );
+      }
+
+      if (
+        dateFilter ===
+          "custom" &&
+        customEndDate
+      ) {
+        endDate =
+          endOfDay(
+            new Date(
+              `${customEndDate}T00:00:00`
+            )
+          );
+      }
+
+      return notifications.filter(
+        (notification) => {
+          const actor =
+            getNotificationActor(
+              notification
+            );
+
+          const purchaseLabel =
+            getPurchaseLabel(
+              notification
+            );
+
+          const transferLabel =
+            getTransferLabel(
+              notification
+            );
+
+          const searchableText =
+            [
+              notification.title,
+              notification.message,
+              notification.description,
+              notification.type,
+              actor,
+              purchaseLabel,
+              transferLabel,
+              notification.transferNumber,
+              notification.purchase?.poNumber,
+              notification.outletPurchase?.poNumber,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+
+          const matchesSearch =
+            !query ||
+            searchableText.includes(
+              query
+            );
+
+          if (!matchesSearch) {
+            return false;
+          }
+
+          if (
+            !startDate &&
+            !endDate
+          ) {
+            return true;
+          }
+
+          const createdAt =
+            new Date(
+              notification.createdAt
+            );
+
+          if (
+            Number.isNaN(
+              createdAt.getTime()
+            )
+          ) {
+            return false;
+          }
+
+          if (
+            startDate &&
+            createdAt <
+              startDate
+          ) {
+            return false;
+          }
+
+          if (
+            endDate &&
+            createdAt >
+              endDate
+          ) {
+            return false;
+          }
+
+          return true;
+        }
+      );
+    }, [
+      notifications,
+      searchQuery,
+      dateFilter,
+      customStartDate,
+      customEndDate,
+    ]);
+
+  const hasActiveFilters =
+    Boolean(
+      searchQuery.trim()
+    ) ||
+    dateFilter !== "all";
 
   // =========================================================
   // MARK ALL AS READ
@@ -768,6 +1083,8 @@ export default function Header({
         false
       );
 
+      setFilterOpen(false);
+
       try {
         const response =
           await fetch(
@@ -833,6 +1150,71 @@ export default function Header({
         router.push(link);
       }
     };
+
+  // =========================================================
+  // RESET FILTER
+  // =========================================================
+
+  const resetFilters =
+    () => {
+      setSearchQuery("");
+      setDateFilter("all");
+      setCustomStartDate("");
+      setCustomEndDate("");
+    };
+
+  // =========================================================
+  // DATE FILTER LABEL
+  // =========================================================
+
+  const dateFilterLabel =
+    useMemo(() => {
+      switch (
+        dateFilter
+      ) {
+        case "today":
+          return "Hari ini";
+
+        case "7days":
+          return "7 hari";
+
+        case "30days":
+          return "30 hari";
+
+        case "custom":
+          if (
+            customStartDate &&
+            customEndDate
+          ) {
+            return `${formatDateLabel(
+              customStartDate
+            )} — ${formatDateLabel(
+              customEndDate
+            )}`;
+          }
+
+          if (customStartDate) {
+            return `Mulai ${formatDateLabel(
+              customStartDate
+            )}`;
+          }
+
+          if (customEndDate) {
+            return `Sampai ${formatDateLabel(
+              customEndDate
+            )}`;
+          }
+
+          return "Custom";
+
+        default:
+          return "Semua tanggal";
+      }
+    }, [
+      dateFilter,
+      customStartDate,
+      customEndDate,
+    ]);
 
   // =========================================================
   // LOGOUT
@@ -944,6 +1326,7 @@ export default function Header({
           <div className="hidden items-center gap-2 rounded-full border border-white/30 bg-white/15 px-3 py-2 shadow-[0_8px_25px_rgba(15,118,110,0.08)] backdrop-blur-2xl backdrop-saturate-150 lg:flex">
             <span className="relative flex h-2.5 w-2.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
             </span>
 
@@ -1087,10 +1470,12 @@ export default function Header({
               <div
                 role="dialog"
                 aria-label="Pemberitahuan"
-                className="animate-[notificationPanelIn_180ms_ease-out] absolute right-0 top-[calc(100%+14px)] w-[min(475px,calc(100vw-24px))] overflow-hidden rounded-[26px] border border-emerald-100/80 bg-white shadow-[0_30px_90px_rgba(6,78,59,0.24)] ring-1 ring-black/[0.02]"
+                className="animate-[notificationPanelIn_180ms_ease-out] absolute right-0 top-[calc(100%+14px)] w-[min(500px,calc(100vw-24px))] overflow-hidden rounded-[28px] border border-emerald-100/80 bg-white shadow-[0_30px_90px_rgba(6,78,59,0.24)] ring-1 ring-black/[0.02]"
               >
 
-                {/* PREMIUM HEADER */}
+                {/* =================================================
+                    PREMIUM HEADER
+                ================================================= */}
 
                 <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top_right,rgba(110,231,183,0.24),transparent_30%),linear-gradient(135deg,#064E3B,#065F46_48%,#022C22)] px-5 pb-5 pt-5 text-white">
 
@@ -1142,11 +1527,15 @@ export default function Header({
 
                     <button
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
                         setNotificationOpen(
                           false
-                        )
-                      }
+                        );
+
+                        setFilterOpen(
+                          false
+                        );
+                      }}
                       aria-label="Tutup pemberitahuan"
                       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/65 transition hover:border-white/20 hover:bg-white/10 hover:text-white"
                     >
@@ -1158,7 +1547,7 @@ export default function Header({
 
                   {/* HEADER STATUS */}
 
-                  <div className="relative mt-5 grid grid-cols-2 gap-2">
+                  <div className="relative mt-5 grid grid-cols-3 gap-2">
 
                     <div className="rounded-2xl border border-white/10 bg-white/[0.07] px-3 py-2.5 backdrop-blur-sm">
                       <p className="text-[8px] font-bold uppercase tracking-[0.14em] text-emerald-100/55">
@@ -1185,6 +1574,16 @@ export default function Header({
 
                       <p className="mt-1 text-sm font-black text-white">
                         {unreadCount}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.07] px-3 py-2.5 backdrop-blur-sm">
+                      <p className="text-[8px] font-bold uppercase tracking-[0.14em] text-emerald-100/55">
+                        Ditampilkan
+                      </p>
+
+                      <p className="mt-1 text-sm font-black text-white">
+                        {filteredNotifications.length}
                       </p>
                     </div>
                   </div>
@@ -1228,7 +1627,381 @@ export default function Header({
                   </div>
                 </div>
 
-                {/* BODY */}
+                {/* =================================================
+                    SEARCH + FILTER TOOLBAR
+                ================================================= */}
+
+                <div className="border-b border-emerald-100/80 bg-white px-4 pb-3 pt-4">
+
+                  <div className="flex items-center gap-2">
+
+                    {/* SEARCH */}
+
+                    <div className="relative min-w-0 flex-1">
+                      <Search
+                        size={16}
+                        strokeWidth={2.2}
+                        className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                      />
+
+                      <input
+                        type="text"
+                        value={
+                          searchQuery
+                        }
+                        onChange={(event) =>
+                          setSearchQuery(
+                            event.target.value
+                          )
+                        }
+                        placeholder="Cari pemberitahuan..."
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50/70 pl-10 pr-10 text-[11px] font-semibold text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-50"
+                      />
+
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSearchQuery(
+                              ""
+                            )
+                          }
+                          aria-label="Hapus pencarian"
+                          className="absolute right-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                        >
+                          <X
+                            size={14}
+                          />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* FILTER BUTTON */}
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFilterOpen(
+                          (current) =>
+                            !current
+                        )
+                      }
+                      aria-expanded={
+                        filterOpen
+                      }
+                      className={[
+                        "group relative flex h-11 shrink-0 items-center gap-2 rounded-2xl border px-3.5 transition-all duration-200",
+                        filterOpen ||
+                        hasActiveFilters
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-700 shadow-[0_6px_20px_rgba(16,185,129,0.10)]"
+                          : "border-slate-200 bg-slate-50/70 text-slate-500 hover:border-emerald-200 hover:bg-emerald-50/60 hover:text-emerald-700",
+                      ].join(" ")}
+                    >
+                      <SlidersHorizontal
+                        size={15}
+                        strokeWidth={2.3}
+                      />
+
+                      <span className="hidden text-[10px] font-black uppercase tracking-[0.08em] sm:inline">
+                        Filter
+                      </span>
+
+                      {hasActiveFilters && (
+                        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-white bg-emerald-600 px-1 text-[7px] font-black text-white">
+                          !
+                        </span>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* SEARCH RESULT SUMMARY */}
+
+                  <div className="mt-2.5 flex items-center justify-between gap-2 px-1">
+
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                        Hasil
+                      </span>
+
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-black text-emerald-700">
+                        {filteredNotifications.length}
+                      </span>
+
+                      {searchQuery && (
+                        <span className="truncate text-[9px] font-semibold text-slate-400">
+                          untuk "{searchQuery}"
+                        </span>
+                      )}
+                    </div>
+
+                    {hasActiveFilters && (
+                      <button
+                        type="button"
+                        onClick={
+                          resetFilters
+                        }
+                        className="group flex shrink-0 items-center gap-1 text-[9px] font-extrabold text-slate-400 transition hover:text-emerald-600"
+                      >
+                        <RotateCcw
+                          size={11}
+                          className="transition-transform duration-300 group-hover:rotate-[-45deg]"
+                        />
+                        Reset
+                      </button>
+                    )}
+                  </div>
+
+                  {/* =================================================
+                      PREMIUM FILTER PANEL
+                  ================================================= */}
+
+                  {filterOpen && (
+                    <div className="mt-3 overflow-hidden rounded-[22px] border border-emerald-100 bg-gradient-to-br from-emerald-50/70 via-white to-slate-50/80 p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_10px_30px_rgba(15,118,110,0.06)]">
+
+                      <div className="mb-3 flex items-center justify-between gap-3">
+
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-[0_6px_16px_rgba(16,185,129,0.20)]">
+                            <Filter
+                              size={14}
+                              strokeWidth={2.4}
+                            />
+                          </div>
+
+                          <div>
+                            <div className="text-[11px] font-black text-slate-700">
+                              Filter Pemberitahuan
+                            </div>
+
+                            <div className="text-[8px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+                              Atur periode & pencarian
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={
+                            resetFilters
+                          }
+                          className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[8px] font-black uppercase tracking-[0.08em] text-slate-400 transition hover:border-emerald-200 hover:text-emerald-600"
+                        >
+                          Reset
+                        </button>
+                      </div>
+
+                      {/* DATE PRESETS */}
+
+                      <div>
+                        <div className="mb-2 flex items-center gap-1.5">
+                          <CalendarDays
+                            size={13}
+                            className="text-emerald-600"
+                          />
+
+                          <span className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-500">
+                            Periode tanggal
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+
+                          {[
+                            {
+                              value:
+                                "all" as const,
+                              label:
+                                "Semua",
+                            },
+                            {
+                              value:
+                                "today" as const,
+                              label:
+                                "Hari ini",
+                            },
+                            {
+                              value:
+                                "7days" as const,
+                              label:
+                                "7 Hari",
+                            },
+                            {
+                              value:
+                                "30days" as const,
+                              label:
+                                "30 Hari",
+                            },
+                          ].map(
+                            (
+                              option
+                            ) => (
+                              <button
+                                key={
+                                  option.value
+                                }
+                                type="button"
+                                onClick={() =>
+                                  setDateFilter(
+                                    option.value
+                                  )
+                                }
+                                className={[
+                                  "rounded-xl border px-2 py-2 text-[9px] font-extrabold transition-all duration-200",
+                                  dateFilter ===
+                                  option.value
+                                    ? "border-emerald-400 bg-emerald-600 text-white shadow-[0_6px_16px_rgba(16,185,129,0.18)]"
+                                    : "border-slate-200 bg-white text-slate-500 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700",
+                                ].join(
+                                  " "
+                                )}
+                              >
+                                {
+                                  option.label
+                                }
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </div>
+
+                      {/* CUSTOM DATE */}
+
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDateFilter(
+                              "custom"
+                            )
+                          }
+                          className={[
+                            "flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-all",
+                            dateFilter ===
+                            "custom"
+                              ? "border-emerald-300 bg-white shadow-sm"
+                              : "border-slate-200 bg-white/80 hover:border-emerald-200",
+                          ].join(" ")}
+                        >
+                          <div className="flex items-center gap-2">
+                            <CalendarDays
+                              size={14}
+                              className={
+                                dateFilter ===
+                                "custom"
+                                  ? "text-emerald-600"
+                                  : "text-slate-400"
+                              }
+                            />
+
+                            <div>
+                              <div className="text-[9px] font-black text-slate-600">
+                                Rentang custom
+                              </div>
+
+                              <div className="text-[8px] font-medium text-slate-400">
+                                Pilih tanggal mulai dan akhir
+                              </div>
+                            </div>
+                          </div>
+
+                          <ChevronDown
+                            size={14}
+                            className={[
+                              "text-slate-400 transition-transform",
+                              dateFilter ===
+                              "custom"
+                                ? "rotate-180 text-emerald-600"
+                                : "",
+                            ].join(" ")}
+                          />
+                        </button>
+
+                        {dateFilter ===
+                          "custom" && (
+                          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+
+                            <label className="rounded-xl border border-slate-200 bg-white p-2.5">
+                              <span className="mb-1.5 block text-[8px] font-black uppercase tracking-[0.1em] text-slate-400">
+                                Dari
+                              </span>
+
+                              <input
+                                type="date"
+                                value={
+                                  customStartDate
+                                }
+                                max={
+                                  customEndDate ||
+                                  getTodayInputValue()
+                                }
+                                onChange={(
+                                  event
+                                ) =>
+                                  setCustomStartDate(
+                                    event
+                                      .target
+                                      .value
+                                  )
+                                }
+                                className="w-full bg-transparent text-[10px] font-bold text-slate-700 outline-none"
+                              />
+                            </label>
+
+                            <label className="rounded-xl border border-slate-200 bg-white p-2.5">
+                              <span className="mb-1.5 block text-[8px] font-black uppercase tracking-[0.1em] text-slate-400">
+                                Sampai
+                              </span>
+
+                              <input
+                                type="date"
+                                value={
+                                  customEndDate
+                                }
+                                min={
+                                  customStartDate ||
+                                  undefined
+                                }
+                                max={
+                                  getTodayInputValue()
+                                }
+                                onChange={(
+                                  event
+                                ) =>
+                                  setCustomEndDate(
+                                    event
+                                      .target
+                                      .value
+                                  )
+                                }
+                                className="w-full bg-transparent text-[10px] font-bold text-slate-700 outline-none"
+                              />
+                            </label>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* ACTIVE FILTER SUMMARY */}
+
+                      <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-white/80 px-3 py-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.10)]" />
+
+                          <span className="truncate text-[9px] font-semibold text-slate-500">
+                            {dateFilterLabel}
+                          </span>
+                        </div>
+
+                        <span className="shrink-0 rounded-lg bg-emerald-50 px-2 py-1 text-[8px] font-black text-emerald-700">
+                          {filteredNotifications.length} hasil
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* =================================================
+                    BODY
+                ================================================= */}
 
                 <div className="max-h-[475px] overflow-y-auto bg-[#FBFDFC]">
 
@@ -1291,38 +2064,53 @@ export default function Header({
                         Coba Lagi
                       </button>
                     </div>
-                  ) : notifications.length ===
+                  ) : filteredNotifications.length ===
                     0 ? (
-                    <div className="flex min-h-[270px] flex-col items-center justify-center px-6 text-center">
+                    <div className="flex min-h-[280px] flex-col items-center justify-center px-6 text-center">
 
                       <div className="relative mb-5 flex h-16 w-16 items-center justify-center rounded-[22px] border border-emerald-100 bg-gradient-to-br from-white to-emerald-50 text-emerald-600 shadow-[0_12px_35px_rgba(16,185,129,0.10)]">
                         <div className="absolute inset-2 rounded-2xl border border-emerald-100/80" />
 
-                        <Bell
-                          size={25}
-                        />
+                        {searchQuery ? (
+                          <Search
+                            size={25}
+                          />
+                        ) : (
+                          <CalendarDays
+                            size={25}
+                          />
+                        )}
                       </div>
 
                       <div className="text-sm font-black text-slate-700">
-                        Tidak ada pemberitahuan
+                        Tidak ada hasil
                       </div>
 
-                      <div className="mt-1 max-w-[280px] text-xs leading-relaxed text-slate-400">
-                        Semua aktivitas terbaru akan muncul di sini.
+                      <div className="mt-1 max-w-[300px] text-xs leading-relaxed text-slate-400">
+                        {searchQuery
+                          ? `Tidak ditemukan pemberitahuan untuk "${searchQuery}".`
+                          : "Tidak ada pemberitahuan pada periode tanggal yang dipilih."}
                       </div>
 
-                      <div className="mt-4 flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-
-                        <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-emerald-700">
-                          Sistem aktif
-                        </span>
-                      </div>
+                      {hasActiveFilters && (
+                        <button
+                          type="button"
+                          onClick={
+                            resetFilters
+                          }
+                          className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-[9px] font-extrabold text-emerald-700 transition hover:bg-emerald-100"
+                        >
+                          <RotateCcw
+                            size={12}
+                          />
+                          Reset Filter
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="divide-y divide-slate-100">
 
-                      {notifications.map(
+                      {filteredNotifications.map(
                         (
                           notification
                         ) => {
@@ -1540,28 +2328,38 @@ export default function Header({
                   )}
                 </div>
 
-                {/* FOOTER */}
+                {/* =================================================
+                    FOOTER
+                ================================================= */}
 
                 <div className="border-t border-emerald-100 bg-gradient-to-r from-slate-50 via-white to-emerald-50/40 px-5 py-3.5">
 
                   <div className="flex items-center justify-between gap-3">
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
 
-                      <span className="relative flex h-2 w-2">
+                      <span className="relative flex h-2 w-2 shrink-0">
                         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
 
                         <span className="relative h-2 w-2 rounded-full bg-emerald-500" />
                       </span>
 
-                      <span className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-500">
+                      <span className="truncate text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-500">
                         Notification Center LIVE
                       </span>
                     </div>
 
-                    <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[8px] font-black tracking-[0.12em] text-slate-400 shadow-sm">
-                      SYNC 15S
-                    </span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {hasActiveFilters && (
+                        <span className="hidden rounded-full border border-emerald-100 bg-emerald-50 px-2 py-1 text-[8px] font-black tracking-[0.08em] text-emerald-600 sm:inline-flex">
+                          FILTER AKTIF
+                        </span>
+                      )}
+
+                      <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[8px] font-black tracking-[0.12em] text-slate-400 shadow-sm">
+                        SYNC 15S
+                      </span>
+                    </div>
                   </div>
 
                   {notificationError &&

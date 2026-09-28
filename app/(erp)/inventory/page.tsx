@@ -46,10 +46,63 @@ export default function InventoryPage() {
     loadData();
   }, []);
 
+  // Inventory Pusat only.
+  // The /api/inventory endpoint is the transaction-backed inventory source.
+  // We keep only rows belonging to Pusat; if the API exposes transaction
+  // metadata, rows without a transaction are excluded as well.
+  const pusatData = useMemo(() => {
+    const isPusat = (item: any) => {
+      const warehouse = String(
+        item.warehouse ?? item.gudang ?? item.location ?? item.outletName ?? ""
+      )
+        .trim()
+        .toLowerCase();
+
+      const outletId = item.outletId ?? item.outlet?.id ?? null;
+
+      return (
+        outletId === null ||
+        outletId === undefined ||
+        warehouse === "pusat" ||
+        warehouse === "gudang pusat" ||
+        warehouse.includes("pusat")
+      );
+    };
+
+    const hasTransactionMetadata = data.some(
+      (item: any) =>
+        item.transactionCount !== undefined ||
+        item.inventoryCount !== undefined ||
+        item.hasTransaction !== undefined ||
+        Array.isArray(item.transactions) ||
+        Array.isArray(item.inventoryTransactions)
+    );
+
+    return data.filter((item: any) => {
+      if (!isPusat(item)) return false;
+
+      if (!hasTransactionMetadata) return true;
+
+      const transactionCount = Number(
+        item.transactionCount ?? item.inventoryCount ?? 0
+      );
+      const hasTransaction =
+        item.hasTransaction === true ||
+        transactionCount > 0 ||
+        (Array.isArray(item.transactions) && item.transactions.length > 0) ||
+        (Array.isArray(item.inventoryTransactions) &&
+          item.inventoryTransactions.length > 0);
+
+      return hasTransaction;
+    });
+  }, [data]);
+
+
+
   const filteredData = useMemo(() => {
     const keyword = search.trim().toLowerCase();
 
-    return data.filter((item: any) => {
+    return pusatData.filter((item: any) => {
       const matchesSearch =
         !keyword ||
         String(item.name ?? "")
@@ -70,26 +123,27 @@ export default function InventoryPage() {
 
       return matchesSearch && matchesStatus;
     });
-  }, [data, search, statusFilter]);
+  }, [pusatData, search, statusFilter]);
 
-  const totalItem = data.length;
 
-  const totalLowStock = data.filter(
+  const totalItem = pusatData.length;
+
+  const totalLowStock = pusatData.filter(
     (item: any) =>
       Number(item.stock ?? 0) <= Number(item.minimumStock ?? 0)
   ).length;
 
-  const totalSafe = data.filter(
+  const totalSafe = pusatData.filter(
     (item: any) =>
       Number(item.stock ?? 0) > Number(item.minimumStock ?? 0)
   ).length;
 
-  const totalStock = data.reduce(
+  const totalStock = pusatData.reduce(
     (sum: number, item: any) => sum + Number(item.stock ?? 0),
     0
   );
 
-  const totalAvailable = data.reduce(
+  const totalAvailable = pusatData.reduce(
     (sum: number, item: any) =>
       sum + Number(item.availableStock ?? 0),
     0
@@ -128,12 +182,12 @@ export default function InventoryPage() {
                 </div>
 
                 <h1 className="text-2xl font-bold tracking-tight text-[#17352D] sm:text-3xl">
-                  Inventory Stock
+                  Inventory Pusat
                 </h1>
 
                 <p className="mt-1.5 max-w-xl text-sm leading-6 text-gray-500">
-                  Monitoring persediaan barang, ketersediaan stok,
-                  dan kondisi inventory perusahaan secara real-time.
+                  Monitoring barang Pusat yang memiliki transaksi,
+                  ketersediaan stok, dan kondisi inventory secara real-time.
                 </p>
               </div>
             </div>
@@ -458,7 +512,7 @@ export default function InventoryPage() {
                         </div>
 
                         <h3 className="mt-4 font-semibold text-gray-700">
-                          Tidak ada data inventory
+                          Tidak ada inventory Pusat
                         </h3>
 
                         <p className="mt-1 max-w-sm text-sm text-gray-400">
@@ -631,7 +685,7 @@ export default function InventoryPage() {
               </span>{" "}
               dari{" "}
               <span className="font-bold text-[#17352D]">
-                {data.length.toLocaleString("id-ID")}
+                {pusatData.length.toLocaleString("id-ID")}
               </span>{" "}
               barang
             </div>

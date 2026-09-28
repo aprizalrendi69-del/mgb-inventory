@@ -16,7 +16,6 @@ import {
   ShieldCheck,
   ShieldAlert,
   History,
-  Trash2,
 } from "lucide-react";
 
 import BarangForm from "@/components/master/barang/BarangForm";
@@ -32,34 +31,34 @@ export default function BarangPage() {
   const [loading, setLoading] = useState(false);
 
   /*
-   * =========================================================
-   * FILTER DUPLIKAT
-   * =========================================================
-   */
+  =========================================================
+  FILTER DUPLIKAT NAMA BARANG
+  =========================================================
+  */
 
   const [showDuplicates, setShowDuplicates] = useState(false);
 
   /*
-   * =========================================================
-   * FILTER STATUS HAPUS
-   * =========================================================
-   *
-   * ALL
-   * SAFE       = aman dihapus
-   * USED       = sudah ada history/transaksi
-   *
-   * =========================================================
-   */
+  =========================================================
+  FILTER STATUS HAPUS
+  =========================================================
+
+  ALL
+  SAFE = aman dihapus
+  USED = sudah ada history/transaksi
+
+  =========================================================
+  */
 
   const [deleteFilter, setDeleteFilter] = useState<
     "ALL" | "SAFE" | "USED"
   >("ALL");
 
   /*
-   * =========================================================
-   * LOAD BARANG
-   * =========================================================
-   */
+  =========================================================
+  LOAD BARANG
+  =========================================================
+  */
 
   async function loadBarang() {
     try {
@@ -85,7 +84,7 @@ export default function BarangPage() {
       console.log("MASTER BARANG:", json);
 
       if (json.success) {
-        setBarang(json.data ?? []);
+        setBarang(Array.isArray(json.data) ? json.data : []);
       } else {
         setBarang([]);
       }
@@ -98,69 +97,126 @@ export default function BarangPage() {
   }
 
   /*
-   * =========================================================
-   * LOAD SAAT FILTER BERUBAH
-   * =========================================================
-   */
+  =========================================================
+  LOAD SAAT FILTER BERUBAH
+  =========================================================
+  */
 
   useEffect(() => {
     loadBarang();
   }, [search, source]);
 
   /*
-   * =========================================================
-   * NORMALIZE NAMA
-   * =========================================================
-   */
+  =========================================================
+  NORMALIZE NAMA BARANG
+  =========================================================
+
+  Tujuan:
+  - "Ayam Goreng"       = "ayam goreng"
+  - "AYAM GORENG"       = "ayam goreng"
+  - " ayam goreng "     = "ayam goreng"
+  - "ayam   goreng"     = "ayam goreng"
+  - whitespace Unicode  = normal space
+
+  Jadi semua dianggap nama yang sama.
+  =========================================================
+  */
 
   function normalizeName(value: any) {
-    return String(value || "")
+    return String(value ?? "")
+      .normalize("NFKC")
+      .replace(/\u00A0/g, " ")
+      .replace(/\s+/g, " ")
       .trim()
-      .toLowerCase()
-      .replace(/\s+/g, " ");
+      .toLocaleLowerCase("id-ID");
   }
 
   /*
-   * =========================================================
-   * DUPLIKAT
-   * =========================================================
-   */
+  =========================================================
+  DUPLICATE GROUPS
+  =========================================================
+
+  Contoh:
+
+  1. Ayam Goreng
+  2. AYAM GORENG
+  3. ayam   goreng
+  4.  Ayam Goreng
+
+  Akan menjadi:
+
+  {
+    key: "ayam goreng",
+    name: "Ayam Goreng",
+    items: [1,2,3,4]
+  }
+
+  =========================================================
+  */
 
   const duplicateGroups = useMemo(() => {
-    const groups = new Map<string, any[]>();
+    const groups = new Map<
+      string,
+      {
+        name: string;
+        items: any[];
+      }
+    >();
 
     for (const item of barang) {
-      const key = normalizeName(item.name);
+      const normalizedName = normalizeName(item?.name);
 
-      if (!key) continue;
+      if (!normalizedName) {
+        continue;
+      }
 
-      const existing = groups.get(key) ?? [];
+      const existing = groups.get(normalizedName);
 
-      existing.push(item);
-
-      groups.set(key, existing);
+      if (existing) {
+        existing.items.push(item);
+      } else {
+        groups.set(normalizedName, {
+          name: String(item?.name ?? "").trim(),
+          items: [item],
+        });
+      }
     }
 
     return Array.from(groups.entries())
-      .filter(([, items]) => items.length > 1)
-      .map(([name, items]) => ({
-        name,
-        items,
-      }));
+      .filter(([, group]) => group.items.length > 1)
+      .map(([key, group]) => ({
+        key,
+        name: group.name,
+        items: group.items,
+      }))
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, "id-ID", {
+          sensitivity: "base",
+        })
+      );
   }, [barang]);
 
   /*
-   * =========================================================
-   * DUPLICATE IDS
-   * =========================================================
-   */
+  =========================================================
+  DUPLICATE BARANG IDS
+  =========================================================
+
+  Semua ID yang berada di dalam kelompok nama duplikat
+  akan ditampilkan ketika filter "Duplikat" aktif.
+
+  =========================================================
+  */
 
   const duplicateBarangIds = useMemo(() => {
     const ids = new Set<number>();
 
     for (const group of duplicateGroups) {
       for (const item of group.items) {
-        ids.add(Number(item.id));
+        const id = Number(item?.id);
+
+        if (Number.isFinite(id)) {
+          ids.add(id);
+        }
       }
     }
 
@@ -168,92 +224,116 @@ export default function BarangPage() {
   }, [duplicateGroups]);
 
   /*
-   * =========================================================
-   * BARANG AMAN DIHAPUS
-   * =========================================================
-   *
-   * API harus mengirim:
-   *
-   * canDelete: true
-   *
-   * jika tidak mempunyai history/relasi dan stock = 0.
-   *
-   * =========================================================
-   */
+  =========================================================
+  BARANG AMAN DIHAPUS
+  =========================================================
+  */
 
   const safeDeleteCount = useMemo(() => {
     return barang.filter(
-      (item) =>
-        item.canDelete === true
+      (item) => item?.canDelete === true
     ).length;
   }, [barang]);
 
   /*
-   * =========================================================
-   * BARANG SUDAH DIGUNAKAN
-   * =========================================================
-   */
+  =========================================================
+  BARANG SUDAH DIGUNAKAN
+  =========================================================
+  */
 
   const usedCount = useMemo(() => {
     return barang.filter(
-      (item) =>
-        item.canDelete === false
+      (item) => item?.canDelete === false
     ).length;
   }, [barang]);
 
   /*
-   * =========================================================
-   * DUPLIKAT COUNT
-   * =========================================================
-   */
+  =========================================================
+  DUPLIKAT COUNT
+  =========================================================
+  */
 
-  const duplicateGroupCount =
-    duplicateGroups.length;
+  const duplicateGroupCount = duplicateGroups.length;
 
-  const duplicateItemCount =
-    duplicateGroups.reduce(
-      (total, group) =>
-        total + group.items.length,
+  const duplicateItemCount = useMemo(() => {
+    return duplicateGroups.reduce(
+      (total, group) => total + group.items.length,
       0
     );
+  }, [duplicateGroups]);
 
   /*
-   * =========================================================
-   * DATA YANG DITAMPILKAN
-   * =========================================================
-   */
+  =========================================================
+  DATA YANG DITAMPILKAN
+  =========================================================
+  */
 
   const displayedBarang = useMemo(() => {
     let result = [...barang];
 
     /*
-     * FILTER DUPLIKAT
-     */
+    ---------------------------------------------------------
+    FILTER DUPLIKAT
+    ---------------------------------------------------------
+    */
 
     if (showDuplicates) {
-      result = result.filter((item) =>
-        duplicateBarangIds.has(
-          Number(item.id)
-        )
-      );
+      result = result.filter((item) => {
+        const id = Number(item?.id);
+
+        return (
+          Number.isFinite(id) &&
+          duplicateBarangIds.has(id)
+        );
+      });
     }
 
     /*
-     * FILTER STATUS DELETE
-     */
+    ---------------------------------------------------------
+    FILTER STATUS DELETE
+    ---------------------------------------------------------
+    */
 
     if (deleteFilter === "SAFE") {
       result = result.filter(
-        (item) =>
-          item.canDelete === true
+        (item) => item?.canDelete === true
       );
     }
 
     if (deleteFilter === "USED") {
       result = result.filter(
-        (item) =>
-          item.canDelete === false
+        (item) => item?.canDelete === false
       );
+    }
+
+    /*
+    ---------------------------------------------------------
+    SORT SAAT FILTER DUPLIKAT AKTIF
+    ---------------------------------------------------------
+
+    Barang dengan nama yang sama dikelompokkan berdekatan
+    agar lebih mudah melihat mana yang double.
+    */
+
+    if (showDuplicates) {
+      result.sort((a, b) => {
+        const nameA = normalizeName(a?.name);
+        const nameB = normalizeName(b?.name);
+
+        const nameCompare = nameA.localeCompare(
+          nameB,
+          "id-ID",
+          {
+            sensitivity: "base",
+          }
+        );
+
+        if (nameCompare !== 0) {
+          return nameCompare;
+        }
+
+        return Number(a?.id ?? 0) - Number(b?.id ?? 0);
+      });
     }
 
     return result;
@@ -265,10 +345,10 @@ export default function BarangPage() {
   ]);
 
   /*
-   * =========================================================
-   * SOURCE LABEL
-   * =========================================================
-   */
+  =========================================================
+  SOURCE LABEL
+  =========================================================
+  */
 
   const sourceLabel =
     source === "CENTRAL"
@@ -278,30 +358,30 @@ export default function BarangPage() {
       : "Semua Barang";
 
   /*
-   * =========================================================
-   * RESET DUPLIKAT
-   * =========================================================
-   */
+  =========================================================
+  RESET DUPLIKAT
+  =========================================================
+  */
 
   function clearDuplicateFilter() {
     setShowDuplicates(false);
   }
 
   /*
-   * =========================================================
-   * RESET DELETE FILTER
-   * =========================================================
-   */
+  =========================================================
+  RESET DELETE FILTER
+  =========================================================
+  */
 
   function clearDeleteFilter() {
     setDeleteFilter("ALL");
   }
 
   /*
-   * =========================================================
-   * REFRESH
-   * =========================================================
-   */
+  =========================================================
+  REFRESH
+  =========================================================
+  */
 
   function handleRefresh() {
     loadBarang();
@@ -413,7 +493,10 @@ export default function BarangPage() {
 
               setShowDuplicates(false);
             }}
-            disabled={loading || safeDeleteCount === 0}
+            disabled={
+              loading ||
+              safeDeleteCount === 0
+            }
             className={`
               inline-flex
               items-center
@@ -456,7 +539,10 @@ export default function BarangPage() {
 
               setShowDuplicates(false);
             }}
-            disabled={loading || usedCount === 0}
+            disabled={
+              loading ||
+              usedCount === 0
+            }
             className={`
               inline-flex
               items-center
@@ -491,10 +577,7 @@ export default function BarangPage() {
           <button
             type="button"
             onClick={() => {
-              setShowDuplicates(
-                (prev) => !prev
-              );
-
+              setShowDuplicates((prev) => !prev);
               setDeleteFilter("ALL");
             }}
             disabled={
@@ -868,7 +951,6 @@ export default function BarangPage() {
                 </h3>
 
                 <p className="mt-1 text-sm text-amber-700">
-
                   Terdapat{" "}
                   <strong>
                     {duplicateGroupCount}
@@ -879,7 +961,6 @@ export default function BarangPage() {
                     {duplicateItemCount}
                   </strong>{" "}
                   data barang.
-
                 </p>
 
               </div>
@@ -1115,7 +1196,7 @@ export default function BarangPage() {
 
               ${
                 deleteFilter === "SAFE"
-                  ? "bg-emerald-600 text-white shadow-sm"
+                  ? "bg-emerald-600 text-white"
                   : "border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
               }
             `}
@@ -1146,7 +1227,7 @@ export default function BarangPage() {
 
               ${
                 deleteFilter === "USED"
-                  ? "bg-red-600 text-white shadow-sm"
+                  ? "bg-red-600 text-white"
                   : "border border-red-200 bg-white text-red-700 hover:bg-red-50"
               }
             `}
@@ -1156,6 +1237,44 @@ export default function BarangPage() {
             Sudah Ada History
           </button>
 
+          {/* DUPLIKAT */}
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowDuplicates((prev) => !prev);
+              setDeleteFilter("ALL");
+            }}
+            disabled={
+              loading ||
+              duplicateItemCount === 0
+            }
+            className={`
+              inline-flex
+              items-center
+              gap-2
+              rounded-xl
+              px-4
+              py-2.5
+              text-sm
+              font-semibold
+              transition
+
+              ${
+                showDuplicates
+                  ? "bg-red-600 text-white"
+                  : "border border-red-200 bg-white text-red-700 hover:bg-red-50"
+              }
+
+              disabled:cursor-not-allowed
+              disabled:opacity-50
+            `}
+          >
+            <Copy size={17} />
+
+            Duplikat ({duplicateItemCount})
+          </button>
+
           {/* RESET */}
 
           {(deleteFilter !== "ALL" ||
@@ -1163,8 +1282,8 @@ export default function BarangPage() {
             <button
               type="button"
               onClick={() => {
-                setDeleteFilter("ALL");
-                setShowDuplicates(false);
+                clearDeleteFilter();
+                clearDuplicateFilter();
               }}
               className="
                 inline-flex
@@ -1348,7 +1467,7 @@ export default function BarangPage() {
                 <p className="mt-0.5 text-xs text-gray-500">
 
                   {showDuplicates
-                    ? "Barang dengan nama yang sama"
+                    ? "Menampilkan semua barang yang mempunyai nama sama"
                     : deleteFilter === "SAFE"
                     ? "Barang yang belum memiliki history/relasi dan stock 0"
                     : deleteFilter === "USED"
@@ -1469,7 +1588,7 @@ export default function BarangPage() {
                 {duplicateGroups.map(
                   (group) => (
                     <div
-                      key={group.name}
+                      key={group.key}
                       className="
                         inline-flex
                         items-center
@@ -1490,7 +1609,7 @@ export default function BarangPage() {
                       />
 
                       <span className="font-semibold text-red-800">
-                        {group.items[0]?.name}
+                        {group.name}
                       </span>
 
                       <span
@@ -1598,7 +1717,9 @@ export default function BarangPage() {
 
               <p className="mt-1 text-sm text-gray-400">
 
-                {deleteFilter === "SAFE"
+                {showDuplicates
+                  ? "Tidak ditemukan nama barang yang sama pada data yang sedang dimuat."
+                  : deleteFilter === "SAFE"
                   ? "Semua barang yang ditampilkan mempunyai stock atau sudah mempunyai relasi/history."
                   : deleteFilter === "USED"
                   ? "Tidak ditemukan barang dengan history pada data yang sedang dimuat."

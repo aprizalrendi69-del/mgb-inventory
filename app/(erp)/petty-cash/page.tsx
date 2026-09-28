@@ -545,6 +545,11 @@ export default function PettyCashPage() {
   const [topUpDate, setTopUpDate] =
     useState(getTodayInput());
 
+  const [topUpTime, setTopUpTime] =
+    useState(
+      new Date().toTimeString().slice(0, 5)
+    );
+
   const [topUpReference, setTopUpReference] =
     useState("");
 
@@ -1201,6 +1206,9 @@ export default function PettyCashPage() {
     setTopUpDate(
       getTodayInput()
     );
+    setTopUpTime(
+      new Date().toTimeString().slice(0, 5)
+    );
     setTopUpReference("");
     setTopUpDescription("");
 
@@ -1354,7 +1362,32 @@ export default function PettyCashPage() {
 
     if (!topUpDate) {
       alert(
-        "Tanggal & Jam Top Up wajib dipilih."
+        "Tanggal Top Up wajib dipilih."
+      );
+      return;
+    }
+
+    if (!topUpTime) {
+      alert(
+        "Jam Top Up wajib dipilih."
+      );
+      return;
+    }
+
+    // IMPORTANT:
+    // Tanggal dan jam dikirim TERPISAH.
+    // trxDate selalu YYYY-MM-DD, tanpa jam/timezone.
+    // trxTime selalu HH:mm.
+    const normalizedTopUpDate =
+      /^\d{4}-\d{2}-\d{2}$/.test(
+        topUpDate
+      )
+        ? topUpDate
+        : "";
+
+    if (!normalizedTopUpDate) {
+      alert(
+        "Format tanggal Top Up harus YYYY-MM-DD."
       );
       return;
     }
@@ -1376,7 +1409,9 @@ export default function PettyCashPage() {
               category: "TOP UP",
               amount,
               trxDate:
-                topUpDate,
+                normalizedTopUpDate,
+              trxTime:
+                topUpTime,
               referenceNumber:
                 topUpReference.trim() ||
                 null,
@@ -3854,7 +3889,7 @@ function exportPettyCashPDF() {
                   </div>
 
                   <p className="mt-1.5 text-[8px] text-[#91A1AC]">
-                    Format tanggal: YYYY-MM-DD.
+                    Wajib YYYY-MM-DD (contoh: 2026-09-28).
                   </p>
 
                 </div>
@@ -4158,12 +4193,11 @@ function exportPettyCashPDF() {
 
               {/* DATE + REF */}
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-3">
 
                 <div>
-
                   <label className="mb-2 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#657B8A]">
-                    Tanggal & Jam Top Up
+                    Tanggal Top Up
                   </label>
 
                   <div className="relative">
@@ -4174,12 +4208,48 @@ function exportPettyCashPDF() {
                     />
 
                     <input
-                      type="datetime-local"
-                      value={
-                        topUpDate
-                      }
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      placeholder="YYYY-MM-DD"
+                      maxLength={10}
+                      value={topUpDate}
+                      onChange={(e) => {
+                        const value =
+                          e.target.value
+                            .replace(/[^0-9-]/g, "")
+                            .slice(0, 10);
+
+                        setTopUpDate(value);
+                      }}
+                      className="h-11 w-full rounded-xl border border-[#D0E0E8] bg-white pl-10 pr-3 text-[10px] font-semibold text-[#465B69] outline-none transition focus:border-[#006BBA] focus:ring-4 focus:ring-[#006BBA]/10"
+                    />
+
+                  </div>
+
+                  <p className="mt-1.5 text-[8px] text-[#91A1AC]">
+                    Format tanggal: YYYY-MM-DD.
+                  </p>
+
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#657B8A]">
+                    Jam Top Up
+                  </label>
+
+                  <div className="relative">
+
+                    <Clock3
+                      size={14}
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8CA0AD]"
+                    />
+
+                    <input
+                      type="time"
+                      value={topUpTime}
                       onChange={(e) =>
-                        setTopUpDate(
+                        setTopUpTime(
                           e.target.value
                         )
                       }
@@ -4189,7 +4259,7 @@ function exportPettyCashPDF() {
                   </div>
 
                   <p className="mt-1.5 text-[8px] text-[#91A1AC]">
-                    Tanggal & jam ini digunakan sebagai trxDate.
+                    Jam disimpan terpisah sebagai HH:mm.
                   </p>
 
                 </div>

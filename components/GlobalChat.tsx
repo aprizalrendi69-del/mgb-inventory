@@ -285,8 +285,52 @@ function GlobalChatStyles() {
         }
       }
 
+      @keyframes mgb-chat-new-message {
+        0% {
+          transform: translate3d(0, 0, 0) rotate(0deg);
+        }
+
+        10% {
+          transform: translate3d(-3px, 0, 0) rotate(-3deg);
+        }
+
+        20% {
+          transform: translate3d(3px, 0, 0) rotate(3deg);
+        }
+
+        30% {
+          transform: translate3d(-3px, 0, 0) rotate(-3deg);
+        }
+
+        40% {
+          transform: translate3d(3px, 0, 0) rotate(2deg);
+        }
+
+        50% {
+          transform: translate3d(-2px, 0, 0) rotate(-2deg);
+        }
+
+        60% {
+          transform: translate3d(2px, 0, 0) rotate(1deg);
+        }
+
+        70% {
+          transform: translate3d(-1px, 0, 0) rotate(-1deg);
+        }
+
+        80%,
+        100% {
+          transform: translate3d(0, 0, 0) rotate(0deg);
+        }
+      }
+
       .mgb-chat-launcher-shake {
         animation: mgb-chat-shake 1.8s ease-in-out infinite;
+        transform-origin: center;
+      }
+
+      .mgb-chat-new-message {
+        animation: mgb-chat-new-message 0.95s ease-in-out;
         transform-origin: center;
       }
 
@@ -308,6 +352,7 @@ function GlobalChatStyles() {
 
       @media (prefers-reduced-motion: reduce) {
         .mgb-chat-launcher-shake,
+        .mgb-chat-new-message,
         .mgb-chat-unread-ring,
         .mgb-chat-unread-badge,
         .mgb-chat-shine,
@@ -466,6 +511,21 @@ export default function GlobalChat() {
   const [error, setError] =
     useState("");
 
+  /*
+   * ============================================================
+   * NEW MESSAGE TRACKING
+   * ============================================================
+   */
+
+  const previousUnreadRef =
+    useRef<number | null>(null);
+
+  const previousLatestMessageRef =
+    useRef<Record<number, number>>({});
+
+  const [newMessagePulse, setNewMessagePulse] =
+    useState(false);
+
   const messagesEndRef =
     useRef<HTMLDivElement | null>(null);
 
@@ -521,6 +581,12 @@ export default function GlobalChat() {
     });
   }, [users, search]);
 
+  /*
+   * ============================================================
+   * TOTAL UNREAD
+   * ============================================================
+   */
+
   const totalUnread = useMemo(() => {
     if (!currentUser) return 0;
 
@@ -549,6 +615,136 @@ export default function GlobalChat() {
     ).length;
   }, [users]);
 
+  /*
+   * ============================================================
+   * DETECT NEW UNREAD MESSAGE
+   * ============================================================
+   */
+
+  useEffect(() => {
+    /*
+     * First load:
+     * do not trigger the "new message" pulse,
+     * but keep unread visible immediately.
+     */
+    if (previousUnreadRef.current === null) {
+      previousUnreadRef.current =
+        totalUnread;
+      return;
+    }
+
+    if (
+      totalUnread >
+      previousUnreadRef.current
+    ) {
+      setNewMessagePulse(true);
+
+      const timeout =
+        window.setTimeout(() => {
+          setNewMessagePulse(false);
+        }, 1200);
+
+      previousUnreadRef.current =
+        totalUnread;
+
+      return () => {
+        window.clearTimeout(timeout);
+      };
+    }
+
+    previousUnreadRef.current =
+      totalUnread;
+  }, [totalUnread]);
+
+  /*
+   * ============================================================
+   * DETECT NEW MESSAGE BY CONVERSATION
+   * ============================================================
+   */
+
+  useEffect(() => {
+    if (!conversations.length) {
+      return;
+    }
+
+    let foundNewMessage = false;
+
+    const nextLatestMap: Record<
+      number,
+      number
+    > = {};
+
+    for (const conversation of conversations) {
+      const last =
+        conversation.lastMessage;
+
+      if (!last) continue;
+
+      nextLatestMap[
+        conversation.id
+      ] = last.id;
+
+      const previousId =
+        previousLatestMessageRef.current[
+          conversation.id
+        ];
+
+      if (
+        previousId !== undefined &&
+        last.id > previousId &&
+        last.senderId !== currentUser?.id
+      ) {
+        /*
+         * If this conversation is currently open,
+         * the message is being actively viewed.
+         *
+         * We still update the map but don't trigger
+         * the global launcher pulse for a conversation
+         * that is currently selected.
+         */
+        if (
+          conversation.id !==
+          selectedConversationId
+        ) {
+          foundNewMessage = true;
+        }
+      }
+    }
+
+    /*
+     * Initial population only.
+     */
+    if (
+      Object.keys(
+        previousLatestMessageRef.current,
+      ).length === 0
+    ) {
+      previousLatestMessageRef.current =
+        nextLatestMap;
+      return;
+    }
+
+    previousLatestMessageRef.current =
+      nextLatestMap;
+
+    if (foundNewMessage) {
+      setNewMessagePulse(true);
+
+      const timeout =
+        window.setTimeout(() => {
+          setNewMessagePulse(false);
+        }, 1200);
+
+      return () => {
+        window.clearTimeout(timeout);
+      };
+    }
+  }, [
+    conversations,
+    currentUser?.id,
+    selectedConversationId,
+  ]);
+
   const scrollToBottom = useCallback(
     (
       behavior: ScrollBehavior = "smooth",
@@ -562,40 +758,64 @@ export default function GlobalChat() {
     [],
   );
 
-  const loadUsers = useCallback(async () => {
-    try {
-      setLoadingUsers(true);
+  /*
+   * ============================================================
+   * LOAD USERS
+   * ============================================================
+   */
 
-      const response = await fetch(
-        "/api/chat/users",
-        {
-          method: "GET",
-          cache: "no-store",
-        },
-      );
+  const loadUsers = useCallback(
+    async (silent = false) => {
+      try {
+        if (!silent) {
+          setLoadingUsers(true);
+        }
 
-      if (!response.ok) {
-        throw new Error(
-          "Gagal mengambil daftar user",
+        const response = await fetch(
+          "/api/chat/users",
+          {
+            method: "GET",
+            cache: "no-store",
+          },
         );
+
+        if (!response.ok) {
+          throw new Error(
+            "Gagal mengambil daftar user",
+          );
+        }
+
+        const data =
+          (await response.json()) as UsersResponse;
+
+        setCurrentUser(data.currentUser);
+        setUsers(data.users ?? []);
+
+        if (!silent) {
+          setError("");
+        }
+      } catch (err) {
+        console.error(err);
+
+        if (!silent) {
+          setError(
+            "Gagal mengambil daftar user.",
+          );
+        }
+      } finally {
+        if (!silent) {
+          setLoadingUsers(false);
+        }
       }
+    },
+    [],
+  );
 
-      const data =
-        (await response.json()) as UsersResponse;
-
-      setCurrentUser(data.currentUser);
-      setUsers(data.users ?? []);
-      setError("");
-    } catch (err) {
-      console.error(err);
-
-      setError(
-        "Gagal mengambil daftar user.",
-      );
-    } finally {
-      setLoadingUsers(false);
-    }
-  }, []);
+  /*
+   * ============================================================
+   * LOAD CONVERSATIONS
+   * ============================================================
+   */
 
   const loadConversations = useCallback(
     async (silent = false) => {
@@ -625,7 +845,9 @@ export default function GlobalChat() {
           data.conversations ?? [],
         );
 
-        setError("");
+        if (!silent) {
+          setError("");
+        }
       } catch (err) {
         console.error(err);
 
@@ -642,6 +864,12 @@ export default function GlobalChat() {
     },
     [],
   );
+
+  /*
+   * ============================================================
+   * LOAD MESSAGES
+   * ============================================================
+   */
 
   const loadMessages = useCallback(
     async (
@@ -693,6 +921,12 @@ export default function GlobalChat() {
     },
     [scrollToBottom],
   );
+
+  /*
+   * ============================================================
+   * MARK AS READ
+   * ============================================================
+   */
 
   const markAsRead = useCallback(
     async (conversationId: number) => {
@@ -760,6 +994,12 @@ export default function GlobalChat() {
     [currentUser],
   );
 
+  /*
+   * ============================================================
+   * OPEN CONVERSATION
+   * ============================================================
+   */
+
   const openConversation =
     useCallback(
       async (conversationId: number) => {
@@ -780,6 +1020,12 @@ export default function GlobalChat() {
       },
       [loadMessages, markAsRead],
     );
+
+  /*
+   * ============================================================
+   * START CONVERSATION
+   * ============================================================
+   */
 
   const startConversation =
     useCallback(
@@ -890,6 +1136,12 @@ export default function GlobalChat() {
       ],
     );
 
+  /*
+   * ============================================================
+   * SEND MESSAGE
+   * ============================================================
+   */
+
   const sendMessage = useCallback(
     async () => {
       const message =
@@ -969,35 +1221,80 @@ export default function GlobalChat() {
     ],
   );
 
-  useEffect(() => {
-    if (!open) return;
+  /*
+   * ============================================================
+   * INITIAL DATA LOAD
+   *
+   * IMPORTANT:
+   * This runs even when chat is CLOSED.
+   *
+   * This is what makes unread badge work automatically.
+   * ============================================================
+   */
 
+  useEffect(() => {
     loadUsers();
     loadConversations();
   }, [
-    open,
     loadUsers,
     loadConversations,
   ]);
 
+  /*
+   * ============================================================
+   * GLOBAL BACKGROUND POLLING
+   *
+   * IMPORTANT:
+   * Runs whether chat is open OR closed.
+   *
+   * So new messages can update:
+   * - badge
+   * - unread count
+   * - launcher shake
+   * - minimized indicator
+   * ============================================================
+   */
+
+  useEffect(() => {
+    const interval =
+      window.setInterval(() => {
+        loadUsers(true);
+        loadConversations(true);
+      }, POLLING_INTERVAL);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [
+    loadUsers,
+    loadConversations,
+  ]);
+
+  /*
+   * ============================================================
+   * OPEN CHAT DETAIL POLLING
+   *
+   * Only runs when a conversation is open.
+   * ============================================================
+   */
+
   useEffect(() => {
     if (!open) return;
 
+    if (!selectedConversationId) {
+      return;
+    }
+
     const interval =
       window.setInterval(() => {
-        loadUsers();
-        loadConversations(true);
+        loadMessages(
+          selectedConversationId,
+          true,
+        );
 
-        if (selectedConversationId) {
-          loadMessages(
-            selectedConversationId,
-            true,
-          );
-
-          markAsRead(
-            selectedConversationId,
-          );
-        }
+        markAsRead(
+          selectedConversationId,
+        );
       }, POLLING_INTERVAL);
 
     return () => {
@@ -1006,11 +1303,15 @@ export default function GlobalChat() {
   }, [
     open,
     selectedConversationId,
-    loadUsers,
-    loadConversations,
     loadMessages,
     markAsRead,
   ]);
+
+  /*
+   * ============================================================
+   * SCROLL WHEN SELECTED CONVERSATION CHANGES
+   * ============================================================
+   */
 
   useEffect(() => {
     if (!selectedConversationId) return;
@@ -1021,6 +1322,12 @@ export default function GlobalChat() {
     scrollToBottom,
   ]);
 
+  /*
+   * ============================================================
+   * RESET DETAIL WHEN CLOSED
+   * ============================================================
+   */
+
   useEffect(() => {
     if (!open) {
       setSelectedConversationId(null);
@@ -1029,6 +1336,12 @@ export default function GlobalChat() {
       setSearch("");
     }
   }, [open]);
+
+  /*
+   * ============================================================
+   * ESCAPE
+   * ============================================================
+   */
 
   useEffect(() => {
     const handleKeyDown = (
@@ -1069,6 +1382,22 @@ export default function GlobalChat() {
 
   /*
    * ============================================================
+   * LAUNCHER ANIMATION STATE
+   * ============================================================
+   */
+
+  const launcherHasUnread =
+    totalUnread > 0;
+
+  const launcherAnimationClass =
+    launcherHasUnread
+      ? "mgb-chat-launcher-shake"
+      : newMessagePulse
+        ? "mgb-chat-new-message"
+        : "";
+
+  /*
+   * ============================================================
    * CLOSED / FLOATING LAUNCHER
    * ============================================================
    */
@@ -1086,14 +1415,10 @@ export default function GlobalChat() {
             z-[9999]
             sm:bottom-6
             sm:right-6
-            ${
-              totalUnread > 0
-                ? "mgb-chat-launcher-shake"
-                : ""
-            }
+            ${launcherAnimationClass}
           `}
         >
-          {totalUnread > 0 && (
+          {launcherHasUnread && (
             <span
               className="
                 mgb-chat-unread-ring
@@ -1114,7 +1439,7 @@ export default function GlobalChat() {
               setMinimized(false);
             }}
             aria-label={
-              totalUnread > 0
+              launcherHasUnread
                 ? `Buka chat, ${totalUnread} chat belum dibaca`
                 : "Buka chat"
             }
@@ -1213,7 +1538,7 @@ export default function GlobalChat() {
               strokeWidth={1.75}
             />
 
-            {totalUnread > 0 && (
+            {launcherHasUnread && (
               <span
                 className="
                   mgb-chat-unread-badge
@@ -1262,7 +1587,7 @@ export default function GlobalChat() {
         <GlobalChatStyles />
 
         <div
-          className="
+          className={`
             fixed
             bottom-5
             right-5
@@ -1272,7 +1597,12 @@ export default function GlobalChat() {
             gap-2
             sm:bottom-6
             sm:right-6
-          "
+            ${
+              launcherHasUnread
+                ? "mgb-chat-new-message"
+                : ""
+            }
+          `}
         >
           <button
             type="button"
@@ -1300,7 +1630,7 @@ export default function GlobalChat() {
               hover:bg-white
               hover:shadow-[0_22px_52px_rgba(31,65,53,0.21)]
               ${
-                totalUnread > 0
+                launcherHasUnread
                   ? "mgb-chat-minimized-unread"
                   : ""
               }
@@ -1314,7 +1644,7 @@ export default function GlobalChat() {
                 w-10
                 items-center
                 justify-center
-                overflow-hidden
+                overflow-visible
                 rounded-[13px]
                 border
                 border-white/20
@@ -1330,6 +1660,7 @@ export default function GlobalChat() {
                   pointer-events-none
                   absolute
                   inset-0
+                  rounded-[13px]
                   bg-gradient-to-br
                   from-white/15
                   via-transparent
@@ -1342,7 +1673,7 @@ export default function GlobalChat() {
                 strokeWidth={1.8}
               />
 
-              {totalUnread > 0 && (
+              {launcherHasUnread && (
                 <span
                   className="
                     mgb-chat-unread-badge
@@ -1375,13 +1706,13 @@ export default function GlobalChat() {
               <span className="flex items-center gap-1.5 text-[12px] font-black tracking-[-0.01em] text-[#1D332A]">
                 MGB Chat
 
-                {totalUnread > 0 && (
+                {launcherHasUnread && (
                   <span className="h-1.5 w-1.5 rounded-full bg-[#D94D4D]" />
                 )}
               </span>
 
               <span className="mt-0.5 text-[9px] font-medium text-[#8B9B94]">
-                {totalUnread > 0
+                {launcherHasUnread
                   ? `${totalUnread} pesan belum dibaca`
                   : "Komunikasi internal"}
               </span>
