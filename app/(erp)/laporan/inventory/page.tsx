@@ -18,12 +18,26 @@ import { exportReportPdf } from "@/lib/exportReportPdf";
 import { exportReportExcel } from "@/lib/exportReportExcel";
 import { printTable } from "@/lib/print";
 
+type StockStatus = "AMAN" | "MENIPIS" | "HABIS";
+
 export default function LaporanInventoryPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+
+  // =========================================================
+  // MULTI STATUS FILTER
+  // =========================================================
+  //
+  // [] = semua status
+  // ["AMAN"] = hanya Aman
+  // ["AMAN", "MENIPIS"] = Aman + Menipis
+  // ["AMAN", "MENIPIS", "HABIS"] = semua status
+  //
+  const [statusFilters, setStatusFilters] = useState<
+    StockStatus[]
+  >([]);
 
   // =========================================================
   // LOAD DATA
@@ -88,7 +102,7 @@ export default function LaporanInventoryPage() {
     );
   }
 
-  function getStockStatus(item: any) {
+  function getStockStatus(item: any): StockStatus {
     const stock = Number(item.stock ?? 0);
     const minimum = getMinimumStock(item);
 
@@ -104,6 +118,33 @@ export default function LaporanInventoryPage() {
     }
 
     return "AMAN";
+  }
+
+  // =========================================================
+  // TOGGLE STATUS FILTER
+  // =========================================================
+
+  function toggleStatusFilter(
+    status: StockStatus
+  ) {
+    setStatusFilters((current) => {
+      if (current.includes(status)) {
+        return current.filter(
+          (item) => item !== status
+        );
+      }
+
+      return [
+        ...current,
+        status,
+      ];
+    });
+  }
+
+  function isStatusSelected(
+    status: StockStatus
+  ) {
+    return statusFilters.includes(status);
   }
 
   // =========================================================
@@ -137,8 +178,8 @@ export default function LaporanInventoryPage() {
         category.includes(keyword);
 
       const cocokStatus =
-        statusFilter === "ALL" ||
-        status === statusFilter;
+        statusFilters.length === 0 ||
+        statusFilters.includes(status);
 
       return (
         cocokSearch &&
@@ -148,7 +189,7 @@ export default function LaporanInventoryPage() {
   }, [
     data,
     search,
-    statusFilter,
+    statusFilters,
   ]);
 
   // =========================================================
@@ -263,12 +304,195 @@ export default function LaporanInventoryPage() {
 
   function resetFilter() {
     setSearch("");
-    setStatusFilter("ALL");
+    setStatusFilters([]);
   }
 
   const hasFilter =
     search !== "" ||
-    statusFilter !== "ALL";
+    statusFilters.length > 0;
+
+  // =========================================================
+  // STATUS BUTTON
+  // =========================================================
+
+  function StatusFilterButton({
+    status,
+    label,
+    description,
+    count,
+  }: {
+    status: StockStatus;
+    label: string;
+    description: string;
+    count: number;
+  }) {
+    const selected =
+      isStatusSelected(status);
+
+    const styles = {
+      AMAN: {
+        active:
+          "border-emerald-300 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-100",
+        icon:
+          "bg-emerald-100 text-emerald-600",
+        dot:
+          "bg-emerald-500",
+      },
+      MENIPIS: {
+        active:
+          "border-amber-300 bg-amber-50 text-amber-700 ring-2 ring-amber-100",
+        icon:
+          "bg-amber-100 text-amber-600",
+        dot:
+          "bg-amber-500",
+      },
+      HABIS: {
+        active:
+          "border-red-300 bg-red-50 text-red-700 ring-2 ring-red-100",
+        icon:
+          "bg-red-100 text-red-600",
+        dot:
+          "bg-red-500",
+      },
+    };
+
+    const style =
+      styles[status];
+
+    return (
+      <button
+        type="button"
+        onClick={() =>
+          toggleStatusFilter(status)
+        }
+        aria-pressed={selected}
+        className={`
+          group
+          relative
+          flex
+          min-w-[145px]
+          flex-1
+          items-center
+          gap-3
+          rounded-xl
+          border
+          px-4
+          py-3
+          text-left
+          transition
+          duration-200
+          ${
+            selected
+              ? style.active
+              : "border-[#D5E5DC] bg-white text-[#35564C] hover:border-[#BBD5C9] hover:bg-[#FAFCFB]"
+          }
+        `}
+      >
+        <span
+          className={`
+            flex
+            h-9
+            w-9
+            shrink-0
+            items-center
+            justify-center
+            rounded-lg
+            ${
+              selected
+                ? style.icon
+                : "bg-[#EAF3EF] text-[#497F70]"
+            }
+          `}
+        >
+          <span
+            className={`
+              h-2.5
+              w-2.5
+              rounded-full
+              ${
+                selected
+                  ? style.dot
+                  : "bg-[#8EAAA0]"
+              }
+            `}
+          />
+        </span>
+
+        <span className="min-w-0">
+          <span
+            className={`
+              block
+              text-sm
+              font-semibold
+              ${
+                selected
+                  ? ""
+                  : "text-[#35564C]"
+              }
+            `}
+          >
+            {label}
+          </span>
+
+          <span
+            className={`
+              mt-0.5
+              block
+              text-xs
+              ${
+                selected
+                  ? "opacity-80"
+                  : "text-gray-400"
+              }
+            `}
+          >
+            {description}
+          </span>
+        </span>
+
+        <span
+          className={`
+            ml-auto
+            shrink-0
+            rounded-full
+            px-2
+            py-1
+            text-xs
+            font-bold
+            ${
+              selected
+                ? "bg-white/70"
+                : "bg-[#F5F8F6] text-[#497F70]"
+            }
+          `}
+        >
+          {formatNumber(count)}
+        </span>
+
+        {selected && (
+          <span
+            className="
+              absolute
+              right-2
+              top-2
+              flex
+              h-4
+              w-4
+              items-center
+              justify-center
+              rounded-full
+              bg-white
+              text-[10px]
+              font-bold
+              shadow-sm
+            "
+          >
+            ✓
+          </span>
+        )}
+      </button>
+    );
+  }
 
   // =========================================================
   // STATUS BADGE
@@ -352,7 +576,6 @@ export default function LaporanInventoryPage() {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-
           <div
             className="
               flex
@@ -374,11 +597,32 @@ export default function LaporanInventoryPage() {
           <p className="text-sm font-medium text-gray-500">
             Memuat laporan inventory...
           </p>
-
         </div>
       </div>
     );
   }
+
+  // =========================================================
+  // STATUS COUNTS
+  // =========================================================
+
+  const amanCount = data.filter(
+    (item) =>
+      getStockStatus(item) ===
+      "AMAN"
+  ).length;
+
+  const menipisCount = data.filter(
+    (item) =>
+      getStockStatus(item) ===
+      "MENIPIS"
+  ).length;
+
+  const habisCount = data.filter(
+    (item) =>
+      getStockStatus(item) ===
+      "HABIS"
+  ).length;
 
   // =========================================================
   // PAGE
@@ -386,7 +630,6 @@ export default function LaporanInventoryPage() {
 
   return (
     <div className="space-y-6 pb-8">
-
       {/* ================================================= */}
       {/* HEADER */}
       {/* ================================================= */}
@@ -401,9 +644,7 @@ export default function LaporanInventoryPage() {
           md:justify-between
         "
       >
-
         <div className="flex items-center gap-3">
-
           <div
             className="
               flex
@@ -421,7 +662,6 @@ export default function LaporanInventoryPage() {
           </div>
 
           <div>
-
             <h1
               className="
                 text-2xl
@@ -438,9 +678,7 @@ export default function LaporanInventoryPage() {
               Ringkasan persediaan dan nilai
               asset barang
             </p>
-
           </div>
-
         </div>
 
         <button
@@ -479,7 +717,6 @@ export default function LaporanInventoryPage() {
 
           Refresh
         </button>
-
       </div>
 
       {/* ================================================= */}
@@ -495,7 +732,6 @@ export default function LaporanInventoryPage() {
           xl:grid-cols-5
         "
       >
-
         {/* TOTAL BARANG */}
 
         <div
@@ -509,9 +745,7 @@ export default function LaporanInventoryPage() {
           "
         >
           <div className="flex items-start justify-between">
-
             <div>
-
               <p className="text-sm text-gray-500">
                 Total Barang
               </p>
@@ -525,7 +759,6 @@ export default function LaporanInventoryPage() {
               <p className="mt-1 text-xs text-gray-400">
                 Jenis barang
               </p>
-
             </div>
 
             <div
@@ -542,7 +775,6 @@ export default function LaporanInventoryPage() {
             >
               <Package size={20} />
             </div>
-
           </div>
         </div>
 
@@ -559,9 +791,7 @@ export default function LaporanInventoryPage() {
           "
         >
           <div className="flex items-start justify-between">
-
             <div>
-
               <p className="text-sm text-gray-500">
                 Total Stock
               </p>
@@ -573,7 +803,6 @@ export default function LaporanInventoryPage() {
               <p className="mt-1 text-xs text-gray-400">
                 Jumlah seluruh stock
               </p>
-
             </div>
 
             <div
@@ -590,7 +819,6 @@ export default function LaporanInventoryPage() {
             >
               <Boxes size={20} />
             </div>
-
           </div>
         </div>
 
@@ -607,9 +835,7 @@ export default function LaporanInventoryPage() {
           "
         >
           <div className="flex items-start justify-between">
-
             <div>
-
               <p className="text-sm text-gray-500">
                 Stok Menipis
               </p>
@@ -623,7 +849,6 @@ export default function LaporanInventoryPage() {
               <p className="mt-1 text-xs text-gray-400">
                 Perlu perhatian
               </p>
-
             </div>
 
             <div
@@ -640,7 +865,6 @@ export default function LaporanInventoryPage() {
             >
               <AlertTriangle size={20} />
             </div>
-
           </div>
         </div>
 
@@ -657,9 +881,7 @@ export default function LaporanInventoryPage() {
           "
         >
           <div className="flex items-start justify-between">
-
             <div>
-
               <p className="text-sm text-gray-500">
                 Stok Habis
               </p>
@@ -673,7 +895,6 @@ export default function LaporanInventoryPage() {
               <p className="mt-1 text-xs text-gray-400">
                 Tidak tersedia
               </p>
-
             </div>
 
             <div
@@ -690,7 +911,6 @@ export default function LaporanInventoryPage() {
             >
               <Package size={20} />
             </div>
-
           </div>
         </div>
 
@@ -707,9 +927,7 @@ export default function LaporanInventoryPage() {
           "
         >
           <div className="flex items-start justify-between">
-
             <div className="min-w-0">
-
               <p className="text-sm text-gray-500">
                 Nilai Asset
               </p>
@@ -721,7 +939,6 @@ export default function LaporanInventoryPage() {
               <p className="mt-1 text-xs text-gray-400">
                 Nilai persediaan
               </p>
-
             </div>
 
             <div
@@ -739,10 +956,8 @@ export default function LaporanInventoryPage() {
             >
               <Wallet size={20} />
             </div>
-
           </div>
         </div>
-
       </div>
 
       {/* ================================================= */}
@@ -760,18 +975,13 @@ export default function LaporanInventoryPage() {
           md:p-6
         "
       >
-
         <div
           className="
             flex
             flex-col
-            gap-4
-            xl:flex-row
-            xl:items-end
-            xl:justify-between
+            gap-5
           "
         >
-
           {/* FILTER AREA */}
 
           <div
@@ -779,22 +989,18 @@ export default function LaporanInventoryPage() {
               grid
               w-full
               grid-cols-1
-              gap-3
-              md:grid-cols-[minmax(0,1fr)_220px]
-              xl:max-w-3xl
+              gap-4
+              xl:grid-cols-[minmax(0,1fr)_minmax(520px,1.35fr)]
             "
           >
-
             {/* SEARCH */}
 
             <div>
-
               <label className="mb-1.5 block text-sm font-medium text-[#35564C]">
                 Pencarian
               </label>
 
               <div className="relative">
-
                 <Search
                   size={18}
                   className="
@@ -859,69 +1065,85 @@ export default function LaporanInventoryPage() {
                     <X size={16} />
                   </button>
                 )}
-
               </div>
-
             </div>
 
-            {/* STATUS */}
+            {/* STATUS MULTI SELECT */}
 
             <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="block text-sm font-medium text-[#35564C]">
+                  Status Stock
+                </label>
 
-              <label className="mb-1.5 block text-sm font-medium text-[#35564C]">
-                Status Stock
-              </label>
+                {statusFilters.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setStatusFilters([])
+                    }
+                    className="
+                      text-xs
+                      font-semibold
+                      text-[#497F70]
+                      transition
+                      hover:text-[#3D6D60]
+                    "
+                  >
+                    Semua Status
+                  </button>
+                )}
+              </div>
 
-              <select
-                value={statusFilter}
-                onChange={(e) =>
-                  setStatusFilter(
-                    e.target.value
-                  )
-                }
+              <div
                 className="
-                  w-full
-                  rounded-xl
-                  border
-                  border-[#D5E5DC]
-                  bg-[#FAFCFB]
-                  px-4
-                  py-3
-                  text-sm
-                  text-gray-700
-                  outline-none
-                  transition
-                  focus:border-[#497F70]
-                  focus:bg-white
-                  focus:ring-2
-                  focus:ring-[#497F70]/10
+                  flex
+                  flex-col
+                  gap-2
+                  sm:flex-row
                 "
               >
-                <option value="ALL">
-                  Semua Status
-                </option>
+                <StatusFilterButton
+                  status="AMAN"
+                  label="Aman"
+                  description="Stock normal"
+                  count={amanCount}
+                />
 
-                <option value="AMAN">
-                  Aman
-                </option>
+                <StatusFilterButton
+                  status="MENIPIS"
+                  label="Menipis"
+                  description="Di bawah minimum"
+                  count={menipisCount}
+                />
 
-                <option value="MENIPIS">
-                  Menipis
-                </option>
+                <StatusFilterButton
+                  status="HABIS"
+                  label="Habis"
+                  description="Stock 0"
+                  count={habisCount}
+                />
+              </div>
 
-                <option value="HABIS">
-                  Habis
-                </option>
-              </select>
-
+              <p className="mt-2 text-xs text-gray-400">
+                Bisa memilih lebih dari satu status sekaligus.
+              </p>
             </div>
-
           </div>
 
           {/* EXPORT */}
 
-          <div className="flex flex-wrap gap-2">
-
+          <div
+            className="
+              flex
+              flex-wrap
+              items-center
+              gap-2
+              border-t
+              border-[#EDF2EF]
+              pt-4
+            "
+          >
             <button
               type="button"
               disabled={
@@ -1030,8 +1252,30 @@ export default function LaporanInventoryPage() {
               Print
             </button>
 
+            {hasFilter && (
+              <button
+                type="button"
+                onClick={resetFilter}
+                className="
+                  ml-auto
+                  inline-flex
+                  items-center
+                  gap-1.5
+                  rounded-xl
+                  px-3
+                  py-2.5
+                  text-sm
+                  font-semibold
+                  text-[#497F70]
+                  transition
+                  hover:bg-[#EAF3EF]
+                "
+              >
+                <X size={15} />
+                Reset Filter
+              </button>
+            )}
           </div>
-
         </div>
 
         {/* INFO FILTER */}
@@ -1051,50 +1295,59 @@ export default function LaporanInventoryPage() {
             sm:justify-between
           "
         >
-
           <p className="text-gray-500">
-
             Menampilkan{" "}
-
             <span className="font-semibold text-[#35564C]">
               {formatNumber(
                 filteredData.length
               )}
-            </span>
-
-            {" "}dari{" "}
-
+            </span>{" "}
+            dari{" "}
             <span className="font-semibold text-[#35564C]">
               {formatNumber(
                 data.length
               )}
-            </span>
-
-            {" "}barang
-
+            </span>{" "}
+            barang
           </p>
 
-          {hasFilter && (
-            <button
-              type="button"
-              onClick={resetFilter}
-              className="
-                inline-flex
-                items-center
-                gap-1
-                font-semibold
-                text-[#497F70]
-                transition
-                hover:text-[#3D6D60]
-              "
-            >
-              <X size={14} />
-              Reset Filter
-            </button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {statusFilters.length > 0 ? (
+              <>
+                <span className="text-gray-400">
+                  Filter:
+                </span>
 
+                {statusFilters.map(
+                  (status) => (
+                    <span
+                      key={status}
+                      className="
+                        rounded-full
+                        bg-[#EAF3EF]
+                        px-2.5
+                        py-1
+                        font-semibold
+                        text-[#497F70]
+                      "
+                    >
+                      {status === "AMAN"
+                        ? "Aman"
+                        : status ===
+                          "MENIPIS"
+                        ? "Menipis"
+                        : "Habis"}
+                    </span>
+                  )
+                )}
+              </>
+            ) : (
+              <span className="text-gray-400">
+                Semua status
+              </span>
+            )}
+          </div>
         </div>
-
       </div>
 
       {/* ================================================= */}
@@ -1111,7 +1364,6 @@ export default function LaporanInventoryPage() {
           shadow-sm
         "
       >
-
         {/* TABLE HEADER */}
 
         <div
@@ -1129,9 +1381,7 @@ export default function LaporanInventoryPage() {
             md:px-6
           "
         >
-
           <div>
-
             <h2 className="font-semibold text-[#18352D]">
               Daftar Inventory
             </h2>
@@ -1140,7 +1390,6 @@ export default function LaporanInventoryPage() {
               Detail stok dan nilai persediaan
               barang
             </p>
-
           </div>
 
           <div
@@ -1160,19 +1409,14 @@ export default function LaporanInventoryPage() {
             )}{" "}
             Item
           </div>
-
         </div>
 
         {/* TABLE */}
 
         <div className="overflow-x-auto">
-
           <table className="min-w-[1050px] w-full text-sm">
-
             <thead className="bg-[#F5F8F6]">
-
               <tr className="border-b border-[#E5ECE9]">
-
                 <th className="w-16 px-5 py-4 text-center font-semibold text-[#35564C]">
                   No
                 </th>
@@ -1204,24 +1448,17 @@ export default function LaporanInventoryPage() {
                 <th className="px-5 py-4 text-center font-semibold text-[#35564C]">
                   Status
                 </th>
-
               </tr>
-
             </thead>
 
             <tbody>
-
               {filteredData.length === 0 ? (
-
                 <tr>
-
                   <td
                     colSpan={8}
                     className="px-5 py-14 text-center"
                   >
-
                     <div className="flex flex-col items-center">
-
                       <div
                         className="
                           mb-3
@@ -1246,21 +1483,15 @@ export default function LaporanInventoryPage() {
                         Coba ubah pencarian atau
                         filter status
                       </p>
-
                     </div>
-
                   </td>
-
                 </tr>
-
               ) : (
-
                 filteredData.map(
                   (
                     item: any,
                     index: number
                   ) => {
-
                     const stock =
                       Number(
                         item.stock ?? 0
@@ -1294,7 +1525,6 @@ export default function LaporanInventoryPage() {
                           hover:bg-[#FAFCFB]
                         "
                       >
-
                         {/* NO */}
 
                         <td className="px-5 py-4 text-center text-gray-500">
@@ -1304,29 +1534,24 @@ export default function LaporanInventoryPage() {
                         {/* KODE */}
 
                         <td className="px-5 py-4">
-
                           <span className="font-semibold text-[#18352D]">
                             {item.code ??
                               "-"}
                           </span>
-
                         </td>
 
                         {/* NAMA */}
 
                         <td className="px-5 py-4">
-
                           <div className="font-semibold text-[#18352D]">
                             {item.name ??
                               "-"}
                           </div>
-
                         </td>
 
                         {/* KATEGORI */}
 
                         <td className="px-5 py-4">
-
                           <span
                             className="
                               inline-flex
@@ -1343,15 +1568,12 @@ export default function LaporanInventoryPage() {
                               item
                             )}
                           </span>
-
                         </td>
 
                         {/* STOCK */}
 
                         <td className="px-5 py-4 text-right">
-
                           <div className="flex items-center justify-end gap-2">
-
                             {isLowStock && (
                               <AlertTriangle
                                 size={15}
@@ -1385,54 +1607,41 @@ export default function LaporanInventoryPage() {
                                 stock
                               )}
                             </span>
-
                           </div>
-
                         </td>
 
                         {/* HARGA */}
 
                         <td className="whitespace-nowrap px-5 py-4 text-right text-gray-600">
-
                           {formatRupiah(
                             price
                           )}
-
                         </td>
 
                         {/* ASSET */}
 
                         <td className="whitespace-nowrap px-5 py-4 text-right">
-
                           <span className="font-semibold text-[#497F70]">
                             {formatRupiah(
                               asset
                             )}
                           </span>
-
                         </td>
 
                         {/* STATUS */}
 
                         <td className="px-5 py-4 text-center">
-
                           <StatusBadge
                             status={status}
                           />
-
                         </td>
-
                       </tr>
                     );
                   }
                 )
-
               )}
-
             </tbody>
-
           </table>
-
         </div>
 
         {/* ================================================= */}
@@ -1449,7 +1658,6 @@ export default function LaporanInventoryPage() {
             md:px-6
           "
         >
-
           <div
             className="
               flex
@@ -1461,38 +1669,27 @@ export default function LaporanInventoryPage() {
               md:justify-between
             "
           >
-
             <div className="text-gray-500">
-
               Menampilkan{" "}
-
               <span className="font-semibold text-[#35564C]">
                 {formatNumber(
                   filteredData.length
                 )}
               </span>{" "}
               barang
-
             </div>
 
             <div className="font-semibold text-[#35564C]">
-
               Total Asset:{" "}
-
               <span className="text-[#497F70]">
                 {formatRupiah(
                   totalAsset
                 )}
               </span>
-
             </div>
-
           </div>
-
         </div>
-
       </div>
-
     </div>
   );
 }

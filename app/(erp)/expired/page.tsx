@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   CalendarDays,
   CheckCircle2,
-  ChevronDown,
   Clock3,
   FileDown,
   Package,
@@ -32,55 +31,52 @@ type ExpiredItem = {
   status: "AMAN" | "WARNING" | "EXPIRED";
 };
 
-type StatusFilter = "SEMUA" | "EXPIRED" | "WARNING" | "AMAN";
+type StatusFilter = "EXPIRED" | "WARNING" | "AMAN";
 
 const STATUS_META = {
   EXPIRED: {
     label: "Expired",
     description: "Sudah melewati tanggal",
     icon: XCircle,
-    badge:
-      "border-red-200 bg-red-50 text-red-700",
-    iconWrap:
-      "bg-red-100 text-red-600",
-    accent:
-      "from-red-500 to-rose-600",
-    soft:
-      "bg-red-50/70",
-    text:
-      "text-red-600",
+    badge: "border-red-200 bg-red-50 text-red-700",
+    iconWrap: "bg-red-100 text-red-600",
+    accent: "from-red-500 to-rose-600",
+    soft: "bg-red-50/70",
+    text: "text-red-600",
+    active:
+      "border-red-300 bg-gradient-to-br from-red-50 to-rose-50 text-red-700 shadow-[0_8px_24px_-12px_rgba(220,38,38,0.45)]",
   },
   WARNING: {
     label: "Warning",
     description: "Mendekati expired",
     icon: AlertTriangle,
-    badge:
-      "border-amber-200 bg-amber-50 text-amber-700",
-    iconWrap:
-      "bg-amber-100 text-amber-600",
-    accent:
-      "from-amber-400 to-orange-500",
-    soft:
-      "bg-amber-50/70",
-    text:
-      "text-amber-600",
+    badge: "border-amber-200 bg-amber-50 text-amber-700",
+    iconWrap: "bg-amber-100 text-amber-600",
+    accent: "from-amber-400 to-orange-500",
+    soft: "bg-amber-50/70",
+    text: "text-amber-600",
+    active:
+      "border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 text-amber-700 shadow-[0_8px_24px_-12px_rgba(245,158,11,0.45)]",
   },
   AMAN: {
     label: "Aman",
     description: "Masih dalam masa berlaku",
     icon: CheckCircle2,
-    badge:
-      "border-emerald-200 bg-emerald-50 text-emerald-700",
-    iconWrap:
-      "bg-emerald-100 text-emerald-600",
-    accent:
-      "from-emerald-400 to-teal-600",
-    soft:
-      "bg-emerald-50/70",
-    text:
-      "text-emerald-600",
+    badge: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    iconWrap: "bg-emerald-100 text-emerald-600",
+    accent: "from-emerald-400 to-teal-600",
+    soft: "bg-emerald-50/70",
+    text: "text-emerald-600",
+    active:
+      "border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 text-emerald-700 shadow-[0_8px_24px_-12px_rgba(16,185,129,0.45)]",
   },
 } as const;
+
+const STATUS_OPTIONS: StatusFilter[] = [
+  "EXPIRED",
+  "WARNING",
+  "AMAN",
+];
 
 function formatDate(date: string) {
   if (!date) return "-";
@@ -163,13 +159,21 @@ function getExpiryTone(status: ExpiredItem["status"]) {
 export default function ExpiredPage() {
   const [data, setData] = useState<ExpiredItem[]>([]);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<StatusFilter>("SEMUA");
+
+  // Multi-select status.
+  // Empty array = Semua Status.
+  const [statusFilters, setStatusFilters] = useState<
+    StatusFilter[]
+  >([]);
+
   const [loading, setLoading] = useState(true);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
 
-  const [deleteLoading, setDeleteLoading] = useState<number | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState<number | null>(
+    null
+  );
 
   const [editData, setEditData] = useState({
     id: 0,
@@ -205,6 +209,21 @@ export default function ExpiredPage() {
     load();
   }, []);
 
+  function toggleStatus(statusValue: StatusFilter) {
+    setStatusFilters((prev) => {
+      if (prev.includes(statusValue)) {
+        return prev.filter((item) => item !== statusValue);
+      }
+
+      return [...prev, statusValue];
+    });
+  }
+
+  function resetFilters() {
+    setSearch("");
+    setStatusFilters([]);
+  }
+
   const filtered = useMemo(() => {
     const keyword = search.toLowerCase().trim();
 
@@ -216,11 +235,12 @@ export default function ExpiredPage() {
         item.batchNumber?.toLowerCase().includes(keyword);
 
       const cocokStatus =
-        status === "SEMUA" || item.status === status;
+        statusFilters.length === 0 ||
+        statusFilters.includes(item.status);
 
       return cocokSearch && cocokStatus;
     });
-  }, [data, search, status]);
+  }, [data, search, statusFilters]);
 
   const summary = useMemo(() => {
     const expired = data.filter(
@@ -284,18 +304,39 @@ export default function ExpiredPage() {
         orientation: "landscape",
         unit: "mm",
         format: "a4",
+        compress: true,
       });
 
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       const now = new Date();
 
+      const colors = {
+        ink: [15, 23, 42] as [number, number, number],
+        muted: [100, 116, 139] as [number, number, number],
+        line: [226, 232, 240] as [number, number, number],
+        soft: [248, 250, 252] as [number, number, number],
+        green: [24, 53, 45] as [number, number, number],
+        green2: [73, 127, 112] as [number, number, number],
+        white: [255, 255, 255] as [number, number, number],
+        red: [185, 28, 28] as [number, number, number],
+        redSoft: [254, 242, 242] as [number, number, number],
+        amber: [180, 83, 9] as [number, number, number],
+        amberSoft: [255, 247, 237] as [number, number, number],
+        emerald: [4, 120, 87] as [number, number, number],
+        emeraldSoft: [236, 253, 245] as [number, number, number],
+      };
+
       const statusLabel =
-        status === "SEMUA" ? "Semua Status" : status;
+        statusFilters.length === 0
+          ? "Semua Status"
+          : statusFilters
+              .map((item) => STATUS_META[item].label)
+              .join(" + ");
 
       const searchLabel = search.trim()
-        ? `Pencarian: ${search.trim()}`
-        : "Pencarian: Semua Barang";
+        ? search.trim()
+        : "Semua Barang";
 
       const filteredExpired = filtered.filter(
         (item) => item.status === "EXPIRED"
@@ -314,88 +355,322 @@ export default function ExpiredPage() {
         0
       );
 
-      /*
-       * PDF HEADER
-       */
-      pdf.setFillColor(24, 53, 45);
-      pdf.rect(0, 0, pageWidth, 9, "F");
+      const riskQty = filtered
+        .filter(
+          (item) =>
+            item.status === "EXPIRED" ||
+            item.status === "WARNING"
+        )
+        .reduce((sum, item) => sum + Number(item.qty || 0), 0);
 
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(9);
-      pdf.setTextColor(255, 255, 255);
-      pdf.text("MGB ERP", 14, 6);
-
-      pdf.setFontSize(17);
-      pdf.setTextColor(24, 53, 45);
-      pdf.text("Monitoring Barang Expired", 14, 20);
-
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8);
-      pdf.setTextColor(100, 116, 139);
-      pdf.text(
-        "Inventory Control • Monitoring masa berlaku batch barang",
-        14,
-        26
-      );
-
-      pdf.setFontSize(8);
-      pdf.text(
-        `Export: ${now.toLocaleDateString("id-ID", {
+      const formatExportDate = (date: Date) =>
+        date.toLocaleDateString("id-ID", {
           day: "2-digit",
           month: "long",
           year: "numeric",
-        })} ${now.toLocaleTimeString("id-ID", {
+        });
+
+      const formatExportTime = (date: Date) =>
+        date.toLocaleTimeString("id-ID", {
           hour: "2-digit",
           minute: "2-digit",
-        })}`,
-        pageWidth - 14,
-        14,
-        { align: "right" }
-      );
+        });
+
+      /*
+       * ---------------------------------------------------------
+       * SMALL VECTOR ICONS
+       * ---------------------------------------------------------
+       * Dibuat dengan vector PDF supaya tidak bergantung pada
+       * font emoji / icon image dan tetap tajam saat dicetak.
+       */
+      const drawCheckIcon = (
+        x: number,
+        y: number,
+        radius: number,
+        color: [number, number, number]
+      ) => {
+        pdf.setDrawColor(...color);
+        pdf.setLineWidth(0.7);
+        pdf.circle(x, y, radius, "S");
+        pdf.line(
+          x - radius * 0.45,
+          y,
+          x - radius * 0.08,
+          y + radius * 0.42
+        );
+        pdf.line(
+          x - radius * 0.08,
+          y + radius * 0.42,
+          x + radius * 0.55,
+          y - radius * 0.48
+        );
+      };
+
+      const drawXIcon = (
+        x: number,
+        y: number,
+        radius: number,
+        color: [number, number, number]
+      ) => {
+        pdf.setDrawColor(...color);
+        pdf.setLineWidth(0.7);
+        pdf.circle(x, y, radius, "S");
+        pdf.line(
+          x - radius * 0.4,
+          y - radius * 0.4,
+          x + radius * 0.4,
+          y + radius * 0.4
+        );
+        pdf.line(
+          x + radius * 0.4,
+          y - radius * 0.4,
+          x - radius * 0.4,
+          y + radius * 0.4
+        );
+      };
+
+      const drawWarningIcon = (
+        x: number,
+        y: number,
+        size: number,
+        color: [number, number, number]
+      ) => {
+        pdf.setDrawColor(...color);
+        pdf.setLineWidth(0.7);
+
+        const top = y - size * 0.58;
+        const bottom = y + size * 0.48;
+        const left = x - size * 0.62;
+        const right = x + size * 0.62;
+
+        pdf.line(top ? x : x, top, right, bottom);
+        pdf.line(right, bottom, left, bottom);
+        pdf.line(left, bottom, x, top);
+
+        pdf.line(x, y - size * 0.22, x, y + size * 0.15);
+        pdf.circle(x, y + size * 0.31, 0.35, "F");
+      };
+
+      const drawPackageIcon = (
+        x: number,
+        y: number,
+        size: number,
+        color: [number, number, number]
+      ) => {
+        pdf.setDrawColor(...color);
+        pdf.setLineWidth(0.55);
+
+        const w = size;
+        const h = size * 0.72;
+        const left = x - w / 2;
+        const right = x + w / 2;
+        const top = y - h / 2;
+        const bottom = y + h / 2;
+
+        pdf.rect(left, top, w, h, "S");
+        pdf.line(left, top, x, top + h * 0.22);
+        pdf.line(x, top + h * 0.22, right, top);
+        pdf.line(x, top + h * 0.22, x, bottom);
+      };
+
+      const drawCalendarIcon = (
+        x: number,
+        y: number,
+        size: number,
+        color: [number, number, number]
+      ) => {
+        pdf.setDrawColor(...color);
+        pdf.setLineWidth(0.55);
+
+        const w = size;
+        const h = size * 0.82;
+        const left = x - w / 2;
+        const top = y - h / 2;
+
+        pdf.roundedRect(left, top, w, h, 1, 1, "S");
+        pdf.line(left, top + h * 0.28, left + w, top + h * 0.28);
+        pdf.line(
+          left + w * 0.25,
+          top - 0.7,
+          left + w * 0.25,
+          top + 1.8
+        );
+        pdf.line(
+          left + w * 0.75,
+          top - 0.7,
+          left + w * 0.75,
+          top + 1.8
+        );
+      };
+
+      const drawStatusIcon = (
+        status: ExpiredItem["status"],
+        x: number,
+        y: number
+      ) => {
+        if (status === "EXPIRED") {
+          drawXIcon(x, y, 2.2, colors.red);
+        } else if (status === "WARNING") {
+          drawWarningIcon(x, y, 4.4, colors.amber);
+        } else {
+          drawCheckIcon(x, y, 2.2, colors.emerald);
+        }
+      };
+
+      /*
+       * ---------------------------------------------------------
+       * HEADER / BRAND
+       * ---------------------------------------------------------
+       */
+      const drawPageChrome = (
+        pageNumber: number,
+        totalPages?: number
+      ) => {
+        pdf.setFillColor(...colors.green);
+        pdf.rect(0, 0, pageWidth, 7, "F");
+
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(...colors.white);
+        pdf.text("MGB ERP", 14, 4.8);
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(6.5);
+        pdf.text(
+          "INVENTORY CONTROL  /  EXPIRY MONITORING",
+          pageWidth - 14,
+          4.8,
+          { align: "right" }
+        );
+
+        pdf.setDrawColor(...colors.line);
+        pdf.setLineWidth(0.25);
+        pdf.line(
+          14,
+          pageHeight - 12,
+          pageWidth - 14,
+          pageHeight - 12
+        );
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(6.5);
+        pdf.setTextColor(...colors.muted);
+        pdf.text(
+          "MGB ERP • Monitoring Barang Expired",
+          14,
+          pageHeight - 6.8
+        );
+
+        pdf.text(
+          `Page ${pageNumber}${totalPages ? ` / ${totalPages}` : ""}`,
+          pageWidth - 14,
+          pageHeight - 6.8,
+          { align: "right" }
+        );
+      };
+
+      drawPageChrome(1);
 
       pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(19);
+      pdf.setTextColor(...colors.ink);
+      pdf.text("Monitoring Barang Expired", 14, 19);
+
+      pdf.setFont("helvetica", "normal");
       pdf.setFontSize(8);
+      pdf.setTextColor(...colors.muted);
       pdf.text(
-        `FILTER: ${statusLabel}  •  ${searchLabel}  •  ${filtered.length} batch`,
-        pageWidth - 14,
-        21,
-        { align: "right" }
+        "Laporan kontrol masa berlaku batch • Identifikasi risiko dan prioritas tindakan inventory",
+        14,
+        25
       );
 
       /*
-       * SUMMARY
+       * META PANEL
+       */
+      const metaX = pageWidth - 96;
+      const metaY = 12;
+      const metaW = 82;
+      const metaH = 17;
+
+      pdf.setFillColor(...colors.soft);
+      pdf.setDrawColor(...colors.line);
+      pdf.roundedRect(metaX, metaY, metaW, metaH, 2.5, 2.5, "FD");
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(6.2);
+      pdf.setTextColor(...colors.muted);
+      pdf.text("EXPORT", metaX + 5, metaY + 5);
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(7.2);
+      pdf.setTextColor(...colors.ink);
+      pdf.text(
+        `${formatExportDate(now)} • ${formatExportTime(now)}`,
+        metaX + 5,
+        metaY + 9.5
+      );
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(6.3);
+      pdf.setTextColor(...colors.muted);
+      pdf.text(
+        `Filter: ${statusLabel}`,
+        metaX + 5,
+        metaY + 14
+      );
+
+      /*
+       * ---------------------------------------------------------
+       * KPI CARDS
+       * ---------------------------------------------------------
        */
       const cards = [
         {
           label: "TOTAL BATCH",
           value: filtered.length,
+          sub: `${filteredQty.toLocaleString("id-ID")} qty`,
+          color: colors.green,
+          soft: colors.soft,
+          icon: "package",
         },
         {
           label: "EXPIRED",
           value: filteredExpired,
+          sub: `${riskQty.toLocaleString("id-ID")} qty berisiko`,
+          color: colors.red,
+          soft: colors.redSoft,
+          icon: "expired",
         },
         {
           label: "WARNING",
           value: filteredWarning,
+          sub: "Perlu dipantau",
+          color: colors.amber,
+          soft: colors.amberSoft,
+          icon: "warning",
         },
         {
           label: "AMAN",
           value: filteredAman,
+          sub: "Dalam masa berlaku",
+          color: colors.emerald,
+          soft: colors.emeraldSoft,
+          icon: "safe",
         },
       ];
 
-      const cardGap = 5;
+      const cardGap = 4;
+      const cardY = 33;
+      const cardH = 22;
       const cardWidth =
         (pageWidth - 28 - cardGap * 3) / 4;
-
-      const cardY = 33;
-      const cardH = 18;
 
       cards.forEach((card, index) => {
         const x = 14 + index * (cardWidth + cardGap);
 
-        pdf.setDrawColor(226, 232, 240);
-        pdf.setFillColor(248, 250, 252);
+        pdf.setFillColor(...card.soft);
+        pdf.setDrawColor(...colors.line);
         pdf.roundedRect(
           x,
           cardY,
@@ -406,34 +681,148 @@ export default function ExpiredPage() {
           "FD"
         );
 
-        pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(7);
-        pdf.setTextColor(100, 116, 139);
-        pdf.text(card.label, x + 5, cardY + 6);
+        pdf.setFillColor(...card.color);
+        pdf.roundedRect(
+          x + 4,
+          cardY + 4,
+          11,
+          11,
+          2,
+          2,
+          "F"
+        );
+
+        if (card.icon === "expired") {
+          drawXIcon(
+            x + 9.5,
+            cardY + 9.5,
+            2.1,
+            colors.white
+          );
+        } else if (card.icon === "warning") {
+          drawWarningIcon(
+            x + 9.5,
+            cardY + 9.5,
+            4.1,
+            colors.white
+          );
+        } else if (card.icon === "safe") {
+          drawCheckIcon(
+            x + 9.5,
+            cardY + 9.5,
+            2.1,
+            colors.white
+          );
+        } else {
+          drawPackageIcon(
+            x + 9.5,
+            cardY + 9.5,
+            6.2,
+            colors.white
+          );
+        }
 
         pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(12);
-        pdf.setTextColor(15, 23, 42);
-        pdf.text(
-          String(card.value),
-          x + 5,
-          cardY + 14
-        );
+        pdf.setFontSize(6.4);
+        pdf.setTextColor(...colors.muted);
+        pdf.text(card.label, x + 19, cardY + 6.5);
+
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(13);
+        pdf.setTextColor(...card.color);
+        pdf.text(String(card.value), x + 19, cardY + 14.5);
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(6.2);
+        pdf.setTextColor(...colors.muted);
+        pdf.text(card.sub, x + 19, cardY + 19);
       });
 
-      pdf.setTextColor(71, 85, 105);
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8);
-      pdf.text(
-        `Total Qty pada hasil filter: ${filteredQty.toLocaleString(
-          "id-ID"
-        )}`,
+      /*
+       * ---------------------------------------------------------
+       * FILTER / CONTROL SUMMARY
+       * ---------------------------------------------------------
+       */
+      const infoY = 59;
+
+      pdf.setFillColor(249, 250, 251);
+      pdf.setDrawColor(...colors.line);
+      pdf.roundedRect(
         14,
-        58
+        infoY,
+        pageWidth - 28,
+        10,
+        2,
+        2,
+        "FD"
       );
 
+      drawPackageIcon(
+        20,
+        infoY + 5,
+        5.5,
+        colors.green2
+      );
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(6.8);
+      pdf.setTextColor(...colors.ink);
+      pdf.text(
+        `${filtered.length} batch`,
+        25,
+        infoY + 4.3
+      );
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(6.5);
+      pdf.setTextColor(...colors.muted);
+      pdf.text(
+        `• Total quantity ${filteredQty.toLocaleString("id-ID")}`,
+        25,
+        infoY + 7.5
+      );
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(...colors.red);
+      pdf.text(
+        `Expired ${filteredExpired}`,
+        91,
+        infoY + 4.3
+      );
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(...colors.amber);
+      pdf.text(
+        `Warning ${filteredWarning}`,
+        123,
+        infoY + 4.3
+      );
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(...colors.emerald);
+      pdf.text(
+        `Aman ${filteredAman}`,
+        157,
+        infoY + 4.3
+      );
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(6.3);
+      pdf.setTextColor(...colors.muted);
+      pdf.text(
+        `Pencarian: ${searchLabel}`,
+        pageWidth - 19,
+        infoY + 7.5,
+        { align: "right" }
+      );
+
+      /*
+       * ---------------------------------------------------------
+       * TABLE
+       * ---------------------------------------------------------
+       */
       autoTable(pdf, {
-        startY: 63,
+        startY: 74,
         head: [
           [
             "NO",
@@ -442,7 +831,7 @@ export default function ExpiredPage() {
             "BATCH",
             "QTY",
             "TANGGAL EXPIRED",
-            "SISA HARI",
+            "SISA MASA",
             "STATUS",
           ],
         ],
@@ -454,31 +843,42 @@ export default function ExpiredPage() {
           Number(item.qty || 0).toLocaleString("id-ID"),
           formatDate(item.expiredDate),
           item.status === "EXPIRED"
-            ? `${Math.abs(
-                Number(item.sisaHari || 0)
-              )} hari lewat`
-            : `${Number(item.sisaHari || 0)} hari`,
+            ? `${Math.abs(Number(item.sisaHari || 0))} hari lewat`
+            : Number(item.sisaHari || 0) === 0
+              ? "Hari ini"
+              : `${Number(item.sisaHari || 0)} hari lagi`,
           item.status,
         ]),
-        theme: "grid",
+        theme: "plain",
         styles: {
           font: "helvetica",
-          fontSize: 7.5,
-          cellPadding: 2.5,
-          textColor: [30, 41, 59],
-          lineColor: [226, 232, 240],
+          fontSize: 7.2,
+          cellPadding: {
+            top: 3,
+            right: 2.5,
+            bottom: 3,
+            left: 2.5,
+          },
+          textColor: colors.ink,
+          lineColor: colors.line,
           lineWidth: 0.2,
           valign: "middle",
+          overflow: "linebreak",
         },
         headStyles: {
+          font: "helvetica",
           fontStyle: "bold",
-          fontSize: 7,
-          textColor: [255, 255, 255],
-          fillColor: [24, 53, 45],
+          fontSize: 6.5,
+          textColor: colors.white,
+          fillColor: colors.green,
+          lineColor: colors.green,
+          lineWidth: 0.2,
           halign: "center",
+          valign: "middle",
+          cellPadding: 3,
         },
         alternateRowStyles: {
-          fillColor: [248, 250, 252],
+          fillColor: [250, 251, 252],
         },
         columnStyles: {
           0: {
@@ -487,114 +887,306 @@ export default function ExpiredPage() {
           },
           1: {
             cellWidth: 29,
+            fontStyle: "bold",
           },
           2: {
-            cellWidth: 63,
+            cellWidth: 61,
+            fontStyle: "bold",
           },
           3: {
             cellWidth: 38,
+            fontStyle: "bold",
           },
           4: {
-            cellWidth: 20,
+            cellWidth: 19,
             halign: "right",
+            fontStyle: "bold",
           },
           5: {
             cellWidth: 34,
             halign: "center",
           },
           6: {
-            cellWidth: 32,
+            cellWidth: 35,
             halign: "center",
           },
           7: {
-            cellWidth: 27,
-            halign: "center",
+            cellWidth: 31,
+            halign: "left",
             fontStyle: "bold",
           },
         },
         didParseCell: (hookData) => {
-          if (
-            hookData.section === "body" &&
-            hookData.column.index === 7
-          ) {
-            const value = String(
-              hookData.cell.raw || ""
+          if (hookData.section !== "body") return;
+
+          const item = filtered[hookData.row.index];
+          if (!item) return;
+
+          /*
+           * Beri tint lembut pada row berdasarkan status.
+           * Tidak menggunakan full red/orange/green agar tetap
+           * terlihat premium dan mudah dibaca saat print.
+           */
+          if (item.status === "EXPIRED") {
+            if (hookData.row.index % 2 === 0) {
+              hookData.cell.styles.fillColor = [255, 248, 248];
+            }
+          } else if (item.status === "WARNING") {
+            if (hookData.row.index % 2 === 0) {
+              hookData.cell.styles.fillColor = [255, 252, 244];
+            }
+          } else if (item.status === "AMAN") {
+            if (hookData.row.index % 2 === 0) {
+              hookData.cell.styles.fillColor = [247, 253, 250];
+            }
+          }
+
+          if (hookData.column.index === 6) {
+            if (item.status === "EXPIRED") {
+              hookData.cell.styles.textColor = colors.red;
+              hookData.cell.styles.fontStyle = "bold";
+            } else if (item.status === "WARNING") {
+              hookData.cell.styles.textColor = colors.amber;
+              hookData.cell.styles.fontStyle = "bold";
+            } else {
+              hookData.cell.styles.textColor = colors.emerald;
+              hookData.cell.styles.fontStyle = "bold";
+            }
+          }
+
+          if (hookData.column.index === 7) {
+            /*
+             * Text status digambar manual sebagai premium badge
+             * pada didDrawCell agar icon + label benar-benar
+             * terlihat seperti status chip.
+             */
+            hookData.cell.text = [];
+          }
+        },
+        didDrawCell: (hookData) => {
+          if (hookData.section !== "body") return;
+
+          const item = filtered[hookData.row.index];
+          if (!item) return;
+
+          if (hookData.column.index === 7) {
+            const cell = hookData.cell;
+
+            let textColor = colors.emerald;
+            let bgColor = colors.emeraldSoft;
+            let label = "AMAN";
+
+            if (item.status === "EXPIRED") {
+              textColor = colors.red;
+              bgColor = colors.redSoft;
+              label = "EXPIRED";
+            } else if (item.status === "WARNING") {
+              textColor = colors.amber;
+              bgColor = colors.amberSoft;
+              label = "WARNING";
+            }
+
+            const badgeW =
+              label === "EXPIRED" ? 25 : 25;
+            const badgeH = 6.5;
+            const badgeX =
+              cell.x + (cell.width - badgeW) / 2;
+            const badgeY =
+              cell.y + (cell.height - badgeH) / 2;
+
+            pdf.setFillColor(...bgColor);
+            pdf.setDrawColor(...bgColor);
+            pdf.roundedRect(
+              badgeX,
+              badgeY,
+              badgeW,
+              badgeH,
+              2.8,
+              2.8,
+              "F"
             );
 
-            if (value === "EXPIRED") {
-              hookData.cell.styles.textColor = [
-                185,
-                28,
-                28,
-              ];
-            } else if (value === "WARNING") {
-              hookData.cell.styles.textColor = [
-                180,
-                83,
-                9,
-              ];
-            } else if (value === "AMAN") {
-              hookData.cell.styles.textColor = [
-                4,
-                120,
-                87,
-              ];
-            }
+            drawStatusIcon(
+              item.status,
+              badgeX + 4,
+              badgeY + badgeH / 2
+            );
+
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(6.2);
+            pdf.setTextColor(...textColor);
+            pdf.text(
+              label,
+              badgeX + 8,
+              badgeY + 4.25
+            );
+          }
+
+          /*
+           * Icon kecil untuk kolom sisa masa berlaku.
+           */
+          if (hookData.column.index === 6) {
+            const cell = hookData.cell;
+            const iconX = cell.x + 5;
+            const iconY = cell.y + cell.height / 2;
+
+            pdf.setDrawColor(...(
+              item.status === "EXPIRED"
+                ? colors.red
+                : item.status === "WARNING"
+                  ? colors.amber
+                  : colors.emerald
+            ));
+            pdf.setLineWidth(0.55);
+            pdf.circle(iconX, iconY, 2, "S");
+            pdf.line(
+              iconX,
+              iconY,
+              iconX,
+              iconY - 1.1
+            );
+            pdf.line(
+              iconX,
+              iconY,
+              iconX + 0.9,
+              iconY + 0.65
+            );
           }
         },
         didDrawPage: () => {
           const pageNumber =
             pdf.getCurrentPageInfo().pageNumber;
 
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(7);
-          pdf.setTextColor(100, 116, 139);
+          /*
+           * Halaman lanjutan mendapatkan header compact.
+           * Halaman pertama sudah memiliki hero header.
+           */
+          if (pageNumber > 1) {
+            pdf.setFillColor(...colors.green);
+            pdf.rect(0, 0, pageWidth, 7, "F");
 
-          pdf.text(
-            "MGB ERP • Monitoring Barang Expired",
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(7.5);
+            pdf.setTextColor(...colors.white);
+            pdf.text(
+              "MGB ERP",
+              14,
+              4.8
+            );
+
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(6.5);
+            pdf.text(
+              "Monitoring Barang Expired",
+              pageWidth - 14,
+              4.8,
+              { align: "right" }
+            );
+          }
+
+          pdf.setDrawColor(...colors.line);
+          pdf.setLineWidth(0.25);
+          pdf.line(
             14,
-            pageHeight - 7
+            pageHeight - 12,
+            pageWidth - 14,
+            pageHeight - 12
+          );
+
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(6.5);
+          pdf.setTextColor(...colors.muted);
+          pdf.text(
+            "MGB ERP • Inventory Control • Expiry Monitoring",
+            14,
+            pageHeight - 6.8
           );
 
           pdf.text(
             `Page ${pageNumber}`,
             pageWidth - 14,
-            pageHeight - 7,
+            pageHeight - 6.8,
             { align: "right" }
           );
         },
         margin: {
+          top: 12,
           left: 14,
           right: 14,
-          bottom: 12,
+          bottom: 15,
         },
+        pageBreak: "auto",
+        rowPageBreak: "auto",
       });
 
+      /*
+       * ---------------------------------------------------------
+       * FINAL PAGE REFINEMENT
+       * ---------------------------------------------------------
+       */
       const totalPages = pdf.getNumberOfPages();
 
-      for (
-        let page = 1;
-        page <= totalPages;
-        page++
-      ) {
+      for (let page = 1; page <= totalPages; page++) {
         pdf.setPage(page);
 
+        /*
+         * Pastikan nomor halaman final konsisten.
+         */
         pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(7);
-        pdf.setTextColor(100, 116, 139);
-
-        pdf.text(
-          "MGB ERP • Monitoring Barang Expired",
-          14,
-          pageHeight - 7
-        );
-
+        pdf.setFontSize(6.5);
+        pdf.setTextColor(...colors.muted);
         pdf.text(
           `Page ${page} / ${totalPages}`,
           pageWidth - 14,
-          pageHeight - 7,
+          pageHeight - 6.8,
           { align: "right" }
         );
+
+        /*
+         * Legend status hanya di halaman terakhir.
+         */
+        if (page === totalPages) {
+          const legendY = pageHeight - 18.5;
+
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(6.2);
+          pdf.setTextColor(...colors.muted);
+          pdf.text("STATUS LEGEND", 14, legendY);
+
+          drawStatusIcon(
+            "EXPIRED",
+            42,
+            legendY - 1.7
+          );
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(6.2);
+          pdf.setTextColor(...colors.red);
+          pdf.text("Expired", 47, legendY);
+
+          drawStatusIcon(
+            "WARNING",
+            70,
+            legendY - 1.7
+          );
+          pdf.setTextColor(...colors.amber);
+          pdf.text("Warning", 75, legendY);
+
+          drawStatusIcon(
+            "AMAN",
+            99,
+            legendY - 1.7
+          );
+          pdf.setTextColor(...colors.emerald);
+          pdf.text("Aman", 104, legendY);
+
+          pdf.setTextColor(...colors.muted);
+          pdf.text(
+            "Dokumen ini dibuat otomatis dari data batch inventory yang sedang ditampilkan.",
+            pageWidth - 14,
+            legendY,
+            { align: "right" }
+          );
+        }
       }
 
       const safeSearch = search
@@ -603,10 +1195,15 @@ export default function ExpiredPage() {
         .replace(/^-+|-+$/g, "")
         .slice(0, 40);
 
+      const safeStatus =
+        statusFilters.length === 0
+          ? "SEMUA"
+          : statusFilters.join("-");
+
       const filename =
         [
           "Monitoring-Barang-Expired",
-          status !== "SEMUA" ? status : "SEMUA",
+          safeStatus,
           safeSearch || null,
           now.toISOString().slice(0, 10),
         ]
@@ -750,7 +1347,17 @@ export default function ExpiredPage() {
   }
 
   const hasFilter =
-    search.trim() !== "" || status !== "SEMUA";
+    search.trim() !== "" ||
+    statusFilters.length > 0;
+
+  const statusFilterLabel =
+    statusFilters.length === 0
+      ? "Semua Status"
+      : statusFilters.length === 3
+      ? "Semua Status"
+      : statusFilters
+          .map((item) => STATUS_META[item].label)
+          .join(" + ");
 
   return (
     <div className="min-h-screen bg-[#f5f7f8]">
@@ -1001,118 +1608,182 @@ export default function ExpiredPage() {
         </section>
 
         {/* =====================================================
-            FILTER / CONTROL BAR
+            PREMIUM FILTER / CONTROL BAR
         ====================================================== */}
-        <section className="mb-5 rounded-[22px] border border-slate-200/80 bg-white p-3 shadow-[0_8px_30px_-20px_rgba(15,23,42,0.3)] sm:p-4">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400" />
+        <section className="mb-5 overflow-hidden rounded-[22px] border border-slate-200/80 bg-white shadow-[0_8px_30px_-20px_rgba(15,23,42,0.3)]">
+          <div className="p-3 sm:p-4">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
+              {/* SEARCH */}
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400" />
 
-              <input
-                type="text"
-                placeholder="Cari kode barang, nama barang, atau nomor batch..."
-                value={search}
-                onChange={(e) =>
-                  setSearch(e.target.value)
-                }
-                className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-11 pr-11 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
-              />
+                <input
+                  type="text"
+                  placeholder="Cari kode barang, nama barang, atau nomor batch..."
+                  value={search}
+                  onChange={(e) =>
+                    setSearch(e.target.value)
+                  }
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-11 pr-11 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                />
 
-              {search && (
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                    aria-label="Hapus pencarian"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* STATUS MULTI SELECT */}
+              <div className="w-full xl:w-auto">
+                <div className="flex h-12 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50/80 p-1.5 shadow-inner">
+                  {/* ALL */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setStatusFilters([])
+                    }
+                    className={[
+                      "inline-flex h-9 items-center justify-center rounded-lg px-3.5 text-xs font-black transition-all",
+                      statusFilters.length === 0
+                        ? "bg-[#18352D] text-white shadow-md shadow-[#18352D]/15"
+                        : "text-slate-500 hover:bg-white hover:text-slate-700",
+                    ].join(" ")}
+                  >
+                    Semua
+                  </button>
+
+                  {STATUS_OPTIONS.map(
+                    (statusOption) => {
+                      const meta =
+                        STATUS_META[
+                          statusOption
+                        ];
+
+                      const Icon = meta.icon;
+
+                      const active =
+                        statusFilters.includes(
+                          statusOption
+                        );
+
+                      return (
+                        <button
+                          key={statusOption}
+                          type="button"
+                          onClick={() =>
+                            toggleStatus(
+                              statusOption
+                            )
+                          }
+                          aria-pressed={active}
+                          title={
+                            meta.description
+                          }
+                          className={[
+                            "group inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-black transition-all",
+                            active
+                              ? meta.active
+                              : "text-slate-500 hover:bg-white hover:text-slate-700",
+                          ].join(" ")}
+                        >
+                          <Icon
+                            className={[
+                              "h-3.5 w-3.5 transition-transform",
+                              active
+                                ? "scale-105"
+                                : "text-slate-400 group-hover:text-slate-600",
+                            ].join(" ")}
+                          />
+
+                          {meta.label}
+
+                          {active && (
+                            <span className="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-white/80 px-1 text-[9px] font-black">
+                              ✓
+                            </span>
+                          )}
+                        </button>
+                      );
+                    }
+                  )}
+                </div>
+              </div>
+
+              {/* RESET */}
+              {hasFilter && (
                 <button
                   type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                  aria-label="Hapus pencarian"
+                  onClick={resetFilters}
+                  className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
                 >
                   <X className="h-4 w-4" />
+                  Reset
                 </button>
               )}
             </div>
 
-            <div className="relative w-full xl:w-[220px]">
-              <select
-                value={status}
-                onChange={(e) =>
-                  setStatus(
-                    e.target.value as StatusFilter
-                  )
-                }
-                className="h-12 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/80 px-4 pr-10 text-sm font-semibold text-slate-700 outline-none transition-all hover:border-slate-300 focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
-              >
-                <option value="SEMUA">
-                  Semua Status
-                </option>
-                <option value="EXPIRED">
-                  Expired
-                </option>
-                <option value="WARNING">
-                  Warning
-                </option>
-                <option value="AMAN">
-                  Aman
-                </option>
-              </select>
+            {/* ACTIVE FILTER SUMMARY */}
+            <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 text-xs sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-slate-400">
+                <span className="font-medium">
+                  Menampilkan
+                </span>
 
-              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            </div>
+                <span className="font-black text-slate-700">
+                  {filtered.length}
+                </span>
 
-            {hasFilter && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearch("");
-                  setStatus("SEMUA");
-                }}
-                className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
-              >
-                <X className="h-4 w-4" />
-                Reset
-              </button>
-            )}
-          </div>
+                <span>dari</span>
 
-          <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 text-xs sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-slate-400">
-              <span className="font-medium">
-                Menampilkan
-              </span>
+                <span className="font-black text-slate-700">
+                  {data.length}
+                </span>
 
-              <span className="font-black text-slate-700">
-                {filtered.length}
-              </span>
+                <span>batch</span>
 
-              <span>dari</span>
+                {hasFilter && (
+                  <>
+                    <span className="text-slate-300">
+                      •
+                    </span>
 
-              <span className="font-black text-slate-700">
-                {data.length}
-              </span>
+                    <span className="font-semibold text-[#497F70]">
+                      Filter aktif
+                    </span>
+                  </>
+                )}
+              </div>
 
-              <span>batch</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {statusFilters.length > 0 && (
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-500">
+                    <span>Status:</span>
 
-              {hasFilter && (
-                <>
-                  <span className="text-slate-300">
-                    •
+                    <span className="font-black text-slate-700">
+                      {statusFilterLabel}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 text-slate-400">
+                  <Package className="h-3.5 w-3.5" />
+
+                  <span>
+                    Qty hasil:{" "}
+                    <strong className="text-slate-700">
+                      {formatNumber(
+                        summary.filteredQty
+                      )}
+                    </strong>
                   </span>
-
-                  <span className="font-semibold text-[#497F70]">
-                    Filter aktif
-                  </span>
-                </>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 text-slate-400">
-              <Package className="h-3.5 w-3.5" />
-              <span>
-                Qty hasil:{" "}
-                <strong className="text-slate-700">
-                  {formatNumber(
-                    summary.filteredQty
-                  )}
-                </strong>
-              </span>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -1221,10 +1892,7 @@ export default function ExpiredPage() {
                         {hasFilter && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setSearch("");
-                              setStatus("SEMUA");
-                            }}
+                            onClick={resetFilters}
                             className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#18352D] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#21483e]"
                           >
                             <X className="h-3.5 w-3.5" />
@@ -1237,9 +1905,7 @@ export default function ExpiredPage() {
                 ) : (
                   filtered.map((item) => {
                     const expiryTone =
-                      getExpiryTone(
-                        item.status
-                      );
+                      getExpiryTone(item.status);
 
                     return (
                       <tr
@@ -1478,6 +2144,7 @@ export default function ExpiredPage() {
               <div>
                 <label className="mb-2 flex items-center justify-between text-xs font-black uppercase tracking-[0.08em] text-slate-600">
                   <span>Nomor Batch</span>
+
                   <span className="font-medium normal-case tracking-normal text-slate-400">
                     Identitas batch
                   </span>

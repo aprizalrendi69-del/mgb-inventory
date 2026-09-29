@@ -40,6 +40,7 @@ import {
   MessageCircle,
   AtSign,
   Check,
+  Copy,
   Send,
 } from "lucide-react";
 
@@ -218,6 +219,9 @@ export default function PurchaseOutletDetailPage() {
     useState(false);
 
   const [exporting, setExporting] =
+    useState(false);
+
+  const [copyingWhatsApp, setCopyingWhatsApp] =
     useState(false);
 
   const [outletId, setOutletId] =
@@ -2105,15 +2109,13 @@ export default function PurchaseOutletDetailPage() {
    * Harga per item tidak ditampilkan sesuai kebutuhan pesan.
    * Total/Subtotal PO ditampilkan di bagian paling bawah.
    */
-  function handleWhatsApp() {
+  function buildWhatsappMessage(): string | null {
     if (!purchase) {
-      alert("Data Purchase Outlet belum tersedia");
-      return;
+      return null;
     }
 
     if (items.length === 0) {
-      alert("Purchase Order belum memiliki barang");
-      return;
+      return null;
     }
 
     const currentOutlet =
@@ -2175,14 +2177,11 @@ export default function PurchaseOutletDetailPage() {
     );
 
     /*
-     * Format dibuat mengikuti contoh WhatsApp yang diminta:
-     * - branding PT.MITRA GARAM BOGATAMA
-     * - PO / outlet / supplier / tanggal pengiriman
-     * - detail barang tanpa kode barang
-     * - nomor item sederhana 1., 2., 3.
-     * - subtotal di bagian paling bawah
+     * Satu sumber pesan untuk WhatsApp dan tombol Salin.
+     * Dengan begitu isi yang disalin selalu identik
+     * dengan isi yang dikirim ke WhatsApp.
      */
-    const whatsappMessage = [
+    return [
       "🛒 *PURCHASE ORDER*",
       "",
       "━━━━━━━━━━━━━━━━━━━━",
@@ -2207,6 +2206,26 @@ export default function PurchaseOutletDetailPage() {
       "Mohon diproses sesuai Purchase Order di atas.",
       "Terima kasih. 🙏",
     ].join("\n");
+  }
+
+  function handleWhatsApp() {
+    if (!purchase) {
+      alert("Data Purchase Outlet belum tersedia");
+      return;
+    }
+
+    if (items.length === 0) {
+      alert("Purchase Order belum memiliki barang");
+      return;
+    }
+
+    const whatsappMessage =
+      buildWhatsappMessage();
+
+    if (!whatsappMessage) {
+      alert("Pesan WhatsApp tidak dapat dibuat");
+      return;
+    }
 
     const whatsappUrl =
       `https://web.whatsapp.com/send?text=${encodeURIComponent(
@@ -2218,6 +2237,98 @@ export default function PurchaseOutletDetailPage() {
       "_blank",
       "noopener,noreferrer"
     );
+  }
+
+  async function handleCopyWhatsApp() {
+    if (!purchase) {
+      alert("Data Purchase Outlet belum tersedia");
+      return;
+    }
+
+    if (items.length === 0) {
+      alert("Purchase Order belum memiliki barang");
+      return;
+    }
+
+    const whatsappMessage =
+      buildWhatsappMessage();
+
+    if (!whatsappMessage) {
+      alert("Pesan WhatsApp tidak dapat dibuat");
+      return;
+    }
+
+    try {
+      setCopyingWhatsApp(true);
+
+      await navigator.clipboard.writeText(
+        whatsappMessage
+      );
+
+      window.setTimeout(() => {
+        setCopyingWhatsApp(false);
+      }, 1800);
+    } catch (error) {
+      console.error(
+        "COPY WHATSAPP MESSAGE ERROR:",
+        error
+      );
+
+      setCopyingWhatsApp(false);
+
+      /*
+       * Fallback untuk browser/environment yang tidak
+       * menyediakan Clipboard API.
+       */
+      try {
+        const textarea =
+          document.createElement("textarea");
+
+        textarea.value =
+          whatsappMessage;
+        textarea.style.position =
+          "fixed";
+        textarea.style.left =
+          "-9999px";
+        textarea.style.top =
+          "0";
+
+        document.body.appendChild(
+          textarea
+        );
+
+        textarea.focus();
+        textarea.select();
+
+        const copied =
+          document.execCommand(
+            "copy"
+          );
+
+        textarea.remove();
+
+        if (!copied) {
+          throw new Error(
+            "document.execCommand('copy') gagal"
+          );
+        }
+
+        setCopyingWhatsApp(true);
+
+        window.setTimeout(() => {
+          setCopyingWhatsApp(false);
+        }, 1800);
+      } catch (fallbackError) {
+        console.error(
+          "COPY WHATSAPP MESSAGE FALLBACK ERROR:",
+          fallbackError
+        );
+
+        alert(
+          "Pesan WhatsApp gagal disalin. Silakan salin secara manual."
+        );
+      }
+    }
   }
 
   /*
@@ -2788,6 +2899,32 @@ export default function PurchaseOutletDetailPage() {
                 {exporting
                   ? "Membuat PDF..."
                   : "Export PDF"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  void handleCopyWhatsApp()
+                }
+                disabled={
+                  items.length === 0 ||
+                  copyingWhatsApp
+                }
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Salin pesan WhatsApp"
+              >
+                {copyingWhatsApp ? (
+                  <Check
+                    size={16}
+                    className="text-emerald-600"
+                  />
+                ) : (
+                  <Copy size={16} />
+                )}
+
+                {copyingWhatsApp
+                  ? "Tersalin"
+                  : "Salin"}
               </button>
 
               <button

@@ -329,43 +329,183 @@ export default function BarangPage() {
 
 
       {/* =====================================================
-          FORM TAMBAH BARANG
+          FORM TAMBAH BARANG — PREMIUM
       ===================================================== */}
 
-      <div className="
-        rounded-2xl
+      <section className="
+        relative
+        overflow-hidden
+        rounded-[24px]
         border
-        border-slate-200
+        border-slate-200/80
         bg-white
-        shadow-sm
+        shadow-[0_18px_50px_-28px_rgba(15,23,42,0.35)]
       ">
 
+        {/* Premium top accent */}
         <div className="
+          absolute
+          inset-x-0
+          top-0
+          h-1
+          bg-gradient-to-r
+          from-emerald-500
+          via-teal-500
+          to-blue-500
+        " />
+
+        {/* Header */}
+        <div className="
+          relative
           border-b
           border-slate-100
-          px-6
+          bg-gradient-to-br
+          from-slate-50
+          via-white
+          to-emerald-50/40
+          px-5
           py-5
+          sm:px-6
+          sm:py-6
         ">
 
-          <h2 className="text-lg font-semibold text-slate-800">
-            Tambah Barang
-          </h2>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
-          <p className="mt-1 text-sm text-slate-500">
-            Tambahkan data barang baru ke master barang.
-          </p>
+            <div className="flex min-w-0 items-center gap-4">
+
+              <div className="
+                flex
+                h-12
+                w-12
+                shrink-0
+                items-center
+                justify-center
+                rounded-2xl
+                bg-gradient-to-br
+                from-emerald-500
+                to-teal-600
+                text-white
+                shadow-lg
+                shadow-emerald-500/20
+              ">
+                <span className="text-xl font-bold">+</span>
+              </div>
+
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-bold tracking-tight text-slate-800 sm:text-xl">
+                    Tambah Barang
+                  </h2>
+
+                  <span className="
+                    inline-flex
+                    items-center
+                    rounded-full
+                    border
+                    border-emerald-200
+                    bg-emerald-50
+                    px-2.5
+                    py-1
+                    text-[10px]
+                    font-bold
+                    uppercase
+                    tracking-[0.12em]
+                    text-emerald-700
+                  ">
+                    Master Data
+                  </span>
+                </div>
+
+                <p className="mt-1 text-xs leading-5 text-slate-500 sm:text-sm">
+                  Tambahkan barang baru dengan data yang lengkap dan siap digunakan dalam transaksi.
+                </p>
+              </div>
+
+            </div>
+
+            <div className="
+              hidden
+              rounded-2xl
+              border
+              border-slate-200/80
+              bg-white/80
+              px-4
+              py-2.5
+              shadow-sm
+              sm:block
+            ">
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                Data Entry
+              </p>
+              <p className="mt-0.5 text-xs font-semibold text-slate-600">
+                Lengkapi informasi barang
+              </p>
+            </div>
+
+          </div>
 
         </div>
 
-        <div className="p-6">
+        {/* Form body */}
+        <div className="
+          relative
+          bg-white
+          px-4
+          py-5
+          sm:px-6
+          sm:py-6
+        ">
 
-          <BarangForm
-            reload={loadBarang}
-          />
+          <div className="
+            rounded-2xl
+            border
+            border-slate-100
+            bg-slate-50/50
+            p-3
+            sm:p-5
+          ">
+
+            <BarangForm
+              reload={loadBarang}
+            />
+
+          </div>
 
         </div>
 
-      </div>
+        {/* Bottom helper */}
+        <div className="
+          flex
+          items-center
+          gap-2
+          border-t
+          border-slate-100
+          bg-slate-50/70
+          px-5
+          py-3
+          text-[11px]
+          text-slate-500
+          sm:px-6
+        ">
+          <span className="
+            flex
+            h-5
+            w-5
+            shrink-0
+            items-center
+            justify-center
+            rounded-full
+            bg-emerald-100
+            text-[10px]
+            font-bold
+            text-emerald-700
+          ">
+            ✓
+          </span>
+          Pastikan satuan, kategori, harga, stok minimum, dan informasi lainnya sudah sesuai sebelum menyimpan.
+        </div>
+
+      </section>
 
 
       {/* =====================================================

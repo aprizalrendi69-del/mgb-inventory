@@ -30,11 +30,13 @@ import {
   ChevronUp,
   Pencil,
   Save,
+  ShieldCheck,
   AlertTriangle,
   PackageCheck,
   PackageX,
   Download,
   MessageCircle,
+  Copy,
 } from "lucide-react";
 
 import BarcodeInputScanner from "@/components/BarcodeInputScanner";
@@ -96,6 +98,17 @@ export default function BarangKeluarPage() {
   const [expandedRequestId, setExpandedRequestId] = useState<number | null>(
     null
   );
+
+  // =========================================================
+  // WHATSAPP DELIVERY REQUEST CENTER
+  // =========================================================
+
+  const [showWhatsAppCenter, setShowWhatsAppCenter] = useState(false);
+  const [loadingWhatsAppRequests, setLoadingWhatsAppRequests] = useState(false);
+  const [whatsAppRequests, setWhatsAppRequests] = useState<any[]>([]);
+  const [copiedWhatsAppType, setCopiedWhatsAppType] = useState<
+    "all" | "unfulfilled" | null
+  >(null);
 
   // =========================================================
   // EDIT DELIVERY REQUEST
@@ -1301,6 +1314,219 @@ export default function BarangKeluarPage() {
     return uniqueRequests;
   }
 
+  /**
+   * Ambil harga terakhir berdasarkan BARANG ID dari Master Barang Pusat.
+   *
+   * Sumber utama WAJIB berasal dari state `barang` yang di-load dari
+   * `/api/barang` (Master Barang Pusat), bukan dari snapshot harga pada
+   * Delivery Request Item.
+   *
+   * Dengan cara ini harga WhatsApp selalu mengikuti harga master barang
+   * berdasarkan barangId yang sedang diminta.
+   */
+  function getLastPurchasePrice(item: any) {
+    const barangId = Number(
+      item?.barangId ??
+        item?.barang?.id ??
+        0
+    );
+
+    const masterBarang = barang.find(
+      (master: any) => Number(master?.id) === barangId
+    );
+
+    // Prioritas absolut: harga purchase pada Master Barang Pusat.
+    if (masterBarang) {
+      const masterPrice = Number(masterBarang?.purchasePrice ?? 0);
+
+      if (Number.isFinite(masterPrice) && masterPrice >= 0) {
+        return masterPrice;
+      }
+    }
+
+    // Fallback hanya jika Master Barang tidak ditemukan.
+    // Ini tidak menjadi sumber utama harga WhatsApp.
+    const fallbackPrice =
+      item?.barang?.purchasePrice ??
+      item?.purchasePrice ??
+      item?.barang?.lastPurchasePrice ??
+      item?.lastPurchasePrice ??
+      0;
+
+    const numericFallback = Number(fallbackPrice || 0);
+
+    return Number.isFinite(numericFallback) ? numericFallback : 0;
+  }
+
+  function formatWhatsAppPrice(value: any) {
+    return `Rp ${formatNumber(Number(value || 0))}`;
+  }
+
+  function getUnfulfilledItems(requests: any[]) {
+    return requests.flatMap((request: any) => {
+      const items = Array.isArray(request?.items) ? request.items : [];
+
+      return items
+        .filter((item: any) => Number(getCentralStock(item) || 0) <= 0)
+        .map((item: any) => ({
+          request,
+          item,
+        }));
+    });
+  }
+
+  /**
+   * WhatsApp khusus barang yang BELUM TERPENUHI karena stock pusat kosong.
+   *
+   * Format dibuat ringkas tetapi premium:
+   *
+   * ❌ 01. Nama Barang
+   *    Request : 10 kg
+   *    Harga terakhir : Rp 25.000
+   *
+   * Setiap request tetap menyertakan outlet, tanggal, dan nomor DR agar
+   * Gudang Pusat dapat langsung menelusuri sumber permintaannya.
+   */
+  function buildUnfulfilledDeliveryRequestsWhatsAppMessage(
+    requests: any[]
+  ) {
+    const validRequests = sortDeliveryRequestsForWhatsApp(
+      requests.filter(
+        (request: any) =>
+          isWhatsAppEligibleRequest(request) &&
+          Array.isArray(request?.items) &&
+          request.items.length > 0
+      )
+    );
+
+    const unfulfilled = getUnfulfilledItems(validRequests);
+
+    if (!unfulfilled.length) {
+      return "";
+    }
+
+    const groups = new Map<
+      string,
+      { name: string; requests: Map<string, { request: any; items: any[] }> }
+    >();
+
+    for (const entry of unfulfilled) {
+      const request = entry.request;
+      const item = entry.item;
+      const outletName = getRequestOutlet(request);
+      const outletKey = outletName.trim().toLowerCase();
+      const requestKey = String(
+        request?.id ?? getRequestNumber(request)
+      );
+
+      if (!groups.has(outletKey)) {
+        groups.set(outletKey, {
+          name: outletName,
+          requests: new Map(),
+        });
+      }
+
+      const group = groups.get(outletKey)!;
+
+      if (!group.requests.has(requestKey)) {
+        group.requests.set(requestKey, {
+          request,
+          items: [],
+        });
+      }
+
+      group.requests.get(requestKey)!.items.push(item);
+    }
+
+    const message: string[] = [
+      "🚨 *DELIVERY REQUEST — BELUM TERPENUHI*",
+      "*GUDANG PUSAT • STOCK KOSONG*",
+      "",
+      "Berikut item request yang belum dapat dipenuhi karena stock Gudang Pusat saat ini tidak tersedia.",
+      "",
+    ];
+
+    const outletGroups = [...groups.values()];
+
+    outletGroups.forEach((group, outletIndex) => {
+      message.push(
+        "━━━━━━━━━━━━━━━━━━━━",
+        `🏪 *${outletIndex + 1}. ${group.name}*`,
+        "━━━━━━━━━━━━━━━━━━━━"
+      );
+
+      [...group.requests.values()].forEach(
+        ({ request, items }, requestIndex) => {
+          message.push(
+            ` *${getRequestNumber(request)}*`,
+            ` Request: ${getWhatsAppRequestDate(request)}`,
+            ` Status pemenuhan: *BELUM TERPENUHI*`,
+            ""
+          );
+
+          items.forEach((item: any, itemIndex: number) => {
+            const itemName =
+              item?.barang?.name ||
+              `Barang #${item?.barangId ?? "-"}`;
+            const qty = Number(item?.qty || 0);
+            const unit = getRequestItemUnit(item);
+            const price = getLastPurchasePrice(item);
+
+            /*
+             * Format WA dibuat langsung seperti instruksi Gudang Pusat:
+             *
+             * *01. Nama Barang* : *2 pack*
+             * _( Lakukan Pembelian Menggunakan Petty Cash Dengan Max-Price
+             * *Rp 25.000 / pack* )_❌
+             *
+             * Harga diambil dari Master Barang Pusat berdasarkan barangId.
+             */
+            message.push(
+              `*${String(itemIndex + 1).padStart(2, "0")}. ${itemName}* : *${formatNumber(
+                qty
+              )} ${unit}*`,
+              `_( Lakukan Pembelian Menggunakan Petty Cash Dengan Max-Price *${formatWhatsAppPrice(
+                price
+              )} / ${unit}* )_❌`
+            );
+
+            const note =
+              typeof item?.note === "string"
+                ? item.note.trim()
+                : "";
+
+            if (note) {
+              message.push(`_Catatan: ${note}_`);
+            }
+
+            message.push("");
+          });
+
+          if (requestIndex < group.requests.size - 1) {
+            message.push("────────────────────");
+          }
+        }
+      );
+
+      if (outletIndex < outletGroups.length - 1) {
+        message.push("");
+      }
+    });
+
+    message.push(
+      "",
+      "> 📌 _*Catatan*_",
+      "Harga terakhir diambil dari *Master Barang Pusat* berdasarkan barangId.",
+      "Mohon item yang kosong dapat ditindaklanjuti pada pengadaan / replenishment.",
+      "",
+      "Terimakasih 🙏🏻",
+      "",
+      "✨ _*Pesan Otomatis Dari MGB•ERP*_ ✨"
+    );
+
+    return message.join("\n");
+  }
+
   function buildAllDeliveryRequestsWhatsAppMessage(
     requests: any[]
   ) {
@@ -1394,14 +1620,13 @@ export default function BarangKeluarPage() {
     message.push(
       "",
       "> 📌  *Keterangan :*",
-      "",
       "Stock cukup : ✅ → _*stock ≥ request*_",
       "Stok kurang : ☑️ → _*stock > 0 tetapi stock < request*_",
       "Stock habis : ❌ → _*stock = 0*_",
       "",
       "Terimakasih 🙏🏻",
       "",
-      "_***Pesan Otomatis Dari MGB•ERP***_"
+      "✨ _*Pesan Otomatis Dari MGB•ERP*_ ✨"
     );
 
     return message.join("\n");
@@ -1443,58 +1668,160 @@ export default function BarangKeluarPage() {
   }
 
   async function openWhatsAppAllDeliveryRequests() {
-    const whatsappWindow = window.open(
-      "about:blank",
-      "_blank"
-    );
+    setShowWhatsAppCenter(true);
+    setLoadingWhatsAppRequests(true);
 
     try {
       const requests =
         await loadAllDeliveryRequestsForWhatsApp();
 
-      const message =
-        buildAllDeliveryRequestsWhatsAppMessage(
-          requests
-        );
-
-      if (!message) {
-        whatsappWindow?.close();
-
-        alert(
-          "Tidak ada Delivery Request DRAFT / PENDING dengan detail barang yang dapat dikirim."
-        );
-
-        return;
-      }
-
-      const whatsappUrl =
-        `https://web.whatsapp.com/send?text=${encodeURIComponent(
-          message
-        )}`;
-
-      if (whatsappWindow) {
-        whatsappWindow.location.href =
-          whatsappUrl;
-        whatsappWindow.focus();
-      } else {
-        window.open(
-          whatsappUrl,
-          "_blank",
-          "noopener,noreferrer"
-        );
-      }
+      setWhatsAppRequests(requests);
     } catch (error: any) {
-      whatsappWindow?.close();
-
       console.error(
         "WHATSAPP ALL DELIVERY REQUEST ERROR:",
         error
       );
 
+      setWhatsAppRequests([]);
+
       alert(
         error?.message ||
           "Gagal mengambil Delivery Request untuk WhatsApp."
       );
+    } finally {
+      setLoadingWhatsAppRequests(false);
+    }
+  }
+
+  function closeWhatsAppCenter() {
+    if (loadingWhatsAppRequests) {
+      return;
+    }
+
+    setShowWhatsAppCenter(false);
+  }
+
+  function openWhatsAppWithMessage(message: string) {
+    if (!message) {
+      alert(
+        "Tidak ada data Delivery Request yang sesuai untuk dikirim ke WhatsApp."
+      );
+      return;
+    }
+
+    const whatsappUrl =
+      `https://web.whatsapp.com/send?text=${encodeURIComponent(
+        message
+      )}`;
+
+    const whatsappWindow = window.open(
+      whatsappUrl,
+      "_blank",
+      "noopener,noreferrer"
+    );
+
+    if (!whatsappWindow) {
+      alert(
+        "WhatsApp Web tidak dapat dibuka. Silakan izinkan popup untuk MGB ERP."
+      );
+      return;
+    }
+
+    whatsappWindow.focus();
+  }
+
+  function sendAllDeliveryRequestsWhatsApp() {
+    const message =
+      buildAllDeliveryRequestsWhatsAppMessage(
+        whatsAppRequests
+      );
+
+    if (!message) {
+      alert(
+        "Tidak ada Delivery Request DRAFT / PENDING dengan detail barang yang dapat dikirim."
+      );
+      return;
+    }
+
+    openWhatsAppWithMessage(message);
+  }
+
+  function sendUnfulfilledDeliveryRequestsWhatsApp() {
+    const message =
+      buildUnfulfilledDeliveryRequestsWhatsAppMessage(
+        whatsAppRequests
+      );
+
+    if (!message) {
+      alert(
+        "Tidak ada barang dengan stock pusat kosong pada Delivery Request DRAFT / PENDING."
+      );
+      return;
+    }
+
+    openWhatsAppWithMessage(message);
+  }
+
+
+  // =========================================================
+  // COPY WHATSAPP MESSAGE
+  // =========================================================
+
+  async function copyWhatsAppMessage(
+    type: "all" | "unfulfilled"
+  ) {
+    const message =
+      type === "all"
+        ? buildAllDeliveryRequestsWhatsAppMessage(whatsAppRequests)
+        : buildUnfulfilledDeliveryRequestsWhatsAppMessage(
+            whatsAppRequests
+          );
+
+    if (!message) {
+      alert(
+        type === "all"
+          ? "Tidak ada Delivery Request DRAFT / PENDING dengan detail barang yang dapat disalin."
+          : "Tidak ada barang dengan stock pusat kosong pada Delivery Request DRAFT / PENDING."
+      );
+      return;
+    }
+
+    try {
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard &&
+        window.isSecureContext
+      ) {
+        await navigator.clipboard.writeText(message);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = message;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        textarea.style.pointerEvents = "none";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+        const copied = document.execCommand("copy");
+        document.body.removeChild(textarea);
+
+        if (!copied) {
+          throw new Error("Clipboard tidak tersedia.");
+        }
+      }
+
+      setCopiedWhatsAppType(type);
+
+      window.setTimeout(() => {
+        setCopiedWhatsAppType((current) =>
+          current === type ? null : current
+        );
+      }, 1800);
+    } catch (error) {
+      console.error("COPY WHATSAPP MESSAGE ERROR:", error);
+      alert("Pesan WhatsApp gagal disalin. Silakan coba lagi.");
     }
   }
 
@@ -3127,6 +3454,266 @@ export default function BarangKeluarPage() {
             )}
           </div>
         </section>
+
+        {/* =====================================================
+            WHATSAPP CENTER MODAL
+        ===================================================== */}
+
+        {showWhatsAppCenter && (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-[#10261F]/55 px-4 py-6 backdrop-blur-md"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                closeWhatsAppCenter();
+              }
+            }}
+          >
+            <div className="w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/70 bg-[#F8FAF8] shadow-[0_35px_100px_rgba(15,45,35,0.28)]">
+              <div className="relative overflow-hidden bg-[#173A2F] px-6 py-6 text-white md:px-7">
+                <div className="absolute -right-12 -top-16 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+                <div className="absolute -bottom-20 left-20 h-36 w-36 rounded-full bg-[#A9C6B5]/15 blur-3xl" />
+
+                <div className="relative flex items-start justify-between gap-4">
+                  <div className="flex min-w-0 items-center gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 shadow-inner">
+                      <MessageCircle size={23} />
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#C8DCCF]">
+                        MGB • ERP
+                      </p>
+
+                      <h3 className="mt-1 text-lg font-black tracking-tight md:text-xl">
+                        WhatsApp Delivery Request
+                      </h3>
+
+                      <p className="mt-1 max-w-xl text-xs leading-5 text-white/70">
+                        Pilih jenis pesan yang ingin dikirim ke Gudang Pusat.
+                        Pesan akan dibuka langsung di WhatsApp Web.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={closeWhatsAppCenter}
+                    disabled={loadingWhatsAppRequests}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-white/80 transition hover:bg-white/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Tutup"
+                  >
+                    <X size={17} />
+                  </button>
+                </div>
+
+                <div className="relative mt-5 grid grid-cols-3 gap-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2.5">
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-white/50">
+                      Request
+                    </p>
+                    <p className="mt-1 text-sm font-black">
+                      {loadingWhatsAppRequests ? "…" : whatsAppRequests.length}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2.5">
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-white/50">
+                      Outlet
+                    </p>
+                    <p className="mt-1 text-sm font-black">
+                      {loadingWhatsAppRequests
+                        ? "…"
+                        : new Set(
+                            whatsAppRequests.map((request: any) =>
+                              getRequestOutlet(request)
+                            )
+                          ).size}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2.5">
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-white/50">
+                      Stock Kosong
+                    </p>
+                    <p className="mt-1 text-sm font-black text-[#F6B6B6]">
+                      {loadingWhatsAppRequests
+                        ? "…"
+                        : getUnfulfilledItems(whatsAppRequests).length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5 md:p-6">
+                {loadingWhatsAppRequests ? (
+                  <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#DDE8E1] bg-white">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EEF4F0] text-[#5F8A72]">
+                      <RefreshCw size={23} className="animate-spin" />
+                    </div>
+
+                    <p className="mt-4 text-sm font-black text-[#173A2F]">
+                      Menyiapkan pesan WhatsApp...
+                    </p>
+
+                    <p className="mt-1 text-xs text-gray-400">
+                      Mengambil request DRAFT / PENDING dan memeriksa stock pusat.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="group relative overflow-hidden rounded-[24px] border border-[#D8E7DD] bg-white p-3 shadow-[0_12px_40px_rgba(23,58,47,0.065)] transition hover:-translate-y-0.5 hover:border-[#A8C5B2] hover:shadow-[0_20px_55px_rgba(23,58,47,0.10)]">
+                      <div className="absolute -right-12 -top-12 h-28 w-28 rounded-full bg-[#EAF7EF] blur-2xl" />
+
+                      <div className="relative flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={sendAllDeliveryRequestsWhatsApp}
+                          className="min-w-0 flex-1 rounded-[19px] p-2 text-left transition hover:bg-[#F7FBF8]"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#EAF7EF] text-[#159447] shadow-sm transition group-hover:scale-105">
+                              <MessageCircle size={22} />
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4 className="text-sm font-black text-[#173A2F]">
+                                  WhatsApp Request
+                                </h4>
+
+                                <span className="rounded-full bg-[#EEF4F0] px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-[#5F8A72]">
+                                  Semua Request
+                                </span>
+                              </div>
+
+                              <p className="mt-1 text-xs leading-5 text-gray-500">
+                                Kirim seluruh pesan request DRAFT / PENDING dengan
+                                format WhatsApp existing.
+                              </p>
+                            </div>
+
+                            <ArrowRight
+                              size={18}
+                              className="shrink-0 text-[#A2B3A9] transition group-hover:translate-x-1 group-hover:text-[#5F8A72]"
+                            />
+                          </div>
+                        </button>
+
+                        <div className="h-11 w-px shrink-0 bg-[#E7EEE9]" />
+
+                        <button
+                          type="button"
+                          onClick={() => copyWhatsAppMessage("all")}
+                          className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-[16px] border border-[#DCE9E0] bg-[#F7FBF8] px-3.5 text-[11px] font-black text-[#386A52] shadow-sm transition hover:border-[#AFCBB8] hover:bg-[#EDF7F0] active:scale-[0.98] md:px-4"
+                          title="Salin pesan WhatsApp Request"
+                          aria-label="Salin pesan WhatsApp Request"
+                        >
+                          {copiedWhatsAppType === "all" ? (
+                            <Check size={15} className="text-[#159447]" />
+                          ) : (
+                            <Copy size={15} />
+                          )}
+                          <span className="hidden sm:inline">
+                            {copiedWhatsAppType === "all" ? "Tersalin" : "Salin"}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="group relative overflow-hidden rounded-[24px] border border-red-100 bg-gradient-to-br from-white to-[#FFF8F8] p-3 shadow-[0_12px_40px_rgba(154,49,49,0.05)] transition hover:-translate-y-0.5 hover:border-red-200 hover:shadow-[0_20px_55px_rgba(154,49,49,0.09)]">
+                      <div className="absolute -right-12 -top-12 h-28 w-28 rounded-full bg-red-50 blur-2xl" />
+
+                      <div className="relative flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={sendUnfulfilledDeliveryRequestsWhatsApp}
+                          className="min-w-0 flex-1 rounded-[19px] p-2 text-left transition hover:bg-[#FFFDFD]"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-500 shadow-sm transition group-hover:scale-105">
+                              <PackageX size={22} />
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4 className="text-sm font-black text-[#173A2F]">
+                                  WhatsApp Tidak Fulfill
+                                </h4>
+
+                                <span className="rounded-full bg-red-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-red-600">
+                                  Stock Kosong
+                                </span>
+                              </div>
+
+                              <p className="mt-1 text-xs leading-5 text-gray-500">
+                                Hanya pesan item dengan stock pusat <b>0</b>,
+                                lengkap dengan DR, qty, satuan, dan max-price.
+                              </p>
+                            </div>
+
+                            <ArrowRight
+                              size={18}
+                              className="shrink-0 text-[#C7A7A7] transition group-hover:translate-x-1 group-hover:text-red-500"
+                            />
+                          </div>
+                        </button>
+
+                        <div className="h-11 w-px shrink-0 bg-red-100" />
+
+                        <button
+                          type="button"
+                          onClick={() => copyWhatsAppMessage("unfulfilled")}
+                          className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-[16px] border border-red-100 bg-white/80 px-3.5 text-[11px] font-black text-red-600 shadow-sm transition hover:border-red-200 hover:bg-red-50 active:scale-[0.98] md:px-4"
+                          title="Salin pesan WhatsApp Tidak Fulfill"
+                          aria-label="Salin pesan WhatsApp Tidak Fulfill"
+                        >
+                          {copiedWhatsAppType === "unfulfilled" ? (
+                            <Check size={15} />
+                          ) : (
+                            <Copy size={15} />
+                          )}
+                          <span className="hidden sm:inline">
+                            {copiedWhatsAppType === "unfulfilled"
+                              ? "Tersalin"
+                              : "Salin"}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-[#E4E9E5] bg-[#F5F8F5] px-4 py-3.5">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[#5F8A72] shadow-sm">
+                          <ShieldCheck size={15} />
+                        </div>
+
+                        <div>
+                          <p className="text-[11px] font-black text-[#44564A]">
+                            Preview pesan
+                          </p>
+
+                          <p className="mt-0.5 text-[11px] leading-5 text-gray-500">
+                            WhatsApp Request mempertahankan format pesan existing.
+                            WhatsApp Tidak Fulfill membuat laporan khusus item stock
+                            kosong dengan penanda <b className="text-red-500">❌</b>.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={closeWhatsAppCenter}
+                      className="mt-1 w-full rounded-xl border border-[#DDD8CE] bg-white px-4 py-3 text-xs font-bold text-gray-500 transition hover:bg-[#F5F3EE] hover:text-[#44564A]"
+                    >
+                      Tutup
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* =====================================================
             TRANSACTION FLOW

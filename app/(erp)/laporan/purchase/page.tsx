@@ -19,6 +19,9 @@ import {
   TrendingUp,
   ReceiptText,
   ChevronRight,
+  MessageCircle,
+  Copy,
+  Check,
 } from "lucide-react";
 
 import {
@@ -42,6 +45,15 @@ type PurchaseItem = {
   qty: number;
   harga: number;
   subtotal: number;
+
+  /**
+   * Ending stock dapat berasal dari API dengan
+   * beberapa kemungkinan nama field.
+   */
+  endingStock?: number | null;
+  stock?: number | null;
+  currentStock?: number | null;
+  remainingStock?: number | null;
 };
 
 type Purchase = {
@@ -57,6 +69,7 @@ type Purchase = {
 export default function LaporanPurchase() {
   const [data, setData] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -71,16 +84,116 @@ export default function LaporanPurchase() {
     try {
       setLoading(true);
 
-      const res = await fetch("/api/laporan/purchase", {
-        cache: "no-store",
-      });
+      /*
+       * Laporan purchase tidak selalu mengirim stock pada setiap
+       * PurchaseItem. Karena ending stock harus tetap tersedia di
+       * pesan WhatsApp, ambil juga master Barang sebagai fallback
+       * berdasarkan barangId.
+       *
+       * Jika API laporan sudah mengirim endingStock/stock, nilai dari
+       * laporan tetap menjadi prioritas.
+       */
+      const [purchaseRes, barangRes] = await Promise.all([
+        fetch("/api/laporan/purchase", {
+          cache: "no-store",
+        }),
+        fetch("/api/master/barang", {
+          cache: "no-store",
+        }).catch(() => null),
+      ]);
 
-      const result = await res.json();
+      const result = await purchaseRes.json();
+
+      let stockByBarangId = new Map<number, number>();
+
+      if (barangRes?.ok) {
+        try {
+          const barangResult = await barangRes.json();
+
+          const rawBarang =
+            Array.isArray(barangResult)
+              ? barangResult
+              : Array.isArray(barangResult?.data)
+                ? barangResult.data
+                : Array.isArray(barangResult?.barang)
+                  ? barangResult.barang
+                  : Array.isArray(barangResult?.data?.barang)
+                    ? barangResult.data.barang
+                    : [];
+
+          rawBarang.forEach((barang: any) => {
+            const id = Number(
+              barang?.id ??
+              barang?.barangId
+            );
+
+            const stock = Number(
+              barang?.stock ??
+              barang?.currentStock ??
+              barang?.endingStock ??
+              0
+            );
+
+            if (
+              Number.isFinite(id) &&
+              id > 0 &&
+              Number.isFinite(stock)
+            ) {
+              stockByBarangId.set(id, stock);
+            }
+          });
+        } catch (error) {
+          console.warn(
+            "Master barang tidak dapat dipakai sebagai fallback ending stock:",
+            error
+          );
+        }
+      }
 
       console.log("LAPORAN PURCHASE:", result);
 
       if (result.success) {
-        setData(result.data ?? []);
+        const normalizedData: Purchase[] = (
+          result.data ?? []
+        ).map((purchase: Purchase) => ({
+          ...purchase,
+          items: (purchase.items ?? []).map(
+            (item: PurchaseItem) => {
+              const nestedItem =
+                item as PurchaseItem & {
+                  barang?: Record<string, unknown> | null;
+                  Barang?: Record<string, unknown> | null;
+                };
+
+              const directStock =
+                nestedItem.endingStock ??
+                nestedItem.stock ??
+                nestedItem.currentStock ??
+                nestedItem.remainingStock ??
+                nestedItem.barang?.endingStock ??
+                nestedItem.barang?.stock ??
+                nestedItem.Barang?.endingStock ??
+                nestedItem.Barang?.stock;
+
+              const fallbackStock =
+                stockByBarangId.get(
+                  Number(item.barangId)
+                );
+
+              return {
+                ...item,
+                endingStock:
+                  directStock !== null &&
+                  directStock !== undefined &&
+                  directStock !== ""
+                    ? Number(directStock)
+                    : fallbackStock ?? 0,
+              };
+            }
+          ),
+        }));
+
+        setData(normalizedData);
       } else {
         setData([]);
       }
@@ -142,6 +255,85 @@ export default function LaporanPurchase() {
       month: "long",
       year: "numeric",
     });
+  }
+
+  function formatDateWhatsApp(value: string) {
+    if (!value) return "-";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+
+    return date.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  // =====================================================
+  // ENDING STOCK
+  // =====================================================
+
+  function getEndingStock(item: PurchaseItem) {
+    /*
+     * API laporan purchase dapat mengirim stock dengan beberapa bentuk:
+     * - item.endingStock
+     * - item.stock
+     * - item.currentStock
+     * - item.remainingStock
+     * - item.barang.stock / item.barang.endingStock
+     * - item.inventory.stock / item.inventory.endingStock
+     *
+     * Jangan menggunakan `||` karena angka 0 adalah ending stock
+     * yang valid dan harus tetap ditampilkan sebagai 0.
+     */
+    const source = item as PurchaseItem & {
+      barang?: Record<string, unknown> | null;
+      Barang?: Record<string, unknown> | null;
+      inventory?: Record<string, unknown> | null;
+      Inventory?: Record<string, unknown> | null;
+      item?: Record<string, unknown> | null;
+    };
+
+    const candidates: unknown[] = [
+      source.endingStock,
+      source.stock,
+      source.currentStock,
+      source.remainingStock,
+      source.barang?.endingStock,
+      source.barang?.stock,
+      source.barang?.currentStock,
+      source.barang?.remainingStock,
+      source.Barang?.endingStock,
+      source.Barang?.stock,
+      source.Barang?.currentStock,
+      source.Barang?.remainingStock,
+      source.inventory?.endingStock,
+      source.inventory?.stock,
+      source.inventory?.currentStock,
+      source.inventory?.remainingStock,
+      source.Inventory?.endingStock,
+      source.Inventory?.stock,
+      source.Inventory?.currentStock,
+      source.Inventory?.remainingStock,
+      source.item?.endingStock,
+      source.item?.stock,
+      source.item?.currentStock,
+      source.item?.remainingStock,
+    ];
+
+    const valid = candidates.find(
+      (value) =>
+        value !== null &&
+        value !== undefined &&
+        value !== "" &&
+        Number.isFinite(Number(value))
+    );
+
+    return valid === undefined ? 0 : Number(valid);
   }
 
   // =====================================================
@@ -311,6 +503,259 @@ export default function LaporanPurchase() {
       0
     );
   }, [filteredData]);
+
+  // =====================================================
+  // WHATSAPP MESSAGE
+  // =====================================================
+
+  const whatsappMessage = useMemo(() => {
+    if (filteredData.length === 0) {
+      return "";
+    }
+
+    /*
+     * Gunakan tanggal PO pertama sebagai tanggal utama.
+     * Jika ada beberapa tanggal berbeda, gunakan rentang
+     * tanggal filter jika tersedia.
+     */
+    let reportDate = "";
+
+    if (startDate && endDate) {
+      const start = new Date(`${startDate}T00:00:00`);
+      const end = new Date(`${endDate}T00:00:00`);
+
+      const startText = start.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+
+      const endText = end.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+
+      reportDate =
+        startDate === endDate
+          ? startText
+          : `${startText} - ${endText}`;
+    } else if (startDate) {
+      const start = new Date(`${startDate}T00:00:00`);
+
+      reportDate = start.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    } else if (endDate) {
+      const end = new Date(`${endDate}T00:00:00`);
+
+      reportDate = end.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    } else if (filteredData.length === 1) {
+      reportDate = formatDateWhatsApp(
+        filteredData[0].date
+      );
+    } else {
+      /*
+       * Untuk beberapa PO tanpa filter tanggal,
+       * gunakan tanggal hari ini sebagai tanggal laporan.
+       */
+      reportDate = new Date().toLocaleDateString(
+        "id-ID",
+        {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }
+      );
+    }
+
+    const lines: string[] = [];
+
+    lines.push(
+      "✨ *PT.MITRA GARAM BOGATAMA*"
+    );
+
+    lines.push("");
+
+    lines.push(
+      "Berikut Pengajuan List Purchase Order Supplier"
+    );
+
+    lines.push(
+      `_*${reportDate}*_`
+    );
+
+    lines.push("");
+
+    filteredData.forEach((purchase, purchaseIndex) => {
+      const supplier =
+        purchase.supplier?.trim() || "Supplier Tidak Diketahui";
+
+      const poNumber =
+        purchase.number?.trim() || "-";
+
+      // Format dibuat mengikuti template WhatsApp yang diminta:
+      // 1. *Supplier* → _*(PO-xxxxx)*_
+      lines.push(
+        `${purchaseIndex + 1}. *${supplier}* → _*(${poNumber})*_`
+      );
+
+      const items = purchase.items ?? [];
+
+      if (items.length === 0) {
+        lines.push("• Tidak ada detail barang");
+      } else {
+        items.forEach((barang) => {
+          const nama =
+            barang.nama?.trim() || "-";
+
+          const qty = formatNumber(barang.qty);
+
+          const satuan =
+            barang.satuan?.trim() || "";
+
+          const endingStock = formatNumber(
+            getEndingStock(barang)
+          );
+
+          const quantityText = satuan
+            ? `${qty} ${satuan}`
+            : qty;
+
+          lines.push(
+            `• ${nama} : ${quantityText} (${endingStock})`
+          );
+        });
+      }
+
+
+      lines.push(
+        `> *TOTAL* : _*${formatCurrency(
+          purchase.total
+        )}*_`
+      );
+
+      if (
+        purchaseIndex <
+        filteredData.length - 1
+      ) {
+        lines.push("");
+      }
+    });
+
+    lines.push("");
+
+    lines.push(
+      `💰 *ESTIMASI SUBTOTAL* : *${formatCurrency(
+        totalPurchase
+      )}*`
+    );
+
+    lines.push("");
+
+    lines.push(
+      "☑️ : DONE PO"
+    );
+
+    lines.push(
+      "✅ : BARANG SUDAH DITERIMA"
+    );
+
+    lines.push(
+      "‼️ : PO HOLD"
+    );
+
+    lines.push("");
+
+    lines.push(
+      "Terimakasih 🙏🏻"
+    );
+
+    return lines.join("\n");
+  }, [
+    filteredData,
+    totalPurchase,
+    startDate,
+    endDate,
+  ]);
+
+  // =====================================================
+  // WHATSAPP
+  // =====================================================
+
+  function handleWhatsApp() {
+    if (!whatsappMessage) return;
+
+    const encodedMessage =
+      encodeURIComponent(whatsappMessage);
+
+    /*
+     * wa.me lebih aman untuk membuka WhatsApp dari browser
+     * dibanding memaksa web.whatsapp.com, karena WhatsApp
+     * dapat menentukan apakah user memakai Web / Desktop / App.
+     */
+    const whatsappUrl =
+      `https://wa.me/?text=${encodedMessage}`;
+
+    window.open(
+      whatsappUrl,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
+  async function handleCopyWhatsApp() {
+    if (!whatsappMessage) return;
+
+    try {
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard?.writeText
+      ) {
+        await navigator.clipboard.writeText(
+          whatsappMessage
+        );
+      } else {
+        const textarea =
+          document.createElement("textarea");
+
+        textarea.value = whatsappMessage;
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        textarea.style.top = "0";
+
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        const copiedSuccessfully =
+          document.execCommand("copy");
+
+        document.body.removeChild(textarea);
+
+        if (!copiedSuccessfully) {
+          throw new Error("Gagal menyalin pesan.");
+        }
+      }
+
+      setCopied(true);
+
+      window.setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch (error) {
+      console.error(
+        "Gagal menyalin pesan WhatsApp:",
+        error
+      );
+    }
+  }
 
   // =====================================================
   // EXPORT
@@ -509,7 +954,6 @@ export default function LaporanPurchase() {
           md:py-8
         "
       >
-        {/* decorative */}
         <div
           className="
             pointer-events-none
@@ -974,7 +1418,78 @@ export default function LaporanPurchase() {
               </div>
             </div>
 
+            {/* EXPORT BUTTONS */}
+
             <div className="flex flex-wrap gap-2">
+
+              {/* WHATSAPP */}
+
+              <button
+                type="button"
+                onClick={handleWhatsApp}
+                disabled={filteredData.length === 0}
+                className="
+                  inline-flex
+                  h-12
+                  items-center
+                  justify-center
+                  gap-2
+                  rounded-xl
+                  bg-[#25D366]
+                  px-4
+                  text-sm
+                  font-bold
+                  text-white
+                  shadow-sm
+                  transition
+                  hover:-translate-y-0.5
+                  hover:bg-[#20BD5B]
+                  hover:shadow-md
+                  disabled:cursor-not-allowed
+                  disabled:opacity-40
+                "
+                title="Kirim hasil filter ke WhatsApp Web"
+              >
+                <MessageCircle size={17} />
+                WhatsApp
+              </button>
+
+              {/* COPY WHATSAPP MESSAGE */}
+              <button
+                type="button"
+                onClick={handleCopyWhatsApp}
+                disabled={filteredData.length === 0}
+                className="
+                  inline-flex
+                  h-12
+                  items-center
+                  justify-center
+                  gap-2
+                  rounded-xl
+                  border
+                  border-[#D5E5DC]
+                  bg-white
+                  px-4
+                  text-sm
+                  font-bold
+                  text-[#35564C]
+                  shadow-sm
+                  transition
+                  hover:-translate-y-0.5
+                  hover:bg-[#F5F8F6]
+                  hover:shadow-md
+                  disabled:cursor-not-allowed
+                  disabled:opacity-40
+                "
+                title="Salin seluruh isi pesan WhatsApp"
+              >
+                {copied ? (
+                  <Check size={17} />
+                ) : (
+                  <Copy size={17} />
+                )}
+                {copied ? "Tersalin" : "Salin"}
+              </button>
 
               <button
                 type="button"

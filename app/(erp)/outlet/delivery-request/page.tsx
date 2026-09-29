@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock3,
+  Copy,
   Download,
   Edit3,
   Eye,
@@ -1955,6 +1956,9 @@ function DetailModal({
   const [downloadingPdf, setDownloadingPdf] =
     useState(false);
 
+  const [copiedWhatsApp, setCopiedWhatsApp] =
+    useState(false);
+
   const [editingRequest, setEditingRequest] =
     useState(false);
 
@@ -2250,7 +2254,7 @@ function DetailModal({
   // WHATSAPP
   // ==========================================================
 
-  function handleWhatsApp() {
+  function getWhatsAppMessage() {
     const deliveryNumber =
       request.delivery?.number || request.number;
 
@@ -2288,7 +2292,11 @@ function DetailModal({
       "Terimakasih 🙏🏻",
     ];
 
-    const message = lines.join("\n");
+    return lines.join("\n");
+  }
+
+  function handleWhatsApp() {
+    const message = getWhatsAppMessage();
 
     // Jangan langsung mengarah ke nomor WhatsApp tertentu.
     // WhatsApp Web akan dibuka ke halaman pemilihan kontak,
@@ -2297,6 +2305,65 @@ function DetailModal({
       `https://web.whatsapp.com/send?text=${encodeURIComponent(message)}`;
 
     window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  async function handleCopyWhatsApp() {
+    const message = getWhatsAppMessage();
+
+    try {
+      await navigator.clipboard.writeText(message);
+      setCopiedWhatsApp(true);
+
+      window.setTimeout(() => {
+        setCopiedWhatsApp(false);
+      }, 1800);
+    } catch (error) {
+      console.error(
+        "COPY WHATSAPP MESSAGE ERROR:",
+        error
+      );
+
+      // Fallback untuk browser yang tidak mengizinkan
+      // navigator.clipboard.
+      try {
+        const textarea =
+          document.createElement("textarea");
+
+        textarea.value = message;
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        textarea.style.top = "0";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        const copied =
+          document.execCommand("copy");
+
+        document.body.removeChild(textarea);
+
+        if (!copied) {
+          throw new Error(
+            "Browser menolak proses copy."
+          );
+        }
+
+        setCopiedWhatsApp(true);
+
+        window.setTimeout(() => {
+          setCopiedWhatsApp(false);
+        }, 1800);
+      } catch (fallbackError) {
+        console.error(
+          "COPY WHATSAPP FALLBACK ERROR:",
+          fallbackError
+        );
+
+        window.alert(
+          "Pesan WhatsApp tidak dapat disalin otomatis. Silakan gunakan tombol WhatsApp."
+        );
+      }
+    }
   }
 
   // ==========================================================
@@ -3925,6 +3992,24 @@ function DetailModal({
 
               <button
                 type="button"
+                onClick={handleCopyWhatsApp}
+                disabled={
+                  downloadingPdf ||
+                  isDeleting ||
+                  savingEdit
+                }
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300/20 bg-white/[0.055] px-4 text-sm font-black text-emerald-100 transition hover:border-emerald-300/40 hover:bg-emerald-300/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {copiedWhatsApp ? (
+                  <CheckCircle2 className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+                {copiedWhatsApp ? "Tersalin" : "Salin"}
+              </button>
+
+              <button
+                type="button"
                 onClick={
                   handleDownloadPDF
                 }
@@ -4719,6 +4804,24 @@ function DetailModal({
             >
               <MessageCircle className="h-4 w-4" />
               WhatsApp
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCopyWhatsApp}
+              disabled={
+                savingEdit ||
+                isDeleting ||
+                downloadingPdf
+              }
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-black text-[#0B6B55] transition hover:border-emerald-300 hover:bg-[#EAF5F1] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {copiedWhatsApp ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+              {copiedWhatsApp ? "Tersalin" : "Salin"}
             </button>
 
             <button

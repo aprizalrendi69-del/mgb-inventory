@@ -37,7 +37,7 @@ type Supplier = {
   name: string;
 };
 
-type SourceFilter = "ALL" | "PURCHASE" | "TRANSFER";
+type SourceFilter = "ALL" | "PURCHASE" | "DELIVERY_ORDER" | "TRANSFER";
 
 type StatusFilter =
   | "ALL"
@@ -120,11 +120,7 @@ export default function OutletBarangMasukPage() {
   const [selectedSource, setSelectedSource] =
     useState<SourceFilter>("ALL");
 
-  const [sourceMenuOpen, setSourceMenuOpen] =
-    useState(false);
-
-  const sourceMenuRef =
-    useRef<HTMLDivElement | null>(null);
+  const defaultSourceAppliedRef = useRef(false);
 
   // =====================================================
   // FILTER STATUS
@@ -148,13 +144,6 @@ export default function OutletBarangMasukPage() {
       const target = event.target as Node;
 
       if (
-        sourceMenuRef.current &&
-        !sourceMenuRef.current.contains(target)
-      ) {
-        setSourceMenuOpen(false);
-      }
-
-      if (
         statusMenuRef.current &&
         !statusMenuRef.current.contains(target)
       ) {
@@ -162,7 +151,7 @@ export default function OutletBarangMasukPage() {
       }
     }
 
-    if (sourceMenuOpen || statusMenuOpen) {
+    if (statusMenuOpen) {
       document.addEventListener(
         "mousedown",
         handleClickOutside
@@ -176,7 +165,6 @@ export default function OutletBarangMasukPage() {
       );
     };
   }, [
-    sourceMenuOpen,
     statusMenuOpen,
   ]);
 
@@ -188,14 +176,33 @@ export default function OutletBarangMasukPage() {
     source: SourceFilter
   ) {
     if (source === "PURCHASE") {
-      return "Purchase Supplier";
+      return "Purchase Order";
+    }
+
+    if (source === "DELIVERY_ORDER") {
+      return "Delivery Order";
     }
 
     if (source === "TRANSFER") {
-      return "Transfer";
+      return "Transfer Antar Outlet";
     }
 
-    return "Semua Sumber";
+    return "Semua Transaksi";
+  }
+
+  function getTransactionType(item: BarangMasuk): Exclude<SourceFilter, "ALL"> {
+    if (item.sumber === "PURCHASE") {
+      return "PURCHASE";
+    }
+
+    if (
+      item.jenisTransfer === "OUTLET_TO_OUTLET" ||
+      Boolean(item.sourceOutletId)
+    ) {
+      return "TRANSFER";
+    }
+
+    return "DELIVERY_ORDER";
   }
 
   // =====================================================
@@ -267,6 +274,14 @@ export default function OutletBarangMasukPage() {
         : null;
 
       setRole(loginRole);
+
+      if (
+        loginRole === "OUTLET_ADMIN" &&
+        !defaultSourceAppliedRef.current
+      ) {
+        setSelectedSource("PURCHASE");
+        defaultSourceAppliedRef.current = true;
+      }
 
       setUserOutletId(
         Number.isInteger(loginOutletId)
@@ -496,7 +511,7 @@ export default function OutletBarangMasukPage() {
 
       if (
         selectedSource !== "ALL" &&
-        item.sumber !== selectedSource
+        getTransactionType(item) !== selectedSource
       ) {
         return false;
       }
@@ -639,6 +654,35 @@ export default function OutletBarangMasukPage() {
   ]);
 
   // =====================================================
+  // TRANSACTION TYPE COUNTS
+  // =====================================================
+
+  const sourceCounts = useMemo(() => {
+    const counts: Record<Exclude<SourceFilter, "ALL">, number> = {
+      PURCHASE: 0,
+      DELIVERY_ORDER: 0,
+      TRANSFER: 0,
+    };
+
+    data.forEach((item) => {
+      const destinationOutlet =
+        item.destinationOutlet || item.outlet;
+
+      if (
+        isOutletAdmin &&
+        userOutletId !== null &&
+        Number(destinationOutlet?.id) !== Number(userOutletId)
+      ) {
+        return;
+      }
+
+      counts[getTransactionType(item)]++;
+    });
+
+    return counts;
+  }, [data, isOutletAdmin, userOutletId]);
+
+  // =====================================================
   // KPI
   // =====================================================
 
@@ -690,9 +734,8 @@ export default function OutletBarangMasukPage() {
     setDateFrom("");
     setDateTo("");
     setSearch("");
-    setSelectedSource("ALL");
+    setSelectedSource(isOutletAdmin ? "PURCHASE" : "ALL");
     setSelectedStatus("ALL");
-    setSourceMenuOpen(false);
     setStatusMenuOpen(false);
   }
 
@@ -859,7 +902,7 @@ export default function OutletBarangMasukPage() {
       <div className="flex min-w-[190px] flex-col items-start gap-2">
         <span className="inline-flex items-center gap-1.5 rounded-lg bg-violet-50 px-2.5 py-1.5 text-[11px] font-bold text-violet-700 ring-1 ring-inset ring-violet-200">
           <FileText size={12} />
-          Purchase Supplier
+          Purchase Order
         </span>
 
         {item.supplier && (
@@ -934,6 +977,13 @@ export default function OutletBarangMasukPage() {
                       OUTLET
                     </span>
                   )}
+
+                  {isOutletAdmin && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-black text-violet-700 ring-1 ring-inset ring-violet-200">
+                      <FileText size={10} />
+                      PURCHASE ORDER
+                    </span>
+                  )}
                 </div>
 
                 <h1 className="text-2xl font-black tracking-tight text-[#18352D] md:text-3xl">
@@ -941,8 +991,8 @@ export default function OutletBarangMasukPage() {
                 </h1>
 
                 <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500">
-                  Monitoring penerimaan barang dari supplier,
-                  gudang pusat, maupun transfer antar outlet.
+                  Monitoring seluruh penerimaan barang dengan pemisahan
+                  Purchase Order, Delivery Order, dan transfer antar outlet.
                 </p>
               </div>
             </div>
@@ -1315,173 +1365,118 @@ export default function OutletBarangMasukPage() {
                 </div>
 
                 {/* =================================================
-                    SOURCE BUTTON
+                    TRANSACTION TYPE FILTER
                     ================================================= */}
 
-                <div
-                  ref={sourceMenuRef}
-                  className="relative"
-                >
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 rounded-2xl border border-[#DDE9E4] bg-[#F8FBF9] p-1.5 xl:flex-none">
+
                   <button
                     type="button"
-                    onClick={() => {
-                      setSourceMenuOpen(
-                        (prev) => !prev
-                      );
-                      setStatusMenuOpen(false);
-                    }}
-                    className={`inline-flex h-[46px] min-w-[150px] items-center justify-center gap-2 rounded-xl border px-4 text-sm font-bold transition-all ${
-                      selectedSource !== "ALL"
-                        ? "border-[#AFCFC2] bg-[#EAF3EF] text-[#35564C] shadow-sm"
-                        : "border-[#D5E5DC] bg-[#FAFCFB] text-[#35564C] hover:border-[#BFD6CC] hover:bg-white"
+                    onClick={() => setSelectedSource("ALL")}
+                    className={`group inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-xs font-black transition-all ${
+                      selectedSource === "ALL"
+                        ? "bg-white text-[#18352D] shadow-[0_4px_14px_rgba(24,53,45,0.10)] ring-1 ring-inset ring-[#D5E5DC]"
+                        : "text-slate-500 hover:bg-white/80 hover:text-[#35564C]"
                     }`}
                   >
-                    <SlidersHorizontal
-                      size={16}
-                    />
-
-                    <span>
-                      {selectedSource ===
-                      "ALL"
-                        ? "Sumber"
-                        : sourceFilterLabel(
-                            selectedSource
-                          )}
+                    <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${
+                      selectedSource === "ALL"
+                        ? "bg-[#EAF3EF] text-[#497F70]"
+                        : "bg-slate-100 text-slate-400"
+                    }`}>
+                      <Boxes size={13} />
                     </span>
-
-                    <ChevronDown
-                      size={15}
-                      className={`transition-transform ${
-                        sourceMenuOpen
-                          ? "rotate-180"
-                          : ""
-                      }`}
-                    />
-
-                    {selectedSource !==
-                      "ALL" && (
-                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#497F70] px-1 text-[10px] font-black text-white">
-                        1
+                    Semua Transaksi
+                    {selectedSource === "ALL" && (
+                      <span className="rounded-full bg-[#497F70] px-1.5 py-0.5 text-[9px] font-black text-white">
+                        {data.length.toLocaleString("id-ID")}
                       </span>
                     )}
                   </button>
 
-                  {sourceMenuOpen && (
-                    <div className="absolute right-0 z-50 mt-2 w-[230px] overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white p-1.5 shadow-[0_15px_45px_rgba(24,53,45,0.15)]">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSource("PURCHASE")}
+                    className={`group inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-xs font-black transition-all ${
+                      selectedSource === "PURCHASE"
+                        ? "bg-violet-600 text-white shadow-[0_6px_18px_rgba(124,58,237,0.20)]"
+                        : "text-slate-500 hover:bg-white/80 hover:text-violet-700"
+                    }`}
+                  >
+                    <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${
+                      selectedSource === "PURCHASE"
+                        ? "bg-white/15 text-white"
+                        : "bg-violet-50 text-violet-500"
+                    }`}>
+                      <FileText size={13} />
+                    </span>
+                    <span className="whitespace-nowrap">Purchase Order</span>
+                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
+                      selectedSource === "PURCHASE"
+                        ? "bg-white/15 text-white"
+                        : "bg-violet-50 text-violet-600"
+                    }`}>
+                      {sourceCounts.PURCHASE.toLocaleString("id-ID")}
+                    </span>
+                    {selectedSource === "PURCHASE" && isOutletAdmin && (
+                      <span className="rounded-full bg-white/15 px-1.5 py-0.5 text-[9px] font-black text-white ring-1 ring-inset ring-white/20">
+                        DEFAULT
+                      </span>
+                    )}
+                  </button>
 
-                      <div className="px-3 pb-2 pt-2">
-                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                          Filter Sumber
-                        </p>
-                      </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSource("DELIVERY_ORDER")}
+                    className={`group inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-xs font-black transition-all ${
+                      selectedSource === "DELIVERY_ORDER"
+                        ? "bg-blue-600 text-white shadow-[0_6px_18px_rgba(37,99,235,0.20)]"
+                        : "text-slate-500 hover:bg-white/80 hover:text-blue-700"
+                    }`}
+                  >
+                    <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${
+                      selectedSource === "DELIVERY_ORDER"
+                        ? "bg-white/15 text-white"
+                        : "bg-blue-50 text-blue-500"
+                    }`}>
+                      <Truck size={13} />
+                    </span>
+                    <span className="whitespace-nowrap">Delivery Order</span>
+                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
+                      selectedSource === "DELIVERY_ORDER"
+                        ? "bg-white/15 text-white"
+                        : "bg-blue-50 text-blue-600"
+                    }`}>
+                      {sourceCounts.DELIVERY_ORDER.toLocaleString("id-ID")}
+                    </span>
+                  </button>
 
-                      {/* ALL */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSource("TRANSFER")}
+                    className={`group inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-xs font-black transition-all ${
+                      selectedSource === "TRANSFER"
+                        ? "bg-indigo-600 text-white shadow-[0_6px_18px_rgba(79,70,229,0.20)]"
+                        : "text-slate-500 hover:bg-white/80 hover:text-indigo-700"
+                    }`}
+                  >
+                    <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${
+                      selectedSource === "TRANSFER"
+                        ? "bg-white/15 text-white"
+                        : "bg-indigo-50 text-indigo-500"
+                    }`}>
+                      <ArrowRightLeft size={13} />
+                    </span>
+                    <span className="whitespace-nowrap">Transfer Antar Outlet</span>
+                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
+                      selectedSource === "TRANSFER"
+                        ? "bg-white/15 text-white"
+                        : "bg-indigo-50 text-indigo-600"
+                    }`}>
+                      {sourceCounts.TRANSFER.toLocaleString("id-ID")}
+                    </span>
+                  </button>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedSource(
-                            "ALL"
-                          );
-                          setSourceMenuOpen(
-                            false
-                          );
-                        }}
-                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
-                          selectedSource ===
-                          "ALL"
-                            ? "bg-[#EAF3EF] text-[#35564C]"
-                            : "text-slate-600 hover:bg-[#F4F7F5]"
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <Boxes
-                            size={15}
-                          />
-                          Semua Sumber
-                        </span>
-
-                        {selectedSource ===
-                          "ALL" && (
-                          <Check
-                            size={15}
-                            className="text-[#497F70]"
-                          />
-                        )}
-                      </button>
-
-                      {/* PURCHASE */}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedSource(
-                            "PURCHASE"
-                          );
-                          setSourceMenuOpen(
-                            false
-                          );
-                        }}
-                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
-                          selectedSource ===
-                          "PURCHASE"
-                            ? "bg-violet-50 text-violet-700"
-                            : "text-slate-600 hover:bg-[#F4F7F5]"
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <FileText
-                            size={15}
-                          />
-                          Purchase Supplier
-                        </span>
-
-                        {selectedSource ===
-                          "PURCHASE" && (
-                          <Check
-                            size={15}
-                            className="text-violet-600"
-                          />
-                        )}
-                      </button>
-
-                      {/* TRANSFER */}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedSource(
-                            "TRANSFER"
-                          );
-                          setSourceMenuOpen(
-                            false
-                          );
-                        }}
-                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
-                          selectedSource ===
-                          "TRANSFER"
-                            ? "bg-blue-50 text-blue-700"
-                            : "text-slate-600 hover:bg-[#F4F7F5]"
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <ArrowRightLeft
-                            size={15}
-                          />
-                          Transfer
-                        </span>
-
-                        {selectedSource ===
-                          "TRANSFER" && (
-                          <Check
-                            size={15}
-                            className="text-blue-600"
-                          />
-                        )}
-                      </button>
-
-                    </div>
-                  )}
                 </div>
 
                 {/* =================================================
@@ -1498,8 +1493,7 @@ export default function OutletBarangMasukPage() {
                       setStatusMenuOpen(
                         (prev) => !prev
                       );
-                      setSourceMenuOpen(false);
-                    }}
+                                    }}
                     className={`inline-flex h-[46px] min-w-[150px] items-center justify-center gap-2 rounded-xl border px-4 text-sm font-bold transition-all ${
                       selectedStatus !== "ALL"
                         ? "border-[#AFCFC2] bg-[#EAF3EF] text-[#35564C] shadow-sm"
@@ -1790,13 +1784,25 @@ export default function OutletBarangMasukPage() {
 
                 {selectedSource !==
                   "ALL" && (
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-violet-50 px-2.5 py-1.5 text-[11px] font-bold text-violet-700">
-                    <SlidersHorizontal
-                      size={11}
-                    />
-                    Sumber:{" "}
-                    {sourceFilterLabel(
-                      selectedSource
+                  <span className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-bold ring-1 ring-inset ${
+                    selectedSource === "PURCHASE"
+                      ? "bg-violet-50 text-violet-700 ring-violet-200"
+                      : selectedSource === "DELIVERY_ORDER"
+                        ? "bg-blue-50 text-blue-700 ring-blue-200"
+                        : "bg-indigo-50 text-indigo-700 ring-indigo-200"
+                  }`}>
+                    {selectedSource === "PURCHASE" ? (
+                      <FileText size={11} />
+                    ) : selectedSource === "DELIVERY_ORDER" ? (
+                      <Truck size={11} />
+                    ) : (
+                      <ArrowRightLeft size={11} />
+                    )}
+                    Sumber: {sourceFilterLabel(selectedSource)}
+                    {isOutletAdmin && selectedSource === "PURCHASE" && (
+                      <span className="rounded-full bg-violet-600 px-1.5 py-0.5 text-[8px] font-black text-white">
+                        DEFAULT
+                      </span>
                     )}
                   </span>
                 )}

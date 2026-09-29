@@ -10,6 +10,7 @@ import {
   ArrowUp,
   Check,
   CheckCircle2,
+  Copy,
   Clock3,
   CreditCard,
   Edit,
@@ -71,6 +72,8 @@ export default function DetailPurchase() {
   const [purchase, setPurchase] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [copyingWhatsApp, setCopyingWhatsApp] = useState(false);
+  const [whatsappCopied, setWhatsappCopied] = useState(false);
   const [approving, setApproving] = useState(false);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [canDelete, setCanDelete] = useState(false);
@@ -659,6 +662,109 @@ export default function DetailPurchase() {
           ? error.message
           : "Gagal membuka WhatsApp untuk Purchase Order."
       );
+    }
+  }
+
+  // =====================================================
+  // COPY WHATSAPP PURCHASE ORDER MESSAGE
+  // =====================================================
+
+  async function copyPurchaseWhatsAppMessage() {
+    if (!purchase || copyingWhatsApp) return;
+
+    try {
+      setCopyingWhatsApp(true);
+      setWhatsappCopied(false);
+
+      /*
+       * Gunakan builder yang sama dengan tombol Kirim WhatsApp
+       * agar isi yang disalin 100% mengikuti pesan WhatsApp yang
+       * akan dikirim oleh Purchase Order ini.
+       */
+      const whatsappUrl =
+        buildWhatsAppPurchaseUrl(purchase);
+
+      const parsedUrl = new URL(
+        whatsappUrl,
+        window.location.origin
+      );
+
+      const message =
+        parsedUrl.searchParams.get("text") ?? "";
+
+      if (!message.trim()) {
+        throw new Error(
+          "Isi pesan WhatsApp tidak ditemukan."
+        );
+      }
+
+      /*
+       * Clipboard API dipakai terlebih dahulu.
+       * Fallback textarea menjaga kompatibilitas browser yang
+       * tidak mengizinkan navigator.clipboard pada konteks tertentu.
+       */
+      if (
+        navigator.clipboard &&
+        window.isSecureContext
+      ) {
+        await navigator.clipboard.writeText(
+          message
+        );
+      } else {
+        const textarea =
+          document.createElement("textarea");
+
+        textarea.value = message;
+        textarea.setAttribute(
+          "readonly",
+          ""
+        );
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        textarea.style.top = "0";
+        textarea.style.opacity = "0";
+
+        document.body.appendChild(
+          textarea
+        );
+
+        textarea.focus();
+        textarea.select();
+
+        const copied =
+          document.execCommand(
+            "copy"
+          );
+
+        document.body.removeChild(
+          textarea
+        );
+
+        if (!copied) {
+          throw new Error(
+            "Browser tidak mengizinkan penyalinan otomatis."
+          );
+        }
+      }
+
+      setWhatsappCopied(true);
+
+      window.setTimeout(() => {
+        setWhatsappCopied(false);
+      }, 2200);
+    } catch (error) {
+      console.error(
+        "COPY WHATSAPP MESSAGE ERROR:",
+        error
+      );
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Gagal menyalin pesan WhatsApp."
+      );
+    } finally {
+      setCopyingWhatsApp(false);
     }
   }
 
@@ -1984,6 +2090,30 @@ export default function DetailPurchase() {
                   >
                     <WhatsAppIcon />
                     WhatsApp
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={
+                      copyPurchaseWhatsAppMessage
+                    }
+                    disabled={copyingWhatsApp}
+                    className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      whatsappCopied
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-[#CFE5DA] bg-white text-[#315E50] hover:border-[#AFCFC1] hover:bg-[#F4F9F6]"
+                    }`}
+                  >
+                    {whatsappCopied ? (
+                      <Check size={16} />
+                    ) : (
+                      <Copy size={16} />
+                    )}
+                    {copyingWhatsApp
+                      ? "Menyalin..."
+                      : whatsappCopied
+                      ? "Tersalin"
+                      : "Salin Pesan"}
                   </button>
 
                   <button
@@ -3382,6 +3512,30 @@ export default function DetailPurchase() {
               >
                 <WhatsAppIcon />
                 Kirim WhatsApp
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  copyPurchaseWhatsAppMessage
+                }
+                disabled={copyingWhatsApp}
+                className={`inline-flex items-center gap-2 rounded-xl border px-5 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                  whatsappCopied
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-[#CFE5DA] bg-white text-[#315E50] hover:border-[#AFCFC1] hover:bg-[#F5F8F6]"
+                }`}
+              >
+                {whatsappCopied ? (
+                  <Check size={17} />
+                ) : (
+                  <Copy size={17} />
+                )}
+                {copyingWhatsApp
+                  ? "Menyalin..."
+                  : whatsappCopied
+                  ? "Pesan Tersalin"
+                  : "Salin Pesan WhatsApp"}
               </button>
 
               <button

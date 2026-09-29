@@ -28,6 +28,7 @@ export default function BarangPage() {
   const [search, setSearch] = useState("");
   const [source, setSource] = useState("CENTRAL");
   const [openImport, setOpenImport] = useState(false);
+  const [openTambahBarang, setOpenTambahBarang] = useState(false);
   const [loading, setLoading] = useState(false);
 
   /*
@@ -1312,56 +1313,24 @@ export default function BarangPage() {
       </div>
 
       {/* =====================================================
-          TAMBAH BARANG
+          ACTION TAMBAH BARANG
       ===================================================== */}
 
       {source !== "OUTLET" && (
-        <div
-          className="
-            mb-6
-            rounded-2xl
-            border
-            border-[#DDE9E4]
-            bg-white
-            p-5
-            shadow-sm
-            md:p-6
-          "
-        >
-
-          <div className="mb-5 flex items-center gap-3">
-
-            <div
-              className="
-                flex
-                h-10
-                w-10
-                items-center
-                justify-center
-                rounded-xl
-                bg-[#EAF3EF]
-                text-[#497F70]
-              "
-            >
+        <div className="mb-6 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setOpenTambahBarang(true)}
+            className="group inline-flex items-center gap-3 rounded-2xl border border-emerald-700/10 bg-gradient-to-r from-[#18352D] via-[#2F6253] to-[#497F70] px-5 py-3 text-sm font-bold text-white shadow-[0_12px_30px_-12px_rgba(24,53,45,0.55)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_34px_-12px_rgba(24,53,45,0.65)] active:translate-y-0"
+          >
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/20 transition group-hover:bg-white/20">
               <Plus size={19} />
-            </div>
-
-            <div>
-
-              <h2 className="font-semibold text-[#18352D]">
-                Tambah Barang
-              </h2>
-
-              <p className="mt-0.5 text-xs text-gray-500">
-                Tambahkan barang baru ke master inventory pusat
-              </p>
-
-            </div>
-
-          </div>
-
-          <BarangForm reload={loadBarang} />
-
+            </span>
+            <span className="text-left">
+              <span className="block leading-5">Tambah Barang</span>
+              <span className="block text-[10px] font-medium text-white/70">Buat master barang baru</span>
+            </span>
+          </button>
         </div>
       )}
 
@@ -1837,6 +1806,74 @@ export default function BarangPage() {
         </div>
 
       </div>
+
+      {/* =====================================================
+          TAMBAH BARANG — PREMIUM MODAL
+      ===================================================== */}
+
+      {openTambahBarang && source !== "OUTLET" && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tambah-barang-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOpenTambahBarang(false);
+          }}
+        >
+          <div className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[26px] border border-white/70 bg-white shadow-[0_30px_90px_-30px_rgba(15,23,42,0.55)]">
+            <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-blue-500" />
+
+            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 bg-gradient-to-br from-slate-50 via-white to-emerald-50/50 px-5 py-4 sm:px-6 sm:py-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#18352D] to-[#497F70] text-white shadow-lg shadow-emerald-900/15">
+                  <Plus size={21} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 id="tambah-barang-title" className="truncate text-lg font-bold tracking-tight text-[#18352D] sm:text-xl">
+                      Tambah Barang
+                    </h2>
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-700">
+                      Master Data
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">
+                    Buat data barang baru untuk inventory pusat.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setOpenTambahBarang(false)}
+                aria-label="Tutup form tambah barang"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+              >
+                <X size={19} />
+              </button>
+            </div>
+
+            <div className="min-h-0 overflow-y-auto bg-white p-4 sm:p-6">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3 sm:p-5">
+                <BarangForm
+                  reload={async () => {
+                    await loadBarang();
+                    setOpenTambahBarang(false);
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2 border-t border-slate-100 bg-slate-50/80 px-5 py-3 text-[11px] text-slate-500 sm:px-6">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-700">
+                ✓
+              </span>
+              Lengkapi data barang dengan benar sebelum menyimpan.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* =====================================================
           IMPORT MODAL

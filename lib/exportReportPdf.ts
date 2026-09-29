@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+
 import { COMPANY } from "@/lib/company";
 
 // =====================================================
@@ -20,6 +21,8 @@ import { COMPANY } from "@/lib/company";
 // - Automatic page numbering
 // - Multi-page safe
 // - Safe filename
+// - Automatic A4 portrait / landscape
+// - Responsive table column sizing
 //
 // EXPORTS
 // -----------------------------------------------------
@@ -36,14 +39,11 @@ import { COMPANY } from "@/lib/company";
 const COLORS = {
   dark: [22, 45, 38] as [number, number, number],
   dark2: [36, 70, 59] as [number, number, number],
-
   green: [58, 119, 98] as [number, number, number],
   greenDark: [42, 91, 74] as [number, number, number],
   greenMid: [91, 143, 123] as [number, number, number],
-
   greenLight: [233, 243, 238] as [number, number, number],
   greenPale: [247, 250, 248] as [number, number, number],
-
   ivory: [250, 249, 246] as [number, number, number],
 
   blue: [61, 106, 157] as [number, number, number],
@@ -75,7 +75,7 @@ const COLORS = {
 // BASIC HELPERS
 // =====================================================
 
-function parseNumericValue(value: any) {
+function parseNumericValue(value: any): number {
   if (
     value === null ||
     value === undefined ||
@@ -94,7 +94,6 @@ function parseNumericValue(value: any) {
     return 0;
   }
 
-  // Support Indonesian currency:
   // Rp 25.000
   // Rp 25.000,50
   if (/^rp\s*/i.test(text)) {
@@ -105,43 +104,44 @@ function parseNumericValue(value: any) {
 
     const number = Number(cleaned);
 
-    return Number.isFinite(number)
-      ? number
-      : 0;
+    return Number.isFinite(number) ? number : 0;
   }
 
-  // Support formatted number such as:
-  // 25.000
   // 25.000,50
-  if (
-    text.includes(".") &&
-    text.includes(",")
-  ) {
+  if (text.includes(".") && text.includes(",")) {
     const cleaned = text
       .replace(/\./g, "")
       .replace(/,/g, ".");
 
     const number = Number(cleaned);
 
-    return Number.isFinite(number)
-      ? number
-      : 0;
+    return Number.isFinite(number) ? number : 0;
+  }
+
+  // 25.000
+  //
+  // Untuk angka dengan titik ribuan.
+  if (
+    /^\d{1,3}(\.\d{3})+$/.test(text)
+  ) {
+    const cleaned = text.replace(/\./g, "");
+    const number = Number(cleaned);
+
+    return Number.isFinite(number) ? number : 0;
   }
 
   const number = Number(text);
 
-  return Number.isFinite(number)
-    ? number
-    : 0;
+  return Number.isFinite(number) ? number : 0;
 }
 
-function formatRupiah(value: any) {
+function formatRupiah(value: any): string {
   const number = parseNumericValue(value);
 
   return `Rp ${number.toLocaleString("id-ID")}`;
 }
 
-function formatNumber(value: any) {
+function formatNumber(value: any): string {
   const number = Number(value ?? 0);
 
   if (!Number.isFinite(number)) {
@@ -151,7 +151,7 @@ function formatNumber(value: any) {
   return number.toLocaleString("id-ID");
 }
 
-function formatDate(value: any) {
+function formatDate(value: any): string {
   if (!value) {
     return "-";
   }
@@ -169,7 +169,7 @@ function formatDate(value: any) {
   });
 }
 
-function formatDateTime(value: any) {
+function formatDateTime(value: any): string {
   if (!value) {
     return "-";
   }
@@ -189,7 +189,7 @@ function formatDateTime(value: any) {
   });
 }
 
-function safeFileName(value: string) {
+function safeFileName(value: string): string {
   return String(value || "Laporan")
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, "-")
     .replace(/\s+/g, " ")
@@ -197,13 +197,13 @@ function safeFileName(value: string) {
     .slice(0, 150);
 }
 
-function upper(value: any) {
+function upper(value: any): string {
   return String(value ?? "")
     .trim()
     .toUpperCase();
 }
 
-function cleanText(value: any) {
+function cleanText(value: any): string {
   if (
     value === null ||
     value === undefined ||
@@ -219,18 +219,15 @@ function truncateText(
   doc: jsPDF,
   value: string,
   maxWidth: number
-) {
+): string {
   let result = value;
 
-  if (
-    doc.getTextWidth(result) <= maxWidth
-  ) {
+  if (doc.getTextWidth(result) <= maxWidth) {
     return result;
   }
 
   while (
-    doc.getTextWidth(`${result}...`) >
-      maxWidth &&
+    doc.getTextWidth(`${result}...`) > maxWidth &&
     result.length > 4
   ) {
     result = result.slice(0, -1);
@@ -246,15 +243,15 @@ function truncateText(
 function findColumn(
   columns: string[],
   candidates: string[]
-) {
-  const normalizedColumns =
-    columns.map((column) => upper(column));
+): number {
+  const normalizedColumns = columns.map((column) =>
+    upper(column)
+  );
 
   for (const candidate of candidates) {
-    const index =
-      normalizedColumns.indexOf(
-        upper(candidate)
-      );
+    const index = normalizedColumns.indexOf(
+      upper(candidate)
+    );
 
     if (index >= 0) {
       return index;
@@ -267,18 +264,16 @@ function findColumn(
 function findColumnContains(
   columns: string[],
   candidates: string[]
-) {
-  const normalizedColumns =
-    columns.map((column) => upper(column));
+): number {
+  const normalizedColumns = columns.map((column) =>
+    upper(column)
+  );
 
   for (const candidate of candidates) {
-    const index =
-      normalizedColumns.findIndex(
-        (column) =>
-          column.includes(
-            upper(candidate)
-          )
-      );
+    const index = normalizedColumns.findIndex(
+      (column) =>
+        column.includes(upper(candidate))
+    );
 
     if (index >= 0) {
       return index;
@@ -290,7 +285,7 @@ function findColumnContains(
 
 function isCurrencyColumn(
   columnName: string
-) {
+): boolean {
   const value = upper(columnName);
 
   if (isQuantityColumn(value)) {
@@ -317,7 +312,7 @@ function isCurrencyColumn(
 
 function isQuantityColumn(
   columnName: string
-) {
+): boolean {
   const value = upper(columnName);
 
   return (
@@ -331,7 +326,7 @@ function isQuantityColumn(
 
 function isDateColumn(
   columnName: string
-) {
+): boolean {
   const value = upper(columnName);
 
   return (
@@ -344,12 +339,71 @@ function isDateColumn(
 
 function isStatusColumn(
   columnName: string
-) {
+): boolean {
   const value = upper(columnName);
 
   return (
     value.includes("STATUS") ||
     value.includes("STATE")
+  );
+}
+
+// =====================================================
+// TEXT / NAME COLUMN
+// =====================================================
+
+function isNameColumn(
+  columnName: string
+): boolean {
+  const value = upper(columnName);
+
+  return (
+    value.includes("NAMA BARANG") ||
+    value === "BARANG" ||
+    value.includes("NAMA") ||
+    value.includes("DESCRIPTION") ||
+    value.includes("DESKRIPSI") ||
+    value.includes("KETERANGAN") ||
+    value.includes("REMARK") ||
+    value.includes("CATATAN") ||
+    value.includes("ITEM") ||
+    value.includes("MENU")
+  );
+}
+
+function isCodeColumn(
+  columnName: string
+): boolean {
+  const value = upper(columnName);
+
+  return (
+    value.includes("KODE") ||
+    value === "CODE" ||
+    value.includes("SKU")
+  );
+}
+
+function isUnitColumn(
+  columnName: string
+): boolean {
+  const value = upper(columnName);
+
+  return (
+    value === "UNIT" ||
+    value === "SATUAN"
+  );
+}
+
+function isNumberColumn(
+  columnName: string
+): boolean {
+  const value = upper(columnName);
+
+  return (
+    value === "NO" ||
+    value === "#" ||
+    value === "NO." ||
+    value.includes("INDEX")
   );
 }
 
@@ -425,16 +479,18 @@ function getStatusStyle(status: string) {
 function detectDateRange(
   columns: string[],
   rows: any[][]
-) {
-  const dateIndex =
-    findColumnContains(columns, [
+): string {
+  const dateIndex = findColumnContains(
+    columns,
+    [
       "TANGGAL",
       "DATE",
       "WAKTU",
       "RECEIVED",
       "RECEIPT",
       "CREATED",
-    ]);
+    ]
+  );
 
   if (dateIndex < 0) {
     return "Semua Periode";
@@ -446,9 +502,7 @@ function detectDateRange(
     .map((value) => {
       const date = new Date(value);
 
-      if (
-        Number.isNaN(date.getTime())
-      ) {
+      if (Number.isNaN(date.getTime())) {
         return null;
       }
 
@@ -478,16 +532,16 @@ function detectDateRange(
     return formatDate(minDate);
   }
 
-  return `${formatDate(
-    minDate
-  )} - ${formatDate(maxDate)}`;
+  return `${formatDate(minDate)} - ${formatDate(
+    maxDate
+  )}`;
 }
 
 // =====================================================
 // REPORT ID
 // =====================================================
 
-function generateReportId() {
+function generateReportId(): string {
   return new Date()
     .getTime()
     .toString()
@@ -506,7 +560,7 @@ function drawPremiumHeader(
   marginLeft: number,
   marginRight: number,
   reportCategory: string
-) {
+): number {
   const pageWidth =
     doc.internal.pageSize.getWidth();
 
@@ -529,8 +583,9 @@ function drawPremiumHeader(
     "F"
   );
 
-  // Thin secondary accent
-  doc.setFillColor(...COLORS.greenLight);
+  doc.setFillColor(
+    ...COLORS.greenLight
+  );
 
   doc.rect(
     0,
@@ -580,7 +635,9 @@ function drawPremiumHeader(
 
   doc.setFontSize(6.8);
 
-  doc.setTextColor(...COLORS.greenDark);
+  doc.setTextColor(
+    ...COLORS.greenDark
+  );
 
   doc.text(
     upper(reportCategory),
@@ -708,7 +765,6 @@ function drawPremiumHeader(
     "F"
   );
 
-  // Small accent
   doc.setFillColor(...COLORS.green);
 
   doc.roundedRect(
@@ -721,7 +777,8 @@ function drawPremiumHeader(
     "F"
   );
 
-  // Period label
+  // Period
+
   doc.setFont(
     "helvetica",
     "bold"
@@ -753,12 +810,11 @@ function drawPremiumHeader(
   );
 
   // Divider
+
   const dividerX =
     marginLeft + 100;
 
-  doc.setDrawColor(
-    ...COLORS.border
-  );
+  doc.setDrawColor(...COLORS.border);
 
   doc.line(
     dividerX,
@@ -768,6 +824,7 @@ function drawPremiumHeader(
   );
 
   // Printed
+
   doc.setFont(
     "helvetica",
     "bold"
@@ -1021,7 +1078,9 @@ function finalizePageNumbers(
       "bold"
     );
 
-    doc.setTextColor(...COLORS.dark2);
+    doc.setTextColor(
+      ...COLORS.dark2
+    );
 
     doc.text(
       `Page ${page} of ${totalPages}`,
@@ -1047,12 +1106,9 @@ function drawKpiCard(
   value: string,
   accent: [number, number, number]
 ) {
-  // Outer
   doc.setFillColor(...COLORS.white);
 
-  doc.setDrawColor(
-    ...COLORS.border
-  );
+  doc.setDrawColor(...COLORS.border);
 
   doc.setLineWidth(0.25);
 
@@ -1066,7 +1122,6 @@ function drawKpiCard(
     "FD"
   );
 
-  // Accent bar
   doc.setFillColor(...accent);
 
   doc.roundedRect(
@@ -1079,7 +1134,6 @@ function drawKpiCard(
     "F"
   );
 
-  // Label
   doc.setFont(
     "helvetica",
     "bold"
@@ -1095,7 +1149,6 @@ function drawKpiCard(
     y + 6.5
   );
 
-  // Value
   doc.setFont(
     "helvetica",
     "bold"
@@ -1128,7 +1181,6 @@ function drawKpiCard(
     y + 15
   );
 
-  // Bottom accent dot
   doc.setFillColor(...accent);
 
   doc.circle(
@@ -1147,15 +1199,14 @@ function buildGenericSummary(
   columns: string[],
   rows: any[][]
 ) {
-  const qtyExact =
-    findColumn(
-      columns,
-      [
-        "Qty",
-        "Quantity",
-        "Jumlah",
-      ]
-    );
+  const qtyExact = findColumn(
+    columns,
+    [
+      "Qty",
+      "Quantity",
+      "Jumlah",
+    ]
+  );
 
   const qtyIndex =
     qtyExact >= 0
@@ -1196,8 +1247,8 @@ function buildGenericSummary(
     totalQty = rows.reduce(
       (sum, row) =>
         sum +
-        Number(
-          row[qtyIndex] ?? 0
+        parseNumericValue(
+          row[qtyIndex]
         ),
       0
     );
@@ -1241,6 +1292,668 @@ function buildGenericSummary(
 }
 
 // =====================================================
+// AUTOMATIC ORIENTATION
+// =====================================================
+//
+// Portrait:
+// - <= 6 columns
+//
+// Landscape:
+// - >= 7 columns
+//
+// Additional rule:
+// - Long table headers / content can force landscape
+//
+// =====================================================
+
+function shouldUseLandscape(
+  columns: string[],
+  rows: any[][]
+): boolean {
+  if (columns.length >= 7) {
+    return true;
+  }
+
+  const longHeader = columns.some(
+    (column) =>
+      String(column ?? "").length >= 22
+  );
+
+  if (
+    columns.length >= 6 &&
+    longHeader
+  ) {
+    return true;
+  }
+
+  const longestRowText = rows
+    .slice(0, 30)
+    .reduce(
+      (max, row) => {
+        const length = row.reduce(
+          (sum: number, value: any) =>
+            sum +
+            String(value ?? "").length,
+          0
+        );
+
+        return Math.max(
+          max,
+          length
+        );
+      },
+      0
+    );
+
+  if (
+    columns.length >= 6 &&
+    longestRowText > 180
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+// =====================================================
+// AUTOMATIC COLUMN WIDTH
+// =====================================================
+//
+// IMPORTANT:
+//
+// Tidak lagi menggunakan:
+//
+// contentWidth / columns.length
+//
+// karena metode tersebut membuat:
+// - Nama Barang terlalu sempit
+// - Kode terlalu lebar
+// - Qty terlalu lebar
+// - Harga tidak proporsional
+//
+// Sekarang setiap kolom mempunyai "weight".
+// Kemudian seluruh weight dinormalisasi ke
+// contentWidth.
+//
+// =====================================================
+
+function buildAutomaticColumnStyles(
+  doc: jsPDF,
+  columns: string[],
+  rows: any[][],
+  contentWidth: number,
+  isWide: boolean
+): Record<number, any> {
+  const count = columns.length;
+
+  if (count === 0) {
+    return {};
+  }
+
+  const weights: number[] =
+    columns.map((column) => {
+      const normalized = upper(column);
+
+      // No
+      if (isNumberColumn(normalized)) {
+        return 0.32;
+      }
+
+      // Qty
+      if (isQuantityColumn(normalized)) {
+        return 0.65;
+      }
+
+      // Currency
+      if (isCurrencyColumn(normalized)) {
+        return 1.05;
+      }
+
+      // Status
+      if (isStatusColumn(normalized)) {
+        return 0.9;
+      }
+
+      // Date
+      if (isDateColumn(normalized)) {
+        return 0.95;
+      }
+
+      // Code
+      if (isCodeColumn(normalized)) {
+        return 0.85;
+      }
+
+      // Unit
+      if (isUnitColumn(normalized)) {
+        return 0.65;
+      }
+
+      // Name / Description
+      if (isNameColumn(normalized)) {
+        return isWide ? 2.6 : 2.2;
+      }
+
+      // Generic
+      return 1.25;
+    });
+
+  // ---------------------------------------------------
+  // Content-based adjustment
+  // ---------------------------------------------------
+
+  columns.forEach(
+    (column, index) => {
+      const normalized =
+        upper(column);
+
+      if (
+        isNumberColumn(normalized) ||
+        isQuantityColumn(normalized) ||
+        isCurrencyColumn(normalized) ||
+        isStatusColumn(normalized) ||
+        isDateColumn(normalized)
+      ) {
+        return;
+      }
+
+      const samples = rows
+        .slice(0, 50)
+        .map((row) =>
+          String(
+            row[index] ?? ""
+          ).trim()
+        )
+        .filter(Boolean);
+
+      if (samples.length === 0) {
+        return;
+      }
+
+      const maxLength =
+        samples.reduce(
+          (
+            max,
+            value
+          ) =>
+            Math.max(
+              max,
+              value.length
+            ),
+          0
+        );
+
+      if (isNameColumn(normalized)) {
+        if (maxLength > 45) {
+          weights[index] *= 1.35;
+        } else if (
+          maxLength > 28
+        ) {
+          weights[index] *= 1.18;
+        }
+      } else if (
+        maxLength > 35
+      ) {
+        weights[index] *= 1.18;
+      }
+    }
+  );
+
+  // ---------------------------------------------------
+  // Min / max widths
+  // ---------------------------------------------------
+
+  const minWidths =
+    columns.map(
+      (column) => {
+        const normalized =
+          upper(column);
+
+        if (
+          isNumberColumn(
+            normalized
+          )
+        ) {
+          return 8;
+        }
+
+        if (
+          isQuantityColumn(
+            normalized
+          )
+        ) {
+          return 13;
+        }
+
+        if (
+          isCurrencyColumn(
+            normalized
+          )
+        ) {
+          return isWide ? 28 : 30;
+        }
+
+        if (
+          isStatusColumn(
+            normalized
+          )
+        ) {
+          return 23;
+        }
+
+        if (
+          isDateColumn(
+            normalized
+          )
+        ) {
+          return 24;
+        }
+
+        if (
+          isCodeColumn(
+            normalized
+          )
+        ) {
+          return 20;
+        }
+
+        if (
+          isUnitColumn(
+            normalized
+          )
+        ) {
+          return 13;
+        }
+
+        if (
+          isNameColumn(
+            normalized
+          )
+        ) {
+          return isWide ? 35 : 30;
+        }
+
+        return 18;
+      }
+    );
+
+  const maxWidths =
+    columns.map(
+      (column) => {
+        const normalized =
+          upper(column);
+
+        if (
+          isNumberColumn(
+            normalized
+          )
+        ) {
+          return 12;
+        }
+
+        if (
+          isQuantityColumn(
+            normalized
+          )
+        ) {
+          return 22;
+        }
+
+        if (
+          isCurrencyColumn(
+            normalized
+          )
+        ) {
+          return isWide ? 42 : 42;
+        }
+
+        if (
+          isStatusColumn(
+            normalized
+          )
+        ) {
+          return 34;
+        }
+
+        if (
+          isDateColumn(
+            normalized
+          )
+        ) {
+          return 32;
+        }
+
+        if (
+          isCodeColumn(
+            normalized
+          )
+        ) {
+          return 32;
+        }
+
+        if (
+          isUnitColumn(
+            normalized
+          )
+        ) {
+          return 20;
+        }
+
+        if (
+          isNameColumn(
+            normalized
+          )
+        ) {
+          return isWide ? 95 : 70;
+        }
+
+        return isWide ? 65 : 55;
+      }
+    );
+
+  // ---------------------------------------------------
+  // First allocation
+  // ---------------------------------------------------
+
+  const totalWeight =
+    weights.reduce(
+      (sum, weight) =>
+        sum + weight,
+      0
+    );
+
+  let widths =
+    weights.map(
+      (weight) =>
+        (contentWidth *
+          weight) /
+        totalWeight
+    );
+
+  // ---------------------------------------------------
+  // Clamp min / max
+  // ---------------------------------------------------
+
+  widths =
+    widths.map(
+      (width, index) =>
+        Math.min(
+          maxWidths[index],
+          Math.max(
+            minWidths[index],
+            width
+          )
+        )
+    );
+
+  // ---------------------------------------------------
+  // Normalize widths exactly to content width
+  // ---------------------------------------------------
+
+  function normalizeWidths() {
+    const total =
+      widths.reduce(
+        (sum, width) =>
+          sum + width,
+        0
+      );
+
+    const difference =
+      contentWidth - total;
+
+    if (
+      Math.abs(difference) <
+      0.01
+    ) {
+      return;
+    }
+
+    // Jika masih kurang, distribusikan
+    // ke kolom yang masih bisa melebar.
+
+    if (difference > 0) {
+      let remaining =
+        difference;
+
+      for (
+        let pass = 0;
+        pass < 3 &&
+        remaining > 0.01;
+        pass++
+      ) {
+        const expandable =
+          widths
+            .map(
+              (
+                width,
+                index
+              ) => ({
+                index,
+                room:
+                  maxWidths[
+                    index
+                  ] - width,
+              })
+            )
+            .filter(
+              (item) =>
+                item.room >
+                0.01
+            );
+
+        if (
+          expandable.length ===
+          0
+        ) {
+          break;
+        }
+
+        const share =
+          remaining /
+          expandable.length;
+
+        for (
+          const item of expandable
+        ) {
+          const add =
+            Math.min(
+              share,
+              item.room
+            );
+
+          widths[
+            item.index
+          ] += add;
+
+          remaining -= add;
+        }
+      }
+    }
+
+    // Jika terlalu besar, kurangi
+    // dari kolom yang masih bisa mengecil.
+
+    if (difference < 0) {
+      let remaining =
+        Math.abs(
+          difference
+        );
+
+      for (
+        let pass = 0;
+        pass < 5 &&
+        remaining > 0.01;
+        pass++
+      ) {
+        const shrinkable =
+          widths
+            .map(
+              (
+                width,
+                index
+              ) => ({
+                index,
+                room:
+                  width -
+                  minWidths[
+                    index
+                  ],
+              })
+            )
+            .filter(
+              (item) =>
+                item.room >
+                0.01
+            );
+
+        if (
+          shrinkable.length ===
+          0
+        ) {
+          break;
+        }
+
+        const share =
+          remaining /
+          shrinkable.length;
+
+        for (
+          const item of shrinkable
+        ) {
+          const subtract =
+            Math.min(
+              share,
+              item.room
+            );
+
+          widths[
+            item.index
+          ] -= subtract;
+
+          remaining -= subtract;
+        }
+      }
+    }
+  }
+
+  normalizeWidths();
+
+  // ---------------------------------------------------
+  // Final emergency normalization
+  // ---------------------------------------------------
+
+  const finalTotal =
+    widths.reduce(
+      (sum, width) =>
+        sum + width,
+      0
+    );
+
+  if (
+    finalTotal > 0 &&
+    Math.abs(
+      finalTotal -
+        contentWidth
+    ) > 0.1
+  ) {
+    const factor =
+      contentWidth /
+      finalTotal;
+
+    widths =
+      widths.map(
+        (width) =>
+          width * factor
+      );
+  }
+
+  // ---------------------------------------------------
+  // Build styles
+  // ---------------------------------------------------
+
+  const columnStyles: Record<
+    number,
+    any
+  > = {};
+
+  columns.forEach(
+    (column, index) => {
+      const normalized =
+        upper(column);
+
+      const style: any = {
+        cellWidth:
+          Number(
+            widths[index].toFixed(
+              2
+            )
+          ),
+      };
+
+      if (
+        isNumberColumn(
+          normalized
+        )
+      ) {
+        style.halign =
+          "center";
+      } else if (
+        isQuantityColumn(
+          normalized
+        )
+      ) {
+        style.halign =
+          "right";
+        style.fontStyle =
+          "bold";
+      } else if (
+        isCurrencyColumn(
+          normalized
+        )
+      ) {
+        style.halign =
+          "right";
+      } else if (
+        isStatusColumn(
+          normalized
+        )
+      ) {
+        style.halign =
+          "center";
+      } else if (
+        isDateColumn(
+          normalized
+        )
+      ) {
+        style.halign =
+          "center";
+      } else if (
+        isUnitColumn(
+          normalized
+        )
+      ) {
+        style.halign =
+          "center";
+      }
+
+      if (
+        isNameColumn(
+          normalized
+        )
+      ) {
+        style.fontStyle =
+          "normal";
+      }
+
+      columnStyles[index] =
+        style;
+    }
+  );
+
+  return columnStyles;
+}
+
+// =====================================================
 // GENERIC PREMIUM REPORT
 // =====================================================
 
@@ -1250,11 +1963,18 @@ export function exportReportPdf(
   rows: any[][]
 ) {
   // ===================================================
-  // DOCUMENT
+  // AUTOMATIC ORIENTATION
   // ===================================================
 
   const isWide =
-    columns.length >= 7;
+    shouldUseLandscape(
+      columns,
+      rows
+    );
+
+  // ===================================================
+  // DOCUMENT
+  // ===================================================
 
   const doc = new jsPDF(
     isWide ? "l" : "p",
@@ -1268,11 +1988,14 @@ export function exportReportPdf(
   const pageHeight =
     doc.internal.pageSize.getHeight();
 
+  // Landscape gets tighter margins
+  // to maximize table width.
+
   const marginLeft =
-    isWide ? 12 : 14;
+    isWide ? 9 : 14;
 
   const marginRight =
-    isWide ? 12 : 14;
+    isWide ? 9 : 14;
 
   const contentWidth =
     pageWidth -
@@ -1366,7 +2089,8 @@ export function exportReportPdf(
 
   const cardWidth =
     (contentWidth -
-      gap * (cardCount - 1)) /
+      gap *
+        (cardCount - 1)) /
     cardCount;
 
   drawKpiCard(
@@ -1399,7 +2123,8 @@ export function exportReportPdf(
     drawKpiCard(
       doc,
       marginLeft +
-        (cardWidth + gap) * 2,
+        (cardWidth + gap) *
+          2,
       currentY,
       cardWidth,
       "Status",
@@ -1412,7 +2137,8 @@ export function exportReportPdf(
     drawKpiCard(
       doc,
       marginLeft +
-        (cardWidth + gap) * 3,
+        (cardWidth + gap) *
+          3,
       currentY,
       cardWidth,
       "Grand Total",
@@ -1483,7 +2209,9 @@ export function exportReportPdf(
 
     doc.setFontSize(12);
 
-    doc.setTextColor(...COLORS.dark);
+    doc.setTextColor(
+      ...COLORS.dark
+    );
 
     doc.text(
       "Tidak Ada Data",
@@ -1501,7 +2229,9 @@ export function exportReportPdf(
 
     doc.setFontSize(8);
 
-    doc.setTextColor(...COLORS.muted);
+    doc.setTextColor(
+      ...COLORS.muted
+    );
 
     doc.text(
       "Tidak terdapat transaksi atau data pada periode yang dipilih.",
@@ -1519,7 +2249,9 @@ export function exportReportPdf(
     );
 
     doc.save(
-      `${safeFileName(title)}.pdf`
+      `${safeFileName(
+        title
+      )}.pdf`
     );
 
     return;
@@ -1538,105 +2270,17 @@ export function exportReportPdf(
     );
 
   // ===================================================
-  // COLUMN WIDTH
+  // AUTOMATIC COLUMN WIDTH
   // ===================================================
 
-  const dynamicCellWidth =
-    contentWidth /
-    Math.max(
-      columns.length,
-      1
+  const columnStyles =
+    buildAutomaticColumnStyles(
+      doc,
+      columns,
+      rows,
+      contentWidth,
+      isWide
     );
-
-  const columnStyles: Record<
-    number,
-    any
-  > = {};
-
-  columns.forEach(
-    (column, index) => {
-      const normalized =
-        upper(column);
-
-      if (
-        normalized === "NO" ||
-        normalized === "#" ||
-        normalized === "NO."
-      ) {
-        columnStyles[index] = {
-          cellWidth: Math.min(
-            10,
-            dynamicCellWidth
-          ),
-          halign: "center",
-        };
-
-        return;
-      }
-
-      if (
-        isQuantityColumn(column)
-      ) {
-        columnStyles[index] = {
-          cellWidth: Math.min(
-            20,
-            dynamicCellWidth
-          ),
-          halign: "right",
-          fontStyle: "bold",
-        };
-
-        return;
-      }
-
-      if (
-        isCurrencyColumn(column)
-      ) {
-        columnStyles[index] = {
-          cellWidth: Math.min(
-            35,
-            dynamicCellWidth * 1.4
-          ),
-          halign: "right",
-        };
-
-        return;
-      }
-
-      if (
-        isStatusColumn(column)
-      ) {
-        columnStyles[index] = {
-          cellWidth: Math.min(
-            27,
-            dynamicCellWidth * 1.2
-          ),
-          halign: "center",
-        };
-
-        return;
-      }
-
-      if (
-        isDateColumn(column)
-      ) {
-        columnStyles[index] = {
-          cellWidth: Math.min(
-            27,
-            dynamicCellWidth * 1.2
-          ),
-          halign: "center",
-        };
-
-        return;
-      }
-
-      columnStyles[index] = {
-        cellWidth:
-          dynamicCellWidth,
-      };
-    }
-  );
 
   // ===================================================
   // TABLE
@@ -1659,6 +2303,8 @@ export function exportReportPdf(
 
     theme: "plain",
 
+    tableWidth: contentWidth,
+
     margin: {
       left: marginLeft,
       right: marginRight,
@@ -1670,14 +2316,14 @@ export function exportReportPdf(
       font: "helvetica",
 
       fontSize: isWide
-        ? 7
-        : 7.4,
+        ? 6.8
+        : 7.2,
 
       cellPadding: {
-        top: 2.1,
-        right: 2.4,
-        bottom: 2.1,
-        left: 2.4,
+        top: isWide ? 1.8 : 2.1,
+        right: isWide ? 1.8 : 2.2,
+        bottom: isWide ? 1.8 : 2.1,
+        left: isWide ? 1.8 : 2.2,
       },
 
       textColor:
@@ -1690,7 +2336,11 @@ export function exportReportPdf(
 
       valign: "middle",
 
-      overflow: "linebreak",
+      overflow:
+        "linebreak",
+
+      minCellHeight:
+        isWide ? 5.5 : 6,
     },
 
     headStyles: {
@@ -1700,21 +2350,24 @@ export function exportReportPdf(
       textColor:
         COLORS.white,
 
-      fontStyle: "bold",
+      fontStyle:
+        "bold",
 
       fontSize: isWide
-        ? 6.6
-        : 6.9,
+        ? 6.3
+        : 6.8,
 
-      halign: "center",
+      halign:
+        "center",
 
-      valign: "middle",
+      valign:
+        "middle",
 
       cellPadding: {
-        top: 2.8,
-        right: 2,
-        bottom: 2.8,
-        left: 2,
+        top: isWide ? 2.5 : 2.8,
+        right: 1.8,
+        bottom: isWide ? 2.5 : 2.8,
+        left: 1.8,
       },
     },
 
@@ -1829,7 +2482,17 @@ export function exportReportPdf(
 
         data.cell.styles.halign =
           "center";
+
+        return;
       }
+
+      // ------------------------------------------------
+      // GENERAL TEXT
+      // ------------------------------------------------
+
+      data.cell.text = [
+        cleanText(raw),
+      ];
     },
 
     didDrawPage() {
@@ -1867,7 +2530,9 @@ export function exportReportPdf(
   );
 
   doc.save(
-    `${safeFileName(title)}.pdf`
+    `${safeFileName(
+      title
+    )}.pdf`
   );
 }
 
@@ -2093,8 +2758,8 @@ export function exportPurchaseReportPdf(
     rows.reduce(
       (sum, row) =>
         sum +
-        Number(
-          row[qtyIndex] ?? 0
+        parseNumericValue(
+          row[qtyIndex]
         ),
       0
     );
@@ -2175,6 +2840,7 @@ export function exportPurchaseReportPdf(
     2;
 
   // Row 1
+
   drawKpiCard(
     doc,
     marginLeft,
@@ -2202,6 +2868,7 @@ export function exportPurchaseReportPdf(
   );
 
   // Row 2
+
   currentY += 24;
 
   drawKpiCard(
@@ -2272,7 +2939,9 @@ export function exportPurchaseReportPdf(
 
     doc.setFontSize(12);
 
-    doc.setTextColor(...COLORS.dark);
+    doc.setTextColor(
+      ...COLORS.dark
+    );
 
     doc.text(
       "Tidak Ada Data Purchase",
@@ -2290,7 +2959,9 @@ export function exportPurchaseReportPdf(
 
     doc.setFontSize(8);
 
-    doc.setTextColor(...COLORS.muted);
+    doc.setTextColor(
+      ...COLORS.muted
+    );
 
     doc.text(
       "Tidak terdapat transaksi purchase pada periode yang dipilih.",
@@ -2308,7 +2979,9 @@ export function exportPurchaseReportPdf(
     );
 
     doc.save(
-      `${safeFileName(title)}.pdf`
+      `${safeFileName(
+        title
+      )}.pdf`
     );
 
     return;
@@ -2340,10 +3013,10 @@ export function exportPurchaseReportPdf(
       supplierRows.reduce(
         (sum, row) =>
           sum +
-          Number(
+          parseNumericValue(
             row[
               qtyIndex
-            ] ?? 0
+            ]
           ),
         0
       );
@@ -2361,6 +3034,7 @@ export function exportPurchaseReportPdf(
       ).size;
 
     // Main block
+
     doc.setFillColor(
       ...COLORS.dark
     );
@@ -2376,6 +3050,7 @@ export function exportPurchaseReportPdf(
     );
 
     // Number badge
+
     doc.setFillColor(
       ...COLORS.green
     );
@@ -2411,6 +3086,7 @@ export function exportPurchaseReportPdf(
     );
 
     // Supplier name
+
     const nameStartX =
       marginLeft + 30;
 
@@ -2449,6 +3125,7 @@ export function exportPurchaseReportPdf(
     );
 
     // Stats
+
     doc.setFont(
       "helvetica",
       "normal"
@@ -2554,20 +3231,20 @@ export function exportPurchaseReportPdf(
       );
 
     // =================================================
-    // PORTRAIT WIDTH
+    // PURCHASE WIDTH
     // =================================================
     //
-    // 6 + 19 + 19 + 21 + 43
-    // + 11 + 12 + 29 + 29
-    // = 189mm
+    // Content A4 portrait = 190mm
     //
-    // Content = 190mm
+    // Width dibuat tepat 190mm.
+    //
+    // Nama Barang mendapat ruang paling besar.
     //
     // =================================================
 
     const purchaseColumnStyles = {
       0: {
-        cellWidth: 6,
+        cellWidth: 7,
         halign:
           "center" as const,
       },
@@ -2587,21 +3264,21 @@ export function exportPurchaseReportPdf(
       },
 
       3: {
-        cellWidth: 21,
+        cellWidth: 22,
       },
 
       4: {
-        cellWidth: 43,
+        cellWidth: 45,
       },
 
       5: {
-        cellWidth: 11,
+        cellWidth: 12,
         halign:
           "center" as const,
       },
 
       6: {
-        cellWidth: 12,
+        cellWidth: 13,
         halign:
           "right" as const,
         fontStyle:
@@ -2609,13 +3286,13 @@ export function exportPurchaseReportPdf(
       },
 
       7: {
-        cellWidth: 29,
+        cellWidth: 26,
         halign:
           "right" as const,
       },
 
       8: {
-        cellWidth: 29,
+        cellWidth: 27,
         halign:
           "right" as const,
         fontStyle:
@@ -2649,6 +3326,9 @@ export function exportPurchaseReportPdf(
 
       theme: "plain",
 
+      tableWidth:
+        contentWidth,
+
       margin: {
         left: marginLeft,
         right: marginRight,
@@ -2663,9 +3343,9 @@ export function exportPurchaseReportPdf(
 
         cellPadding: {
           top: 1.75,
-          right: 1.35,
+          right: 1.25,
           bottom: 1.75,
-          left: 1.35,
+          left: 1.25,
         },
 
         textColor:
@@ -2676,7 +3356,8 @@ export function exportPurchaseReportPdf(
 
         lineWidth: 0.12,
 
-        valign: "middle",
+        valign:
+          "middle",
 
         overflow:
           "linebreak",
@@ -2733,9 +3414,7 @@ export function exportPurchaseReportPdf(
           return;
         }
 
-        // ------------------------------------------------
         // QTY
-        // ------------------------------------------------
 
         if (
           data.column.index ===
@@ -2753,9 +3432,7 @@ export function exportPurchaseReportPdf(
             "right";
         }
 
-        // ------------------------------------------------
         // PRICE
-        // ------------------------------------------------
 
         if (
           data.column.index ===
@@ -2773,9 +3450,7 @@ export function exportPurchaseReportPdf(
             "right";
         }
 
-        // ------------------------------------------------
         // SUBTOTAL
-        // ------------------------------------------------
 
         if (
           data.column.index ===
@@ -2909,6 +3584,7 @@ export function exportPurchaseReportPdf(
       }
 
       // Total card
+
       doc.setFillColor(
         ...COLORS.greenPale
       );
@@ -2924,6 +3600,7 @@ export function exportPurchaseReportPdf(
       );
 
       // Accent
+
       doc.setFillColor(
         ...COLORS.green
       );
@@ -2939,6 +3616,7 @@ export function exportPurchaseReportPdf(
       );
 
       // Label
+
       doc.setFont(
         "helvetica",
         "bold"
@@ -2977,6 +3655,7 @@ export function exportPurchaseReportPdf(
       );
 
       // Amount
+
       doc.setFont(
         "helvetica",
         "bold"
@@ -3038,6 +3717,7 @@ export function exportPurchaseReportPdf(
   );
 
   // Left accent
+
   doc.setFillColor(
     ...COLORS.green
   );
@@ -3053,6 +3733,7 @@ export function exportPurchaseReportPdf(
   );
 
   // SUMMARY
+
   doc.setFont(
     "helvetica",
     "bold"
@@ -3073,6 +3754,7 @@ export function exportPurchaseReportPdf(
   );
 
   // Main title
+
   doc.setFont(
     "helvetica",
     "bold"
@@ -3091,6 +3773,7 @@ export function exportPurchaseReportPdf(
   );
 
   // Meta
+
   doc.setFont(
     "helvetica",
     "normal"
@@ -3137,6 +3820,7 @@ export function exportPurchaseReportPdf(
   );
 
   // Amount background
+
   const amountBoxWidth = 63;
 
   const amountBoxX =
@@ -3211,7 +3895,9 @@ export function exportPurchaseReportPdf(
   );
 
   doc.save(
-    `${safeFileName(title)}.pdf`
+    `${safeFileName(
+      title
+    )}.pdf`
   );
 }
 

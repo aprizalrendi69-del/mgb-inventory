@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
+  Copy,
   Download,
   FileSpreadsheet,
   FileText,
@@ -320,6 +321,7 @@ export default function SuratJalanDetailPage() {
     useState<number | null>(null);
   const [showReleaseModal, setShowReleaseModal] =
     useState(false);
+  const [copyingWhatsApp, setCopyingWhatsApp] = useState(false);
 
   /* =======================================================
      LOAD DETAIL
@@ -789,6 +791,57 @@ activeItems.forEach((item, index) => {
     return lines.join("\n");
   }
 
+  async function copyWhatsAppMessage() {
+    const message = buildWhatsAppMessage();
+
+    if (!message) {
+      alert("Isi pesan WhatsApp tidak tersedia.");
+      return;
+    }
+
+    try {
+      setCopyingWhatsApp(true);
+
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard &&
+        window.isSecureContext
+      ) {
+        await navigator.clipboard.writeText(message);
+      } else {
+        const textarea = document.createElement("textarea");
+
+        textarea.value = message;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        textarea.style.top = "0";
+        textarea.style.opacity = "0";
+
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        const copied = document.execCommand("copy");
+        textarea.remove();
+
+        if (!copied) {
+          throw new Error("Browser tidak mengizinkan penyalinan otomatis.");
+        }
+      }
+
+      // Berhasil disalin langsung ke clipboard tanpa popup/notifikasi.
+    } catch (error) {
+      console.error("COPY WHATSAPP MESSAGE ERROR:", error);
+
+      alert(
+        "Gagal menyalin pesan WhatsApp. Silakan coba lagi atau salin secara manual."
+      );
+    } finally {
+      setCopyingWhatsApp(false);
+    }
+  }
+
   function shareWhatsApp() {
     const message =
       buildWhatsAppMessage();
@@ -1095,6 +1148,24 @@ activeItems.forEach((item, index) => {
 
                   <span className="hidden sm:inline">
                     Print
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={copyWhatsAppMessage}
+                  disabled={copyingWhatsApp}
+                  title="Salin isi pesan WhatsApp"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-[#D9E5DF] bg-white px-4 py-3.5 text-sm font-bold text-[#35564C] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#F7FAF8] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {copyingWhatsApp ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+
+                  <span className="hidden sm:inline">
+                    {copyingWhatsApp ? "Menyalin..." : "Salin"}
                   </span>
                 </button>
 

@@ -85,7 +85,7 @@ export default function ApprovePage() {
    */
 
   const [filter, setFilter] =
-    useState<PurchaseFilter>("ALL");
+    useState<PurchaseFilter>("PUSAT");
 
   // =========================================================
   // LOAD DATA
@@ -402,7 +402,7 @@ export default function ApprovePage() {
   return (
     <div className="min-h-full bg-[#F5F8F6] text-[#18352D]">
 
-      <div className="mx-auto max-w-[1500px] p-5 md:p-8">
+      <div className="mx-auto w-full max-w-[1500px] px-3 py-4 sm:px-4 sm:py-5 lg:px-5 lg:py-6">
 
         {/* =====================================================
             HEADER
@@ -535,7 +535,7 @@ export default function ApprovePage() {
             FILTER
         ===================================================== */}
 
-        <div className="mb-7 rounded-[24px] border border-[#DDE9E4] bg-white p-4 shadow-[0_8px_30px_rgba(24,53,45,0.045)]">
+        <div className="mb-5 rounded-[24px] border border-[#DDE9E4] bg-white p-3.5 shadow-[0_8px_30px_rgba(24,53,45,0.045)] sm:p-4">
 
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 
@@ -551,26 +551,31 @@ export default function ApprovePage() {
 
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto">
 
               {/* SEMUA */}
 
               <button
                 type="button"
-                onClick={() =>
-                  setFilter("ALL")
-                }
-                className={`inline-flex h-10 items-center gap-2 rounded-xl px-4 text-xs font-bold transition ${
+                onClick={() => setFilter("ALL")}
+                className={`group inline-flex h-10 items-center gap-2 rounded-xl border px-3.5 text-[11px] font-black transition-all sm:px-4 ${
                   filter === "ALL"
-                    ? "bg-[#18352D] text-white shadow-sm"
-                    : "border border-[#D5E5DC] bg-white text-[#35564C] hover:bg-[#F2F7F4]"
+                    ? "border-[#18352D] bg-[#18352D] text-white shadow-[0_6px_18px_rgba(24,53,45,0.18)]"
+                    : "border-[#D5E5DC] bg-white text-[#35564C] hover:border-[#BFD3CA] hover:bg-[#F5F9F7]"
                 }`}
               >
-                <Receipt size={15} />
-                Semua
-
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] ${
+                  className={`flex h-6 w-6 items-center justify-center rounded-lg ${
+                    filter === "ALL"
+                      ? "bg-white/10 text-white"
+                      : "bg-[#F2F7F4] text-[#497F70]"
+                  }`}
+                >
+                  <Receipt size={13} />
+                </span>
+                <span>Semua</span>
+                <span
+                  className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-[9px] font-black ${
                     filter === "ALL"
                       ? "bg-white/15 text-white"
                       : "bg-[#F2F7F4] text-[#497F70]"
@@ -584,28 +589,31 @@ export default function ApprovePage() {
 
               <button
                 type="button"
-                onClick={() =>
-                  setFilter("PUSAT")
-                }
-                className={`inline-flex h-10 items-center gap-2 rounded-xl px-4 text-xs font-bold transition ${
+                onClick={() => setFilter("PUSAT")}
+                className={`group inline-flex h-10 items-center gap-2 rounded-xl border px-3.5 text-[11px] font-black transition-all sm:px-4 ${
                   filter === "PUSAT"
-                    ? "bg-[#497F70] text-white shadow-sm"
-                    : "border border-[#D5E5DC] bg-white text-[#35564C] hover:bg-[#F2F7F4]"
+                    ? "border-[#497F70] bg-gradient-to-r from-[#497F70] to-[#315E50] text-white shadow-[0_7px_20px_rgba(73,127,112,0.22)]"
+                    : "border-[#D5E5DC] bg-white text-[#35564C] hover:border-[#BFD3CA] hover:bg-[#F5F9F7]"
                 }`}
               >
-                <Warehouse size={15} />
-                Pusat
-
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] ${
+                  className={`flex h-6 w-6 items-center justify-center rounded-lg ${
+                    filter === "PUSAT"
+                      ? "bg-white/10 text-white"
+                      : "bg-[#EAF3EF] text-[#497F70]"
+                  }`}
+                >
+                  <Warehouse size={13} />
+                </span>
+                <span>Pusat</span>
+                <span
+                  className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-[9px] font-black ${
                     filter === "PUSAT"
                       ? "bg-white/15 text-white"
                       : "bg-[#EAF3EF] text-[#497F70]"
                   }`}
                 >
-                  {data.filter((item) =>
-                    isPusatPurchase(item)
-                  ).length}
+                  {data.filter((item) => isPusatPurchase(item)).length}
                 </span>
               </button>
 
@@ -613,28 +621,31 @@ export default function ApprovePage() {
 
               <button
                 type="button"
-                onClick={() =>
-                  setFilter("OUTLET")
-                }
-                className={`inline-flex h-10 items-center gap-2 rounded-xl px-4 text-xs font-bold transition ${
+                onClick={() => setFilter("OUTLET")}
+                className={`group inline-flex h-10 items-center gap-2 rounded-xl border px-3.5 text-[11px] font-black transition-all sm:px-4 ${
                   filter === "OUTLET"
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "border border-[#D5E5DC] bg-white text-[#35564C] hover:bg-[#F2F7F4]"
+                    ? "border-blue-600 bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-[0_7px_20px_rgba(37,99,235,0.20)]"
+                    : "border-[#D5E5DC] bg-white text-[#35564C] hover:border-blue-200 hover:bg-blue-50/40"
                 }`}
               >
-                <Store size={15} />
-                Outlet
-
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] ${
+                  className={`flex h-6 w-6 items-center justify-center rounded-lg ${
+                    filter === "OUTLET"
+                      ? "bg-white/10 text-white"
+                      : "bg-blue-50 text-blue-600"
+                  }`}
+                >
+                  <Store size={13} />
+                </span>
+                <span>Outlet</span>
+                <span
+                  className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-[9px] font-black ${
                     filter === "OUTLET"
                       ? "bg-white/15 text-white"
                       : "bg-blue-50 text-blue-700"
                   }`}
                 >
-                  {data.filter((item) =>
-                    isOutletPurchase(item)
-                  ).length}
+                  {data.filter((item) => isOutletPurchase(item)).length}
                 </span>
               </button>
 
@@ -648,7 +659,7 @@ export default function ApprovePage() {
             SUMMARY CARDS
         ===================================================== */}
 
-        <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
 
           {/* WAITING */}
 
@@ -781,11 +792,11 @@ export default function ApprovePage() {
             MAIN TABLE CARD
         ===================================================== */}
 
-        <section className="overflow-hidden rounded-[28px] border border-[#DDE9E4] bg-white shadow-[0_10px_35px_rgba(24,53,45,0.05)]">
+        <section className="overflow-hidden rounded-[24px] border border-[#DDE9E4] bg-white shadow-[0_10px_35px_rgba(24,53,45,0.05)]">
 
           {/* TABLE HEADER */}
 
-          <div className="flex flex-col gap-4 border-b border-[#E8EEEB] px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
+          <div className="flex flex-col gap-3 border-b border-[#E8EEEB] px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between lg:px-5">
 
             <div className="flex items-center gap-3">
 
@@ -811,7 +822,7 @@ export default function ApprovePage() {
 
               <span className="h-1.5 w-1.5 rounded-full bg-[#497F70]" />
 
-              {filteredData.length} PO Pending
+              {filteredData.length} PO Pending • tampilan ringkas
 
             </div>
 
@@ -819,51 +830,51 @@ export default function ApprovePage() {
 
           {/* TABLE */}
 
-          <div className="overflow-x-auto">
+          <div className="w-full overflow-hidden">
 
-            <table className="w-full min-w-[1250px] text-sm">
+            <table className="w-full table-fixed text-[12px]">
 
               <thead>
 
                 <tr className="border-b border-[#E8EEEB] bg-[#F7FAF8]">
 
-                  <th className="w-16 px-5 py-4 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#607A70]">
+                  <th className="w-[4%] px-2.5 py-3 text-left text-[9px] font-black uppercase tracking-[0.08em] text-[#607A70] lg:px-3">
                     #
                   </th>
 
-                  <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#607A70]">
+                  <th className="w-[15%] px-2.5 py-3 text-left text-[9px] font-black uppercase tracking-[0.08em] text-[#607A70] lg:px-3">
                     Purchase Order
                   </th>
 
-                  <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#607A70]">
+                  <th className="w-[9%] px-2.5 py-3 text-left text-[9px] font-black uppercase tracking-[0.08em] text-[#607A70] lg:px-3">
                     Jenis
                   </th>
 
-                  <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#607A70]">
+                  <th className="w-[14%] px-2.5 py-3 text-left text-[9px] font-black uppercase tracking-[0.08em] text-[#607A70] lg:px-3">
                     Tujuan
                   </th>
 
-                  <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#607A70]">
+                  <th className="w-[14%] px-2.5 py-3 text-left text-[9px] font-black uppercase tracking-[0.08em] text-[#607A70] lg:px-3">
                     Supplier
                   </th>
 
-                  <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#607A70]">
+                  <th className="w-[10%] px-2.5 py-3 text-left text-[9px] font-black uppercase tracking-[0.08em] text-[#607A70] lg:px-3">
                     Tanggal
                   </th>
 
-                  <th className="px-5 py-4 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#607A70]">
+                  <th className="w-[5%] px-2 py-3 text-center text-[9px] font-black uppercase tracking-[0.08em] text-[#607A70] lg:px-2.5">
                     Item
                   </th>
 
-                  <th className="px-5 py-4 text-right text-[10px] font-bold uppercase tracking-[0.1em] text-[#607A70]">
+                  <th className="w-[12%] px-2.5 py-3 text-right text-[9px] font-black uppercase tracking-[0.08em] text-[#607A70] lg:px-3">
                     Total
                   </th>
 
-                  <th className="px-5 py-4 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#607A70]">
+                  <th className="w-[8%] px-2 py-3 text-center text-[9px] font-black uppercase tracking-[0.08em] text-[#607A70] lg:px-2.5">
                     Status
                   </th>
 
-                  <th className="px-5 py-4 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#607A70]">
+                  <th className="w-[9%] px-2 py-3 text-center text-[9px] font-black uppercase tracking-[0.08em] text-[#607A70] lg:px-2.5">
                     Aksi
                   </th>
 
@@ -891,7 +902,7 @@ export default function ApprovePage() {
                           (_, index) => (
                             <td
                               key={index}
-                              className="px-5 py-5"
+                              className="px-2.5 py-3.5 lg:px-3 lg:py-4"
                             >
                               <div
                                 className={`h-4 animate-pulse rounded-lg bg-[#EEF3F0] ${
@@ -1007,7 +1018,7 @@ export default function ApprovePage() {
 
                           {/* NUMBER */}
 
-                          <td className="px-5 py-5">
+                          <td className="px-2.5 py-3.5 lg:px-3 lg:py-4">
 
                             <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#F1F6F3] text-[10px] font-bold text-[#607A70]">
                               {String(
@@ -1022,17 +1033,17 @@ export default function ApprovePage() {
 
                           {/* PO */}
 
-                          <td className="px-5 py-5">
+                          <td className="px-2.5 py-3.5 lg:px-3 lg:py-4">
 
                             <div className="flex items-center gap-3">
 
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F0F6F3] text-[#497F70]">
-                                <FileText size={17} />
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F0F6F3] text-[#497F70]">
+                                <FileText size={15} />
                               </div>
 
                               <div>
 
-                                <p className="font-black text-[#18352D]">
+                                <p className="truncate text-[11px] font-black text-[#18352D] lg:text-xs">
                                   {item.number}
                                 </p>
 
@@ -1048,15 +1059,15 @@ export default function ApprovePage() {
 
                           {/* JENIS */}
 
-                          <td className="px-5 py-5">
+                          <td className="px-2.5 py-3.5 lg:px-3 lg:py-4">
 
                             {isOutlet ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-blue-700">
+                              <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-2 py-1 text-[9px] font-black uppercase tracking-[0.06em] text-blue-700">
                                 <Store size={12} />
                                 Outlet
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#D9E9E1] bg-[#EAF3EF] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#497F70]">
+                              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#D9E9E1] bg-[#EAF3EF] px-2 py-1 text-[9px] font-black uppercase tracking-[0.06em] text-[#497F70]">
                                 <Warehouse size={12} />
                                 Pusat
                               </span>
@@ -1066,11 +1077,11 @@ export default function ApprovePage() {
 
                           {/* TUJUAN */}
 
-                          <td className="px-5 py-5">
+                          <td className="px-2.5 py-3.5 lg:px-3 lg:py-4">
 
                             <div className="flex items-center gap-2.5">
 
-                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F5F8F6] text-gray-400">
+                              <div className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#F5F8F6] text-gray-400 xl:flex">
                                 {isOutlet ? (
                                   <Store size={15} />
                                 ) : (
@@ -1080,12 +1091,12 @@ export default function ApprovePage() {
 
                               <div className="min-w-0">
 
-                                <p className="truncate font-bold text-[#35564C]">
+                                <p className="truncate text-[11px] font-bold text-[#35564C]">
                                   {destination}
                                 </p>
 
                                 {destinationCode && (
-                                  <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                                  <p className="mt-0.5 truncate text-[8px] font-bold uppercase tracking-wider text-gray-400">
                                     {destinationCode}
                                   </p>
                                 )}
@@ -1098,15 +1109,15 @@ export default function ApprovePage() {
 
                           {/* SUPPLIER */}
 
-                          <td className="px-5 py-5">
+                          <td className="px-2.5 py-3.5 lg:px-3 lg:py-4">
 
                             <div className="flex items-center gap-2.5">
 
-                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F5F8F6] text-gray-400">
+                              <div className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#F5F8F6] text-gray-400 xl:flex">
                                 <UserRound size={15} />
                               </div>
 
-                              <span className="max-w-[180px] truncate font-semibold text-gray-600">
+                              <span className="block truncate text-[10px] font-semibold text-gray-600 lg:text-[11px]">
                                 {item.supplier?.name ||
                                   "-"}
                               </span>
@@ -1117,16 +1128,16 @@ export default function ApprovePage() {
 
                           {/* DATE */}
 
-                          <td className="px-5 py-5">
+                          <td className="px-2.5 py-3.5 lg:px-3 lg:py-4">
 
-                            <div className="flex items-center gap-2 text-gray-500">
+                            <div className="flex items-center gap-1.5 text-gray-500">
 
                               <CalendarDays
                                 size={15}
                                 className="text-gray-400"
                               />
 
-                              <span className="text-xs font-medium">
+                              <span className="whitespace-nowrap text-[10px] font-semibold lg:text-[11px]">
                                 {item.purchaseDate
                                   ? new Date(
                                       item.purchaseDate
@@ -1160,7 +1171,7 @@ export default function ApprovePage() {
 
                           <td className="px-5 py-5 text-right">
 
-                            <p className="font-black text-[#18352D]">
+                            <p className="truncate text-[11px] font-black text-[#18352D] lg:text-xs">
                               Rp{" "}
                               {Number(
                                 item.total ||
@@ -1176,7 +1187,7 @@ export default function ApprovePage() {
 
                           <td className="px-5 py-5 text-center">
 
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-100 bg-amber-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-100 bg-amber-50 px-2 py-1 text-[9px] font-black uppercase tracking-[0.06em] text-amber-700">
 
                               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
 
@@ -1188,9 +1199,9 @@ export default function ApprovePage() {
 
                           {/* ACTION */}
 
-                          <td className="px-5 py-5">
+                          <td className="px-2.5 py-3.5 lg:px-3 lg:py-4">
 
-                            <div className="flex items-center justify-center gap-2">
+                            <div className="flex items-center justify-center gap-1">
 
                               <Link
                                 href={
@@ -1198,14 +1209,12 @@ export default function ApprovePage() {
                                     ? `/outlet/purchase/${item.id}`
                                     : `/purchase/${item.id}`
                                 }
-                                className="group/detail inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#D5E5DC] bg-white px-3 text-[11px] font-bold text-[#35564C] transition hover:border-[#BFD3CA] hover:bg-[#F2F7F4]"
+                                className="group/detail inline-flex h-8 items-center gap-1 rounded-lg border border-[#D5E5DC] bg-white px-2 text-[9px] font-black text-[#35564C] transition hover:border-[#BFD3CA] hover:bg-[#F2F7F4]"
                               >
-                                <Eye size={14} />
-
-                                Detail
-
+                                <Eye size={12} />
+                                
                                 <ChevronRight
-                                  size={12}
+                                  size={11}
                                   className="transition group-hover/detail:translate-x-0.5"
                                 />
                               </Link>
@@ -1222,11 +1231,11 @@ export default function ApprovePage() {
                                   approvingId !==
                                     null
                                 }
-                                className="group/approve inline-flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#497F70] to-[#3D6D60] px-3.5 text-[11px] font-bold text-white shadow-[0_5px_14px_rgba(73,127,112,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(73,127,112,0.25)] disabled:cursor-not-allowed disabled:opacity-50"
+                                className="group/approve inline-flex h-8 items-center gap-1 rounded-lg bg-gradient-to-r from-[#497F70] to-[#3D6D60] px-2 text-[9px] font-black text-white shadow-[0_5px_14px_rgba(73,127,112,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(73,127,112,0.25)] disabled:cursor-not-allowed disabled:opacity-50"
                               >
 
                                 <CheckCircle2
-                                  size={14}
+                                  size={12}
                                   className="transition-transform group-hover/approve:scale-110"
                                 />
 
@@ -1255,7 +1264,7 @@ export default function ApprovePage() {
 
           {!loading &&
             filteredData.length > 0 && (
-              <div className="flex flex-col gap-3 border-t border-[#E8EEEB] bg-[#FAFCFB] px-5 py-4 md:flex-row md:items-center md:justify-between md:px-6">
+              <div className="flex flex-col gap-3 border-t border-[#E8EEEB] bg-[#FAFCFB] px-4 py-3.5 sm:px-5 md:flex-row md:items-center md:justify-between">
 
                 <div className="flex items-center gap-2 text-xs text-gray-400">
 
@@ -1295,7 +1304,7 @@ export default function ApprovePage() {
 
         {!loading &&
           filteredData.length > 0 && (
-            <div className="mt-5 rounded-2xl border border-[#DDE9E4] bg-white px-5 py-4 shadow-[0_5px_20px_rgba(24,53,45,0.03)]">
+            <div className="mt-4 rounded-2xl border border-[#DDE9E4] bg-white px-4 py-3.5 sm:px-5 shadow-[0_5px_20px_rgba(24,53,45,0.03)]">
 
               <div className="flex items-start gap-3">
 
