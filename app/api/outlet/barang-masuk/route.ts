@@ -79,8 +79,9 @@ async function getCurrentUser() {
 // VOID:
 // - Transfer tetap tampil
 // - Transfer tetap bisa RECEIVED
-// - Item void tidak dihitung sebagai received
-// - Item void tidak masuk stock
+// - Item void tetap ditampilkan
+// - Item void tidak dianggap sebagai received
+// - Item void tidak masuk perhitungan received
 // - Ditandai hasVoid = true
 // - voidItemCount dan voidTotalQty dikirim
 //
@@ -99,8 +100,7 @@ export async function GET(
     // 1. SESSION
     // ===================================================
 
-    const user =
-      await getCurrentUser();
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
@@ -213,6 +213,10 @@ export async function GET(
     if (
       role === "OUTLET_ADMIN"
     ) {
+      // -------------------------------------------------
+      // OUTLET_ADMIN WAJIB MEMILIKI OUTLET
+      // -------------------------------------------------
+
       if (
         !user.outletId ||
         !Number.isInteger(
@@ -231,6 +235,10 @@ export async function GET(
           }
         );
       }
+
+      // -------------------------------------------------
+      // OUTLET_ADMIN TIDAK BOLEH MELIHAT OUTLET LAIN
+      // -------------------------------------------------
 
       if (
         selectedOutletId !== null &&
@@ -254,6 +262,10 @@ export async function GET(
           user.outletId,
       };
     } else {
+      // -------------------------------------------------
+      // ADMIN / MANAGER
+      // -------------------------------------------------
+
       if (
         selectedOutletId !== null
       ) {
@@ -375,6 +387,8 @@ export async function GET(
 
     // ===================================================
     // 10. VALIDASI PURCHASE
+    //
+    // Semua item Purchase harus berasal dari CENTRAL.
     // ===================================================
 
     const validPurchases =
@@ -399,16 +413,14 @@ export async function GET(
     // ===================================================
     // 11. AMBIL INVOICE SUPPLIER
     //
-    // Invoice supplier disimpan di OutletReceipt,
-    // bukan di OutletPurchase.
+    // Invoice supplier berasal dari OutletReceipt.
     //
-    // Relasi:
     // OutletReceipt.purchaseId
-    //            ↓
+    //          ↓
     // OutletPurchase.id
     //
-    // Tidak mengubah data apa pun.
-    // Hanya membaca data receipt.
+    // Tidak menggunakan purchase.number sebagai
+    // invoice supplier.
     // ===================================================
 
     const purchaseIds =
@@ -431,12 +443,19 @@ export async function GET(
                 purchaseId: true,
                 invoiceNumber: true,
               },
+
+              orderBy: {
+                id: "desc",
+              },
             }
           )
         : [];
 
     // ===================================================
     // 12. MAP RECEIPT BY PURCHASE ID
+    //
+    // Jika ada lebih dari satu receipt untuk purchase
+    // yang sama, receipt terbaru dipakai.
     // ===================================================
 
     const receiptByPurchaseId =
@@ -448,6 +467,16 @@ export async function GET(
     for (
       const receipt of purchaseReceipts
     ) {
+      // Receipt pertama adalah yang terbaru karena
+      // orderBy id desc.
+      if (
+        receiptByPurchaseId.has(
+          receipt.purchaseId
+        )
+      ) {
+        continue;
+      }
+
       const invoiceNumber =
         typeof receipt.invoiceNumber ===
           "string"
@@ -467,6 +496,10 @@ export async function GET(
     const purchaseData =
       validPurchases.map(
         (purchase) => {
+          // ------------------------------------------------
+          // TOTAL QTY PURCHASE
+          // ------------------------------------------------
+
           const totalItem =
             purchase.items.reduce(
               (
@@ -479,6 +512,10 @@ export async function GET(
                 ),
               0
             );
+
+          // ------------------------------------------------
+          // TOTAL RECEIVED
+          // ------------------------------------------------
 
           const totalReceived =
             purchase.items.reduce(
@@ -493,6 +530,10 @@ export async function GET(
                 ),
               0
             );
+
+          // ------------------------------------------------
+          // STATUS
+          // ------------------------------------------------
 
           let status =
             String(
@@ -517,9 +558,9 @@ export async function GET(
               "RECEIVED";
           }
 
-          // =================================================
+          // ------------------------------------------------
           // INVOICE SUPPLIER
-          // =================================================
+          // ------------------------------------------------
 
           const invoiceNumber =
             receiptByPurchaseId.get(
@@ -542,12 +583,6 @@ export async function GET(
             nomor:
               purchase.number,
 
-            // =================================================
-            // INVOICE SUPPLIER
-            //
-            // Ini yang sebelumnya belum dikirim.
-            // =================================================
-
             invoiceNumber,
 
             tanggal:
@@ -559,12 +594,16 @@ export async function GET(
 
             totalReceived,
 
-            // Purchase tidak memiliki void
+            // Purchase tidak memiliki void.
             hasVoid: false,
 
             voidItemCount: 0,
 
             voidTotalQty: 0,
+
+            // ------------------------------------------------
+            // OUTLET
+            // ------------------------------------------------
 
             outletId:
               purchase.outlet?.id ??
@@ -610,6 +649,10 @@ export async function GET(
                   }
                 : null,
 
+            // ------------------------------------------------
+            // SUPPLIER
+            // ------------------------------------------------
+
             supplier:
               purchase.supplier
                 ? {
@@ -626,6 +669,10 @@ export async function GET(
                         .supplier.name,
                   }
                 : null,
+
+            // ------------------------------------------------
+            // PURCHASE DETAIL
+            // ------------------------------------------------
 
             purchase: {
               id:
@@ -644,15 +691,15 @@ export async function GET(
               remarks:
                 purchase.remarks,
 
-              // =================================================
-              // INVOICE SUPPLIER
-              // =================================================
-
               invoiceNumber,
             },
 
             transfer:
               null,
+
+            // ------------------------------------------------
+            // ITEMS
+            // ------------------------------------------------
 
             items:
               purchase.items.map(
@@ -756,11 +803,8 @@ export async function GET(
     // ===================================================
     // 16. VALIDASI TRANSFER
     //
-    // Jangan buang item VOID.
-    //
-    // Item void tetap harus tampil supaya user tahu
-    // bahwa transaksi memiliki barang yang di-void.
-    //
+    // Item VOID tetap dianggap valid agar transaksi
+    // tetap muncul di halaman Barang Masuk.
     // ===================================================
 
     const validTransfers =
@@ -775,12 +819,19 @@ export async function GET(
 
           return transfer.items.every(
             (item) => {
-              // Barang void tetap valid untuk ditampilkan.
+              // --------------------------------------------
+              // ITEM VOID TETAP DITAMPILKAN
+              // --------------------------------------------
+
               if (
                 item.voided === true
               ) {
                 return true;
               }
+
+              // --------------------------------------------
+              // ITEM NON-VOID HARUS CENTRAL
+              // --------------------------------------------
 
               return (
                 item.barang &&
@@ -794,17 +845,17 @@ export async function GET(
 
     // ===================================================
     // 17. MAP TRANSFER
-    // =====================================================
+    // ===================================================
 
     const transferData =
       validTransfers.map(
         (transfer) => {
-          // =================================================
+          // ------------------------------------------------
           // TOTAL ITEM
           //
-          // Semua qty barang tetap dihitung sebagai
-          // total item transaksi.
-          // =================================================
+          // Total transaksi tetap memakai seluruh qty,
+          // termasuk item yang kemudian VOID.
+          // ------------------------------------------------
 
           const totalItem =
             transfer.items.reduce(
@@ -819,31 +870,42 @@ export async function GET(
               0
             );
 
-          // =================================================
+          // ------------------------------------------------
           // TOTAL RECEIVED
           //
-          // receivedQty barang VOID seharusnya 0.
-          // Kita tetap menggunakan receivedQty sebagai
-          // sumber data penerimaan.
-          // =================================================
+          // ITEM VOID TIDAK BOLEH MENAMBAH RECEIVED.
+          //
+          // Untuk menjaga keamanan walaupun data lama
+          // memiliki receivedQty pada item VOID, kita
+          // eksplisit mengecualikan item tersebut.
+          // ------------------------------------------------
 
           const totalReceived =
             transfer.items.reduce(
               (
                 total,
                 item
-              ) =>
-                total +
-                Number(
-                  item.receivedQty ??
-                    0
-                ),
+              ) => {
+                if (
+                  item.voided === true
+                ) {
+                  return total;
+                }
+
+                return (
+                  total +
+                  Number(
+                    item.receivedQty ??
+                      0
+                  )
+                );
+              },
               0
             );
 
-          // =================================================
+          // ------------------------------------------------
           // VOID
-          // =================================================
+          // ------------------------------------------------
 
           const voidItems =
             transfer.items.filter(
@@ -870,9 +932,41 @@ export async function GET(
           const hasVoid =
             voidItemCount > 0;
 
-          // =================================================
+          // ------------------------------------------------
           // STATUS
-          // =================================================
+          //
+          // Jika ada VOID, status dihitung berdasarkan
+          // qty yang benar-benar masih aktif.
+          //
+          // Contoh:
+          // qty 10
+          // void 2
+          // received 8
+          //
+          // => RECEIVED
+          // ------------------------------------------------
+
+          const activeTotalItem =
+            transfer.items.reduce(
+              (
+                total,
+                item
+              ) => {
+                if (
+                  item.voided === true
+                ) {
+                  return total;
+                }
+
+                return (
+                  total +
+                  Number(
+                    item.qty ?? 0
+                  )
+                );
+              },
+              0
+            );
 
           let status =
             String(
@@ -880,26 +974,38 @@ export async function GET(
             );
 
           if (
+            activeTotalItem > 0 &&
             totalReceived > 0 &&
             totalReceived <
-              totalItem
+              activeTotalItem
           ) {
             status =
               "PARTIAL";
           }
 
           if (
-            totalItem > 0 &&
+            activeTotalItem > 0 &&
             totalReceived >=
-              totalItem
+              activeTotalItem
           ) {
             status =
               "RECEIVED";
           }
 
-          // =================================================
+          // ------------------------------------------------
+          // TRANSAKSI YANG SELURUH ITEM-NYA VOID
+          // ------------------------------------------------
+
+          if (
+            activeTotalItem <= 0 &&
+            hasVoid
+          ) {
+            status = "VOID";
+          }
+
+          // ------------------------------------------------
           // JENIS TRANSFER
-          // =================================================
+          // ------------------------------------------------
 
           const jenisTransfer =
             transfer.sourceOutletId
@@ -921,10 +1027,6 @@ export async function GET(
             nomor:
               transfer.number,
 
-            // =================================================
-            // TRANSFER TIDAK MEMILIKI INVOICE SUPPLIER
-            // =================================================
-
             invoiceNumber:
               null,
 
@@ -937,9 +1039,9 @@ export async function GET(
 
             totalReceived,
 
-            // =================================================
-            // INFORMASI VOID
-            // =================================================
+            // ------------------------------------------------
+            // VOID SUMMARY
+            // ------------------------------------------------
 
             hasVoid,
 
@@ -947,9 +1049,9 @@ export async function GET(
 
             voidTotalQty,
 
-            // =================================================
-            // SOURCE
-            // =================================================
+            // ------------------------------------------------
+            // SOURCE OUTLET
+            // ------------------------------------------------
 
             sourceOutletId:
               transfer.sourceOutletId ??
@@ -972,9 +1074,9 @@ export async function GET(
                   }
                 : null,
 
-            // =================================================
-            // DESTINATION
-            // =================================================
+            // ------------------------------------------------
+            // DESTINATION OUTLET
+            // ------------------------------------------------
 
             outletId:
               transfer.outlet?.id ??
@@ -1020,6 +1122,10 @@ export async function GET(
             purchase:
               null,
 
+            // ------------------------------------------------
+            // TRANSFER DETAIL
+            // ------------------------------------------------
+
             transfer: {
               id:
                 transfer.id,
@@ -1047,9 +1153,9 @@ export async function GET(
               jenisTransfer,
             },
 
-            // =================================================
+            // ------------------------------------------------
             // ITEMS
-            // =================================================
+            // ------------------------------------------------
 
             items:
               transfer.items.map(
@@ -1066,6 +1172,14 @@ export async function GET(
                       item.qty ?? 0
                     );
 
+                  const receivedQty =
+                    item.voided === true
+                      ? 0
+                      : Number(
+                          item.receivedQty ??
+                            0
+                        );
+
                   return {
                     id:
                       item.id,
@@ -1075,15 +1189,11 @@ export async function GET(
 
                     qty,
 
-                    receivedQty:
-                      Number(
-                        item.receivedQty ??
-                          0
-                      ),
+                    receivedQty,
 
-                    // ===============================
+                    // ----------------------------------------
                     // VOID INFO
-                    // ===============================
+                    // ----------------------------------------
 
                     voided:
                       item.voided ===
@@ -1149,7 +1259,9 @@ export async function GET(
 
       filters: {
         outletId:
-          selectedOutletId,
+          role === "OUTLET_ADMIN"
+            ? user.outletId
+            : selectedOutletId,
 
         dateFrom:
           dateFrom || null,

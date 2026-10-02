@@ -3,6 +3,13 @@ import { cookies } from "next/headers";
 
 import { prisma } from "@/lib/prisma";
 
+import {
+  toBaseQty,
+  getBaseUnitCost,
+  roundQty,
+  roundMoney,
+} from "@/lib/unit-conversion";
+
 /*
 =============================================================
 POST OUTLET BARANG MASUK - RECEIVE PURCHASE
@@ -22,47 +29,118 @@ OUTLET RECEIPT
     ↓
 INVOICE SUPPLIER disimpan di OutletReceipt
     ↓
-OUTLET STOCK bertambah
+PURCHASE QTY tetap menggunakan UNIT TRANSAKSI
+    ↓
+KONVERSI SEKALI SAAT STOCK MASUK
+    ↓
+OUTLET STOCK disimpan dalam BASE UNIT
     ↓
 OUTLET PURCHASE = RECEIVED
 
-KHUSUS TEMPO
-    ↓
-PurchasePayable dibuat jika belum ada
-    ↓
-Jika PurchasePayable sudah ada:
-    ↓
-gunakan PurchasePayable existing
-    ↓
-TIDAK membuat payable kedua
+=============================================================
+UNIT RULE
+=============================================================
 
-NON TEMPO
--------------------------------------------------------------
-CASH
-TRANSFER
-COD
-CBD
+PURCHASE / RECEIPT:
 
-    ↓
-Invoice tetap disimpan di OutletReceipt
-    ↓
-TIDAK membuat PurchasePayable
+    item.qty
+        = Qty Purchase Order
+        = UNIT TRANSAKSI
 
+    receivedQty
+        = Qty aktual diterima
+        = UNIT TRANSAKSI
+
+Contoh:
+
+    Unit          = jerigen
+    Base Unit     = liter
+    Conversion    = 13
+
+    PO Qty        = 4.3 jerigen
+    Qty Terima    = 4.3 jerigen
+
+Maka:
+
+    OutletReceipt.qty
+        = 4.3 jerigen
+
+    OutletPurchaseItem.receivedQty
+        = 4.3 jerigen
+
+    Stock:
+        4.3 × 13
+        = 55.9 liter
+
+    OutletStock.stock
+        = 55.9 liter
+
+=============================================================
+IMPORTANT STOCK RULE
+=============================================================
+
+OutletStock.stock SELALU menggunakan BASE UNIT.
+
+JANGAN:
+
+    OutletStock.stock += receivedQty
+
+Karena receivedQty adalah UNIT TRANSAKSI.
+
+HARUS:
+
+    baseQty = toBaseQty(receivedQty, barang)
+
+    OutletStock.stock += baseQty
+
+=============================================================
+AVERAGE COST RULE
+=============================================================
+
+Harga Purchase:
+
+    price
+        = harga per UNIT TRANSAKSI
+
+Contoh:
+
+    Harga = Rp130.000 / jerigen
+    Conversion = 13 liter
+
+Maka:
+
+    baseUnitCost
+        = 130.000 / 13
+        = Rp10.000 / liter
+
+OutletStock.averageCost menggunakan
+harga per BASE UNIT.
+
+=============================================================
 IMPORTANT
--------------------------------------------------------------
+=============================================================
+
+- Purchase tetap menggunakan unit transaksi.
+- Receipt tetap menggunakan unit transaksi.
+- receivedQty tetap menggunakan unit transaksi.
+- Konversi hanya dilakukan saat stock masuk.
+- OutletStock.stock = BASE UNIT.
+- Existing OutletStock.stock dianggap sudah BASE UNIT.
+- Existing stock TIDAK dikonversi ulang.
+- averageCost = cost per BASE UNIT.
+- Purchase/Payable amount tetap berdasarkan unit transaksi.
 - Invoice Supplier hanya WAJIB untuk TEMPO.
 - CASH/COD/CBD/TRANSFER invoice boleh kosong.
 - Jika invoice diisi pada non-TEMPO, invoice tetap disimpan.
 - TEMPO membuat PurchasePayable jika belum ada.
 - TEMPO menggunakan PurchasePayable existing jika sudah ada.
-- CASH/TRANSFER/COD/CBD TIDAK membuat PurchasePayable.
-- Transfer Outlet tidak menggunakan endpoint ini.
-- Tidak menghapus data existing.
 - Tidak membuat payable duplikat.
 - Tidak mengubah paidAmount payable existing.
 - PurchasePayable adalah source of truth hutang.
 - OutletReceipt adalah source of truth dokumen penerimaan
   dan invoice supplier.
+- Tidak menghapus data existing.
+- Tidak reset database.
 =============================================================
 */
 
@@ -88,15 +166,6 @@ async function getCurrentUser() {
   } catch {
     return null;
   }
-
-  /*
-   * Support beberapa kemungkinan struktur session:
-   *
-   * data.user.id
-   * data.data.user.id
-   * data.data.id
-   * data.id
-   */
 
   const userId = Number(
     sessionData?.user?.id ??
@@ -128,22 +197,6 @@ async function getCurrentUser() {
 
 /*
 =============================================================
-NORMALIZE MONEY
-=============================================================
-*/
-
-function roundMoney(value: number) {
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-
-  return (
-    Math.round((value + Number.EPSILON) * 100) / 100
-  );
-}
-
-/*
-=============================================================
 NORMALIZE STRING
 =============================================================
 */
@@ -158,11 +211,366 @@ function cleanString(value: unknown) {
 
 /*
 =============================================================
+NORMALIZE QTY
+=============================================================
+*/
+
+function normalizeQty(value: unknown) {
+  const qty = Number(value);
+
+  if (!Number.isFinite(qty)) {
+    return null;
+  }
+
+  if (qty <= 0) {
+    return null;
+  }
+
+  return qty;
+}
+
+/*
+=============================================================
+ROUND QTY
+=============================================================
+*/
+
+function safeRoundQty(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return roundQty(value);
+}
+
+/*
+=============================================================
+GET RECEIVED QTY FROM REQUEST ITEM
+=============================================================
+*/
+
+function getRequestedReceivedQty(
+  requestItem: any,
+  purchaseItem: any
+) {
+  const candidateValues = [
+    requestItem?.receivedQty,
+    requestItem?.qtyDiterima,
+    requestItem?.receiveQty,
+    requestItem?.qtyTerima,
+    requestItem?.received,
+    requestItem?.qty,
+  ];
+
+  for (const value of candidateValues) {
+    if (
+      value !== undefined &&
+      value !== null &&
+      value !== ""
+    ) {
+      const qty = normalizeQty(value);
+
+      if (qty !== null) {
+        return qty;
+      }
+
+      return null;
+    }
+  }
+
+  /*
+   * Backward compatibility:
+   *
+   * Jika frontend tidak mengirim daftar qty penerimaan,
+   * gunakan Qty PO.
+   */
+
+  return normalizeQty(purchaseItem.qty);
+}
+
+/*
+=============================================================
+GET REQUEST ITEM ID
+=============================================================
+*/
+
+function getRequestItemId(requestItem: any) {
+  const rawId =
+    requestItem?.itemId ??
+    requestItem?.purchaseItemId ??
+    requestItem?.id;
+
+  const id = Number(rawId);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return null;
+  }
+
+  return id;
+}
+
+/*
+=============================================================
+BUILD RECEIVED QTY MAP
+=============================================================
+*/
+
+function buildReceivedQtyMap(
+  body: any,
+  purchaseItems: any[]
+) {
+  const rawItems =
+    Array.isArray(body?.items)
+      ? body.items
+      : Array.isArray(body?.receivedItems)
+        ? body.receivedItems
+        : Array.isArray(body?.itemQuantities)
+          ? body.itemQuantities
+          : null;
+
+  const receivedQtyMap = new Map<
+    number,
+    number
+  >();
+
+  if (rawItems) {
+    for (const requestItem of rawItems) {
+      const itemId =
+        getRequestItemId(requestItem);
+
+      if (!itemId) {
+        continue;
+      }
+
+      const purchaseItem =
+        purchaseItems.find(
+          (item) => item.id === itemId
+        );
+
+      if (!purchaseItem) {
+        continue;
+      }
+
+      const receivedQty =
+        getRequestedReceivedQty(
+          requestItem,
+          purchaseItem
+        );
+
+      if (receivedQty === null) {
+        receivedQtyMap.set(
+          itemId,
+          Number.NaN
+        );
+      } else {
+        receivedQtyMap.set(
+          itemId,
+          receivedQty
+        );
+      }
+    }
+  }
+
+  /*
+   * Fallback item yang tidak dikirim frontend:
+   * gunakan Qty PO.
+   */
+
+  for (const purchaseItem of purchaseItems) {
+    if (
+      !receivedQtyMap.has(
+        purchaseItem.id
+      )
+    ) {
+      const fallbackQty =
+        normalizeQty(
+          purchaseItem.qty
+        );
+
+      receivedQtyMap.set(
+        purchaseItem.id,
+        fallbackQty ?? Number.NaN
+      );
+    }
+  }
+
+  return receivedQtyMap;
+}
+
+/*
+=============================================================
+VALIDATE BARANG CONVERSION
+=============================================================
+
+Semua barang yang masuk stock harus mempunyai baseUnit
+dan conversionRate yang valid.
+
+Jika:
+
+    unit      = jerigen
+    baseUnit  = liter
+    rate      = 13
+
+maka:
+
+    4.3 jerigen
+        →
+    55.9 liter
+=============================================================
+*/
+
+function convertReceivedQtyToBase(
+  receivedQty: number,
+  barang: any
+) {
+  const unit =
+    cleanString(barang?.unit);
+
+  const baseUnit =
+    cleanString(barang?.baseUnit);
+
+  const conversionRate =
+    Number(
+      barang?.conversionRate ?? 1
+    );
+
+  if (!baseUnit) {
+    throw new Error(
+      `Barang "${barang?.name ?? barang?.id}" belum memiliki Base Unit. Stock tidak dapat dikonversi dengan aman.`
+    );
+  }
+
+  if (
+    !Number.isFinite(
+      conversionRate
+    ) ||
+    conversionRate <= 0
+  ) {
+    throw new Error(
+      `Barang "${barang?.name ?? barang?.id}" memiliki Conversion Rate tidak valid.`
+    );
+  }
+
+  /*
+   * Jika unit transaksi sama dengan baseUnit,
+   * tidak ada perkalian tambahan.
+   *
+   * Contoh:
+   *
+   * unit     = liter
+   * baseUnit = liter
+   * qty      = 10
+   *
+   * hasil    = 10 liter
+   */
+
+  if (
+    unit &&
+    unit.trim().toLowerCase() ===
+      baseUnit.trim().toLowerCase()
+  ) {
+    return {
+      baseQty:
+        safeRoundQty(
+          receivedQty
+        ),
+
+      unit,
+
+      baseUnit,
+
+      conversionRate: 1,
+
+      converted: false,
+    };
+  }
+
+  /*
+   * Jika unit transaksi berbeda dengan baseUnit,
+   * gunakan conversion helper.
+   */
+
+  const baseQty =
+    toBaseQty(
+      receivedQty,
+      barang
+    );
+
+  if (
+    !Number.isFinite(
+      baseQty
+    ) ||
+    baseQty <= 0
+  ) {
+    throw new Error(
+      `Konversi Qty barang "${barang?.name ?? barang?.id}" tidak menghasilkan nilai Base Unit yang valid.`
+    );
+  }
+
+  return {
+    baseQty:
+      safeRoundQty(
+        baseQty
+      ),
+
+    unit,
+
+    baseUnit,
+
+    conversionRate,
+
+    converted: true,
+  };
+}
+
+/*
+=============================================================
+CALCULATE BASE UNIT COST
+=============================================================
+
+price:
+    harga per UNIT TRANSAKSI
+
+hasil:
+    harga per BASE UNIT
+=============================================================
+*/
+
+function calculateBaseUnitCost(
+  price: number,
+  barang: any
+) {
+  const baseUnitCost =
+    getBaseUnitCost(
+      price,
+      barang
+    );
+
+  if (
+    !Number.isFinite(
+      baseUnitCost
+    ) ||
+    baseUnitCost < 0
+  ) {
+    throw new Error(
+      `Harga Base Unit barang "${barang?.name ?? barang?.id}" tidak valid.`
+    );
+  }
+
+  return roundMoney(
+    baseUnitCost
+  );
+}
+
+/*
+=============================================================
 POST
 =============================================================
 */
 
-export async function POST(req: NextRequest) {
+export async function POST(
+  req: NextRequest
+) {
   try {
     /*
     =========================================================
@@ -170,13 +578,15 @@ export async function POST(req: NextRequest) {
     =========================================================
     */
 
-    const user = await getCurrentUser();
+    const user =
+      await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unauthorized.",
+          message:
+            "Unauthorized.",
         },
         {
           status: 401,
@@ -196,7 +606,11 @@ export async function POST(req: NextRequest) {
       "OUTLET_ADMIN",
     ];
 
-    if (!allowedRoles.includes(String(user.role))) {
+    if (
+      !allowedRoles.includes(
+        String(user.role)
+      )
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -223,7 +637,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Request body tidak valid.",
+          message:
+            "Request body tidak valid.",
         },
         {
           status: 400,
@@ -231,29 +646,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const purchaseId = Number(body?.purchaseId);
+    const purchaseId =
+      Number(
+        body?.purchaseId
+      );
 
     /*
     =========================================================
     INVOICE SUPPLIER
     =========================================================
-    *
-    * Semua payment method boleh mengisi invoice.
-    *
-    * TEMPO:
-    *   WAJIB.
-    *
-    * NON TEMPO:
-    *   OPTIONAL.
     */
 
-    const invoiceNumber = cleanString(
-      body?.invoiceNumber
-    );
+    const invoiceNumber =
+      cleanString(
+        body?.invoiceNumber
+      );
 
-    const remarksRaw = cleanString(body?.remarks);
+    const remarksRaw =
+      cleanString(
+        body?.remarks
+      );
 
-    const remarks = remarksRaw || null;
+    const remarks =
+      remarksRaw || null;
 
     /*
     =========================================================
@@ -262,13 +677,16 @@ export async function POST(req: NextRequest) {
     */
 
     if (
-      !Number.isInteger(purchaseId) ||
+      !Number.isInteger(
+        purchaseId
+      ) ||
       purchaseId <= 0
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Purchase ID tidak valid.",
+          message:
+            "Purchase ID tidak valid.",
         },
         {
           status: 400,
@@ -286,13 +704,10 @@ export async function POST(req: NextRequest) {
       id: purchaseId,
     };
 
-    /*
-    ---------------------------------------------------------
-    OUTLET ADMIN
-    ---------------------------------------------------------
-    */
-
-    if (String(user.role) === "OUTLET_ADMIN") {
+    if (
+      String(user.role) ===
+      "OUTLET_ADMIN"
+    ) {
       if (!user.outletId) {
         return NextResponse.json(
           {
@@ -306,29 +721,33 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      purchaseWhere.outletId = user.outletId;
+      purchaseWhere.outletId =
+        user.outletId;
     }
 
     const purchase =
-      await prisma.outletPurchase.findFirst({
-        where: purchaseWhere,
+      await prisma.outletPurchase.findFirst(
+        {
+          where:
+            purchaseWhere,
 
-        include: {
-          outlet: true,
+          include: {
+            outlet: true,
 
-          supplier: true,
+            supplier: true,
 
-          items: {
-            include: {
-              barang: true,
-            },
+            items: {
+              include: {
+                barang: true,
+              },
 
-            orderBy: {
-              id: "asc",
+              orderBy: {
+                id: "asc",
+              },
             },
           },
-        },
-      });
+        }
+      );
 
     /*
     =========================================================
@@ -356,8 +775,10 @@ export async function POST(req: NextRequest) {
     */
 
     if (
-      String(user.role) === "OUTLET_ADMIN" &&
-      purchase.outletId !== user.outletId
+      String(user.role) ===
+        "OUTLET_ADMIN" &&
+      purchase.outletId !==
+        user.outletId
     ) {
       return NextResponse.json(
         {
@@ -377,11 +798,14 @@ export async function POST(req: NextRequest) {
     =========================================================
     */
 
-    if (!purchase.outlet?.active) {
+    if (
+      !purchase.outlet?.active
+    ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Outlet tujuan tidak aktif.",
+          message:
+            "Outlet tujuan tidak aktif.",
         },
         {
           status: 400,
@@ -395,8 +819,14 @@ export async function POST(req: NextRequest) {
     =========================================================
     */
 
-    if (purchase.status !== "APPROVED") {
-      if (purchase.status === "RECEIVED") {
+    if (
+      purchase.status !==
+      "APPROVED"
+    ) {
+      if (
+        purchase.status ===
+        "RECEIVED"
+      ) {
         return NextResponse.json(
           {
             success: false,
@@ -464,15 +894,28 @@ export async function POST(req: NextRequest) {
 
     /*
     =========================================================
+    BUILD RECEIVED QTY MAP
+    =========================================================
+    */
+
+    const receivedQtyMap =
+      buildReceivedQtyMap(
+        body,
+        purchase.items
+      );
+
+    /*
+    =========================================================
     PAYMENT METHOD
     =========================================================
     */
 
-    const paymentMethod = String(
-      purchase.paymentMethod
-    )
-      .trim()
-      .toUpperCase();
+    const paymentMethod =
+      String(
+        purchase.paymentMethod
+      )
+        .trim()
+        .toUpperCase();
 
     const supportedPaymentMethods = [
       "CASH",
@@ -499,7 +942,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const isTempo = paymentMethod === "TEMPO";
+    const isTempo =
+      paymentMethod ===
+      "TEMPO";
 
     /*
     =========================================================
@@ -507,7 +952,10 @@ export async function POST(req: NextRequest) {
     =========================================================
     */
 
-    if (isTempo && !invoiceNumber) {
+    if (
+      isTempo &&
+      !invoiceNumber
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -526,7 +974,10 @@ export async function POST(req: NextRequest) {
     =========================================================
     */
 
-    for (const item of purchase.items) {
+    for (
+      const item of
+      purchase.items
+    ) {
       /*
       -------------------------------------------------------
       BARANG
@@ -552,7 +1003,10 @@ export async function POST(req: NextRequest) {
       -------------------------------------------------------
       */
 
-      if (item.barang.source !== "CENTRAL") {
+      if (
+        item.barang.source !==
+        "CENTRAL"
+      ) {
         return NextResponse.json(
           {
             success: false,
@@ -567,18 +1021,120 @@ export async function POST(req: NextRequest) {
 
       /*
       -------------------------------------------------------
-      QTY
+      UNIT / BASE UNIT CHECK
       -------------------------------------------------------
       */
 
-      const qty = Number(item.qty);
+      const purchaseUnit =
+        cleanString(
+          item.barang.unit
+        );
 
-      if (!Number.isFinite(qty) || qty <= 0) {
+      const baseUnit =
+        cleanString(
+          item.barang.baseUnit
+        );
+
+      const conversionRate =
+        Number(
+          item.barang
+            .conversionRate ?? 1
+        );
+
+      if (!baseUnit) {
         return NextResponse.json(
           {
             success: false,
             message:
-              `Qty barang "${item.barang.name}" harus lebih besar dari 0.`,
+              `Barang "${item.barang.name}" belum memiliki Base Unit. Lengkapi Base Unit sebelum menerima barang.`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      if (
+        !Number.isFinite(
+          conversionRate
+        ) ||
+        conversionRate <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              `Conversion Rate barang "${item.barang.name}" tidak valid.`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      if (!purchaseUnit) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              `Unit transaksi barang "${item.barang.name}" belum diatur.`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /*
+      -------------------------------------------------------
+      PO QTY
+      -------------------------------------------------------
+      */
+
+      const poQty =
+        Number(item.qty);
+
+      if (
+        !Number.isFinite(
+          poQty
+        ) ||
+        poQty <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              `Qty Purchase Order barang "${item.barang.name}" tidak valid.`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /*
+      -------------------------------------------------------
+      RECEIVED QTY
+      -------------------------------------------------------
+      */
+
+      const receivedQty =
+        receivedQtyMap.get(
+          item.id
+        );
+
+      if (
+        receivedQty === undefined ||
+        !Number.isFinite(
+          receivedQty
+        ) ||
+        receivedQty <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              `Qty diterima barang "${item.barang.name}" tidak valid.`,
           },
           {
             status: 400,
@@ -592,9 +1148,15 @@ export async function POST(req: NextRequest) {
       -------------------------------------------------------
       */
 
-      const price = Number(item.price);
+      const price =
+        Number(item.price);
 
-      if (!Number.isFinite(price) || price < 0) {
+      if (
+        !Number.isFinite(
+          price
+        ) ||
+        price < 0
+      ) {
         return NextResponse.json(
           {
             success: false,
@@ -614,30 +1176,78 @@ export async function POST(req: NextRequest) {
     =========================================================
     */
 
-    const receiptDate = new Date();
+    const receiptDate =
+      new Date();
 
     /*
     =========================================================
     CALCULATE RECEIVED TOTAL
     =========================================================
+
+    IMPORTANT:
+
+    Total transaksi tetap memakai:
+
+        receivedQty × purchase price
+
+    karena keduanya masih menggunakan
+    UNIT TRANSAKSI.
+
+    Contoh:
+
+        4.3 jerigen
+        × Rp130.000 / jerigen
+
+        = Rp559.000
+
+    BUKAN:
+
+        55.9 liter × Rp130.000
     */
 
     const receivedTotalRaw =
       purchase.items.reduce(
-        (sum, item) => {
-          const qty = Number(item.qty);
-          const price = Number(item.price);
+        (
+          sum,
+          item
+        ) => {
+          const receivedQty =
+            receivedQtyMap.get(
+              item.id
+            );
 
-          return sum + qty * price;
+          const price =
+            Number(item.price);
+
+          if (
+            !Number.isFinite(
+              receivedQty
+            ) ||
+            !Number.isFinite(
+              price
+            )
+          ) {
+            return sum;
+          }
+
+          return (
+            sum +
+            receivedQty *
+              price
+          );
         },
         0
       );
 
     const receivedTotal =
-      roundMoney(receivedTotalRaw);
+      roundMoney(
+        receivedTotalRaw
+      );
 
     if (
-      !Number.isFinite(receivedTotal) ||
+      !Number.isFinite(
+        receivedTotal
+      ) ||
       receivedTotal < 0
     ) {
       return NextResponse.json(
@@ -658,15 +1268,21 @@ export async function POST(req: NextRequest) {
     =========================================================
     */
 
-    let dueDate: Date | null = null;
+    let dueDate:
+      | Date
+      | null = null;
 
     if (isTempo) {
-      const tempoDays = Number(
-        purchase.supplier.tempoDays ?? 0
-      );
+      const tempoDays =
+        Number(
+          purchase.supplier
+            .tempoDays ?? 0
+        );
 
       if (
-        !Number.isInteger(tempoDays) ||
+        !Number.isInteger(
+          tempoDays
+        ) ||
         tempoDays < 0
       ) {
         return NextResponse.json(
@@ -681,10 +1297,14 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      dueDate = new Date(receiptDate);
+      dueDate =
+        new Date(
+          receiptDate
+        );
 
       dueDate.setDate(
-        dueDate.getDate() + tempoDays
+        dueDate.getDate() +
+          tempoDays
       );
     }
 
@@ -704,27 +1324,30 @@ export async function POST(req: NextRequest) {
           */
 
           const currentPurchase =
-            await tx.outletPurchase.findUnique({
-              where: {
-                id: purchase.id,
-              },
+            await tx.outletPurchase.findUnique(
+              {
+                where: {
+                  id:
+                    purchase.id,
+                },
 
-              include: {
-                outlet: true,
+                include: {
+                  outlet: true,
 
-                supplier: true,
+                  supplier: true,
 
-                items: {
-                  include: {
-                    barang: true,
-                  },
+                  items: {
+                    include: {
+                      barang: true,
+                    },
 
-                  orderBy: {
-                    id: "asc",
+                    orderBy: {
+                      id: "asc",
+                    },
                   },
                 },
-              },
-            });
+              }
+            );
 
           if (!currentPurchase) {
             throw new Error(
@@ -775,7 +1398,8 @@ export async function POST(req: NextRequest) {
 
           if (
             !currentPurchase.items ||
-            currentPurchase.items.length === 0
+            currentPurchase.items.length ===
+              0
           ) {
             throw new Error(
               "Purchase Outlet tidak memiliki item."
@@ -796,7 +1420,8 @@ export async function POST(req: NextRequest) {
               .toUpperCase();
 
           const currentIsTempo =
-            currentPaymentMethod === "TEMPO";
+            currentPaymentMethod ===
+            "TEMPO";
 
           /*
           ===================================================
@@ -817,22 +1442,22 @@ export async function POST(req: NextRequest) {
           ===================================================
           EXISTING RECEIPT CHECK
           ===================================================
-          *
-          * Satu Purchase hanya boleh memiliki satu receipt.
           */
 
           const existingReceipt =
-            await tx.outletReceipt.findFirst({
-              where: {
-                purchaseId:
-                  currentPurchase.id,
-              },
+            await tx.outletReceipt.findFirst(
+              {
+                where: {
+                  purchaseId:
+                    currentPurchase.id,
+                },
 
-              select: {
-                id: true,
-                number: true,
-              },
-            });
+                select: {
+                  id: true,
+                  number: true,
+                },
+              }
+            );
 
           if (existingReceipt) {
             throw new Error(
@@ -848,21 +1473,24 @@ export async function POST(req: NextRequest) {
 
           if (invoiceNumber) {
             const duplicateReceipt =
-              await tx.outletReceipt.findFirst({
-                where: {
-                  supplierId:
-                    currentPurchase.supplierId,
+              await tx.outletReceipt.findFirst(
+                {
+                  where: {
+                    supplierId:
+                      currentPurchase.supplierId,
 
-                  invoiceNumber:
-                    invoiceNumber,
-                },
+                    invoiceNumber:
+                      invoiceNumber,
+                  },
 
-                select: {
-                  id: true,
-                  number: true,
-                  purchaseId: true,
-                },
-              });
+                  select: {
+                    id: true,
+                    number: true,
+                    purchaseId:
+                      true,
+                  },
+                }
+              );
 
             if (
               duplicateReceipt &&
@@ -874,35 +1502,26 @@ export async function POST(req: NextRequest) {
               );
             }
 
-            /*
-            -------------------------------------------------
-            DUPLICATE PAYABLE CHECK
-            -------------------------------------------------
-            *
-            * Jika invoice sudah digunakan oleh payable
-            * Purchase lain, tolak.
-            *
-            * Jika payable adalah milik Purchase yang sedang
-            * diterima, itu VALID dan akan digunakan kembali.
-            */
-
             if (currentIsTempo) {
               const duplicatePayable =
-                await tx.purchasePayable.findFirst({
-                  where: {
-                    supplierId:
-                      currentPurchase.supplierId,
+                await tx.purchasePayable.findFirst(
+                  {
+                    where: {
+                      supplierId:
+                        currentPurchase.supplierId,
 
-                    invoiceNumber:
-                      invoiceNumber,
-                  },
+                      invoiceNumber:
+                        invoiceNumber,
+                    },
 
-                  select: {
-                    id: true,
-                    outletPurchaseId:
-                      true,
-                  },
-                });
+                    select: {
+                      id: true,
+
+                      outletPurchaseId:
+                        true,
+                    },
+                  }
+                );
 
               if (
                 duplicatePayable &&
@@ -931,22 +1550,53 @@ export async function POST(req: NextRequest) {
           ===================================================
           */
 
-          const currentReceivedTotalRaw =
-            currentPurchase.items.reduce(
-              (sum, item) => {
-                const qty =
-                  Number(item.qty);
+          let currentReceivedTotalRaw =
+            0;
 
-                const price =
-                  Number(item.price);
+          for (
+            const item of
+            currentPurchase.items
+          ) {
+            const receivedQty =
+              receivedQtyMap.get(
+                item.id
+              );
 
-                return (
-                  sum +
-                  qty * price
-                );
-              },
-              0
-            );
+            const price =
+              Number(item.price);
+
+            const finalReceivedQty =
+              receivedQty ??
+              normalizeQty(
+                item.qty
+              );
+
+            if (
+              !Number.isFinite(
+                finalReceivedQty
+              ) ||
+              finalReceivedQty <= 0
+            ) {
+              throw new Error(
+                `Qty diterima barang "${item.barang?.name ?? item.barangId}" tidak valid.`
+              );
+            }
+
+            if (
+              !Number.isFinite(
+                price
+              ) ||
+              price < 0
+            ) {
+              throw new Error(
+                `Harga barang "${item.barang?.name ?? item.barangId}" tidak valid.`
+              );
+            }
+
+            currentReceivedTotalRaw +=
+              finalReceivedQty *
+              price;
+          }
 
           const currentReceivedTotal =
             roundMoney(
@@ -968,83 +1618,128 @@ export async function POST(req: NextRequest) {
           ===================================================
           CREATE OUTLET RECEIPT
           ===================================================
-          *
-          * Invoice disimpan untuk SEMUA payment method.
-          *
-          * NULL:
-          *   jika invoice kosong.
-          *
-          * VALUE:
-          *   jika user mengisi invoice.
+
+          Receipt tetap menyimpan QTY TRANSAKSI.
+
+          Contoh:
+
+              4.3 jerigen
+
+          Bukan:
+
+              55.9 liter
           */
 
           const receipt =
-            await tx.outletReceipt.create({
-              data: {
-                number:
-                  receiptNumber,
+            await tx.outletReceipt.create(
+              {
+                data: {
+                  number:
+                    receiptNumber,
 
-                purchaseId:
-                  currentPurchase.id,
+                  purchaseId:
+                    currentPurchase.id,
 
-                outletId:
-                  currentPurchase.outletId,
+                  outletId:
+                    currentPurchase.outletId,
 
-                supplierId:
-                  currentPurchase.supplierId,
+                  supplierId:
+                    currentPurchase.supplierId,
 
-                invoiceNumber:
-                  invoiceNumber || null,
+                  invoiceNumber:
+                    invoiceNumber ||
+                    null,
 
-                receiptDate,
+                  receiptDate,
 
-                remarks:
-                  remarks ||
-                  currentPurchase.remarks ||
-                  null,
+                  remarks:
+                    remarks ||
+                    currentPurchase.remarks ||
+                    null,
 
-                items: {
-                  create:
-                    currentPurchase.items.map(
-                      (item) => {
-                        const qty =
-                          Number(
-                            item.qty
-                          );
+                  items: {
+                    create:
+                      currentPurchase.items.map(
+                        (item) => {
+                          const receivedQty =
+                            receivedQtyMap.get(
+                              item.id
+                            );
 
-                        const price =
-                          Number(
-                            item.price
-                          );
+                          const qty =
+                            receivedQty ??
+                            normalizeQty(
+                              item.qty
+                            );
 
-                        const subtotal =
-                          roundMoney(
-                            qty * price
-                          );
+                          if (
+                            !Number.isFinite(
+                              qty
+                            ) ||
+                            qty <= 0
+                          ) {
+                            throw new Error(
+                              `Qty diterima barang "${item.barang?.name ?? item.barangId}" tidak valid.`
+                            );
+                          }
 
-                        return {
-                          barangId:
-                            item.barangId,
+                          const price =
+                            Number(
+                              item.price
+                            );
 
-                          qty,
+                          const subtotal =
+                            roundMoney(
+                              qty *
+                                price
+                            );
 
-                          price,
+                          return {
+                            barangId:
+                              item.barangId,
 
-                          subtotal,
-                        };
-                      }
-                    ),
+                            /*
+                             * TETAP UNIT TRANSAKSI
+                             */
+                            qty,
+
+                            price,
+
+                            subtotal,
+                          };
+                        }
+                      ),
+                  },
                 },
-              },
 
-              include: {
-                items: true,
-              },
-            });
+                include: {
+                  items: true,
+                },
+              }
+            );
 
           /*
           ===================================================
           UPDATE OUTLET STOCK
+          ===================================================
+
+          IMPORTANT:
+
+          receivedQty = UNIT TRANSAKSI
+
+          OutletStock.stock = BASE UNIT
+
+          Jadi:
+
+              receivedQty
+                  ↓
+              toBaseQty()
+                  ↓
+              baseQty
+                  ↓
+              OutletStock.stock
+
+          KONVERSI HANYA SEKALI DI SINI.
           ===================================================
           */
 
@@ -1052,14 +1747,24 @@ export async function POST(req: NextRequest) {
             const item of
             currentPurchase.items
           ) {
+            const requestedReceivedQty =
+              receivedQtyMap.get(
+                item.id
+              );
+
             const qty =
-              Number(item.qty);
+              requestedReceivedQty ??
+              normalizeQty(
+                item.qty
+              );
 
             const price =
               Number(item.price);
 
             if (
-              !Number.isFinite(qty) ||
+              !Number.isFinite(
+                qty
+              ) ||
               qty <= 0
             ) {
               throw new Error(
@@ -1068,13 +1773,54 @@ export async function POST(req: NextRequest) {
             }
 
             if (
-              !Number.isFinite(price) ||
+              !Number.isFinite(
+                price
+              ) ||
               price < 0
             ) {
               throw new Error(
                 `Harga barang "${item.barang?.name ?? item.barangId}" tidak valid.`
               );
             }
+
+            if (!item.barang) {
+              throw new Error(
+                `Barang pada item Purchase ID ${item.id} tidak ditemukan.`
+              );
+            }
+
+            /*
+            -------------------------------------------------
+            CONVERT PURCHASE UNIT → BASE UNIT
+            -------------------------------------------------
+            */
+
+            const conversion =
+              convertReceivedQtyToBase(
+                qty,
+                item.barang
+              );
+
+            const baseQty =
+              conversion.baseQty;
+
+            /*
+            -------------------------------------------------
+            BASE UNIT COST
+            -------------------------------------------------
+
+            price:
+                harga / purchase unit
+
+            baseUnitCost:
+                harga / base unit
+            */
+
+            const baseUnitCost =
+              calculateBaseUnitCost(
+                price,
+                item.barang
+              );
 
             /*
             -------------------------------------------------
@@ -1083,17 +1829,19 @@ export async function POST(req: NextRequest) {
             */
 
             const existingStock =
-              await tx.outletStock.findUnique({
-                where: {
-                  outletId_barangId: {
-                    outletId:
-                      currentPurchase.outletId,
+              await tx.outletStock.findUnique(
+                {
+                  where: {
+                    outletId_barangId: {
+                      outletId:
+                        currentPurchase.outletId,
 
-                    barangId:
-                      item.barangId,
+                      barangId:
+                        item.barangId,
+                    },
                   },
-                },
-              });
+                }
+              );
 
             /*
             -------------------------------------------------
@@ -1102,36 +1850,65 @@ export async function POST(req: NextRequest) {
             */
 
             if (!existingStock) {
-              await tx.outletStock.create({
-                data: {
-                  outletId:
-                    currentPurchase.outletId,
+              await tx.outletStock.create(
+                {
+                  data: {
+                    outletId:
+                      currentPurchase.outletId,
 
-                  barangId:
-                    item.barangId,
+                    barangId:
+                      item.barangId,
 
-                  stock: qty,
+                    /*
+                    * STOCK SELALU BASE UNIT.
+                    *
+                    * Contoh:
+                    *
+                    * 4.3 jerigen
+                    * × 13
+                    * = 55.9 liter
+                    */
 
-                  minimumStock:
-                    Number(
-                      item.barang
-                        .minimumStock ??
-                        0
-                    ),
+                    stock:
+                      baseQty,
 
-                  averageCost:
-                    price,
-                },
-              });
+                    minimumStock:
+                      Number(
+                        item.barang
+                          .minimumStock ??
+                          0
+                      ),
+
+                    /*
+                    * averageCost = harga per BASE UNIT.
+                    */
+
+                    averageCost:
+                      baseUnitCost,
+                  },
+                }
+              );
             }
 
             /*
             -------------------------------------------------
-            UPDATE STOCK
+            UPDATE EXISTING STOCK
             -------------------------------------------------
             */
 
             else {
+              /*
+              * IMPORTANT:
+              *
+              * existingStock.stock DIANGGAP SUDAH BASE UNIT.
+              *
+              * JANGAN:
+              *
+              * toBaseQty(existingStock.stock, barang)
+              *
+              * karena akan menyebabkan double conversion.
+              */
+
               const oldStock =
                 Number(
                   existingStock.stock
@@ -1142,51 +1919,110 @@ export async function POST(req: NextRequest) {
                   existingStock.averageCost
                 ) || 0;
 
+              if (
+                !Number.isFinite(
+                  oldStock
+                ) ||
+                oldStock < 0
+              ) {
+                throw new Error(
+                  `Stock existing barang "${item.barang.name}" tidak valid.`
+                );
+              }
+
+              if (
+                !Number.isFinite(
+                  oldAverageCost
+                ) ||
+                oldAverageCost < 0
+              ) {
+                throw new Error(
+                  `Average cost existing barang "${item.barang.name}" tidak valid.`
+                );
+              }
+
+              /*
+              * Stock lama:
+              *
+              * BASE UNIT
+              *
+              * Stock baru:
+              *
+              * BASE UNIT
+              */
+
               const newStock =
-                oldStock + qty;
+                safeRoundQty(
+                  oldStock +
+                    baseQty
+                );
+
+              /*
+              * Weighted average cost
+              * semuanya sudah menggunakan BASE UNIT.
+              */
 
               const newAverageCost =
                 newStock > 0
                   ? (
                       oldStock *
                         oldAverageCost +
-                      qty * price
-                    ) / newStock
-                  : price;
+                      baseQty *
+                        baseUnitCost
+                    ) /
+                    newStock
+                  : baseUnitCost;
 
-              await tx.outletStock.update({
-                where: {
-                  id:
-                    existingStock.id,
-                },
+              await tx.outletStock.update(
+                {
+                  where: {
+                    id:
+                      existingStock.id,
+                  },
 
-                data: {
-                  stock:
-                    newStock,
+                  data: {
+                    stock:
+                      newStock,
 
-                  averageCost:
-                    roundMoney(
-                      newAverageCost
-                    ),
-                },
-              });
+                    averageCost:
+                      roundMoney(
+                        newAverageCost
+                      ),
+                  },
+                }
+              );
             }
 
             /*
             -------------------------------------------------
             UPDATE RECEIVED QTY
             -------------------------------------------------
+
+            receivedQty tetap menyimpan
+            UNIT TRANSAKSI.
+
+            Contoh:
+
+                4.3 jerigen
+
+            BUKAN:
+
+                55.9 liter
             */
 
-            await tx.outletPurchaseItem.update({
-              where: {
-                id: item.id,
-              },
+            await tx.outletPurchaseItem.update(
+              {
+                where: {
+                  id:
+                    item.id,
+                },
 
-              data: {
-                receivedQty: qty,
-              },
-            });
+                data: {
+                  receivedQty:
+                    qty,
+                },
+              }
+            );
           }
 
           /*
@@ -1195,29 +2031,25 @@ export async function POST(req: NextRequest) {
           ===================================================
           */
 
-          let payable = null;
+          let payable =
+            null;
 
           if (currentIsTempo) {
             /*
             =================================================
             FIND EXISTING PAYABLE
             =================================================
-            *
-            * Payable mungkin sudah dibuat sebelumnya.
-            *
-            * JANGAN throw error hanya karena payable sudah
-            * ada untuk Purchase yang sama.
-            *
-            * JANGAN membuat payable kedua.
             */
 
             const existingPayable =
-              await tx.purchasePayable.findUnique({
-                where: {
-                  outletPurchaseId:
-                    currentPurchase.id,
-                },
-              });
+              await tx.purchasePayable.findUnique(
+                {
+                  where: {
+                    outletPurchaseId:
+                      currentPurchase.id,
+                  },
+                }
+              );
 
             /*
             =================================================
@@ -1226,12 +2058,6 @@ export async function POST(req: NextRequest) {
             */
 
             if (existingPayable) {
-              /*
-              ------------------------------------------------
-              VALIDATE SUPPLIER
-              ------------------------------------------------
-              */
-
               if (
                 existingPayable.supplierId !==
                 currentPurchase.supplierId
@@ -1240,12 +2066,6 @@ export async function POST(req: NextRequest) {
                   "Purchase Payable existing tidak sesuai dengan supplier Purchase Outlet ini."
                 );
               }
-
-              /*
-              ------------------------------------------------
-              VALIDATE OUTLET
-              ------------------------------------------------
-              */
 
               if (
                 existingPayable.outletId !==
@@ -1256,22 +2076,10 @@ export async function POST(req: NextRequest) {
                 );
               }
 
-              /*
-              ------------------------------------------------
-              EXISTING INVOICE
-              ------------------------------------------------
-              */
-
               const existingInvoice =
                 cleanString(
                   existingPayable.invoiceNumber
                 );
-
-              /*
-              ------------------------------------------------
-              INVOICE MUST MATCH
-              ------------------------------------------------
-              */
 
               if (
                 existingInvoice &&
@@ -1284,27 +2092,17 @@ export async function POST(req: NextRequest) {
                 );
               }
 
-              /*
-              ------------------------------------------------
-              FINAL INVOICE
-              ------------------------------------------------
-              */
-
               const finalInvoiceNumber =
                 existingInvoice ||
                 invoiceNumber;
 
-              if (!finalInvoiceNumber) {
+              if (
+                !finalInvoiceNumber
+              ) {
                 throw new Error(
                   "Purchase Payable TEMPO tidak memiliki Invoice Supplier."
                 );
               }
-
-              /*
-              ------------------------------------------------
-              EXISTING AMOUNT
-              ------------------------------------------------
-              */
 
               const existingAmount =
                 roundMoney(
@@ -1343,15 +2141,11 @@ export async function POST(req: NextRequest) {
               }
 
               /*
-              ------------------------------------------------
-              AMOUNT CONSISTENCY
-              ------------------------------------------------
+              * Payable menggunakan nilai transaksi:
               *
-              * Jangan mengubah nominal payable existing
-              * secara otomatis.
+              * receivedQty × purchase price
               *
-              * Jika beda signifikan, hentikan transaksi
-              * supaya histori hutang/pembayaran aman.
+              * Bukan baseQty × purchase price.
               */
 
               const amountDifference =
@@ -1373,14 +2167,6 @@ export async function POST(req: NextRequest) {
                 );
               }
 
-              /*
-              ------------------------------------------------
-              RECALCULATE OUTSTANDING
-              ------------------------------------------------
-              *
-              * paidAmount existing TIDAK disentuh.
-              */
-
               const calculatedOutstanding =
                 Math.max(
                   0,
@@ -1390,127 +2176,100 @@ export async function POST(req: NextRequest) {
                   )
                 );
 
-              /*
-              ------------------------------------------------
-              STATUS
-              ------------------------------------------------
-              */
-
               const payableStatus =
                 calculatedOutstanding <=
                 0.01
                   ? "PAID"
                   : "OUTSTANDING";
 
-              /*
-              ------------------------------------------------
-              UPDATE EXISTING PAYABLE
-              ------------------------------------------------
-              *
-              * Hanya melengkapi data yang aman.
-              *
-              * paidAmount tetap.
-              * amount tetap.
-              */
-
               payable =
-                await tx.purchasePayable.update({
-                  where: {
-                    id:
-                      existingPayable.id,
-                  },
+                await tx.purchasePayable.update(
+                  {
+                    where: {
+                      id:
+                        existingPayable.id,
+                    },
 
-                  data: {
-                    invoiceNumber:
-                      finalInvoiceNumber,
+                    data: {
+                      invoiceNumber:
+                        finalInvoiceNumber,
 
-                    invoiceDate:
-                      existingPayable.invoiceDate ??
-                      receiptDate,
+                      invoiceDate:
+                        existingPayable.invoiceDate ??
+                        receiptDate,
 
-                    dueDate:
-                      existingPayable.dueDate ??
-                      dueDate,
+                      dueDate:
+                        existingPayable.dueDate ??
+                        dueDate,
 
-                    amount:
-                      existingPayable.amount,
+                      amount:
+                        existingPayable.amount,
 
-                    paidAmount:
-                      existingPaidAmount,
+                      /*
+                      * paidAmount TIDAK DIUBAH.
+                      */
 
-                    outstanding:
-                      calculatedOutstanding,
+                      paidAmount:
+                        existingPaidAmount,
 
-                    status:
-                      payableStatus,
-                  },
-                });
+                      outstanding:
+                        calculatedOutstanding,
+
+                      status:
+                        payableStatus,
+                    },
+                  }
+                );
             }
 
             /*
             =================================================
             CREATE PAYABLE BARU
             =================================================
-            *
-            * Hanya jika belum ada.
             */
 
             else {
               payable =
-                await tx.purchasePayable.create({
-                  data: {
-                    outletPurchaseId:
-                      currentPurchase.id,
+                await tx.purchasePayable.create(
+                  {
+                    data: {
+                      outletPurchaseId:
+                        currentPurchase.id,
 
-                    supplierId:
-                      currentPurchase.supplierId,
+                      supplierId:
+                        currentPurchase.supplierId,
 
-                    outletId:
-                      currentPurchase.outletId,
+                      outletId:
+                        currentPurchase.outletId,
 
-                    invoiceNumber:
-                      invoiceNumber,
+                      invoiceNumber:
+                        invoiceNumber,
 
-                    /*
-                    ========================================
-                    INVOICE DATE
-                    ========================================
-                    *
-                    * Karena OutletReceipt belum memiliki
-                    * invoiceDate, tanggal penerimaan digunakan
-                    * sebagai tanggal invoice untuk payable.
-                    */
+                      invoiceDate:
+                        receiptDate,
 
-                    invoiceDate:
-                      receiptDate,
+                      dueDate,
 
-                    /*
-                    ========================================
-                    DUE DATE
-                    ========================================
-                    */
+                      /*
+                      * Tetap nilai transaksi Purchase:
+                      *
+                      * receivedQty × purchase price
+                      */
 
-                    dueDate,
+                      amount:
+                        currentReceivedTotal,
 
-                    /*
-                    ========================================
-                    AMOUNT
-                    ========================================
-                    */
+                      paidAmount:
+                        0,
 
-                    amount:
-                      currentReceivedTotal,
+                      outstanding:
+                        currentReceivedTotal,
 
-                    paidAmount:
-                      0,
-
-                    outstanding:
-                      currentReceivedTotal,
-
-                    status:
-                      "OUTSTANDING",
-                  },
-                });
+                      status:
+                        "OUTSTANDING",
+                    },
+                  }
+                );
             }
           }
 
@@ -1521,17 +2280,19 @@ export async function POST(req: NextRequest) {
           */
 
           const updatedPurchase =
-            await tx.outletPurchase.update({
-              where: {
-                id:
-                  currentPurchase.id,
-              },
+            await tx.outletPurchase.update(
+              {
+                where: {
+                  id:
+                    currentPurchase.id,
+                },
 
-              data: {
-                status:
-                  "RECEIVED",
-              },
-            });
+                data: {
+                  status:
+                    "RECEIVED",
+                },
+              }
+            );
 
           /*
           ===================================================
@@ -1572,7 +2333,9 @@ export async function POST(req: NextRequest) {
     if (result.payable) {
       successMessage =
         "Barang berhasil diterima dan Purchase Payable TEMPO berhasil dibuat.";
-    } else if (result.invoiceNumber) {
+    } else if (
+      result.invoiceNumber
+    ) {
       successMessage =
         "Barang berhasil diterima dan Invoice Supplier berhasil disimpan.";
     }

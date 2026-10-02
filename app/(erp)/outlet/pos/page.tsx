@@ -43,6 +43,8 @@ import {
   WalletCards,
   ArrowDownToLine,
   Keyboard,
+  MessageCircle,
+  Copy,
 } from "lucide-react";
 
 type Outlet = {
@@ -73,6 +75,28 @@ type SaleItem = {
   subtotal: number;
   menu?: { name: string } | null;
   barang?: { name: string; unit: string } | null;
+};
+
+type PosStockUsage = {
+  id: number;
+  trxDate: string;
+  trxType: string;
+  trxNumber: string | null;
+  referenceId: number | null;
+  warehouse: string | null;
+  qtyOut: number;
+  unitPrice: number;
+  totalValue: number;
+  balance: number;
+  note: string | null;
+  barang: {
+    id: number;
+    code: string;
+    name: string;
+    unit: string;
+    baseUnit?: string | null;
+    conversionRate?: number;
+  } | null;
 };
 
 type Sale = {
@@ -327,6 +351,14 @@ export default function PosOutletPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportRange, setReportRange] = useState<"TODAY" | "ALL">("TODAY");
+  const [reportDate, setReportDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  });
+  const [reportStockUsage, setReportStockUsage] = useState<PosStockUsage[]>([]);
+  const [reportStockLoading, setReportStockLoading] = useState(false);
+  const [reportStockError, setReportStockError] = useState("");
+  const [reportCopied, setReportCopied] = useState(false);
   const [printTarget, setPrintTarget] = useState<"receipt" | "report">("receipt");
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -1045,7 +1077,9 @@ export default function PosOutletPage() {
   // TAX & SERVICE — BUSINESS RULE LOCKED
   // Service Charge 5% dari taxable setelah diskon.
   // PPN 10% dihitung setelah Service Charge.
-  const serviceCharge = roundMoney(taxable * 0.05);
+  const serviceCharge = roundMoney(
+    taxable * 0.05
+  );
 
   const ppn = roundMoney(
     (taxable + serviceCharge) * 0.10
@@ -1472,6 +1506,10 @@ export default function PosOutletPage() {
               customerName.trim() ||
               null,
             discount: disc,
+            subtotal,
+            serviceCharge,
+            ppn,
+            total,
             paidAmount: paidN,
             paymentMethod,
             note:
@@ -1503,7 +1541,17 @@ export default function PosOutletPage() {
                 }
               : null,
             cashierName: cashier || null,
-            pricing: { subtotal, discount: disc, serviceCharge, ppn, total },
+
+            // Pricing dikirim lengkap agar API dan report menerima komponen
+            // transaksi yang sama: subtotal, discount, service, PPN, total.
+            pricing: {
+              subtotal,
+              discount: disc,
+              taxable,
+              serviceCharge,
+              ppn,
+              total,
+            },
             consumption: ayceSession
               ? cart.map((item) => ({
                   menuId: item.menuId,
@@ -1662,14 +1710,50 @@ export default function PosOutletPage() {
 
   const reportSales = useMemo(() => {
     if (reportRange === "ALL") return sales;
-    const today = new Date();
-    const key = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
     return sales.filter((sale) => {
       const date = new Date(sale.saleDate);
       const saleKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-      return saleKey === key;
+      return saleKey === reportDate;
     });
-  }, [sales, reportRange]);
+  }, [sales, reportRange, reportDate]);
+
+  async function loadDailyReportStock() {
+    if (!outletId || reportRange !== "TODAY") {
+      setReportStockUsage([]);
+      setReportStockError("");
+      return;
+    }
+
+    try {
+      setReportStockLoading(true);
+      setReportStockError("");
+
+      const response = await fetch(
+        `/api/outlet/pos?outletId=${encodeURIComponent(String(outletId))}&date=${encodeURIComponent(reportDate)}`,
+        { cache: "no-store" }
+      );
+
+      const json = await response.json().catch(() => ({}));
+
+      if (!response.ok || !json.success) {
+        throw new Error(json.message || "Gagal mengambil pemakaian bahan POS");
+      }
+
+      setReportStockUsage(Array.isArray(json.data) ? json.data : []);
+    } catch (error: any) {
+      console.error("LOAD DAILY POS STOCK REPORT ERROR:", error);
+      setReportStockUsage([]);
+      setReportStockError(error?.message || "Gagal mengambil pemakaian bahan POS");
+    } finally {
+      setReportStockLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!reportOpen) return;
+    void loadDailyReportStock();
+  }, [reportOpen, reportDate, reportRange, outletId]);
 
   const reportTotal = useMemo(
     () => roundMoney(reportSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0)),
@@ -1758,6 +1842,85 @@ export default function PosOutletPage() {
     () => reportSales.filter((sale) => sale.ayce).length,
     [reportSales]
   );
+  const reportPax = useMemo(
+    () => reportSales.reduce((sum, sale) => sum + Number(sale.pax || 0), 0),
+    [reportSales]
+  );
+  const reportRegularTransactions = useMemo(
+    () => reportSales.filter((sale) => !sale.ayce).length,
+    [reportSales]
+  );
+  const reportStockSummary = useMemo(() => {
+    const map = new Map<number, {
+      barangId: number;
+      code: string;
+      name: string;
+      unit: string;
+      baseUnit: string;
+      conversionRate: number;
+      startStock: number;
+      qty: number;
+      endStock: number;
+      hpp: number;
+    }>();
+
+    for (const row of [...reportStockUsage].sort(
+      (a, b) => new Date(a.trxDate).getTime() - new Date(b.trxDate).getTime()
+    )) {
+      if (!row.barang) continue;
+
+      const key = Number(row.barang.id);
+      const qty = Number(row.qtyOut || 0);
+      const hpp = Number(
+        row.totalValue || qty * Number(row.unitPrice || 0)
+      );
+      const balance = Number(row.balance || 0);
+      const conversionRate = Number(row.barang.conversionRate || 1);
+
+      const existing = map.get(key);
+
+      if (existing) {
+        existing.qty += qty;
+        existing.hpp += hpp;
+        existing.endStock = balance;
+        if (!existing.conversionRate && conversionRate) {
+          existing.conversionRate = conversionRate;
+        }
+      } else {
+        map.set(key, {
+          barangId: key,
+          code: row.barang.code,
+          name: row.barang.name,
+          unit: row.barang.unit || row.barang.baseUnit || "-",
+          baseUnit: row.barang.baseUnit || row.barang.unit || "-",
+          conversionRate,
+          startStock: balance + qty,
+          qty,
+          endStock: balance,
+          hpp,
+        });
+      }
+    }
+
+    return Array.from(map.values()).sort(
+      (a, b) =>
+        b.hpp - a.hpp ||
+        b.qty - a.qty ||
+        a.name.localeCompare(b.name)
+    );
+  }, [reportStockUsage]);
+  const reportConsumptionQty = useMemo(
+    () => reportStockUsage.reduce((sum, row) => sum + Number(row.qtyOut || 0), 0),
+    [reportStockUsage]
+  );
+  const reportConsumptionHpp = useMemo(
+    () => roundMoney(reportStockUsage.reduce((sum, row) => sum + Number(row.totalValue || Number(row.qtyOut || 0) * Number(row.unitPrice || 0)), 0)),
+    [reportStockUsage]
+  );
+  const reportAvgPerPax = useMemo(
+    () => reportPax > 0 ? roundMoney(reportTotal / reportPax) : 0,
+    [reportPax, reportTotal]
+  );
   const reportStaffSummary = useMemo(() => {
     const map = new Map<string, { staff: string; transactions: number; total: number; items: number }>();
     for (const sale of reportSales) {
@@ -1774,6 +1937,195 @@ export default function PosOutletPage() {
     }
     return Array.from(map.values()).sort((a, b) => b.total - a.total || a.staff.localeCompare(b.staff));
   }, [reportSales]);
+
+  const reportPackageSummary = useMemo(() => {
+    const map = new Map<string, {
+      name: string;
+      qty: number;
+      pax: number;
+      value: number;
+    }>();
+
+    for (const sale of reportSales) {
+      const name = (sale.packageName || "").trim();
+      if (!name) continue;
+
+      const pax = Math.max(0, Number(sale.pax || 0));
+      const packagePrice = Number(sale.packagePrice || 0);
+      const value = packagePrice > 0
+        ? packagePrice * Math.max(1, pax)
+        : sale.ayce
+          ? Number(sale.total || 0)
+          : Number(sale.total || 0);
+
+      const existing = map.get(name.toLowerCase());
+
+      if (existing) {
+        existing.qty += 1;
+        existing.pax += pax;
+        existing.value += value;
+      } else {
+        map.set(name.toLowerCase(), {
+          name,
+          qty: 1,
+          pax,
+          value,
+        });
+      }
+    }
+
+    return Array.from(map.values()).sort(
+      (a, b) => b.value - a.value || b.qty - a.qty || a.name.localeCompare(b.name)
+    );
+  }, [reportSales]);
+
+  const reportNetSales = useMemo(
+    () => roundMoney(
+      reportSales.reduce(
+        (sum, sale) =>
+          sum +
+          Math.max(
+            0,
+            Number(sale.total || 0) -
+              Number(sale.serviceCharge || 0) -
+              Number(sale.ppn || 0)
+          ),
+        0
+      )
+    ),
+    [reportSales]
+  );
+
+  const reportFoodCostRatio = useMemo(
+    () => reportNetSales > 0
+      ? (reportConsumptionHpp / reportNetSales) * 100
+      : 0,
+    [reportConsumptionHpp, reportNetSales]
+  );
+
+  const reportDateLabel = useMemo(() => {
+    if (reportRange === "ALL") return "Semua tanggal";
+    const date = new Date(`${reportDate}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return reportDate;
+    return date.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  }, [reportDate, reportRange]);
+
+  const reportWhatsappText = useMemo(() => {
+    const outletName =
+      selectedOutlet?.name ||
+      selectedOutlet?.code ||
+      currentOutlet?.name ||
+      "Outlet";
+
+    const packageLines = reportPackageSummary.length
+      ? reportPackageSummary
+          .map(
+            (item) =>
+              `• ${item.name} — ${item.qty} transaksi | ${item.pax} pax | ${money(item.value)}`
+          )
+          .join("\n")
+      : "• Tidak ada paket tercatat";
+
+    const stockLines = reportStockSummary.length
+      ? reportStockSummary
+          .map(
+            (item) =>
+              `• ${item.name} (${item.unit})\n  Awal: ${item.startStock.toLocaleString("id-ID", { maximumFractionDigits: 3 })} | Pakai: ${item.qty.toLocaleString("id-ID", { maximumFractionDigits: 3 })} | Akhir: ${item.endStock.toLocaleString("id-ID", { maximumFractionDigits: 3 })}\n  Base Unit: ${item.baseUnit} | Konversi: ${item.conversionRate.toLocaleString("id-ID", { maximumFractionDigits: 4 })}x`
+          )
+          .join("\n")
+      : "• Tidak ada pemakaian bahan tercatat";
+
+    const staffLines = reportStaffSummary.length
+      ? reportStaffSummary
+          .map(
+            (staff) =>
+              `• ${staff.staff} — ${staff.transactions} tx | ${staff.items} item | ${money(staff.total)}`
+          )
+          .join("\n")
+      : "• Tidak ada transaksi";
+
+    return [
+      "🔖 *DAILY REPORT — MGB POS*",
+      "━━━━━━━━━━━━━━━━━━━━",
+      `🏪 *Outlet:* ${outletName}`,
+      `📅 *Tanggal:* ${reportDateLabel}`,
+      "",
+      "💰 *NOMINAL SALES*",
+      `• Net Sales : ${money(reportNetSales)}`,
+      `• Tax / PPN : ${money(reportPpn)}`,
+      `• Service : ${money(reportService)}`,
+      `• Discount : ${money(reportDiscount)}`,
+      `• Grand Total : ${money(reportTotal)}`,
+      "",
+      "🍽️ *PAKET KELUAR*",
+      packageLines,
+      "",
+      "📦 *STOCK BAHAN*",
+      stockLines,
+      "",
+      "👥 *REKAP TRANSAKSI / STAFF*",
+      staffLines,
+      "",
+      "🍳 *FOOD COST*",
+      `• Total pemakaian bahan × cost : ${money(reportConsumptionHpp)}`,
+      `• Net Sales : ${money(reportNetSales)}`,
+      `• Food Cost Ratio : ${reportFoodCostRatio.toFixed(2)}%`,
+      "",
+      "━━━━━━━━━━━━━━━━━━━━",
+      `📊 ${reportSales.length} transaksi • ${reportPax} pax • ${reportItems} qty item`,
+      "Terimakasih 🙏🏻",
+    ].join("\n");
+  }, [
+    selectedOutlet,
+    currentOutlet,
+    reportPackageSummary,
+    reportStockSummary,
+    reportStaffSummary,
+    reportDateLabel,
+    reportNetSales,
+    reportPpn,
+    reportService,
+    reportDiscount,
+    reportTotal,
+    reportConsumptionHpp,
+    reportFoodCostRatio,
+    reportSales.length,
+    reportPax,
+    reportItems,
+  ]);
+
+  async function copyWhatsappReport() {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(reportWhatsappText);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = reportWhatsappText;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+
+      setReportCopied(true);
+      window.setTimeout(() => setReportCopied(false), 2200);
+    } catch (error) {
+      console.error("COPY WHATSAPP REPORT ERROR:", error);
+      alert("Pesan Daily Report gagal disalin.");
+    }
+  }
+
+  function openWhatsappReport() {
+    const url = `https://web.whatsapp.com/send?text=${encodeURIComponent(reportWhatsappText)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 
   const theme = isGangnam
     ? "gangnam"
@@ -4642,41 +4994,68 @@ export default function PosOutletPage() {
       )}
 
       {/* =====================================================
-          SALES REPORT MODAL
+          DAILY POS REPORT MODAL
       ====================================================== */}
       {reportOpen && (
         <div className="fixed inset-0 z-[145] flex items-center justify-center bg-black/85 p-3 backdrop-blur-md">
-          <div className={`flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-[28px] border shadow-[0_30px_100px_rgba(0,0,0,0.6)] ${isDark ? "border-white/[0.08] bg-[#08100d] text-white" : "border-slate-200 bg-white text-slate-900"}`}>
-            <div className="flex items-center justify-between border-b p-5">
-              <div>
-                <div className="text-[8px] font-bold uppercase tracking-[0.25em] text-emerald-400">Sales Intelligence</div>
-                <div className="mt-1 text-xl font-black">LAPORAN SALES & ITEM TERJUAL</div>
-                <div className="mt-1 text-[8px] text-slate-500">Transaksi, staff, item terjual, qty, pembayaran, service 5% dan PPN 10%.</div>
+          <div className={`flex max-h-[95vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-[28px] border shadow-[0_30px_100px_rgba(0,0,0,0.6)] ${isDark ? "border-white/[0.08] bg-[#08100d] text-white" : "border-slate-200 bg-white text-slate-900"}`}>
+            <div className={`border-b px-5 py-4 ${isDark ? "border-white/[0.06] bg-gradient-to-r from-emerald-950/40 to-transparent" : "border-slate-100 bg-slate-50"}`}>
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <div>
+                  <div className="text-[8px] font-bold uppercase tracking-[0.25em] text-emerald-400">MGB POS • Daily Control Report</div>
+                  <div className="mt-1 text-xl font-black">LAPORAN HARIAN POS</div>
+                  <div className="mt-1 text-[8px] text-slate-500">Penjualan, pembayaran, pax, staff, dan pemakaian bahan aktual dari StockCard POS_OUT.</div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${isDark ? "border-white/[0.07] bg-white/[0.025]" : "border-slate-200 bg-white"}`}>
+                    <span className="text-[7px] font-black uppercase tracking-wider text-slate-500">Tanggal</span>
+                    <input
+                      type="date"
+                      value={reportDate}
+                      onChange={(e) => { setReportDate(e.target.value); setReportRange("TODAY"); }}
+                      className={`bg-transparent text-[9px] font-black outline-none ${isDark ? "text-white" : "text-slate-900"}`}
+                    />
+                  </label>
+                  <button type="button" onClick={() => void loadDailyReportStock()} className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[8px] font-black uppercase tracking-wider text-emerald-400 hover:bg-emerald-500/15">
+                    <RefreshCw className={`h-3.5 w-3.5 ${reportStockLoading ? "animate-spin" : ""}`} />
+                    Refresh
+                  </button>
+                  <button type="button" onClick={copyWhatsappReport} className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[8px] font-black uppercase tracking-wider transition ${reportCopied ? "border-emerald-400/30 bg-emerald-400/15 text-emerald-300" : isDark ? "border-white/[0.07] bg-white/[0.025] text-slate-300 hover:border-emerald-400/20 hover:text-emerald-300" : "border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:text-emerald-600"}`}>
+                    <Copy className="h-3.5 w-3.5" />
+                    {reportCopied ? "Tersalin" : "Salin"}
+                  </button>
+                  <button type="button" onClick={openWhatsappReport} className="inline-flex items-center gap-2 rounded-xl bg-[#25D366] px-3 py-2 text-[8px] font-black uppercase tracking-wider text-white shadow-lg shadow-emerald-900/20 hover:bg-[#20bd5a]">
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    WhatsApp
+                  </button>
+                  <button type="button" onClick={printSalesReport} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-[8px] font-black uppercase tracking-wider text-white hover:bg-emerald-400">
+                    <Printer className="h-3.5 w-3.5" />
+                    Print
+                  </button>
+                  <button type="button" onClick={() => setReportOpen(false)} className={`flex h-9 w-9 items-center justify-center rounded-xl border ${isDark ? "border-white/[0.07] bg-white/[0.025] text-slate-400" : "border-slate-200 bg-white text-slate-500"}`}>
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <button type="button" onClick={printSalesReport} className="rounded-xl bg-emerald-500 px-3 py-2 text-[8px] font-black text-white"><Printer className="mr-1 inline h-3.5 w-3.5" />Print Report</button>
-                <button type="button" onClick={() => setReportOpen(false)} className="h-9 w-9 rounded-xl bg-white/[0.04] text-slate-500"><X className="mx-auto h-4 w-4" /></button>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                <div className={`flex items-center gap-1 rounded-xl border p-1 ${isDark ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-200 bg-white"}`}>
+                  {[['TODAY', 'Tanggal Dipilih'], ['ALL', 'Semua Sales']].map(([key, label]) => (
+                    <button key={key} type="button" onClick={() => setReportRange(key as "TODAY" | "ALL")} className={`rounded-lg px-3 py-2 text-[8px] font-black ${reportRange === key ? "bg-emerald-500 text-white" : "text-slate-500 hover:text-emerald-500"}`}>{label}</button>
+                  ))}
+                </div>
+                <span className="text-[8px] text-slate-500">{reportRange === "TODAY" ? reportDate : "Semua tanggal"} · {reportSales.length} transaksi · {reportItems} qty item · {reportAyceTransactions} AYCE</span>
               </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
-              <div className="flex gap-1 rounded-xl border border-white/[0.07] p-1">
-                {[['TODAY','Hari Ini'],['ALL','Semua']].map(([key,label]) => (
-                  <button key={key} type="button" onClick={() => setReportRange(key as "TODAY" | "ALL")} className={`rounded-lg px-3 py-2 text-[8px] font-black ${reportRange === key ? "bg-emerald-500 text-white" : "text-slate-500"}`}>{label}</button>
-                ))}
-              </div>
-              <span className="text-[8px] text-slate-500">{reportSales.length} transaksi · {reportItems} qty item · {reportAyceTransactions} AYCE</span>
             </div>
 
             <div id="pos-sales-report" className="min-h-0 overflow-auto p-5">
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
                 {[
+                  ['OMZET', money(reportTotal)],
                   ['TRANSAKSI', String(reportSales.length)],
-                  ['OMZET / GRAND TOTAL', money(reportTotal)],
-                  ['TOTAL BAYAR', money(reportPaid)],
+                  ['ITEM TERJUAL', String(reportItems)],
+                  ['PAX', String(reportPax)],
                   ['DISKON', money(reportDiscount)],
-                  ['SERVICE 5%', money(reportService)],
-                  ['PPN 10%', money(reportPpn)],
+                  ['SERVICE + PPN', money(reportService + reportPpn)],
                 ].map(([label,value]) => (
                   <div key={label} className={`rounded-2xl border p-4 ${isDark ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-200 bg-slate-50"}`}>
                     <div className="text-[7px] font-black text-slate-500">{label}</div>
@@ -4685,78 +5064,151 @@ export default function PosOutletPage() {
                 ))}
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
                 {[
+                  ['CASH', money(reportCash)],
+                  ['QRIS', money(reportQris)],
+                  ['TRANSFER', money(reportTransfer)],
                   ['AVG / TX', money(reportSales.length ? reportTotal / reportSales.length : 0)],
-                  ['ITEM / TX', reportSales.length ? (reportItems / reportSales.length).toFixed(1) : '0.0'],
+                  ['AVG / PAX', money(reportAvgPerPax)],
+                  ['REGULAR TX', String(reportRegularTransactions)],
                   ['AYCE TX', String(reportAyceTransactions)],
-                  ['NILAI ITEM', money(reportGrossItemSales)],
+                  ['HPP BAHAN', money(reportConsumptionHpp)],
                 ].map(([label,value]) => (
-                  <div key={label} className={`rounded-2xl border p-4 ${isDark ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-200 bg-slate-50"}`}>
+                  <div key={label} className={`rounded-2xl border p-3 ${isDark ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-200 bg-white"}`}>
                     <div className="text-[7px] font-black text-slate-500">{label}</div>
-                    <div className="mt-2 text-sm font-black">{value}</div>
+                    <div className="mt-1 text-sm font-black">{value}</div>
                   </div>
                 ))}
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {[['CASH',reportCash,Banknote],['QRIS',reportQris,QrCode],['TRANSFER',reportTransfer,Landmark]].map(([label,value,Icon]: any) => (
-                  <div key={label} className={`rounded-2xl border p-4 ${isDark ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-200 bg-slate-50"}`}>
-                    <div className="flex items-center gap-3"><Icon className="h-5 w-5 text-emerald-400"/><div><div className="text-[7px] font-black text-slate-500">{label}</div><div className="mt-1 text-sm font-black">{money(value)}</div></div></div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_1fr]">
-                <section className="overflow-hidden rounded-2xl border border-white/[0.06]">
-                  <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
-                    <div><div className="text-[9px] font-black uppercase">ITEM TERJUAL</div><div className="text-[7px] text-slate-500">Rekap qty seluruh transaksi</div></div>
-                    <div className="text-[8px] font-black text-emerald-400">{reportItemSummary.length} item</div>
-                  </div>
-                  <div className="overflow-auto">
-                    <table className="w-full text-[9px]">
-                      <thead className="bg-white/[0.03] text-slate-500"><tr><th className="p-3 text-left">#</th><th className="p-3 text-left">Nama Item</th><th className="p-3 text-right">Qty</th><th className="p-3 text-right">AYCE</th><th className="p-3 text-right">Berbayar</th><th className="p-3 text-right">Nilai</th></tr></thead>
-                      <tbody>{reportItemSummary.map((item, index) => (
-                        <tr key={item.name} className="border-t border-white/[0.05]">
-                          <td className="p-3 text-slate-500">{index + 1}</td>
-                          <td className="p-3 font-bold">{item.name}</td>
-                          <td className="p-3 text-right font-black text-emerald-400">{item.qty}</td>
-                          <td className="p-3 text-right">{item.ayceQty}</td>
-                          <td className="p-3 text-right">{item.paidQty}</td>
-                          <td className="p-3 text-right">{money(item.salesValue)}</td>
-                        </tr>
-                      ))}</tbody>
-                    </table>
-                  </div>
-                </section>
-
-                <section className="overflow-hidden rounded-2xl border border-white/[0.06]">
-                  <div className="border-b border-white/[0.06] px-4 py-3"><div className="text-[9px] font-black uppercase">REKAP STAFF</div><div className="text-[7px] text-slate-500">Staff/kasir yang melakukan transaksi</div></div>
-                  <div className="overflow-auto">
-                    <table className="w-full text-[9px]">
-                      <thead className="bg-white/[0.03] text-slate-500"><tr><th className="p-3 text-left">Staff</th><th className="p-3 text-right">Tx</th><th className="p-3 text-right">Qty</th><th className="p-3 text-right">Omzet</th></tr></thead>
-                      <tbody>{reportStaffSummary.map((staff) => (
-                        <tr key={staff.staff} className="border-t border-white/[0.05]"><td className="p-3 font-bold">{staff.staff}</td><td className="p-3 text-right">{staff.transactions}</td><td className="p-3 text-right">{staff.items}</td><td className="p-3 text-right font-black text-emerald-400">{money(staff.total)}</td></tr>
-                      ))}</tbody>
-                    </table>
-                  </div>
-                </section>
-              </div>
-
-              <section className="mt-5 overflow-hidden rounded-2xl border border-white/[0.06]">
-                <div className="border-b border-white/[0.06] px-4 py-3"><div className="text-[9px] font-black uppercase">DETAIL TRANSAKSI</div><div className="text-[7px] text-slate-500">Staff, meja, pax, item, pembayaran dan total</div></div>
+              <section className={`mt-5 overflow-hidden rounded-2xl border ${isDark ? "border-white/[0.06]" : "border-slate-200"}`}>
+                <div className={`border-b px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-slate-100"}`}>
+                  <div className="text-[9px] font-black uppercase">PAKET KELUAR</div>
+                  <div className="text-[7px] text-slate-500">Rekap paket AYCE / paket yang tercatat pada transaksi laporan</div>
+                </div>
                 <div className="overflow-auto">
-                  <table className="w-full min-w-[1050px] text-[9px]">
-                    <thead className="bg-white/[0.03] text-slate-500"><tr><th className="p-3 text-left">Tanggal</th><th className="p-3 text-left">No. Transaksi</th><th className="p-3 text-left">Staff</th><th className="p-3 text-left">Meja / Pax</th><th className="p-3 text-left">Item Terjual</th><th className="p-3 text-left">Metode</th><th className="p-3 text-right">Diskon</th><th className="p-3 text-right">Service 5%</th><th className="p-3 text-right">PPN 10%</th><th className="p-3 text-right">Total</th></tr></thead>
+                  <table className="w-full min-w-[650px] text-[9px]">
+                    <thead className={`${isDark ? "bg-[#101a16] text-slate-500" : "bg-slate-100 text-slate-500"}`}>
+                      <tr>
+                        <th className="p-3 text-left">Nama Paket</th>
+                        <th className="p-3 text-right">Qty Paket</th>
+                        <th className="p-3 text-right">Pax</th>
+                        <th className="p-3 text-right">Nilai Paket</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportPackageSummary.length ? reportPackageSummary.map((item) => (
+                        <tr key={item.name} className={`border-t ${isDark ? "border-white/[0.05]" : "border-slate-100"}`}>
+                          <td className="p-3 font-black">{item.name}</td>
+                          <td className="p-3 text-right">{item.qty}</td>
+                          <td className="p-3 text-right">{item.pax}</td>
+                          <td className="p-3 text-right font-black text-emerald-400">{money(item.value)}</td>
+                        </tr>
+                      )) : (
+                        <tr><td colSpan={4} className="p-8 text-center text-slate-500">Belum ada paket tercatat pada laporan.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-[1.05fr_1fr]">
+                <section className={`overflow-hidden rounded-2xl border ${isDark ? "border-white/[0.06]" : "border-slate-200"}`}>
+                  <div className={`flex items-center justify-between border-b px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-slate-100"}`}>
+                    <div>
+                      <div className="text-[9px] font-black uppercase">PEMAKAIAN BAHAN AKTUAL</div>
+                      <div className="text-[7px] text-slate-500">Sumber: StockCard.trxType = POS_OUT • HPP aktual transaksi</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[8px] font-black text-emerald-400">{reportStockSummary.length} bahan</div>
+                      <div className="text-[7px] text-slate-500">{reportConsumptionQty} qty</div>
+                    </div>
+                  </div>
+                  {reportStockError && (
+                    <div className="mx-4 mt-3 rounded-xl border border-red-400/20 bg-red-500/5 px-3 py-2 text-[8px] text-red-400">{reportStockError}</div>
+                  )}
+                  <div className="max-h-[330px] overflow-auto">
+                    <table className="w-full text-[9px]">
+                      <thead className="sticky top-0 z-10 bg-slate-100/95 text-slate-500 dark:bg-[#101a16]/95"><tr><th className="p-3 text-left">#</th><th className="p-3 text-left">Bahan</th><th className="p-3 text-left">Unit</th><th className="p-3 text-right">Stock Awal</th><th className="p-3 text-right">Pemakaian</th><th className="p-3 text-right">Stock Akhir</th><th className="p-3 text-left">Base Unit</th><th className="p-3 text-right">Konversi</th><th className="p-3 text-right">HPP</th></tr></thead>
+                      <tbody>
+                        {reportStockLoading ? (
+                          <tr><td colSpan={9} className="p-8 text-center text-slate-500">Mengambil StockCard POS_OUT...</td></tr>
+                        ) : reportStockSummary.length === 0 ? (
+                          <tr><td colSpan={9} className="p-8 text-center text-slate-500">Belum ada pemakaian bahan POS pada tanggal ini.</td></tr>
+                        ) : reportStockSummary.map((item, index) => (
+                          <tr key={item.barangId} className={`border-t ${isDark ? "border-white/[0.05]" : "border-slate-100"}`}>
+                            <td className="p-3 text-slate-500">{index + 1}</td>
+                            <td className="p-3"><div className="font-black">{item.name}</div><div className="text-[7px] text-slate-500">{item.code}</div></td>
+                            <td className="p-3 text-slate-500">{item.unit}</td>
+                            <td className="p-3 text-right">{item.startStock.toLocaleString("id-ID", { maximumFractionDigits: 3 })}</td>
+                            <td className="p-3 text-right font-black text-emerald-400">{item.qty.toLocaleString("id-ID", { maximumFractionDigits: 3 })}</td>
+                            <td className="p-3 text-right font-black">{item.endStock.toLocaleString("id-ID", { maximumFractionDigits: 3 })}</td>
+                            <td className="p-3 text-slate-500">{item.baseUnit}</td>
+                            <td className="p-3 text-right text-slate-500">{item.conversionRate.toLocaleString("id-ID", { maximumFractionDigits: 4 })}x</td>
+                            <td className="p-3 text-right font-black">{money(item.hpp)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className={`${isDark ? "bg-white/[0.03]" : "bg-slate-50"}`}>
+                        <tr><td colSpan={4} className="p-3 text-right text-[8px] font-black uppercase text-slate-500">Total Pemakaian / HPP</td><td className="p-3 text-right font-black text-emerald-400">{reportConsumptionQty.toLocaleString("id-ID", { maximumFractionDigits: 3 })}</td><td colSpan={3}></td><td className="p-3 text-right font-black text-emerald-400">{money(reportConsumptionHpp)}</td></tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </section>
+
+                <section className={`overflow-hidden rounded-2xl border ${isDark ? "border-white/[0.06]" : "border-slate-200"}`}>
+                  <div className={`border-b px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-slate-100"}`}><div className="text-[9px] font-black uppercase">REKAP STAFF</div><div className="text-[7px] text-slate-500">Kasir yang mencatat transaksi pada laporan</div></div>
+                  <div className="max-h-[330px] overflow-auto">
+                    <table className="w-full text-[9px]">
+                      <thead className="sticky top-0 z-10 bg-slate-100/95 text-slate-500 dark:bg-[#101a16]/95"><tr><th className="p-3 text-left">Staff</th><th className="p-3 text-right">Tx</th><th className="p-3 text-right">Qty</th><th className="p-3 text-right">Omzet</th></tr></thead>
+                      <tbody>{reportStaffSummary.map((staff) => (
+                        <tr key={staff.staff} className={`border-t ${isDark ? "border-white/[0.05]" : "border-slate-100"}`}><td className="p-3 font-bold">{staff.staff}</td><td className="p-3 text-right">{staff.transactions}</td><td className="p-3 text-right">{staff.items}</td><td className="p-3 text-right font-black text-emerald-400">{money(staff.total)}</td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+
+              <section className={`mt-5 overflow-hidden rounded-2xl border ${isDark ? "border-white/[0.06]" : "border-slate-200"}`}>
+                <div className={`border-b px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-slate-100"}`}>
+                  <div className="text-[9px] font-black uppercase">FOOD COST CONTROL</div>
+                  <div className="text-[7px] text-slate-500">Perbandingan pemakaian bahan aktual terhadap Net Sales</div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-3">
+                  <div className={`rounded-2xl border p-4 ${isDark ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-100 bg-slate-50"}`}>
+                    <div className="text-[7px] font-black uppercase text-slate-500">Total Pemakaian Bahan × Cost</div>
+                    <div className="mt-2 text-lg font-black text-emerald-400">{money(reportConsumptionHpp)}</div>
+                  </div>
+                  <div className={`rounded-2xl border p-4 ${isDark ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-100 bg-slate-50"}`}>
+                    <div className="text-[7px] font-black uppercase text-slate-500">Net Sales</div>
+                    <div className="mt-2 text-lg font-black">{money(reportNetSales)}</div>
+                  </div>
+                  <div className={`rounded-2xl border p-4 ${isDark ? "border-emerald-400/15 bg-emerald-400/[0.05]" : "border-emerald-100 bg-emerald-50"}`}>
+                    <div className="text-[7px] font-black uppercase text-slate-500">Food Cost Ratio</div>
+                    <div className="mt-2 text-lg font-black text-emerald-400">{reportFoodCostRatio.toFixed(2)}%</div>
+                  </div>
+                </div>
+              </section>
+
+              <section className={`mt-5 overflow-hidden rounded-2xl border ${isDark ? "border-white/[0.06]" : "border-slate-200"}`}>
+                <div className={`border-b px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-slate-100"}`}>
+                  <div className="text-[9px] font-black uppercase">DETAIL TRANSAKSI</div>
+                  <div className="text-[7px] text-slate-500">Nomor transaksi, staff, meja, pax, item, pembayaran dan komponen total</div>
+                </div>
+                <div className="overflow-auto">
+                  <table className="w-full min-w-[1200px] text-[9px]">
+                    <thead className="bg-slate-100 text-slate-500 dark:bg-[#101a16]"><tr><th className="p-3 text-left">Tanggal</th><th className="p-3 text-left">No. Transaksi</th><th className="p-3 text-left">Staff</th><th className="p-3 text-left">Tipe</th><th className="p-3 text-left">Meja / Pax</th><th className="p-3 text-left">Item</th><th className="p-3 text-left">Metode</th><th className="p-3 text-right">Diskon</th><th className="p-3 text-right">Service</th><th className="p-3 text-right">PPN</th><th className="p-3 text-right">Total</th></tr></thead>
                     <tbody>{reportSales.map((sale) => {
-                      const itemsText = (sale.items || []).map((item) => `${item.menu?.name || item.barang?.name || `Item #${item.id}`} ×${item.qty}`).join(', ') || (sale.ayce ? `Paket AYCE${sale.packageName ? ` — ${sale.packageName}` : ''}` : 'Tidak ada item');
+                      const itemsText = (sale.items || []).map((item) => `${item.menu?.name || item.barang?.name || `Item #${item.id}`} ×${item.qty}`).join(", ") || (sale.ayce ? `Paket AYCE${sale.packageName ? ` — ${sale.packageName}` : ""}` : "Tidak ada item");
                       return (
-                        <tr key={sale.id} className="border-t border-white/[0.05] align-top">
+                        <tr key={sale.id} className={`border-t align-top ${isDark ? "border-white/[0.05]" : "border-slate-100"}`}>
                           <td className="p-3 text-slate-500">{new Date(sale.saleDate).toLocaleString("id-ID")}</td>
                           <td className="p-3 font-black">{sale.number}</td>
                           <td className="p-3 font-bold">{sale.cashierName || "Staff tidak tercatat"}</td>
+                          <td className="p-3"><span className={`rounded-full px-2 py-1 text-[7px] font-black ${sale.ayce ? "bg-red-500/10 text-red-400" : "bg-emerald-500/10 text-emerald-400"}`}>{sale.ayce ? "AYCE" : "REGULAR"}</span></td>
                           <td className="p-3">{sale.tableName || "-"}{sale.pax ? ` / ${sale.pax} pax` : ""}</td>
-                          <td className="max-w-[330px] p-3 leading-5">{itemsText}</td>
+                          <td className="max-w-[360px] p-3 leading-5">{itemsText}</td>
                           <td className="p-3">{sale.paymentMethod}</td>
                           <td className="p-3 text-right">{money(sale.discount || 0)}</td>
                           <td className="p-3 text-right">{money(sale.serviceCharge || 0)}</td>
@@ -4765,6 +5217,29 @@ export default function PosOutletPage() {
                         </tr>
                       );
                     })}</tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className={`mt-5 overflow-hidden rounded-2xl border ${isDark ? "border-white/[0.06]" : "border-slate-200"}`}>
+                <div className={`border-b px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-slate-100"}`}>
+                  <div className="text-[9px] font-black uppercase">DETAIL PEMAKAIAN BAHAN</div>
+                  <div className="text-[7px] text-slate-500">Setiap baris StockCard POS_OUT pada tanggal laporan</div>
+                </div>
+                <div className="max-h-[360px] overflow-auto">
+                  <table className="w-full min-w-[950px] text-[9px]">
+                    <thead className="sticky top-0 z-10 bg-slate-100 text-slate-500 dark:bg-[#101a16]"><tr><th className="p-3 text-left">Waktu</th><th className="p-3 text-left">Referensi</th><th className="p-3 text-left">Bahan</th><th className="p-3 text-right">Qty Out</th><th className="p-3 text-left">Unit</th><th className="p-3 text-right">HPP / Unit</th><th className="p-3 text-right">Total HPP</th></tr></thead>
+                    <tbody>{reportStockUsage.map((row) => (
+                      <tr key={row.id} className={`border-t ${isDark ? "border-white/[0.05]" : "border-slate-100"}`}>
+                        <td className="p-3 text-slate-500">{new Date(row.trxDate).toLocaleString("id-ID")}</td>
+                        <td className="p-3 font-black">{row.trxNumber || (row.referenceId ? `#${row.referenceId}` : "-")}</td>
+                        <td className="p-3"><div className="font-bold">{row.barang?.name || "Barang tidak ditemukan"}</div><div className="text-[7px] text-slate-500">{row.barang?.code || "-"}</div></td>
+                        <td className="p-3 text-right font-black text-emerald-400">{Number(row.qtyOut || 0).toLocaleString("id-ID", { maximumFractionDigits: 3 })}</td>
+                        <td className="p-3">{row.barang?.baseUnit || row.barang?.unit || "-"}</td>
+                        <td className="p-3 text-right">{money(row.unitPrice)}</td>
+                        <td className="p-3 text-right font-black">{money(row.totalValue || Number(row.qtyOut || 0) * Number(row.unitPrice || 0))}</td>
+                      </tr>
+                    ))}</tbody>
                   </table>
                 </div>
               </section>

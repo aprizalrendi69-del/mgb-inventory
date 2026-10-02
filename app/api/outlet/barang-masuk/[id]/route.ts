@@ -209,6 +209,20 @@ function parseSourceKey(rawId: string) {
 
 // =====================================================
 // VALIDATE PURCHASE ITEMS
+//
+// PENTING:
+//
+// PURCHASE BOLEH:
+// PO qty      = 10
+// Received    = 15
+//
+// Jadi TIDAK BOLEH ada validasi:
+// receivedQty > qty
+//
+// Qty Purchase = qty PO
+// Received Qty = qty aktual yang diterima
+//
+// Transfer memiliki aturan berbeda dan tetap dibatasi.
 // =====================================================
 
 function validatePurchaseItems(
@@ -242,7 +256,7 @@ function validatePurchaseItems(
     }
 
     // =================================================
-    // QTY
+    // QTY PO
     // =================================================
 
     const qty = Number(
@@ -258,6 +272,17 @@ function validatePurchaseItems(
 
     // =================================================
     // RECEIVED QTY
+    //
+    // PURCHASE:
+    //
+    // receivedQty BOLEH > qty
+    //
+    // Contoh:
+    //
+    // qty          = 10
+    // receivedQty  = 15
+    //
+    // VALID.
     // =================================================
 
     const receivedQty = Number(
@@ -271,11 +296,14 @@ function validatePurchaseItems(
       return `Received qty barang ${item.barang.name} tidak valid`;
     }
 
-    if (
-      receivedQty > qty
-    ) {
-      return `Received qty barang ${item.barang.name} melebihi qty purchase`;
-    }
+    // =================================================
+    // JANGAN VALIDASI:
+    //
+    // receivedQty > qty
+    //
+    // Karena Purchase memang boleh menerima lebih banyak
+    // daripada qty PO.
+    // =================================================
   }
 
   return null;
@@ -286,6 +314,9 @@ function validatePurchaseItems(
 //
 // ITEM VOID TETAP DIAMBIL.
 // Jangan filter voided:false.
+//
+// TRANSFER BERBEDA DENGAN PURCHASE.
+// receivedQty TIDAK BOLEH MELEBIHI qty transfer.
 // =====================================================
 
 function validateTransferItems(
@@ -348,6 +379,10 @@ function validateTransferItems(
       return `Received qty barang ${item.barang.name} tidak valid`;
     }
 
+    // =================================================
+    // TRANSFER TETAP DIBATASI QTY KIRIM
+    // =================================================
+
     if (
       receivedQty > qty
     ) {
@@ -360,6 +395,21 @@ function validateTransferItems(
 
 // =====================================================
 // BUILD PURCHASE RESPONSE
+//
+// PURCHASE:
+//
+// qty          = Qty PO
+// receivedQty  = Qty aktual diterima
+//
+// receivedQty BOLEH > qty.
+//
+// Contoh:
+//
+// qty          = 10
+// receivedQty  = 15
+//
+// remainingQty = 0
+// status       = RECEIVED
 // =====================================================
 
 function buildPurchaseItems(
@@ -399,6 +449,51 @@ function buildPurchaseItems(
             )
           : calculatedSubtotal;
 
+      // =================================================
+      // REMAINING
+      //
+      // Kalau received > PO:
+      //
+      // 10 - 15 = -5
+      //
+      // Tetapi remaining secara bisnis = 0.
+      // =================================================
+
+      const remainingQty =
+        roundQty(
+          Math.max(
+            qty - receivedQty,
+            0
+          )
+        );
+
+      // =================================================
+      // PURCHASE STATUS
+      //
+      // receivedQty >= qty:
+      // RECEIVED
+      //
+      // receivedQty > 0:
+      // PARTIAL
+      //
+      // receivedQty = 0:
+      // PENDING
+      //
+      // Jadi:
+      //
+      // qty 10
+      // received 15
+      //
+      // => RECEIVED
+      // =================================================
+
+      const isReceived =
+        receivedQty >= qty;
+
+      const isPartial =
+        receivedQty > 0 &&
+        receivedQty < qty;
+
       return {
         id: item.id,
 
@@ -409,13 +504,7 @@ function buildPurchaseItems(
 
         receivedQty,
 
-        remainingQty:
-          roundQty(
-            Math.max(
-              qty - receivedQty,
-              0
-            )
-          ),
+        remainingQty,
 
         price,
 
@@ -425,18 +514,15 @@ function buildPurchaseItems(
           item.barang,
 
         itemStatus:
-          receivedQty >= qty
+          isReceived
             ? "RECEIVED"
-            : receivedQty > 0
+            : isPartial
               ? "PARTIAL"
               : "PENDING",
 
-        isReceived:
-          receivedQty >= qty,
+        isReceived,
 
-        isPartial:
-          receivedQty > 0 &&
-          receivedQty < qty,
+        isPartial,
       };
     }
   );
@@ -754,9 +840,6 @@ export async function GET(
             //
             // Invoice supplier disimpan di:
             // OutletReceipt.invoiceNumber
-            //
-            // BUKAN:
-            // OutletReceipt.number
             // =================================================
 
             receipts: {
@@ -764,13 +847,7 @@ export async function GET(
                 id: true,
                 number: true,
                 receiptDate: true,
-
-                // =============================================
-                // INVOICE SUPPLIER
-                // =============================================
-
                 invoiceNumber: true,
-
                 remarks: true,
                 createdAt: true,
               },
@@ -862,6 +939,16 @@ export async function GET(
         };
       }
 
+      // =================================================
+      // VALIDASI PURCHASE
+      //
+      // TIDAK ADA LAGI VALIDASI:
+      //
+      // receivedQty > qty
+      //
+      // Purchase boleh menerima qty lebih banyak.
+      // =================================================
+
       const validationError =
         validatePurchaseItems(
           purchase.items
@@ -882,7 +969,7 @@ export async function GET(
         );
 
       // =================================================
-      // TOTAL QTY
+      // TOTAL QTY PO
       // =================================================
 
       const totalQty =
@@ -900,6 +987,17 @@ export async function GET(
 
       // =================================================
       // TOTAL RECEIVED
+      //
+      // PENTING:
+      //
+      // Tidak diclamp ke totalQty.
+      //
+      // Contoh:
+      //
+      // PO = 10
+      // Terima = 15
+      //
+      // totalReceivedQty = 15
       // =================================================
 
       const totalReceivedQty =
@@ -917,6 +1015,8 @@ export async function GET(
 
       // =================================================
       // TOTAL REMAINING
+      //
+      // Tidak boleh negatif.
       // =================================================
 
       const totalRemainingQty =
@@ -930,6 +1030,8 @@ export async function GET(
 
       // =================================================
       // TOTAL VALUE
+      //
+      // Nilai PO tetap berdasarkan qty PO.
       // =================================================
 
       const totalValue =
@@ -961,10 +1063,6 @@ export async function GET(
 
       // =================================================
       // PAYABLE
-      //
-      // Hanya informasi hutang.
-      //
-      // Tidak semua metode pembayaran memiliki payable.
       // =================================================
 
       const payable =
@@ -1029,10 +1127,6 @@ export async function GET(
 
       // =================================================
       // RECEIPTS
-      //
-      // invoiceNumber sekarang ikut dikirim.
-      //
-      // Receipt number berbeda dengan invoice supplier.
       // =================================================
 
       const receipts =
@@ -1050,10 +1144,6 @@ export async function GET(
                 receiptDate:
                   receipt.receiptDate,
 
-                // ===========================================
-                // INVOICE SUPPLIER
-                // ===========================================
-
                 invoiceNumber:
                   receipt.invoiceNumber ??
                   null,
@@ -1070,9 +1160,6 @@ export async function GET(
 
       // =================================================
       // CARI RECEIPT TERBARU YANG MEMILIKI INVOICE
-      //
-      // Diprioritaskan daripada payable karena invoice
-      // transaksi penerimaan memang disimpan di receipt.
       // =================================================
 
       const invoiceReceipt =
@@ -1109,8 +1196,6 @@ export async function GET(
       //
       // 1. OutletReceipt.invoiceNumber
       // 2. PurchasePayable.invoiceNumber
-      //
-      // Fallback payable penting untuk transaksi lama.
       // =================================================
 
       const invoiceNumber =
@@ -1120,37 +1205,12 @@ export async function GET(
 
       // =================================================
       // SUPPLIER INVOICE
-      //
-      // SEMUA PAYMENT METHOD:
-      //
-      // CASH
-      // TRANSFER
-      // COD
-      // CBD
-      // TEMPO
-      //
-      // Invoice optional di level GET.
-      //
-      // Validasi WAJIB untuk TEMPO dilakukan di API
-      // yang melakukan proses penerimaan.
       // =================================================
 
       const supplierInvoice =
         invoiceNumber
           ? {
               invoiceNumber,
-
-              // =============================================
-              // INVOICE DATE
-              //
-              // OutletReceipt belum memiliki invoiceDate.
-              //
-              // Jadi:
-              // - jika invoice berasal dari payable,
-              //   gunakan payable.invoiceDate
-              // - jika hanya berasal dari receipt,
-              //   null
-              // =============================================
 
               invoiceDate:
                 payableInvoiceNumber ===
@@ -1159,21 +1219,11 @@ export async function GET(
                     null
                   : null,
 
-              // =============================================
-              // DUE DATE
-              //
-              // Hanya relevan untuk TEMPO.
-              // =============================================
-
               dueDate:
                 isTempo
                   ? payable?.dueDate ??
                     null
                   : null,
-
-              // =============================================
-              // TEMPO DAYS
-              // =============================================
 
               tempoDays:
                 isTempo
@@ -1184,12 +1234,6 @@ export async function GET(
                       null
                     )
                   : null,
-
-              // =============================================
-              // FINANCIAL
-              //
-              // Hanya ada jika payable tersedia.
-              // =============================================
 
               amount:
                 isTempo &&
@@ -1214,10 +1258,6 @@ export async function GET(
                 payable
                   ? payable.status
                   : null,
-
-              // =============================================
-              // RECEIPT REFERENCE
-              // =============================================
 
               receiptId:
                 invoiceReceipt?.id ??
@@ -1345,10 +1385,6 @@ export async function GET(
 
             alreadyReceived,
 
-            // ===============================================
-            // SUPPLIER INVOICE
-            // ===============================================
-
             invoiceNumber,
 
             invoiceDate:
@@ -1375,17 +1411,9 @@ export async function GET(
                   : null
               ),
 
-            // ===============================================
-            // PAYABLE
-            // ===============================================
-
             payable,
 
             supplierInvoice,
-
-            // ===============================================
-            // RECEIPTS
-            // ===============================================
 
             receipts,
 
@@ -1416,6 +1444,11 @@ export async function GET(
 
           // =================================================
           // STATUS FLAGS
+          //
+          // receivedQty >= totalQty tetap dianggap
+          // fully received.
+          //
+          // Jadi 15 / 10 = fully received.
           // =================================================
 
           isFullyReceived:
@@ -1458,10 +1491,6 @@ export async function GET(
               receipts.length > 0
                 ? receipts[0]
                 : null,
-
-            // =============================================
-            // INVOICE TERAKHIR
-            // =============================================
 
             invoiceNumber,
 
@@ -1628,8 +1657,6 @@ export async function GET(
 
       // =================================================
       // TOTAL VALUE
-      //
-      // SEMUA ITEM.
       // =================================================
 
       const totalValue =
@@ -1852,10 +1879,6 @@ export async function GET(
 
             totalVoidedQty,
 
-            // ===============================================
-            // TRANSFER TIDAK PUNYA INVOICE SUPPLIER
-            // ===============================================
-
             paymentMethod:
               null,
 
@@ -1910,8 +1933,6 @@ export async function GET(
 
           // =================================================
           // FINANCIAL
-          //
-          // Transfer bukan transaksi supplier.
           // =================================================
 
           paymentMethod:
@@ -1946,9 +1967,7 @@ export async function GET(
     }
 
     // =====================================================
-    // =====================================================
     // EXPLICIT PURCHASE
-    // =====================================================
     // =====================================================
 
     if (
@@ -1983,9 +2002,7 @@ export async function GET(
     }
 
     // =====================================================
-    // =====================================================
     // EXPLICIT TRANSFER
-    // =====================================================
     // =====================================================
 
     if (
@@ -2020,13 +2037,7 @@ export async function GET(
     }
 
     // =====================================================
-    // =====================================================
     // NUMERIC ID
-    // =====================================================
-    //
-    // Backward compatibility:
-    //
-    // 123
     //
     // PURCHASE dahulu.
     // Jika tidak ada -> TRANSFER.

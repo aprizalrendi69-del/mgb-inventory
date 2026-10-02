@@ -6,6 +6,7 @@ import {
   Clock3,
   RefreshCw,
   Search,
+  Trash2,
   XCircle,
 } from "lucide-react";
 
@@ -42,6 +43,14 @@ type Waste = {
   } | null;
 };
 
+type CurrentUser = {
+  id?: number;
+  username?: string;
+  fullname?: string | null;
+  role?: string | null;
+  roles?: string[];
+};
+
 function formatNumber(value: number) {
   return new Intl.NumberFormat("id-ID", {
     maximumFractionDigits: 2,
@@ -66,14 +75,204 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function normalizeRole(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+/**
+ * Ambil user dari berbagai kemungkinan struktur response.
+ */
+function extractCurrentUser(result: any): CurrentUser | null {
+  if (!result) return null;
+
+  const candidates = [
+    result,
+    result.user,
+    result.currentUser,
+    result.data?.user,
+    result.data?.currentUser,
+    result.data,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "object") {
+      continue;
+    }
+
+    if (
+      candidate.role ||
+      candidate.roles ||
+      candidate.username ||
+      candidate.fullname
+    ) {
+      return {
+        id:
+          typeof candidate.id === "number"
+            ? candidate.id
+            : undefined,
+        username:
+          typeof candidate.username === "string"
+            ? candidate.username
+            : undefined,
+        fullname:
+          typeof candidate.fullname === "string"
+            ? candidate.fullname
+            : candidate.fullname === null
+              ? null
+              : undefined,
+        role:
+          typeof candidate.role === "string"
+            ? candidate.role
+            : null,
+        roles: Array.isArray(candidate.roles)
+          ? candidate.roles
+              .filter(
+                (role: unknown) =>
+                  typeof role === "string"
+              )
+              .map((role: string) =>
+                normalizeRole(role)
+              )
+          : undefined,
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Backend Waste mengembalikan role sebagai field:
+ *
+ * {
+ *   role: "ADMIN",
+ *   isOutletAdmin: false,
+ *   outletId: ...,
+ *   data: [...]
+ * }
+ *
+ * Jadi role tersebut juga kita baca secara langsung.
+ */
+function extractRoleFromWasteResponse(result: any): CurrentUser | null {
+  if (!result || typeof result !== "object") {
+    return null;
+  }
+
+  const directRole = normalizeRole(result.role);
+
+  if (directRole) {
+    return {
+      role: directRole,
+    };
+  }
+
+  const nestedRole = normalizeRole(result.data?.role);
+
+  if (nestedRole) {
+    return {
+      role: nestedRole,
+    };
+  }
+
+  if (result.isOutletAdmin === true) {
+    return {
+      role: "OUTLET_ADMIN",
+    };
+  }
+
+  return null;
+}
+
+function canDeleteWaste(user: CurrentUser | null) {
+  if (!user) return false;
+
+  const primaryRole = normalizeRole(user.role);
+
+  if (
+    primaryRole === "ADMIN" ||
+    primaryRole === "OUTLET_ADMIN"
+  ) {
+    return true;
+  }
+
+  if (Array.isArray(user.roles)) {
+    return user.roles.some((role) => {
+      const normalized = normalizeRole(role);
+
+      return (
+        normalized === "ADMIN" ||
+        normalized === "OUTLET_ADMIN"
+      );
+    });
+  }
+
+  return false;
+}
+
 export default function WasteApprovalPage() {
   const [data, setData] = useState<Waste[]>([]);
   const [loading, setLoading] = useState(true);
-  const [approvingId, setApprovingId] = useState<number | null>(null);
+
+  const [approvingId, setApprovingId] =
+    useState<number | null>(null);
+
+  const [deletingId, setDeletingId] =
+    useState<number | null>(null);
+
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  const [currentUser, setCurrentUser] =
+    useState<CurrentUser | null>(null);
+
+  const [userLoading, setUserLoading] =
+    useState(true);
+
+  /**
+   * LOAD CURRENT USER
+   *
+   * Endpoint utama /api/auth/me.
+   * Kalau gagal, role akan tetap dicoba dari API Waste.
+   */
+  const loadCurrentUser = useCallback(async () => {
+    try {
+      setUserLoading(true);
+
+      const response = await fetch(
+        "/api/auth/me",
+        {
+          method: "GET",
+          cache: "no-store",
+          credentials: "include",
+        }
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+
+        const user = extractCurrentUser(result);
+
+        if (user) {
+          setCurrentUser(user);
+        }
+      }
+    } catch {
+      // Role akan dicoba dari API Waste.
+    } finally {
+      setUserLoading(false);
+    }
+  }, []);
+
+  /**
+   * LOAD DATA WASTE
+   *
+   * Tidak bergantung pada currentUser agar tidak terjadi
+   * loop/refetch saat role berhasil ditemukan.
+   */
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -82,7 +281,9 @@ export default function WasteApprovalPage() {
       const response = await fetch(
         "/api/outlet/waste?month=all&status=PENDING",
         {
+          method: "GET",
           cache: "no-store",
+          credentials: "include",
         }
       );
 
@@ -90,13 +291,44 @@ export default function WasteApprovalPage() {
 
       if (!response.ok || !result.success) {
         throw new Error(
-          result.message || "Gagal mengambil data Waste."
+          result.message ||
+            "Gagal mengambil data Waste."
         );
       }
 
+      /**
+       * PRIORITAS 1:
+       * Ambil role langsung dari response Waste.
+       *
+       * Contoh:
+       * result.role = "ADMIN"
+       * result.role = "OUTLET_ADMIN"
+       */
+      const userFromWaste =
+        extractRoleFromWasteResponse(result);
+
+      if (userFromWaste) {
+        setCurrentUser((current) => {
+          /**
+           * Kalau /api/auth/me sudah memberikan user
+           * lengkap, jangan ditimpa.
+           */
+          if (current) {
+            return current;
+          }
+
+          return userFromWaste;
+        });
+      }
+
+      /**
+       * Pastikan hanya PENDING yang masuk tabel.
+       */
       const pending = Array.isArray(result.data)
         ? result.data.filter(
-            (item: Waste) => item.status === "PENDING"
+            (item: Waste) =>
+              String(item.status).toUpperCase() ===
+              "PENDING"
           )
         : [];
 
@@ -113,8 +345,22 @@ export default function WasteApprovalPage() {
   }, []);
 
   useEffect(() => {
+    loadCurrentUser();
+  }, [loadCurrentUser]);
+
+  useEffect(() => {
     loadData();
   }, [loadData]);
+
+  /**
+   * Tombol Hapus hanya aktif untuk:
+   *
+   * ADMIN
+   * OUTLET_ADMIN
+   */
+  const canDelete = useMemo(() => {
+    return canDeleteWaste(currentUser);
+  }, [currentUser]);
 
   const filteredData = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -130,11 +376,14 @@ export default function WasteApprovalPage() {
         item.barang?.name,
         item.type,
         item.user?.fullname,
+        item.user?.username,
         item.note,
       ]
         .filter(Boolean)
         .some((value) =>
-          String(value).toLowerCase().includes(keyword)
+          String(value)
+            .toLowerCase()
+            .includes(keyword)
         );
     });
   }, [data, search]);
@@ -142,7 +391,8 @@ export default function WasteApprovalPage() {
   const totalWasteQty = useMemo(
     () =>
       filteredData.reduce(
-        (sum, item) => sum + Number(item.wasteQty || 0),
+        (sum, item) =>
+          sum + Number(item.wasteQty || 0),
         0
       ),
     [filteredData]
@@ -151,16 +401,29 @@ export default function WasteApprovalPage() {
   const totalWasteValue = useMemo(
     () =>
       filteredData.reduce(
-        (sum, item) => sum + Number(item.totalCost || 0),
+        (sum, item) =>
+          sum + Number(item.totalCost || 0),
         0
       ),
     [filteredData]
   );
 
   async function handleApprove(id: number) {
-    const item = data.find((row) => row.id === id);
+    const item = data.find(
+      (row) => row.id === id
+    );
 
     if (!item) return;
+
+    if (
+      String(item.status).toUpperCase() !==
+      "PENDING"
+    ) {
+      setError(
+        `Waste ${item.number} sudah tidak berstatus PENDING.`
+      );
+      return;
+    }
 
     const confirmed = window.confirm(
       `Approve Waste ${item.number}?\n\n` +
@@ -185,6 +448,7 @@ export default function WasteApprovalPage() {
           headers: {
             "Content-Type": "application/json",
           },
+          credentials: "include",
         }
       );
 
@@ -192,12 +456,18 @@ export default function WasteApprovalPage() {
 
       if (!response.ok || !result.success) {
         throw new Error(
-          result.message || "Gagal approve Waste."
+          result.message ||
+            "Gagal approve Waste."
         );
       }
 
+      /**
+       * Langsung hilangkan dari tabel.
+       */
       setData((current) =>
-        current.filter((row) => row.id !== id)
+        current.filter(
+          (row) => row.id !== id
+        )
       );
 
       setSuccess(
@@ -211,6 +481,96 @@ export default function WasteApprovalPage() {
       );
     } finally {
       setApprovingId(null);
+    }
+  }
+
+  async function handleDelete(id: number) {
+    /**
+     * Pengamanan frontend.
+     */
+    if (!canDelete) {
+      setError(
+        "Anda tidak memiliki hak untuk menghapus Waste."
+      );
+      return;
+    }
+
+    const item = data.find(
+      (row) => row.id === id
+    );
+
+    if (!item) return;
+
+    /**
+     * Hanya PENDING yang dapat dihapus.
+     */
+    if (
+      String(item.status).toUpperCase() !==
+      "PENDING"
+    ) {
+      setError(
+        `Waste ${item.number} tidak dapat dihapus karena statusnya sudah bukan PENDING.`
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Hapus Waste ${item.number}?\n\n` +
+        `Barang: ${item.barang?.name || "-"}\n` +
+        `Waste: ${formatNumber(item.wasteQty)} ${
+          item.barang?.unit || ""
+        }\n` +
+        `Nilai: ${formatCurrency(item.totalCost)}\n\n` +
+        `Data Waste PENDING ini akan dihapus. Lanjutkan?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setDeletingId(id);
+      setError("");
+      setSuccess("");
+
+      const response = await fetch(
+        `/api/outlet/waste/${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.message ||
+            "Gagal menghapus Waste."
+        );
+      }
+
+      /**
+       * Langsung hilangkan row setelah DELETE sukses.
+       */
+      setData((current) =>
+        current.filter(
+          (row) => row.id !== id
+        )
+      );
+
+      setSuccess(
+        `Waste ${item.number} berhasil dihapus.`
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Gagal menghapus Waste."
+      );
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -230,8 +590,8 @@ export default function WasteApprovalPage() {
           </div>
 
           <p className="text-[12px] text-[#71847C]">
-            Review dan approve transaksi Waste Outlet yang masih
-            berstatus PENDING.
+            Review dan approve transaksi Waste Outlet
+            yang masih berstatus PENDING.
           </p>
         </div>
 
@@ -262,21 +622,29 @@ export default function WasteApprovalPage() {
         >
           <RefreshCw
             size={15}
-            className={loading ? "animate-spin" : ""}
+            className={
+              loading
+                ? "animate-spin"
+                : ""
+            }
           />
           Refresh
         </button>
       </div>
 
-      {/* ALERT */}
+      {/* ERROR */}
       {error && (
         <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-          <XCircle size={18} className="mt-0.5 shrink-0" />
+          <XCircle
+            size={18}
+            className="mt-0.5 shrink-0"
+          />
 
           <div>
             <p className="text-[12px] font-bold">
               Terjadi kesalahan
             </p>
+
             <p className="mt-0.5 text-[11px]">
               {error}
             </p>
@@ -284,14 +652,19 @@ export default function WasteApprovalPage() {
         </div>
       )}
 
+      {/* SUCCESS */}
       {success && (
         <div className="mb-4 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700">
-          <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+          <CheckCircle2
+            size={18}
+            className="mt-0.5 shrink-0"
+          />
 
           <div>
             <p className="text-[12px] font-bold">
               Berhasil
             </p>
+
             <p className="mt-0.5 text-[11px]">
               {success}
             </p>
@@ -309,7 +682,9 @@ export default function WasteApprovalPage() {
               </p>
 
               <p className="mt-1 text-[24px] font-bold text-[#263B34]">
-                {formatNumber(filteredData.length)}
+                {formatNumber(
+                  filteredData.length
+                )}
               </p>
 
               <p className="text-[10px] text-[#8A9A94]">
@@ -331,7 +706,9 @@ export default function WasteApprovalPage() {
               </p>
 
               <p className="mt-1 text-[24px] font-bold text-[#263B34]">
-                {formatNumber(totalWasteQty)}
+                {formatNumber(
+                  totalWasteQty
+                )}
               </p>
 
               <p className="text-[10px] text-[#8A9A94]">
@@ -353,7 +730,9 @@ export default function WasteApprovalPage() {
               </p>
 
               <p className="mt-1 text-[20px] font-bold text-[#263B34]">
-                {formatCurrency(totalWasteValue)}
+                {formatCurrency(
+                  totalWasteValue
+                )}
               </p>
 
               <p className="text-[10px] text-[#8A9A94]">
@@ -373,13 +752,21 @@ export default function WasteApprovalPage() {
         {/* TOOLBAR */}
         <div className="flex flex-col gap-3 border-b border-[#E1E9E5] p-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-[14px] font-bold text-[#263B34]">
-              Waste Menunggu Approval
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-[14px] font-bold text-[#263B34]">
+                Waste Menunggu Approval
+              </h2>
+
+              {canDelete && (
+                <span className="rounded-full bg-[#EAF3EF] px-2 py-0.5 text-[9px] font-bold text-[#527A6B]">
+                  HAPUS AKTIF
+                </span>
+              )}
+            </div>
 
             <p className="mt-0.5 text-[10px] text-[#84948E]">
-              Hanya transaksi dengan status PENDING yang
-              ditampilkan.
+              Hanya transaksi dengan status PENDING
+              yang ditampilkan.
             </p>
           </div>
 
@@ -392,7 +779,9 @@ export default function WasteApprovalPage() {
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) =>
+                setSearch(e.target.value)
+              }
               placeholder="Cari nomor, outlet, barang..."
               className="
                 h-9
@@ -417,7 +806,7 @@ export default function WasteApprovalPage() {
 
         {/* TABLE */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1120px] border-collapse">
+          <table className="w-full min-w-[1230px] border-collapse">
             <thead>
               <tr className="border-b border-[#DDE7E2] bg-[#F6F9F7]">
                 <th className="px-4 py-3 text-left text-[9px] font-bold uppercase tracking-[0.1em] text-[#74867F]">
@@ -483,7 +872,8 @@ export default function WasteApprovalPage() {
                     </p>
                   </td>
                 </tr>
-              ) : filteredData.length === 0 ? (
+              ) : filteredData.length ===
+                0 ? (
                 <tr>
                   <td
                     colSpan={11}
@@ -498,193 +888,293 @@ export default function WasteApprovalPage() {
                     </p>
 
                     <p className="mt-1 text-[10px] text-[#899993]">
-                      Semua transaksi Waste sudah diproses.
+                      Semua transaksi Waste sudah
+                      diproses.
                     </p>
                   </td>
                 </tr>
               ) : (
-                filteredData.map((item, index) => {
-                  const approving =
-                    approvingId === item.id;
+                filteredData.map(
+                  (item, index) => {
+                    const approving =
+                      approvingId === item.id;
 
-                  return (
-                    <tr
-                      key={item.id}
-                      className="
-                        border-b
-                        border-[#E8EFEC]
-                        transition
-                        hover:bg-[#F8FBF9]
-                      "
-                    >
-                      <td className="px-4 py-3 text-[11px] font-semibold text-[#71847C]">
-                        {index + 1}
-                      </td>
+                    const deleting =
+                      deletingId === item.id;
 
-                      <td className="px-4 py-3">
-                        <p className="text-[11px] font-bold text-[#344A42]">
-                          {item.number}
-                        </p>
+                    const pending =
+                      String(
+                        item.status
+                      ).toUpperCase() ===
+                      "PENDING";
 
-                        <p className="mt-0.5 text-[9px] text-[#8A9A94]">
-                          {formatDate(item.trxDate)}
-                        </p>
-                      </td>
+                    return (
+                      <tr
+                        key={item.id}
+                        className="
+                          border-b
+                          border-[#E8EFEC]
+                          transition
+                          hover:bg-[#F8FBF9]
+                        "
+                      >
+                        <td className="px-4 py-3 text-[11px] font-semibold text-[#71847C]">
+                          {index + 1}
+                        </td>
 
-                      <td className="px-4 py-3">
-                        <p className="text-[11px] font-bold text-[#344A42]">
-                          {item.outlet?.name || "-"}
-                        </p>
-
-                        <p className="mt-0.5 text-[9px] text-[#8A9A94]">
-                          {item.outlet?.code || "-"}
-                        </p>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <p className="text-[11px] font-bold text-[#344A42]">
-                          {item.barang?.name || "-"}
-                        </p>
-
-                        <p className="mt-0.5 text-[9px] text-[#8A9A94]">
-                          {item.barang?.code || "-"}
-                          {item.barang?.category
-                            ? ` • ${item.barang.category}`
-                            : ""}
-                        </p>
-                      </td>
-
-                      <td className="px-4 py-3 text-right">
-                        <span className="text-[11px] font-bold text-[#344A42]">
-                          {formatNumber(item.qtyProcessed)}
-                        </span>
-
-                        <span className="ml-1 text-[9px] text-[#899993]">
-                          {item.barang?.unit || ""}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3 text-right">
-                        <span className="inline-flex rounded-md bg-[#FDECEC] px-2 py-1 text-[11px] font-bold text-[#C75B5B]">
-                          {formatNumber(item.wasteQty)}
-                        </span>
-
-                        <span className="ml-1 text-[9px] text-[#899993]">
-                          {item.barang?.unit || ""}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3 text-right">
-                        <span className="text-[11px] font-bold text-[#344A42]">
-                          {formatNumber(item.netQty)}
-                        </span>
-
-                        <span className="ml-1 text-[9px] text-[#899993]">
-                          {item.barang?.unit || ""}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3 text-right">
-                        <p className="text-[11px] font-bold text-[#344A42]">
-                          {formatCurrency(item.totalCost)}
-                        </p>
-
-                        <p className="mt-0.5 text-[9px] text-[#899993]">
-                          @ {formatCurrency(item.unitCost)}
-                        </p>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <p className="max-w-[130px] truncate text-[11px] font-semibold text-[#344A42]">
-                          {item.user?.fullname ||
-                            item.user?.username ||
-                            "-"}
-                        </p>
-
-                        {item.note && (
-                          <p
-                            title={item.note}
-                            className="mt-0.5 max-w-[130px] truncate text-[9px] text-[#899993]"
-                          >
-                            {item.note}
+                        <td className="px-4 py-3">
+                          <p className="text-[11px] font-bold text-[#344A42]">
+                            {item.number}
                           </p>
-                        )}
-                      </td>
 
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF4D8] px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-[#A87512]">
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#D59B25]" />
-                          PENDING
-                        </span>
-                      </td>
+                          <p className="mt-0.5 text-[9px] text-[#8A9A94]">
+                            {formatDate(
+                              item.trxDate
+                            )}
+                          </p>
+                        </td>
 
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleApprove(item.id)
-                          }
-                          disabled={approving}
-                          className="
-                            inline-flex
-                            h-8
-                            items-center
-                            justify-center
-                            gap-1.5
-                            rounded-lg
-                            bg-[#527A6B]
-                            px-3
-                            text-[10px]
-                            font-bold
-                            text-white
-                            shadow-sm
-                            transition
-                            hover:bg-[#456B5D]
-                            disabled:cursor-not-allowed
-                            disabled:opacity-60
-                          "
-                        >
-                          {approving ? (
-                            <RefreshCw
-                              size={13}
-                              className="animate-spin"
-                            />
-                          ) : (
-                            <CheckCircle2 size={13} />
+                        <td className="px-4 py-3">
+                          <p className="text-[11px] font-bold text-[#344A42]">
+                            {item.outlet?.name ||
+                              "-"}
+                          </p>
+
+                          <p className="mt-0.5 text-[9px] text-[#8A9A94]">
+                            {item.outlet?.code ||
+                              "-"}
+                          </p>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <p className="text-[11px] font-bold text-[#344A42]">
+                            {item.barang?.name ||
+                              "-"}
+                          </p>
+
+                          <p className="mt-0.5 text-[9px] text-[#8A9A94]">
+                            {item.barang?.code ||
+                              "-"}
+                            {item.barang?.category
+                              ? ` • ${item.barang.category}`
+                              : ""}
+                          </p>
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          <span className="text-[11px] font-bold text-[#344A42]">
+                            {formatNumber(
+                              item.qtyProcessed
+                            )}
+                          </span>
+
+                          <span className="ml-1 text-[9px] text-[#899993]">
+                            {item.barang?.unit ||
+                              ""}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          <span className="inline-flex rounded-md bg-[#FDECEC] px-2 py-1 text-[11px] font-bold text-[#C75B5B]">
+                            {formatNumber(
+                              item.wasteQty
+                            )}
+                          </span>
+
+                          <span className="ml-1 text-[9px] text-[#899993]">
+                            {item.barang?.unit ||
+                              ""}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          <span className="text-[11px] font-bold text-[#344A42]">
+                            {formatNumber(
+                              item.netQty
+                            )}
+                          </span>
+
+                          <span className="ml-1 text-[9px] text-[#899993]">
+                            {item.barang?.unit ||
+                              ""}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          <p className="text-[11px] font-bold text-[#344A42]">
+                            {formatCurrency(
+                              item.totalCost
+                            )}
+                          </p>
+
+                          <p className="mt-0.5 text-[9px] text-[#899993]">
+                            @{" "}
+                            {formatCurrency(
+                              item.unitCost
+                            )}
+                          </p>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <p className="max-w-[130px] truncate text-[11px] font-semibold text-[#344A42]">
+                            {item.user?.fullname ||
+                              item.user?.username ||
+                              "-"}
+                          </p>
+
+                          {item.note && (
+                            <p
+                              title={item.note}
+                              className="mt-0.5 max-w-[130px] truncate text-[9px] text-[#899993]"
+                            >
+                              {item.note}
+                            </p>
                           )}
+                        </td>
 
-                          {approving
-                            ? "Proses..."
-                            : "Approve"}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
+                        <td className="px-4 py-3 text-center">
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF4D8] px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-[#A87512]">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#D59B25]" />
+                            {item.status}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-2">
+                            {/* APPROVE */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleApprove(
+                                  item.id
+                                )
+                              }
+                              disabled={
+                                approving ||
+                                deleting ||
+                                !pending
+                              }
+                              className="
+                                inline-flex
+                                h-8
+                                items-center
+                                justify-center
+                                gap-1.5
+                                rounded-lg
+                                bg-[#527A6B]
+                                px-3
+                                text-[10px]
+                                font-bold
+                                text-white
+                                shadow-sm
+                                transition
+                                hover:bg-[#456B5D]
+                                disabled:cursor-not-allowed
+                                disabled:opacity-60
+                              "
+                            >
+                              {approving ? (
+                                <RefreshCw
+                                  size={13}
+                                  className="animate-spin"
+                                />
+                              ) : (
+                                <CheckCircle2
+                                  size={13}
+                                />
+                              )}
+
+                              {approving
+                                ? "Proses..."
+                                : "Approve"}
+                            </button>
+
+                            {/* HAPUS */}
+                            {canDelete &&
+                              pending && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDelete(
+                                      item.id
+                                    )
+                                  }
+                                  disabled={
+                                    approving ||
+                                    deleting
+                                  }
+                                  title="Hapus Waste Pending"
+                                  className="
+                                    inline-flex
+                                    h-8
+                                    items-center
+                                    justify-center
+                                    gap-1.5
+                                    rounded-lg
+                                    border
+                                    border-red-200
+                                    bg-red-50
+                                    px-3
+                                    text-[10px]
+                                    font-bold
+                                    text-red-600
+                                    shadow-sm
+                                    transition
+                                    hover:bg-red-100
+                                    hover:border-red-300
+                                    disabled:cursor-not-allowed
+                                    disabled:opacity-60
+                                  "
+                                >
+                                  {deleting ? (
+                                    <RefreshCw
+                                      size={13}
+                                      className="animate-spin"
+                                    />
+                                  ) : (
+                                    <Trash2
+                                      size={13}
+                                    />
+                                  )}
+
+                                  {deleting
+                                    ? "Hapus..."
+                                    : "Hapus"}
+                                </button>
+                              )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+                )
               )}
             </tbody>
           </table>
         </div>
 
         {/* FOOTER */}
-        {!loading && filteredData.length > 0 && (
-          <div className="flex items-center justify-between border-t border-[#E1E9E5] bg-[#FAFCFB] px-4 py-3">
-            <p className="text-[10px] text-[#81928B]">
-              Menampilkan{" "}
-              <span className="font-bold text-[#527A6B]">
-                {filteredData.length}
-              </span>{" "}
-              transaksi pending
-            </p>
+        {!loading &&
+          filteredData.length > 0 && (
+            <div className="flex items-center justify-between border-t border-[#E1E9E5] bg-[#FAFCFB] px-4 py-3">
+              <p className="text-[10px] text-[#81928B]">
+                Menampilkan{" "}
+                <span className="font-bold text-[#527A6B]">
+                  {filteredData.length}
+                </span>{" "}
+                transaksi pending
+              </p>
 
-            <p className="text-[10px] text-[#81928B]">
-              Total Waste:{" "}
-              <span className="font-bold text-[#C75B5B]">
-                {formatNumber(totalWasteQty)}
-              </span>
-            </p>
-          </div>
-        )}
+              <p className="text-[10px] text-[#81928B]">
+                Total Waste:{" "}
+                <span className="font-bold text-[#C75B5B]">
+                  {formatNumber(
+                    totalWasteQty
+                  )}
+                </span>
+              </p>
+            </div>
+          )}
       </div>
     </div>
   );

@@ -854,7 +854,7 @@ export default function DeliveryRequestNewPage() {
   return (
     <>
       <main className="min-h-screen bg-slate-50 px-3 py-4 md:px-6 md:py-7 lg:px-8">
-        <div className="mx-auto max-w-[1600px] space-y-5">
+        <div className="mx-auto w-full max-w-[1320px] space-y-5">
 
           {/* TOP ACCENT */}
 
@@ -907,7 +907,7 @@ export default function DeliveryRequestNewPage() {
               <div className="absolute -left-32 bottom-[-180px] h-[360px] w-[360px] rounded-full bg-slate-50" />
             </div>
 
-            <div className="relative p-5 md:p-8 lg:p-10">
+            <div className="relative p-4 sm:p-5 md:p-7 lg:p-8">
               <button
                 type="button"
                 onClick={() => router.back()}
@@ -927,7 +927,7 @@ export default function DeliveryRequestNewPage() {
                     Premium Outlet Supply
                   </div>
 
-                  <h1 className="mt-4 text-3xl font-black tracking-[-0.04em] text-emerald-950 md:text-4xl lg:text-[48px]">
+                  <h1 className="mt-4 text-2xl font-black tracking-[-0.04em] text-emerald-950 sm:text-3xl md:text-4xl">
                     Buat Delivery Request
                   </h1>
 
@@ -976,7 +976,7 @@ export default function DeliveryRequestNewPage() {
                   </div>
                 </div>
 
-                <div className="grid w-full max-w-md grid-cols-2 gap-3 xl:w-[350px] xl:max-w-none">
+                <div className="grid w-full max-w-sm grid-cols-2 gap-3 xl:w-[320px] xl:max-w-none">
                   <HeroMetric
                     icon={<Boxes size={17} />}
                     label="Jenis Barang"
@@ -1028,7 +1028,7 @@ export default function DeliveryRequestNewPage() {
 
           {/* MAIN */}
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
 
             {/* LEFT */}
 
@@ -2093,7 +2093,7 @@ export default function DeliveryRequestNewPage() {
                                 </button>
                               </div>
 
-                              <div className="mt-4 grid grid-cols-2 gap-3">
+                              <div className="mt-3 grid grid-cols-2 gap-2.5 sm:gap-3">
                                 <div
                                   className={[
                                     "rounded-xl border p-3",
@@ -2370,7 +2370,7 @@ export default function DeliveryRequestNewPage() {
                   </div>
                 </div>
 
-                <div className="p-5 md:p-6">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 md:p-6">
 
                   <SummaryInfo
                     icon={<CalendarDays size={17} />}
@@ -2413,7 +2413,7 @@ export default function DeliveryRequestNewPage() {
                     />
                   </div>
 
-                  <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="mt-3 grid grid-cols-2 gap-2.5 sm:gap-3">
                     <MiniStat
                       icon={<Boxes size={14} />}
                       label="Jenis Barang"
@@ -2786,7 +2786,7 @@ export default function DeliveryRequestNewPage() {
 
       {showConfirmModal && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/55 p-3 sm:p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="delivery-request-confirm-title"
@@ -2801,16 +2801,16 @@ export default function DeliveryRequestNewPage() {
             }
           }}
         >
-          <div className="relative w-full max-w-lg overflow-hidden rounded-[30px] border border-white/20 bg-white shadow-[0_35px_100px_rgba(15,23,42,0.28)]">
+          <div className="relative flex w-full max-w-[560px] max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] flex-col overflow-hidden rounded-[24px] sm:rounded-[28px] border border-white/20 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.24)]">
 
             {/* MODAL HEADER */}
 
-            <div className="relative overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-900 to-emerald-800 px-6 py-7 text-white md:px-7">
+            <div className="relative shrink-0 overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-900 to-emerald-800 px-4 py-5 text-white sm:px-5 sm:py-6 md:px-6">
               <div className="absolute -right-16 -top-20 h-48 w-48 rounded-full bg-emerald-400/[0.08]" />
               <div className="absolute -bottom-20 -left-10 h-40 w-40 rounded-full bg-white/[0.04]" />
 
-              <div className="relative flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/10 shadow-inner">
+              <div className="relative flex items-start gap-3 sm:gap-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/10 shadow-inner sm:h-11 sm:w-11 sm:rounded-2xl">
                   <Send size={21} />
                 </div>
 
@@ -2821,7 +2821,7 @@ export default function DeliveryRequestNewPage() {
 
                   <h2
                     id="delivery-request-confirm-title"
-                    className="mt-1.5 text-xl font-black tracking-tight"
+                    className="mt-1.5 text-lg font-black tracking-tight sm:text-xl"
                   >
                     Kirim Delivery Request?
                   </h2>
@@ -2849,7 +2849,7 @@ export default function DeliveryRequestNewPage() {
 
             {/* MODAL BODY */}
 
-            <div className="p-5 md:p-6">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 md:p-6">
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm">
@@ -2875,7 +2875,7 @@ export default function DeliveryRequestNewPage() {
 
               {/* SUMMARY */}
 
-              <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="mt-3 grid grid-cols-2 gap-2.5 sm:gap-3">
                 <ConfirmSummaryCard
                   icon={<Store size={15} />}
                   label="Outlet"
@@ -2912,7 +2912,7 @@ export default function DeliveryRequestNewPage() {
                 />
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="mt-2.5 grid grid-cols-2 gap-2.5 sm:gap-3">
                 <ConfirmSummaryCard
                   icon={
                     <ShoppingCart size={15} />
@@ -3082,14 +3082,14 @@ export default function DeliveryRequestNewPage() {
 
               {/* ACTIONS */}
 
-              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="mt-4 grid shrink-0 grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <button
                   type="button"
                   disabled={submitting}
                   onClick={() =>
                     setShowConfirmModal(false)
                   }
-                  className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-black text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:rounded-2xl sm:py-3.5"
                 >
                   <X size={17} />
                   Batal
@@ -3101,7 +3101,7 @@ export default function DeliveryRequestNewPage() {
                   onClick={
                     confirmAndSubmitRequest
                   }
-                  className="group flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-5 py-3.5 text-sm font-black text-white shadow-[0_14px_30px_rgba(6,95,70,0.22)] transition hover:-translate-y-0.5 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                  className="group flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-black text-white shadow-[0_12px_26px_rgba(6,95,70,0.20)] transition hover:-translate-y-0.5 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 sm:rounded-2xl sm:py-3.5"
                 >
                   {submitting ? (
                     <>

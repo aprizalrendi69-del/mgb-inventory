@@ -1230,21 +1230,24 @@ export default function BarangKeluarPage() {
 
     const outletName = getRequestOutlet(request);
 
-    const itemLines = items.map((item: any, itemIndex: number) => {
+    const itemLines = items.map((item: any) => {
       const itemName =
         item?.barang?.name ||
         `Barang #${item?.barangId ?? "-"}`;
 
       const qty = Number(item?.qty || 0);
       const unit = getRequestItemUnit(item);
-      const note =
-        typeof item?.note === "string"
-          ? item.note.trim()
-          : "";
 
-      return `${getWhatsAppStockMark(item)} ${itemIndex + 1}. ${itemName} : Request (${formatNumber(qty)} ${unit})${
-        note ? ` • Catatan (${note})` : ""
-      }`;
+      const note =
+        typeof item?.note === "string" ? item.note.trim() : "";
+
+      const noteText = note
+        ? ` • _*Catatan (${note})*_`
+        : "";
+
+      return `- ${itemName} : Request (*${formatNumber(qty)} ${unit}*)${noteText} ${getWhatsAppStockMark(
+        item
+      )}`;
     });
 
     return [
@@ -1259,15 +1262,14 @@ export default function BarangKeluarPage() {
       "━━━━━━━━━━━━━━━━━━",
       ...itemLines,
       "",
-      ">  *Keterangan :*",
-      "",
+      "> 📌  *Keterangan :*",
       "Stock cukup : ✅ → _*stock ≥ request*_",
       "Stok kurang : ☑️ → _*stock > 0 tetapi stock < request*_",
       "Stock habis : ❌ → _*stock = 0*_",
       "",
       "Terimakasih 🙏🏻",
       "",
-      "_***Pesan Otomatis Dari MGB•ERP***_",
+      "✨ _*Pesan Otomatis Dari MGB•ERP*_ ✨",
     ].join("\n");
   }
 
@@ -1584,24 +1586,25 @@ export default function BarangKeluarPage() {
           "━━━━━━━━━━━━━━━━━━"
         );
 
-        request.items.forEach((item: any, itemIndex: number) => {
+        request.items.forEach((item: any) => {
           const itemName =
             item?.barang?.name ||
             `Barang #${item?.barangId ?? "-"}`;
 
           const qty = Number(item?.qty || 0);
           const unit = getRequestItemUnit(item);
+
           const note =
-            typeof item?.note === "string"
-              ? item.note.trim()
-              : "";
+            typeof item?.note === "string" ? item.note.trim() : "";
+
+          const noteText = note
+            ? ` • _*Catatan (${note})*_`
+            : "";
 
           message.push(
-            `${getWhatsAppStockMark(item)} ${itemIndex + 1}. ${itemName} : Request (${formatNumber(
+            `- ${itemName} : Request (*${formatNumber(
               qty
-            )} ${unit})${
-              note ? ` • Catatan (${note})` : ""
-            }`
+            )} ${unit}*)${noteText} ${getWhatsAppStockMark(item)}`
           );
         });
 

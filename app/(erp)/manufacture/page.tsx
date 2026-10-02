@@ -210,6 +210,72 @@ function formatNumber(
   }).format(n);
 }
 
+function getBarangBaseUnit(barang?: Barang | null) {
+  return barang?.baseUnit?.trim() || barang?.unit?.trim() || "";
+}
+
+function getBarangPurchaseUnit(barang?: Barang | null) {
+  return barang?.unit?.trim() || "";
+}
+
+function getConversionRate(barang?: Barang | null) {
+  const rate = Number(barang?.conversionRate ?? 0);
+  return Number.isFinite(rate) && rate > 0 ? rate : null;
+}
+
+function getStockUnitLabel(barang?: Barang | null) {
+  // Manufacture selalu menampilkan stock dalam baseUnit.
+  return getBarangBaseUnit(barang);
+}
+
+function getStockInBaseUnit(
+  stock: unknown,
+  barang?: Barang | null
+) {
+  const rawStock = Number(stock ?? 0);
+
+  if (!Number.isFinite(rawStock)) {
+    return 0;
+  }
+
+  const baseUnit = getBarangBaseUnit(barang);
+  const purchaseUnit = getBarangPurchaseUnit(barang);
+  const rate = getConversionRate(barang);
+
+  // Jika unit master sudah sama dengan baseUnit, tidak perlu konversi.
+  if (
+    !rate ||
+    !purchaseUnit ||
+    !baseUnit ||
+    purchaseUnit.trim().toLowerCase() ===
+      baseUnit.trim().toLowerCase()
+  ) {
+    return rawStock;
+  }
+
+  // Endpoint legacy /api/outlet/stock mengembalikan
+  // OutletStock.stock dalam purchase unit. Manufacture
+  // membutuhkan nilai dalam baseUnit.
+  //
+  // Contoh:
+  // 4,3 Jerigen × 13.000 gram/Jerigen = 55.900 gram.
+  return rawStock * rate;
+}
+
+function getConversionDescription(barang?: Barang | null) {
+  if (!barang) return "Barang belum dipilih";
+
+  const purchaseUnit = getBarangPurchaseUnit(barang);
+  const baseUnit = getBarangBaseUnit(barang);
+  const rate = getConversionRate(barang);
+
+  if (!purchaseUnit || !baseUnit || !rate) {
+    return "Faktor konversi belum dikonfigurasi. Stock tidak boleh diasumsikan sebagai base unit.";
+  }
+
+  return `1 ${purchaseUnit} = ${formatNumber(rate)} ${baseUnit}`;
+}
+
 function formatDate(value?: string | null) {
   if (!value) return "-";
 
@@ -536,9 +602,41 @@ export default function ManufacturePage() {
                     x.barang?.id
                 ),
 
-                stock: Number(
-                  x.stock ?? 0
-                ),
+                stock: (() => {
+                  /*
+                   * Stock Manufacture WAJIB baseUnit.
+                   *
+                   * Prioritaskan field yang secara eksplisit sudah
+                   * dikonversi oleh backend. Jika endpoint lama hanya
+                   * mengirim `stock`, konversi di sini menggunakan
+                   * conversionRate Master Barang.
+                   *
+                   * Contoh:
+                   * 4,3 Jerigen × 13.000 gram/Jerigen
+                   * = 55.900 gram.
+                   */
+                  const explicitBaseStock =
+                    x.stockBaseUnit ??
+                    x.baseUnitStock ??
+                    x.convertedStock ??
+                    x.stockInBaseUnit;
+
+                  if (
+                    explicitBaseStock != null &&
+                    Number.isFinite(
+                      Number(explicitBaseStock)
+                    )
+                  ) {
+                    return Number(
+                      explicitBaseStock
+                    );
+                  }
+
+                  return getStockInBaseUnit(
+                    x.stock,
+                    x.barang
+                  );
+                })(),
 
                 minimumStock:
                   x.minimumStock != null
@@ -1153,70 +1251,80 @@ export default function ManufacturePage() {
       );
     }
 
-    const stockItems =
-      recipeItems.map(
-        (item, index) => {
-          if (
-            item.itemType !==
-            "STOCK"
-          ) {
+    const normalizedItems = recipeItems.map(
+      (item, index) => {
+        const qty = Number(item.qty);
+
+        if (!Number.isFinite(qty) || qty <= 0) {
+          throw new Error(
+            `Qty pada item ke-${index + 1} harus lebih dari 0.`
+          );
+        }
+
+        if (item.itemType === "UTILITY") {
+          const name = item.name.trim();
+          const unit = item.unit.trim();
+
+          if (!name) {
             throw new Error(
-              `Item ke-${index + 1} masih bertipe UTILITY. Ubah menjadi STOCK.`
-            );
-          }
-
-          const barangId =
-            Number(
-              item.barangId
-            );
-
-          const qty =
-            Number(
-              item.qty
-            );
-
-          const unit =
-            item.unit.trim();
-
-          if (
-            !Number.isInteger(
-              barangId
-            ) ||
-            barangId <= 0
-          ) {
-            throw new Error(
-              `Barang pada item ke-${index + 1} wajib dipilih.`
-            );
-          }
-
-          if (
-            !Number.isFinite(
-              qty
-            ) ||
-            qty <= 0
-          ) {
-            throw new Error(
-              `Qty bahan pada item ke-${index + 1} harus lebih dari 0.`
+              `Nama utility pada item ke-${index + 1} wajib diisi.`
             );
           }
 
           if (!unit) {
             throw new Error(
-              `Unit bahan pada item ke-${index + 1} wajib diisi.`
+              `Unit utility pada item ke-${index + 1} wajib diisi.`
             );
           }
 
           return {
-            barangId,
+            itemType: "UTILITY" as const,
+            barangId: null,
+            name,
             qty,
             unit,
           };
         }
-      );
 
-    if (!stockItems.length) {
+        const barangId = Number(item.barangId);
+
+        if (!Number.isInteger(barangId) || barangId <= 0) {
+          throw new Error(
+            `Barang pada item ke-${index + 1} wajib dipilih.`
+          );
+        }
+
+        const barang = barangs.find(
+          (candidate) => Number(candidate.id) === barangId
+        );
+
+        if (!barang) {
+          throw new Error(
+            `Master Barang pada item ke-${index + 1} tidak ditemukan.`
+          );
+        }
+
+        const baseUnit = getBarangBaseUnit(barang);
+
+        if (!baseUnit) {
+          throw new Error(
+            `Base unit untuk ${barang.name} belum dikonfigurasi.`
+          );
+        }
+
+        return {
+          itemType: "STOCK" as const,
+          barangId,
+          name: null,
+          qty,
+          unit: baseUnit,
+        };
+      }
+    );
+
+    if (!normalizedItems.length) {
       return toast.error(
-        "Minimal satu bahan STOCK harus diisi"
+        "Minimal satu komponen STOCK atau UTILITY harus diisi"
       );
     }
 
@@ -1245,7 +1353,7 @@ export default function ManufacturePage() {
         notes:
           recipe.notes.trim(),
 
-        items: stockItems,
+        items: normalizedItems,
       };
 
       const isEdit =
@@ -1694,6 +1802,169 @@ export default function ManufacturePage() {
 
       toast.error(
         "Gagal menyelesaikan produksi"
+      );
+    }
+  }
+
+  /* =========================================================
+   * DELETE ORDER - ADMIN ONLY
+   *
+   * Hanya order yang BELUM SELESAI yang boleh dihapus.
+   * COMPLETED dan CANCELLED tidak dapat dihapus dari UI.
+   * ========================================================= */
+
+  async function deleteOrder(id: number) {
+    if (!isAdmin) {
+      return toast.error(
+        "Hanya ADMIN yang dapat menghapus order produksi"
+      );
+    }
+
+    const target = orders.find(
+      (item) => Number(item.id) === Number(id)
+    );
+
+    if (!target) {
+      return toast.error(
+        "Order produksi tidak ditemukan"
+      );
+    }
+
+    const status = normalizeStatus(target.status);
+
+    if (
+      status === "COMPLETED" ||
+      status === "CANCELLED"
+    ) {
+      return toast.error(
+        "Order yang sudah selesai atau dibatalkan tidak dapat dihapus"
+      );
+    }
+
+    const confirmed = window.confirm(
+      `Hapus order produksi ${target.number}?\\n\\nOrder yang belum selesai akan dihapus permanen beserta detail ordernya. Tindakan ini tidak dapat dibatalkan.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `/api/manufacture/orders/${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = await res
+        .json()
+        .catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        return toast.error(
+          data.message ||
+            "Gagal menghapus order produksi"
+        );
+      }
+
+      toast.success(
+        `Order ${target.number} berhasil dihapus`
+      );
+
+      await load();
+    } catch (error) {
+      console.error(
+        "DELETE ORDER ERROR:",
+        error
+      );
+
+      toast.error(
+        "Gagal menghapus order produksi"
+      );
+    }
+  }
+
+  /* =========================================================
+   * DELETE BOM / RECIPE - ADMIN ONLY
+   *
+   * Delete dilakukan melalui endpoint DELETE.
+   * Backend tetap wajib melakukan validasi relasi/order.
+   * ========================================================= */
+
+  async function deleteRecipe(id: number) {
+    if (!isAdmin) {
+      return toast.error(
+        "Hanya ADMIN yang dapat menghapus BOM / resep"
+      );
+    }
+
+    const target = recipes.find(
+      (item) => Number(item.id) === Number(id)
+    );
+
+    if (!target) {
+      return toast.error(
+        "BOM / resep tidak ditemukan"
+      );
+    }
+
+    const confirmed = window.confirm(
+      `Hapus BOM / resep "${target.code} — ${target.name}"?\\n\\nBOM beserta komponennya akan dihapus permanen. Pastikan BOM tidak lagi digunakan oleh order produksi. Tindakan ini tidak dapat dibatalkan.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `/api/manufacture/recipes/${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = await res
+        .json()
+        .catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        return toast.error(
+          data.message ||
+            "Gagal menghapus BOM / resep"
+        );
+      }
+
+      toast.success(
+        `BOM ${target.code} berhasil dihapus`
+      );
+
+      if (
+        String(order.recipeId) ===
+        String(id)
+      ) {
+        setOrder((prev) => ({
+          ...prev,
+          recipeId: "",
+        }));
+      }
+
+      await load();
+    } catch (error) {
+      console.error(
+        "DELETE RECIPE ERROR:",
+        error
+      );
+
+      toast.error(
+        "Gagal menghapus BOM / resep"
       );
     }
   }
@@ -2377,31 +2648,61 @@ export default function ManufacturePage() {
                             </td>
 
                             <td className="px-5 py-4">
-                              {!completed &&
-                              !cancelled ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    complete(
-                                      item.id
-                                    )
-                                  }
-                                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#3E7462] px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#315F51] hover:shadow-md"
-                                >
-                                  <CheckCircle2
-                                    size={
-                                      14
+                              <div className="flex flex-wrap items-center gap-2">
+                                {!completed &&
+                                !cancelled && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      complete(
+                                        item.id
+                                      )
                                     }
-                                  />
-                                  Selesaikan
-                                </button>
-                              ) : (
-                                <span className="text-xs font-semibold text-[#98A49F]">
-                                  {completed
-                                    ? "Sudah selesai"
-                                    : "Tidak tersedia"}
-                                </span>
-                              )}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#3E7462] px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#315F51] hover:shadow-md"
+                                  >
+                                    <CheckCircle2
+                                      size={
+                                        14
+                                      }
+                                    />
+                                    Selesaikan
+                                  </button>
+                                )}
+
+                                {isAdmin &&
+                                !completed &&
+                                !cancelled && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void deleteOrder(
+                                        item.id
+                                      )
+                                    }
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#F0D7D7] bg-[#FFF8F8] px-3 py-2 text-xs font-bold text-[#B55B5B] shadow-sm transition hover:border-[#E7BABA] hover:bg-[#FFF0F0] hover:shadow-md"
+                                    title="Hapus order produksi"
+                                  >
+                                    <Trash2
+                                      size={
+                                        14
+                                      }
+                                    />
+                                    Hapus
+                                  </button>
+                                )}
+
+                                {completed && (
+                                  <span className="text-xs font-semibold text-[#98A49F]">
+                                    Sudah selesai
+                                  </span>
+                                )}
+
+                                {cancelled && (
+                                  <span className="text-xs font-semibold text-[#98A49F]">
+                                    Tidak tersedia
+                                  </span>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -2611,6 +2912,12 @@ export default function ManufacturePage() {
                       }
                       onEdit={
                         openEditRecipe
+                      }
+                      onDelete={
+                        deleteRecipe
+                      }
+                      canDelete={
+                        isAdmin
                       }
                     />
                   )
@@ -3005,7 +3312,38 @@ export default function ManufacturePage() {
                               }
                               placeholder="Cari bahan baku..."
                             />
-                          </div>
+                          
+
+                             {item.barangId && (() => {
+                               const selectedBarang = barangs.find(
+                                 (barang) =>
+                                   String(barang.id) === String(item.barangId)
+                               );
+
+                               if (!selectedBarang) return null;
+
+                               const rate = getConversionRate(selectedBarang);
+
+                               return (
+                                 <div className="mt-2 rounded-lg border border-[#E5ECE8] bg-[#F7FAF8] px-2.5 py-2">
+                                   <div className="flex items-center justify-between gap-3 text-[10px]">
+                                     <span className="font-semibold text-[#8A9992]">
+                                       Unit BOM
+                                     </span>
+                                     <span className="font-black text-[#4D7768]">
+                                       {getBarangBaseUnit(selectedBarang)}
+                                     </span>
+                                   </div>
+
+                                   <div className="mt-1 text-[9px] leading-4 text-[#8A9992]">
+                                     {rate
+                                       ? getConversionDescription(selectedBarang)
+                                       : "Faktor konversi belum ada. Sistem tidak akan mengubah angka stock secara otomatis."}
+                                   </div>
+                                 </div>
+                               );
+                             })()}
+                           </div>
 
                           <Field label="Qty">
                             <input
@@ -3464,6 +3802,8 @@ function RecipeCard({
   selectedOutletId,
   getOutletStock,
   onEdit,
+  onDelete,
+  canDelete,
 }: {
   recipe: Recipe;
   selectedOutletId: string;
@@ -3473,6 +3813,10 @@ function RecipeCard({
   onEdit: (
     recipe: Recipe
   ) => void;
+  onDelete: (
+    id: number
+  ) => void;
+  canDelete: boolean;
 }) {
   return (
     <article className="group overflow-hidden rounded-[24px] border border-[#DCE7E2] bg-white shadow-[0_10px_30px_rgba(35,56,47,0.045)] transition duration-300 hover:-translate-y-1 hover:border-[#C8DAD2] hover:shadow-[0_20px_45px_rgba(35,56,47,0.09)]">
@@ -3498,16 +3842,32 @@ function RecipeCard({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() =>
-              onEdit(recipe)
-            }
-            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[#D6E3DD] bg-white px-2.5 py-2 text-[11px] font-bold text-[#527568] shadow-sm transition hover:border-[#BFD4C9] hover:bg-[#F5F9F7]"
-          >
-            <Pencil size={12} />
-            Edit
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() =>
+                onEdit(recipe)
+              }
+              className="flex items-center gap-1.5 rounded-lg border border-[#D6E3DD] bg-white px-2.5 py-2 text-[11px] font-bold text-[#527568] shadow-sm transition hover:border-[#BFD4C9] hover:bg-[#F5F9F7]"
+            >
+              <Pencil size={12} />
+              Edit
+            </button>
+
+            {canDelete && (
+              <button
+                type="button"
+                onClick={() =>
+                  onDelete(recipe.id)
+                }
+                className="flex items-center gap-1.5 rounded-lg border border-[#F0D7D7] bg-[#FFF8F8] px-2.5 py-2 text-[11px] font-bold text-[#B55B5B] shadow-sm transition hover:border-[#E7BABA] hover:bg-[#FFF0F0]"
+                title="Hapus BOM / resep"
+              >
+                <Trash2 size={12} />
+                Hapus
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -3617,10 +3977,24 @@ function RecipeCard({
                   item.qty ?? 0
                 );
 
+              const stockUnit =
+                getStockUnitLabel(item.barang);
+
+              const bomUnit =
+                item.unit ||
+                getBarangBaseUnit(item.barang);
+
+              const comparableUnits =
+                utility ||
+                !item.barang ||
+                stockUnit.toLowerCase() ===
+                  bomUnit.toLowerCase();
+
               const insufficient =
                 !utility &&
-                stock <
-                  required;
+                Boolean(item.barang) &&
+                comparableUnits &&
+                stock < required;
 
               return (
                 <div
@@ -3957,9 +4331,9 @@ function SearchableBarangSelect({
                             {formatNumber(
                               stock
                             )}{" "}
-                            {barang
-                              .baseUnit ||
-                              barang.unit}
+                            {getStockUnitLabel(
+                              barang
+                            )}
                           </div>
                         </div>
                       </button>

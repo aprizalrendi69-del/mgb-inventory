@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getConversionRate, toBaseQty } from "@/lib/base-unit";
 import { changeOutletStock } from "@/lib/outlet-stock-ledger";
 
+export const dynamic = "force-dynamic";
+
 const fail = (message: string, status = 400) =>
   NextResponse.json(
     {
@@ -31,7 +33,8 @@ const PAYMENT_METHODS = [
   "TEMPO",
 ] as const;
 
-type PosPaymentMethod = (typeof PAYMENT_METHODS)[number];
+type PosPaymentMethod =
+  (typeof PAYMENT_METHODS)[number];
 
 async function getUser() {
   const cookieStore = await cookies();
@@ -45,19 +48,20 @@ async function getUser() {
   let userId = 0;
 
   try {
-    const dbSession = await prisma.session.findUnique({
-      where: {
-        token: session.value,
-      },
-      select: {
-        expiresAt: true,
-        user: {
-          select: {
-            id: true,
+    const dbSession =
+      await prisma.session.findUnique({
+        where: {
+          token: session.value,
+        },
+        select: {
+          expiresAt: true,
+          user: {
+            select: {
+              id: true,
+            },
           },
         },
-      },
-    });
+      });
 
     if (
       dbSession &&
@@ -71,7 +75,9 @@ async function getUser() {
 
   if (!userId) {
     try {
-      const parsed = JSON.parse(session.value);
+      const parsed = JSON.parse(
+        session.value
+      );
 
       userId = Number(
         parsed?.user?.id ??
@@ -97,6 +103,13 @@ async function getUser() {
         outletId: true,
         fullname: true,
         username: true,
+        outlet: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
       },
     })
     .then((user) =>
@@ -141,7 +154,8 @@ function resolveOutletId(
     requestedOutletId || 0
   );
 
-  return Number.isInteger(parsed) && parsed > 0
+  return Number.isInteger(parsed) &&
+    parsed > 0
     ? parsed
     : 0;
 }
@@ -205,6 +219,54 @@ function parseIsoDate(value: unknown) {
   return date;
 }
 
+function parseReportDate(
+  value: string | null
+) {
+  if (
+    !value ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    return null;
+  }
+
+  const [
+    year,
+    month,
+    day,
+  ] = value
+    .split("-")
+    .map(Number);
+
+  const start = new Date(
+    year,
+    month - 1,
+    day,
+    0,
+    0,
+    0,
+    0
+  );
+
+  if (
+    start.getFullYear() !== year ||
+    start.getMonth() !== month - 1 ||
+    start.getDate() !== day
+  ) {
+    return null;
+  }
+
+  const end = new Date(start);
+
+  end.setDate(
+    end.getDate() + 1
+  );
+
+  return {
+    start,
+    end,
+  };
+}
+
 type SaleInputItem = {
   menuId?: unknown;
   qty?: unknown;
@@ -242,23 +304,32 @@ function parseAyce(body: any) {
   ) {
     return {
       enabled: false,
-      sessionId: null as string | null,
-      tableName: null as string | null,
+      sessionId:
+        null as string | null,
+      tableName:
+        null as string | null,
       pax: 0,
-      packageKey: null as string | null,
-      packageName: null as string | null,
+      packageKey:
+        null as string | null,
+      packageName:
+        null as string | null,
       packagePrice: 0,
       durationMinutes: 0,
-      startedAt: null as Date | null,
-      expiresAt: null as Date | null,
-      addOnMenuIds: new Set<number>(),
+      startedAt:
+        null as Date | null,
+      expiresAt:
+        null as Date | null,
+      addOnMenuIds:
+        new Set<number>(),
     };
   }
 
   const enabled =
     raw.enabled === true ||
     raw.enabled === 1 ||
-    String(raw.enabled).toLowerCase() ===
+    String(
+      raw.enabled
+    ).toLowerCase() ===
       "true";
 
   const pax = Number(
@@ -269,9 +340,10 @@ function parseAyce(body: any) {
     raw.packagePrice || 0
   );
 
-  const durationMinutes = Number(
-    raw.durationMinutes || 0
-  );
+  const durationMinutes =
+    Number(
+      raw.durationMinutes || 0
+    );
 
   const addOnMenuIds =
     new Set<number>();
@@ -281,7 +353,9 @@ function parseAyce(body: any) {
       raw.addOnMenuIds
     )
   ) {
-    for (const id of raw.addOnMenuIds) {
+    for (
+      const id of raw.addOnMenuIds
+    ) {
       const parsed = Number(id);
 
       if (
@@ -336,28 +410,19 @@ function parseAyce(body: any) {
 
 /*
  * ============================================================
- * GET POS
+ * GET POS + DAILY REPORT
  * ============================================================
  *
- * Optimasi utama:
+ * GET NORMAL:
  *
- * SEBELUM:
+ *   /api/outlet/pos
  *
- *   menu
- *      -> BOM item
- *          -> outletStock.findUnique()
- *          -> outletStock.findUnique()
- *          -> outletStock.findUnique()
+ * GET LAPORAN HARIAN:
  *
- * SEKARANG:
+ *   /api/outlet/pos?date=YYYY-MM-DD&outletId=1
  *
- *   1. Ambil semua menu + BOM
- *   2. Kumpulkan semua barangId BOM
- *   3. Ambil seluruh OutletStock dengan 1 query
- *   4. Buat Map barangId -> stock
- *   5. Hitung stock menu dari memory
- *
- * Selain itu menu dan sales dijalankan paralel.
+ * Laporan memakai StockCard POS_OUT sebagai
+ * sumber utama consumption / HPP.
  */
 export async function GET(
   req: NextRequest
@@ -374,6 +439,586 @@ export async function GET(
 
     const role = roleOf(user);
 
+    /*
+     * ========================================================
+     * DAILY REPORT MODE
+     * ========================================================
+     */
+    const dateParam =
+      req.nextUrl.searchParams.get(
+        "date"
+      );
+
+    if (dateParam) {
+      const parsed =
+        parseReportDate(
+          dateParam
+        );
+
+      if (!parsed) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Tanggal laporan wajib YYYY-MM-DD",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /*
+       * Laporan POS tidak dibuka untuk KASIR.
+       */
+      if (
+        role !== "ADMIN" &&
+        role !== "MANAGER" &&
+        role !== "OUTLET_ADMIN" &&
+        role !== "ADMIN_OUTLET"
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Anda tidak memiliki akses laporan POS",
+          },
+          {
+            status: 403,
+          }
+        );
+      }
+
+      const requestedOutletId =
+        Number(
+          req.nextUrl.searchParams.get(
+            "outletId"
+          ) || 0
+        );
+
+      let outletId =
+        requestedOutletId;
+
+      if (
+        role === "OUTLET_ADMIN" ||
+        role === "ADMIN_OUTLET"
+      ) {
+        outletId = Number(
+          user.outletId || 0
+        );
+      }
+
+      if (
+        !Number.isInteger(
+          outletId
+        ) ||
+        outletId <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Outlet laporan tidak valid",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      if (
+        (role === "OUTLET_ADMIN" ||
+          role === "ADMIN_OUTLET") &&
+        outletId !==
+          Number(user.outletId)
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Outlet tidak sesuai dengan session",
+          },
+          {
+            status: 403,
+          }
+        );
+      }
+
+      const outlet =
+        await prisma.outlet.findUnique(
+          {
+            where: {
+              id: outletId,
+            },
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              active: true,
+            },
+          }
+        );
+
+      if (!outlet) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Outlet tidak ditemukan",
+          },
+          {
+            status: 404,
+          }
+        );
+      }
+
+      if (!outlet.active) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Outlet sedang tidak aktif",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /*
+       * ======================================================
+       * STOCK CARD POS OUT
+       * ======================================================
+       */
+      const cards =
+        await prisma.stockCard.findMany(
+          {
+            where: {
+              trxType: "POS_OUT",
+
+              trxDate: {
+                gte: parsed.start,
+                lt: parsed.end,
+              },
+
+              warehouse:
+                `OUTLET:${outlet.code}`,
+
+              qtyOut: {
+                gt: 0,
+              },
+            },
+
+            include: {
+              barang: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  unit: true,
+                  baseUnit: true,
+                  conversionRate: true,
+                },
+              },
+            },
+
+            orderBy: {
+              trxDate: "asc",
+            },
+          }
+        );
+
+      const data =
+        cards.map(
+          (card: any) => ({
+            id: card.id,
+
+            trxDate:
+              card.trxDate,
+
+            trxType:
+              card.trxType,
+
+            trxNumber:
+              card.trxNumber,
+
+            referenceId:
+              card.referenceId,
+
+            warehouse:
+              card.warehouse,
+
+            qtyOut: Number(
+              card.qtyOut || 0
+            ),
+
+            unitPrice:
+              Number(
+                card.unitPrice || 0
+              ),
+
+            totalValue:
+              Number(
+                card.totalValue || 0
+              ),
+
+            balance:
+              Number(
+                card.balance || 0
+              ),
+
+            note:
+              card.note || null,
+
+            barang:
+              card.barang
+                ? {
+                    id:
+                      card.barang.id,
+
+                    code:
+                      card.barang.code,
+
+                    name:
+                      card.barang.name,
+
+                    unit:
+                      card.barang.unit,
+
+                    baseUnit:
+                      card.barang.baseUnit,
+
+                    conversionRate:
+                      Number(
+                        card.barang
+                          .conversionRate ||
+                          1
+                      ),
+                  }
+                : null,
+          })
+        );
+
+      /*
+       * ======================================================
+       * SUMMARY LAPORAN
+       * ======================================================
+       */
+      const totalTransactions =
+        data.length;
+
+      const totalQtyOut =
+        data.reduce(
+          (
+            sum: number,
+            row: any
+          ) =>
+            sum +
+            Number(
+              row.qtyOut || 0
+            ),
+          0
+        );
+
+      const totalValue =
+        data.reduce(
+          (
+            sum: number,
+            row: any
+          ) =>
+            sum +
+            Number(
+              row.totalValue || 0
+            ),
+          0
+        );
+
+      /*
+       * Group berdasarkan barang.
+       */
+      const groupedMap =
+        new Map<
+          number,
+          {
+            barangId: number;
+            code: string | null;
+            name: string;
+            unit: string | null;
+            baseUnit: string | null;
+            conversionRate: number;
+            qtyOut: number;
+            totalValue: number;
+            transactionCount: number;
+          }
+        >();
+
+      for (
+        const row of data
+      ) {
+        if (!row.barang) {
+          continue;
+        }
+
+        const barangId =
+          Number(
+            row.barang.id
+          );
+
+        const existing =
+          groupedMap.get(
+            barangId
+          );
+
+        if (existing) {
+          existing.qtyOut +=
+            Number(
+              row.qtyOut || 0
+            );
+
+          existing.totalValue +=
+            Number(
+              row.totalValue || 0
+            );
+
+          existing.transactionCount +=
+            1;
+        } else {
+          groupedMap.set(
+            barangId,
+            {
+              barangId,
+
+              code:
+                row.barang.code ??
+                null,
+
+              name:
+                row.barang.name,
+
+              unit:
+                row.barang.unit ??
+                null,
+
+              baseUnit:
+                row.barang.baseUnit ??
+                null,
+
+              conversionRate:
+                Number(
+                  row.barang
+                    .conversionRate ||
+                    1
+                ),
+
+              qtyOut:
+                Number(
+                  row.qtyOut || 0
+                ),
+
+              totalValue:
+                Number(
+                  row.totalValue || 0
+                ),
+
+              transactionCount:
+                1,
+            }
+          );
+        }
+      }
+
+      const summaryByBarang =
+        [...groupedMap.values()]
+          .sort(
+            (a, b) =>
+              a.name.localeCompare(
+                b.name
+              )
+          );
+
+      /*
+       * ======================================================
+       * SALES HARIAN
+       * ======================================================
+       *
+       * Ditambahkan agar endpoint yang sama dapat digunakan
+       * untuk laporan harian POS.
+       */
+      const sales =
+        await prisma.outletSale.findMany(
+          {
+            where: {
+              outletId,
+
+              saleDate: {
+                gte: parsed.start,
+                lt: parsed.end,
+              },
+            },
+
+            include: {
+              items: {
+                include: {
+                  barang: true,
+                  menu: true,
+                },
+              },
+
+              outlet: true,
+
+              user: {
+                select: {
+                  id: true,
+                  fullname: true,
+                  username: true,
+                },
+              },
+            },
+
+            orderBy: {
+              saleDate: "asc",
+            },
+          }
+        );
+
+      const totalSales =
+        sales.length;
+
+      const totalGrossSales =
+        sales.reduce(
+          (
+            sum: number,
+            sale: any
+          ) =>
+            sum +
+            Number(
+              sale.subtotal || 0
+            ),
+          0
+        );
+
+      const totalDiscount =
+        sales.reduce(
+          (
+            sum: number,
+            sale: any
+          ) =>
+            sum +
+            Number(
+              sale.discount || 0
+            ),
+          0
+        );
+
+      const totalServiceCharge =
+        sales.reduce(
+          (
+            sum: number,
+            sale: any
+          ) =>
+            sum +
+            Number(
+              sale.serviceCharge || 0
+            ),
+          0
+        );
+
+      const totalPpn =
+        sales.reduce(
+          (
+            sum: number,
+            sale: any
+          ) =>
+            sum +
+            Number(
+              sale.ppn || 0
+            ),
+          0
+        );
+
+      const totalGrandTotal =
+        sales.reduce(
+          (
+            sum: number,
+            sale: any
+          ) =>
+            sum +
+            Number(
+              sale.total || 0
+            ),
+          0
+        );
+
+      const totalNetSales =
+        totalGrandTotal -
+        totalServiceCharge -
+        totalPpn;
+
+      return NextResponse.json({
+        success: true,
+
+        reportType:
+          "POS_DAILY",
+
+        date: dateParam,
+
+        period: {
+          start:
+            parsed.start.toISOString(),
+          end:
+            parsed.end.toISOString(),
+        },
+
+        outlet,
+
+        trxType:
+          "POS_OUT",
+
+        summary: {
+          totalTransactions,
+
+          totalQtyOut,
+
+          totalValue,
+
+          totalItems:
+            summaryByBarang.length,
+
+          totalSales,
+
+          grossSales:
+            totalGrossSales,
+
+          discount:
+            totalDiscount,
+
+          serviceCharge:
+            totalServiceCharge,
+
+          ppn:
+            totalPpn,
+
+          grandTotal:
+            totalGrandTotal,
+
+          netSales:
+            totalNetSales,
+        },
+
+        data,
+
+        summaryByBarang,
+
+        sales,
+      });
+    }
+
+    /*
+     * ========================================================
+     * NORMAL POS MODE
+     * ========================================================
+     */
+
     if (!isPosRole(role)) {
       return fail(
         "Tidak memiliki akses POS Outlet.",
@@ -387,25 +1032,31 @@ export async function GET(
       );
 
     const requestedOutletId =
-      Number(requestedRaw || 0);
+      Number(
+        requestedRaw || 0
+      );
 
     /*
      * Ambil outlet aktif satu kali.
      */
     const outletRows =
-      await prisma.outlet.findMany({
-        where: {
-          active: true,
-        },
-        select: {
-          id: true,
-          code: true,
-          name: true,
-        },
-        orderBy: {
-          id: "asc",
-        },
-      });
+      await prisma.outlet.findMany(
+        {
+          where: {
+            active: true,
+          },
+
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+
+          orderBy: {
+            id: "asc",
+          },
+        }
+      );
 
     /*
      * OUTLET_ADMIN / KASIR hanya boleh melihat
@@ -417,7 +1068,9 @@ export async function GET(
         ? outletRows.filter(
             (outlet) =>
               Number(outlet.id) ===
-              Number(user.outletId)
+              Number(
+                user.outletId
+              )
           )
         : outletRows;
 
@@ -465,19 +1118,31 @@ export async function GET(
     if (!outletId) {
       return NextResponse.json({
         success: true,
+
         role,
+
         cashier: {
           id: user.id,
+
           fullname:
-            user.fullname || null,
+            user.fullname ||
+            null,
+
           username:
-            user.username || null,
+            user.username ||
+            null,
         },
+
         outlets: [],
+
         currentOutlet: null,
+
         menus: [],
+
         sales: [],
+
         data: [],
+
         outlet: null,
       });
     }
@@ -502,7 +1167,7 @@ export async function GET(
 
     /*
      * Untuk ADMIN / MANAGER, outletId wajib
-     * berasal dari outlet aktif yang benar-benar ada.
+     * berasal dari outlet aktif.
      */
     const selectedOutlet =
       outlets.find(
@@ -518,10 +1183,6 @@ export async function GET(
       );
     }
 
-    /*
-     * Tidak perlu findUnique outlet kedua.
-     * selectedOutlet sudah berasal dari query outlet aktif.
-     */
     const outlet = {
       ...selectedOutlet,
       active: true,
@@ -540,6 +1201,7 @@ export async function GET(
         where: {
           active: true,
         },
+
         select: {
           id: true,
           code: true,
@@ -553,6 +1215,7 @@ export async function GET(
             where: {
               active: true,
             },
+
             select: {
               id: true,
 
@@ -569,18 +1232,21 @@ export async function GET(
                       unit: true,
                       baseUnit: true,
                       conversionRate: true,
-                      purchasePrice: true,
+                      purchasePrice:
+                        true,
                       active: true,
                     },
                   },
                 },
               },
             },
+
             orderBy: {
               id: "asc",
             },
           },
         },
+
         orderBy: {
           id: "asc",
         },
@@ -590,6 +1256,7 @@ export async function GET(
         where: {
           outletId,
         },
+
         include: {
           items: {
             include: {
@@ -597,7 +1264,9 @@ export async function GET(
               menu: true,
             },
           },
+
           outlet: true,
+
           user: {
             select: {
               id: true,
@@ -606,9 +1275,11 @@ export async function GET(
             },
           },
         },
+
         orderBy: {
           saleDate: "desc",
         },
+
         take: 100,
       }),
     ]);
@@ -621,7 +1292,9 @@ export async function GET(
     const bomBarangIds =
       new Set<number>();
 
-    for (const menu of menuRows) {
+    for (
+      const menu of menuRows
+    ) {
       const recipe =
         menu.recipes[0];
 
@@ -643,38 +1316,31 @@ export async function GET(
      * ========================================================
      * AMBIL SEMUA OUTLET STOCK SEKALI
      * ========================================================
-     *
-     * SEBELUM:
-     *
-     * outletStock.findUnique()
-     * outletStock.findUnique()
-     * outletStock.findUnique()
-     * ...
-     *
-     * SEKARANG:
-     *
-     * SATU QUERY.
      */
     const outletStocks =
       bomBarangIds.size
-        ? await prisma.outletStock.findMany({
-            where: {
-              outletId,
-              barangId: {
-                in: [
-                  ...bomBarangIds,
-                ],
+        ? await prisma.outletStock.findMany(
+            {
+              where: {
+                outletId,
+
+                barangId: {
+                  in: [
+                    ...bomBarangIds,
+                  ],
+                },
               },
-            },
-            select: {
-              barangId: true,
-              stock: true,
-            },
-          })
+
+              select: {
+                barangId: true,
+                stock: true,
+              },
+            }
+          )
         : [];
 
     /*
-     * Map supaya lookup O(1) di memory.
+     * Map supaya lookup O(1).
      */
     const stockMap =
       new Map<
@@ -683,10 +1349,13 @@ export async function GET(
       >();
 
     for (
-      const stock of outletStocks
+      const stock of
+        outletStocks
     ) {
       stockMap.set(
-        Number(stock.barangId),
+        Number(
+          stock.barangId
+        ),
         Number(
           stock.stock || 0
         )
@@ -699,165 +1368,177 @@ export async function GET(
      * ========================================================
      */
     const menuItems =
-      menuRows.map((menu) => {
-        const recipe =
-          menu.recipes[0];
+      menuRows.map(
+        (menu) => {
+          const recipe =
+            menu.recipes[0];
 
-        const bomReady =
-          Boolean(
-            recipe &&
-              recipe.items &&
-              recipe.items.length > 0
-          );
+          const bomReady =
+            Boolean(
+              recipe &&
+                recipe.items &&
+                recipe.items.length >
+                  0
+            );
 
-        let menuStock = 0;
+          let menuStock = 0;
 
-        if (bomReady) {
-          let possibleQty =
-            Number.POSITIVE_INFINITY;
+          if (bomReady) {
+            let possibleQty =
+              Number.POSITIVE_INFINITY;
 
-          for (
-            const recipeItem of
-              recipe.items
-          ) {
-            const recipeQty =
-              Number(
-                recipeItem.qty || 0
-              );
-
-            if (
-              !Number.isFinite(
-                recipeQty
-              ) ||
-              recipeQty <= 0
+            for (
+              const recipeItem of
+                recipe.items
             ) {
-              possibleQty = 0;
-              break;
-            }
-
-            /*
-             * Stock sudah berada di Map.
-             * Tidak ada query DB di dalam loop.
-             */
-            const stockValue =
-              stockMap.get(
+              const recipeQty =
                 Number(
-                  recipeItem.barangId
+                  recipeItem.qty ||
+                    0
+                );
+
+              if (
+                !Number.isFinite(
+                  recipeQty
+                ) ||
+                recipeQty <= 0
+              ) {
+                possibleQty = 0;
+                break;
+              }
+
+              const stockValue =
+                stockMap.get(
+                  Number(
+                    recipeItem.barangId
+                  )
+                );
+
+              if (
+                stockValue ===
+                undefined
+              ) {
+                possibleQty = 0;
+                break;
+              }
+
+              const barang =
+                recipeItem.barang;
+
+              if (
+                !barang ||
+                !barang.active
+              ) {
+                possibleQty = 0;
+                break;
+              }
+
+              const requiredBase =
+                toBaseQty(
+                  recipeQty,
+                  recipeItem.unit,
+                  barang
+                );
+
+              if (
+                !Number.isFinite(
+                  requiredBase
+                ) ||
+                requiredBase <= 0
+              ) {
+                possibleQty = 0;
+                break;
+              }
+
+              const availableBase =
+                toBaseQty(
+                  stockValue,
+                  barang.unit,
+                  barang
+                );
+
+              if (
+                !Number.isFinite(
+                  availableBase
                 )
-              );
+              ) {
+                possibleQty = 0;
+                break;
+              }
 
-            if (
-              stockValue === undefined
-            ) {
-              possibleQty = 0;
-              break;
+              const possible =
+                availableBase /
+                requiredBase;
+
+              possibleQty =
+                Math.min(
+                  possibleQty,
+                  possible
+                );
             }
 
-            const barang =
-              recipeItem.barang;
-
-            if (
-              !barang ||
-              !barang.active
-            ) {
-              possibleQty = 0;
-              break;
-            }
-
-            const requiredBase =
-              toBaseQty(
-                recipeQty,
-                recipeItem.unit,
-                barang
-              );
-
-            if (
-              !Number.isFinite(
-                requiredBase
-              ) ||
-              requiredBase <= 0
-            ) {
-              possibleQty = 0;
-              break;
-            }
-
-            /*
-             * OutletStock.stock adalah stock unit.
-             * Konversi ke base unit sebelum dibandingkan
-             * dengan kebutuhan BOM.
-             */
-            const availableBase =
-              toBaseQty(
-                stockValue,
-                barang.unit,
-                barang
-              );
-
-            if (
-              !Number.isFinite(
-                availableBase
+            menuStock =
+              Number.isFinite(
+                possibleQty
               )
-            ) {
-              possibleQty = 0;
-              break;
-            }
-
-            const possible =
-              availableBase /
-              requiredBase;
-
-            possibleQty =
-              Math.min(
-                possibleQty,
-                possible
-              );
+                ? Math.max(
+                    0,
+                    Math.floor(
+                      possibleQty
+                    )
+                  )
+                : 0;
           }
 
-          menuStock =
-            Number.isFinite(
-              possibleQty
-            )
-              ? Math.max(
-                  0,
-                  Math.floor(
-                    possibleQty
-                  )
-                )
-              : 0;
-        }
+          return {
+            id: menu.id,
 
-        return {
-          id: menu.id,
-          menuId: menu.id,
-          code: menu.code,
-          name: menu.name,
-          description:
-            menu.description ??
-            null,
-          category:
-            menu.category || "",
-          price: Number(
-            menu.price || 0
-          ),
-          image:
-            menu.image ?? null,
-          stock: menuStock,
-          bomReady,
-          recipeId:
-            recipe?.id ?? null,
-        };
-      });
+            menuId: menu.id,
+
+            code: menu.code,
+
+            name: menu.name,
+
+            description:
+              menu.description ??
+              null,
+
+            category:
+              menu.category || "",
+
+            price: Number(
+              menu.price || 0
+            ),
+
+            image:
+              menu.image ?? null,
+
+            stock: menuStock,
+
+            bomReady,
+
+            recipeId:
+              recipe?.id ??
+              null,
+          };
+        }
+      );
 
     return NextResponse.json({
       success: true,
+
       role,
 
       cashier: {
         id: user.id,
+
         fullname:
-          user.fullname || null,
+          user.fullname ||
+          null,
+
         username:
-          user.username || null,
+          user.username ||
+          null,
       },
 
       outlets,
@@ -958,11 +1639,6 @@ export async function POST(
      * ========================================================
      * PAYMENT METHOD
      * ========================================================
-     *
-     * Mengikuti enum terbaru.
-     *
-     * QRIS / CARD / DEBIT / CREDIT
-     * tidak lagi diterima.
      */
     const paymentMethodRaw =
       String(
@@ -1097,7 +1773,8 @@ export async function POST(
           !Number.isFinite(
             ayce.durationMinutes
           ) ||
-          ayce.durationMinutes <= 0
+          ayce.durationMinutes <=
+            0
         )
       ) {
         return fail(
@@ -1116,17 +1793,15 @@ export async function POST(
         async (tx) => {
           /*
            * ==================================================
-           * VALIDASI OUTLET DI DALAM TRANSACTION
+           * VALIDASI OUTLET
            * ==================================================
-           *
-           * Ini mencegah ADMIN/MANAGER mengirim outletId
-           * sembarang yang tidak ada / inactive.
            */
           const outlet =
             await tx.outlet.findUnique({
               where: {
                 id: outletId,
               },
+
               select: {
                 id: true,
                 code: true,
@@ -1159,16 +1834,19 @@ export async function POST(
             >();
 
           for (
-            const rawItem of rawItems
+            const rawItem of
+              rawItems
           ) {
             const menuId =
               Number(
-                rawItem?.menuId || 0
+                rawItem?.menuId ||
+                  0
               );
 
             const qty =
               Number(
-                rawItem?.qty || 0
+                rawItem?.qty ||
+                  0
               );
 
             if (
@@ -1204,12 +1882,13 @@ export async function POST(
           }
 
           const menuIds =
-            [...menuQty.keys()];
+            [
+              ...menuQty.keys(),
+            ];
 
           /*
            * ==================================================
            * AMBIL SEMUA MENU + BOM
-           * SATU QUERY
            * ==================================================
            */
           const menus =
@@ -1218,8 +1897,10 @@ export async function POST(
                 id: {
                   in: menuIds,
                 },
+
                 active: true,
               },
+
               select: {
                 id: true,
                 code: true,
@@ -1230,6 +1911,7 @@ export async function POST(
                   where: {
                     active: true,
                   },
+
                   select: {
                     id: true,
 
@@ -1255,6 +1937,7 @@ export async function POST(
                       },
                     },
                   },
+
                   orderBy: {
                     id: "asc",
                   },
@@ -1310,15 +1993,25 @@ export async function POST(
 
           let subtotal = 0;
 
-          const saleItems: Array<{
-            menuId: number | null;
-            barangId: number | null;
-            qty: number;
-            unitPrice: number;
-            subtotal: number;
-          }> = [];
+          const saleItems:
+            Array<{
+              menuId:
+                | number
+                | null;
 
-          let ayceAddOnSubtotal = 0;
+              barangId:
+                | number
+                | null;
+
+              qty: number;
+
+              unitPrice: number;
+
+              subtotal: number;
+            }> = [];
+
+          let ayceAddOnSubtotal =
+            0;
 
           /*
            * ==================================================
@@ -1326,7 +2019,8 @@ export async function POST(
            * ==================================================
            */
           for (
-            const menuId of menuIds
+            const menuId of
+              menuIds
           ) {
             const menu =
               menuMap.get(
@@ -1370,9 +2064,11 @@ export async function POST(
             const itemSubtotal =
               ayce.enabled
                 ? addon
-                  ? unitPrice * qty
+                  ? unitPrice *
+                    qty
                   : 0
-                : unitPrice * qty;
+                : unitPrice *
+                  qty;
 
             if (
               ayce.enabled &&
@@ -1384,13 +2080,17 @@ export async function POST(
 
             saleItems.push({
               menuId,
+
               barangId: null,
+
               qty,
+
               unitPrice:
                 ayce.enabled &&
                 !addon
                   ? 0
                   : unitPrice,
+
               subtotal:
                 itemSubtotal,
             });
@@ -1425,7 +2125,8 @@ export async function POST(
 
               const recipeQty =
                 Number(
-                  recipeItem.qty || 0
+                  recipeItem.qty ||
+                    0
                 );
 
               if (
@@ -1454,7 +2155,8 @@ export async function POST(
                 !Number.isFinite(
                   qtyBasePerMenu
                 ) ||
-                qtyBasePerMenu <= 0
+                qtyBasePerMenu <=
+                  0
               ) {
                 throw new Error(
                   `Konversi BOM ${barang.name} pada menu "${menu.name}" tidak valid.`
@@ -1483,17 +2185,22 @@ export async function POST(
 
               const unitCostBase =
                 rate > 0
-                  ? mainCost / rate
+                  ? mainCost /
+                    rate
                   : mainCost;
 
               required.set(
                 recipeItem.barangId,
                 {
+                  barangId:
+                    recipeItem.barangId,
+
                   qtyBase:
                     (
                       existing?.qtyBase ||
                       0
-                    ) + qtyBase,
+                    ) +
+                    qtyBase,
 
                   barangName:
                     barang.name,
@@ -1541,17 +2248,24 @@ export async function POST(
              */
             saleItems.unshift({
               menuId: null,
+
               barangId: null,
+
               qty: ayce.pax,
+
               unitPrice:
                 ayce.packagePrice,
+
               subtotal:
                 packageTotal,
             });
           } else {
             subtotal =
               saleItems.reduce(
-                (sum, item) =>
+                (
+                  sum,
+                  item
+                ) =>
                   sum +
                   item.subtotal,
                 0
@@ -1588,7 +2302,24 @@ export async function POST(
             );
           }
 
-          const total =
+          /*
+           * ==================================================
+           * TAX / SERVICE
+           * ==================================================
+           *
+           * SUBTOTAL
+           *     ↓
+           * DISCOUNT
+           *     ↓
+           * TAXABLE
+           *     ↓
+           * SERVICE 5%
+           *     ↓
+           * PPN 10% dari taxable + service
+           *     ↓
+           * GRAND TOTAL
+           */
+          const taxable =
             Math.max(
               0,
               subtotal -
@@ -1597,11 +2328,60 @@ export async function POST(
 
           if (
             !Number.isFinite(
+              taxable
+            )
+          ) {
+            throw new Error(
+              "Taxable amount tidak valid."
+            );
+          }
+
+          const serviceCharge =
+            taxable * 0.05;
+
+          const ppn =
+            (
+              taxable +
+              serviceCharge
+            ) * 0.1;
+
+          const total =
+            Math.max(
+              0,
+              taxable +
+                serviceCharge +
+                ppn
+            );
+
+          if (
+            !Number.isFinite(
+              serviceCharge
+            ) ||
+            serviceCharge < 0
+          ) {
+            throw new Error(
+              "Service Charge tidak valid."
+            );
+          }
+
+          if (
+            !Number.isFinite(
+              ppn
+            ) ||
+            ppn < 0
+          ) {
+            throw new Error(
+              "PPN tidak valid."
+            );
+          }
+
+          if (
+            !Number.isFinite(
               total
             )
           ) {
             throw new Error(
-              "Total transaksi tidak valid."
+              "Grand Total transaksi tidak valid."
             );
           }
 
@@ -1623,14 +2403,14 @@ export async function POST(
             paidAmount < total
           ) {
             throw new Error(
-              `Pembayaran kurang. Total ${total}, dibayar ${paidAmount}.`
+              `Pembayaran kurang. Grand Total ${total}, dibayar ${paidAmount}.`
             );
           }
 
           const cashLikeMethods =
-            new Set<
-              PosPaymentMethod
-            >(["CASH"]);
+            new Set<PosPaymentMethod>(
+              ["CASH"]
+            );
 
           /*
            * Semua metode selain CASH
@@ -1641,11 +2421,12 @@ export async function POST(
               paymentMethod
             ) &&
             Math.abs(
-              paidAmount - total
+              paidAmount -
+                total
             ) > 0.01
           ) {
             throw new Error(
-              `Pembayaran ${paymentMethod} harus sama persis dengan total ${total}.`
+              `Pembayaran ${paymentMethod} harus sama persis dengan Grand Total ${total}.`
             );
           }
 
@@ -1664,12 +2445,6 @@ export async function POST(
            * ==================================================
            * AMBIL SEMUA OUTLET STOCK SEKALI
            * ==================================================
-           *
-           * Ini menggantikan:
-           *
-           * for (...) {
-           *   await outletStock.findUnique(...)
-           * }
            */
           const requiredBarangIds =
             [
@@ -1682,14 +2457,20 @@ export async function POST(
                   {
                     where: {
                       outletId,
+
                       barangId: {
                         in:
                           requiredBarangIds,
                       },
                     },
+
                     select: {
-                      barangId: true,
-                      stock: true,
+                      barangId:
+                        true,
+
+                      stock:
+                        true,
+
                       averageCost:
                         true,
                     },
@@ -1716,8 +2497,10 @@ export async function POST(
               ),
               {
                 stock: Number(
-                  stock.stock || 0
+                  stock.stock ||
+                    0
                 ),
+
                 averageCost:
                   Number(
                     stock.averageCost ||
@@ -1731,10 +2514,6 @@ export async function POST(
            * ==================================================
            * VALIDASI STOCK
            * ==================================================
-           *
-           * Barang BOM sudah berasal dari query menu.
-           * Jadi tidak perlu barang.findUnique()
-           * lagi satu per satu.
            */
           for (
             const [
@@ -1826,11 +2605,12 @@ export async function POST(
 
             /*
              * averageCost disimpan pada stock unit.
-             * Konversikan ke base cost untuk requirement.
+             * Konversikan ke base cost.
              */
             const averageCostMain =
               Number(
-                stock.averageCost || 0
+                stock.averageCost ||
+                  0
               );
 
             const rate =
@@ -1839,8 +2619,9 @@ export async function POST(
               );
 
             requirement.unitCostBase =
-              averageCostMain > 0 &&
-              rate > 0
+              averageCostMain >
+                  0 &&
+                rate > 0
                 ? averageCostMain /
                   rate
                 : requirement.unitCostBase;
@@ -1878,62 +2659,96 @@ export async function POST(
            * ==================================================
            */
           const sale =
-            await tx.outletSale.create({
-              data: {
-                number,
-                outletId,
-                userId:
-                  user.id,
-                customerName,
-                saleDate: now,
-                subtotal,
-                discount,
-                total,
-                paidAmount,
-                changeAmount,
-                paymentMethod,
-                status: "PAID",
+            await tx.outletSale.create(
+              {
+                data: {
+                  number,
 
-                items: {
-                  create:
-                    saleItems.map(
-                      (item) => ({
-                        barangId:
-                          item.barangId,
-                        menuId:
-                          item.menuId,
-                        qty:
-                          item.qty,
-                        unitPrice:
-                          item.unitPrice,
-                        subtotal:
-                          item.subtotal,
-                      })
-                    ),
-                },
-              },
+                  outletId,
 
-              include: {
-                items: {
-                  include: {
-                    menu: true,
-                    barang: true,
+                  userId:
+                    user.id,
+
+                  customerName,
+
+                  saleDate: now,
+
+                  subtotal,
+
+                  discount,
+
+                  /*
+                   * Taxable tidak perlu disimpan.
+                   * Dihitung ulang dari subtotal - discount.
+                   */
+
+                  serviceCharge,
+
+                  ppn,
+
+                  /*
+                   * total = GRAND TOTAL
+                   */
+                  total,
+
+                  paidAmount,
+
+                  changeAmount,
+
+                  paymentMethod,
+
+                  status:
+                    "PAID",
+
+                  items: {
+                    create:
+                      saleItems.map(
+                        (
+                          item
+                        ) => ({
+                          barangId:
+                            item.barangId,
+
+                          menuId:
+                            item.menuId,
+
+                          qty:
+                            item.qty,
+
+                          unitPrice:
+                            item.unitPrice,
+
+                          subtotal:
+                            item.subtotal,
+                        })
+                      ),
                   },
                 },
 
-                outlet: true,
+                include: {
+                  items: {
+                    include: {
+                      menu: true,
+                      barang: true,
+                    },
+                  },
 
-                user: {
-                  select: {
-                    id: true,
-                    fullname:
-                      true,
-                    username:
-                      true,
+                  outlet: true,
+
+                  user: {
+                    select: {
+                      id: true,
+
+                      fullname:
+                        true,
+
+                      username:
+                        true,
+                    },
                   },
                 },
-              },
-            });
+              }
+            );
 
           /*
            * ==================================================
@@ -1953,12 +2768,9 @@ export async function POST(
                 tx,
                 {
                   outletId,
+
                   barangId,
 
-                  /*
-                   * PENTING:
-                   * helper menerima base unit.
-                   */
                   deltaBaseQty:
                     -requirement.qtyBase,
 
@@ -1972,25 +2784,12 @@ export async function POST(
                 }
               );
 
-            /*
-             * Tidak perlu findUnique outletStock lagi.
-             *
-             * changeOutletStock() sudah mengembalikan
-             * stockAfter.
-             *
-             * Jadi satu query per BOM benar-benar
-             * hilang dari sini.
-             */
             const stockAfter =
               Number(
                 stockResult.stockAfter ??
                   0
               );
 
-            /*
-             * qtyOut harus menggunakan unit stock
-             * yang dikembalikan helper.
-             */
             const qtyOut =
               Math.abs(
                 Number(
@@ -1999,13 +2798,6 @@ export async function POST(
                 )
               );
 
-            /*
-             * averageCost sebelum transaksi digunakan
-             * sebagai basis nilai StockCard.
-             *
-             * Jika averageCost tidak tersedia,
-             * fallback ke unitCostBase.
-             */
             const cachedStock =
               outletStockMap.get(
                 barangId
@@ -2025,44 +2817,51 @@ export async function POST(
                       0
                   );
 
-            await tx.stockCard.create({
-              data: {
-                barangId,
+            /*
+             * ==================================================
+             * STOCK CARD
+             * ==================================================
+             */
+            await tx.stockCard.create(
+              {
+                data: {
+                  barangId,
 
-                trxDate:
-                  now,
+                  trxDate:
+                    now,
 
-                trxType:
-                  "POS_OUT",
+                  trxType:
+                    "POS_OUT",
 
-                trxNumber:
-                  sale.number,
+                  trxNumber:
+                    sale.number,
 
-                referenceId:
-                  sale.id,
+                  referenceId:
+                    sale.id,
 
-                warehouse:
-                  `OUTLET:${outlet.code}`,
+                  warehouse:
+                    `OUTLET:${outlet.code}`,
 
-                qtyIn: 0,
+                  qtyIn: 0,
 
-                qtyOut,
+                  qtyOut,
 
-                balance:
-                  stockAfter,
+                  balance:
+                    stockAfter,
 
-                unitPrice,
-
-                totalValue:
-                  qtyOut *
                   unitPrice,
 
-                note:
-                  ayce.enabled
-                    ? `POS ${sale.number} - AYCE ${ayce.packageName} - konsumsi ${requirement.qtyBase} ${requirement.baseUnit}`
-                    : `POS ${sale.number} - konsumsi BOM [${requirement.qtyBase} ${requirement.baseUnit}]`,
-              },
-            });
+                  totalValue:
+                    qtyOut *
+                    unitPrice,
+
+                  note:
+                    ayce.enabled
+                      ? `POS ${sale.number} - AYCE ${ayce.packageName} - konsumsi ${requirement.qtyBase} ${requirement.baseUnit}`
+                      : `POS ${sale.number} - konsumsi BOM [${requirement.qtyBase} ${requirement.baseUnit}]`,
+                },
+              }
+            );
           }
 
           /*
@@ -2074,10 +2873,15 @@ export async function POST(
             ayce.enabled
               ? [
                   `POS ${outlet.name} ${sale.number} berhasil.`,
+
                   `AYCE SESSION ${ayce.sessionId}.`,
+
                   `MEJA ${ayce.tableName}.`,
+
                   `PAX ${ayce.pax}.`,
+
                   `PAKET ${ayce.packageName}.`,
+
                   `HARGA PAKET ${ayce.packagePrice}.`,
 
                   ayce.durationMinutes
@@ -2091,6 +2895,16 @@ export async function POST(
                   ayce.expiresAt
                     ? `EXPIRE ${ayce.expiresAt.toISOString()}.`
                     : null,
+
+                  `SUBTOTAL ${subtotal}.`,
+
+                  `DISCOUNT ${discount}.`,
+
+                  `SERVICE ${serviceCharge}.`,
+
+                  `PPN ${ppn}.`,
+
+                  `GRAND TOTAL ${total}.`,
 
                   `ADD-ON ${ayceAddOnSubtotal}.`,
 
@@ -2106,6 +2920,17 @@ export async function POST(
                   .join(" ")
               : [
                   `POS ${outlet.name} ${sale.number} berhasil.`,
+
+                  `SUBTOTAL ${subtotal}.`,
+
+                  `DISCOUNT ${discount}.`,
+
+                  `SERVICE ${serviceCharge}.`,
+
+                  `PPN ${ppn}.`,
+
+                  `GRAND TOTAL ${total}.`,
+
                   `Stock BOM otomatis terpakai.`,
 
                   body?.note
@@ -2117,24 +2942,59 @@ export async function POST(
                   .filter(Boolean)
                   .join(" ");
 
-          await tx.history.create({
-            data: {
-              transactionType:
-                "STOCK_OUT",
+          await tx.history.create(
+            {
+              data: {
+                transactionType:
+                  "STOCK_OUT",
 
-              referenceNumber:
-                sale.number,
+                referenceNumber:
+                  sale.number,
 
-              userId:
-                user.id,
+                userId:
+                  user.id,
 
-              description:
-                historyDescription,
-            },
-          });
+                description:
+                  historyDescription,
+              },
+            }
+          );
 
           return {
             ...sale,
+
+            /*
+             * Komponen pricing dikembalikan
+             * secara eksplisit supaya frontend
+             * dapat langsung menggunakan hasil
+             * server.
+             */
+            pricing: {
+              subtotal,
+
+              discount,
+
+              taxable,
+
+              serviceCharge,
+
+              serviceRate:
+                0.05,
+
+              ppn,
+
+              ppnRate:
+                0.1,
+
+              total,
+
+              grandTotal:
+                total,
+
+              paidAmount,
+
+              changeAmount,
+            },
 
             ayce: ayce.enabled
               ? {

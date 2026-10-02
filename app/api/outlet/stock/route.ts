@@ -9,79 +9,97 @@ import { cookies } from "next/headers";
  *
  * ACCESS:
  *
- * ADMIN
- * -> bisa melihat semua outlet
- * -> bisa filter outletId
- *
- * MANAGER
+ * ADMIN / MANAGER
  * -> bisa melihat semua outlet
  * -> bisa filter outletId
  *
  * OUTLET_ADMIN / ADMIN_OUTLET
  * -> hanya bisa melihat outlet miliknya
  * -> outletId dari URL TIDAK dipercaya
- * -> outletId selalu diambil dari user.outletId
+ * -> outletId selalu berasal dari user.outletId
  *
  * =========================================================
- * SECURITY RULE
+ * SECURITY
  * =========================================================
  *
- * Jangan pernah menggunakan outletId dari URL sebagai
- * sumber authority untuk outlet admin.
+ * Authority outlet untuk outlet admin:
  *
- * =========================================================
- * SATUAN
- * =========================================================
+ *     user.outletId
  *
- * SATUAN UTAMA:
+ * BUKAN:
  *
- * Barang.unit
+ *     ?outletId=
  *
- * baseUnit:
- * Barang.baseUnit
- *
- * conversionRate:
- * Barang.conversionRate
+ * Endpoint ini READ ONLY.
  *
  * =========================================================
  * STOCK SOURCE
  * =========================================================
  *
- * Stock utama berasal dari:
+ * Sumber stock:
  *
- * OutletStock.stock
+ *     OutletStock.stock
  *
- * Endpoint ini READ ONLY.
+ * Endpoint ini TIDAK:
  *
- * Tidak melakukan:
- *
- * -> adjustment
- * -> stock opname adjustment
- * -> update OutletStock
- * -> update Barang.stock
+ * -> melakukan adjustment
+ * -> mengubah OutletStock
+ * -> mengubah Barang.stock
+ * -> melakukan stock opname adjustment
  *
  * =========================================================
- * PRICE SOURCE
+ * UNIT
  * =========================================================
  *
- * HARGA TERAKHIR:
+ * Main Unit:
  *
- * ReceiptItem.price
+ *     Barang.unit
  *
- * Urutan:
+ * Base Unit:
  *
- * Receipt.receiptDate DESC
- * ReceiptItem.id DESC
+ *     Barang.baseUnit
  *
- * Jadi harga yang dikembalikan adalah harga dari transaksi
- * BARANG MASUK TERAKHIR.
+ * Conversion:
  *
- * TIDAK menggunakan:
+ *     Barang.conversionRate
  *
- * -> Barang.purchasePrice sebagai sumber harga terakhir
+ * Rule:
  *
- * Barang.purchasePrice hanya tetap dikirim sebagai harga
- * master/fallback informasi.
+ *     stock utama tetap menggunakan Barang.unit.
+ *
+ * Hasil konversi hanya informasi tambahan.
+ *
+ * =========================================================
+ * CATEGORY
+ * =========================================================
+ *
+ * Kategori barang berasal dari:
+ *
+ *     Barang.category
+ *
+ * Category merupakan field scalar String pada Barang,
+ * bukan relation Prisma.
+ *
+ * =========================================================
+ * PRICE
+ * =========================================================
+ *
+ * Harga transaksi terakhir:
+ *
+ *     ReceiptItem.price
+ *
+ * Berdasarkan:
+ *
+ *     Receipt.receiptDate DESC
+ *     ReceiptItem.id DESC
+ *
+ * Jika belum pernah ada transaksi Barang Masuk:
+ *
+ *     latestPurchasePrice = null
+ *
+ * Barang.purchasePrice tetap dikirim sebagai:
+ *
+ *     masterPurchasePrice
  *
  * =========================================================
  */
@@ -90,6 +108,7 @@ type BarangUnitInfo = {
   id: number;
   code: string;
   name: string;
+  category: string | null;
   unit: string;
   baseUnit: string | null;
   conversionRate: number;
@@ -118,10 +137,19 @@ type LatestPriceInfo = {
     name: string;
   } | null;
 
-  source: "ReceiptItem.price" | "Barang.purchasePrice" | "NO_TRANSACTION";
+  source:
+    | "ReceiptItem.price"
+    | "Barang.purchasePrice"
+    | "NO_TRANSACTION";
 
   hasTransaction: boolean;
 };
+
+/*
+ * =========================================================
+ * SAFE NUMBER
+ * =========================================================
+ */
 
 function getSafeNumber(value: unknown): number {
   const number = Number(value);
@@ -133,7 +161,15 @@ function getSafeNumber(value: unknown): number {
   return number;
 }
 
-function formatRupiah(value: number | null): string | null {
+/*
+ * =========================================================
+ * RUPIAH
+ * =========================================================
+ */
+
+function formatRupiah(
+  value: number | null
+): string | null {
   if (
     value === null ||
     !Number.isFinite(value)
@@ -153,17 +189,21 @@ function formatRupiah(value: number | null): string | null {
 
 /*
  * =========================================================
- * ROLE HELPERS
+ * ROLE
  * =========================================================
  */
 
-function normalizeRole(value: unknown): string {
+function normalizeRole(
+  value: unknown
+): string {
   return String(value || "")
     .trim()
     .toUpperCase();
 }
 
-function isOutletAdminRole(role: unknown): boolean {
+function isOutletAdminRole(
+  role: unknown
+): boolean {
   const normalizedRole =
     normalizeRole(role);
 
@@ -173,7 +213,9 @@ function isOutletAdminRole(role: unknown): boolean {
   );
 }
 
-function isCentralRole(role: unknown): boolean {
+function isCentralRole(
+  role: unknown
+): boolean {
   const normalizedRole =
     normalizeRole(role);
 
@@ -211,10 +253,12 @@ function getConversionRate(
  * MAIN UNIT
  * =========================================================
  *
- * Satuan utama HARUS Barang.unit.
+ * PRIORITAS:
  *
- * baseUnit hanya fallback apabila data lama
- * ternyata Barang.unit kosong.
+ * 1. Barang.unit
+ * 2. Barang.baseUnit
+ *
+ * Untuk data lama yang mungkin kosong.
  */
 
 function getMainUnit(
@@ -250,12 +294,24 @@ function getBaseUnit(
 
 /*
  * =========================================================
- * CONVERTED STOCK
+ * STOCK CONVERSION
  * =========================================================
  *
- * Stock utama TIDAK diubah.
+ * Contoh:
  *
- * Hanya menghitung informasi konversi.
+ * stock = 10
+ * unit = BOX
+ * conversionRate = 12
+ * baseUnit = PCS
+ *
+ * hasil:
+ *
+ * mainQty       = 10
+ * mainUnit      = BOX
+ * convertedQty  = 120
+ * convertedUnit = PCS
+ *
+ * Stock utama TIDAK diubah.
  */
 
 function calculateConvertedStock(
@@ -304,9 +360,11 @@ export async function GET(
   req: NextRequest
 ) {
   try {
-    // =====================================================
-    // 1. SESSION
-    // =====================================================
+    /*
+     * =====================================================
+     * 1. SESSION
+     * =====================================================
+     */
 
     const cookieStore =
       await cookies();
@@ -328,9 +386,11 @@ export async function GET(
       );
     }
 
-    // =====================================================
-    // 2. PARSE SESSION
-    // =====================================================
+    /*
+     * =====================================================
+     * 2. PARSE SESSION
+     * =====================================================
+     */
 
     let sessionData: any;
 
@@ -375,9 +435,11 @@ export async function GET(
       );
     }
 
-    // =====================================================
-    // 3. LOAD USER LOGIN
-    // =====================================================
+    /*
+     * =====================================================
+     * 3. LOAD USER
+     * =====================================================
+     */
 
     const user =
       await prisma.user.findUnique(
@@ -419,9 +481,11 @@ export async function GET(
       );
     }
 
-    // =====================================================
-    // 4. USER ACTIVE
-    // =====================================================
+    /*
+     * =====================================================
+     * 4. USER ACTIVE
+     * =====================================================
+     */
 
     if (!user.active) {
       return NextResponse.json(
@@ -436,9 +500,11 @@ export async function GET(
       );
     }
 
-    // =====================================================
-    // 5. NORMALIZE ROLE
-    // =====================================================
+    /*
+     * =====================================================
+     * 5. ROLE
+     * =====================================================
+     */
 
     const role =
       normalizeRole(
@@ -454,10 +520,6 @@ export async function GET(
       isCentralRole(
         role
       );
-
-    // =====================================================
-    // 6. ROLE ACCESS
-    // =====================================================
 
     const allowedRoles = [
       "ADMIN",
@@ -483,24 +545,27 @@ export async function GET(
       );
     }
 
-    // =====================================================
-    // 7. QUERY PARAMETER
-    // =====================================================
+    /*
+     * =====================================================
+     * 6. QUERY PARAMETER
+     * =====================================================
+     */
 
-    const {
-      searchParams,
-    } = new URL(
-      req.url
-    );
+    const searchParams =
+      new URL(
+        req.url
+      ).searchParams;
 
     const outletIdParam =
       searchParams.get(
         "outletId"
       );
 
-    // =====================================================
-    // 8. RESOLVE OUTLET SCOPE
-    // =====================================================
+    /*
+     * =====================================================
+     * 7. RESOLVE OUTLET SCOPE
+     * =====================================================
+     */
 
     let outletId:
       | number
@@ -509,23 +574,19 @@ export async function GET(
     let outletLocked =
       false;
 
-    // =====================================================
-    // OUTLET ADMIN
-    // =====================================================
+    /*
+     * =====================================================
+     * OUTLET ADMIN
+     * =====================================================
+     *
+     * outletId dari URL DIABAIKAN.
+     */
 
-    if (
-      outletAdmin
-    ) {
+    if (outletAdmin) {
       outletLocked = true;
 
       /*
-       * SECURITY:
-       *
-       * outletIdParam SENGAJA TIDAK DIGUNAKAN.
-       *
-       * Authority berasal dari:
-       *
-       * user.outletId
+       * User outlet wajib valid.
        */
 
       if (
@@ -548,25 +609,29 @@ export async function GET(
         );
       }
 
+      /*
+       * Authority berasal dari user.outletId.
+       */
+
       outletId =
         user.outletId;
     }
 
-    // =====================================================
-    // ADMIN / MANAGER
-    // =====================================================
+    /*
+     * =====================================================
+     * ADMIN / MANAGER
+     * =====================================================
+     */
 
-    else if (
-      centralRole
-    ) {
+    else if (centralRole) {
       /*
-       * ADMIN dan MANAGER boleh melihat
-       * semua outlet apabila outletId tidak dikirim.
+       * Tanpa outletId:
+       *
+       * -> semua outlet
        */
 
       if (
-        outletIdParam !==
-        null
+        outletIdParam !== null
       ) {
         const parsedOutletId =
           Number(
@@ -596,9 +661,11 @@ export async function GET(
       }
     }
 
-    // =====================================================
-    // 9. VALIDATE SELECTED OUTLET
-    // =====================================================
+    /*
+     * =====================================================
+     * 8. VALIDATE SELECTED OUTLET
+     * =====================================================
+     */
 
     let selectedOutlet:
       | {
@@ -657,7 +724,10 @@ export async function GET(
       }
 
       /*
-       * SECURITY CHECK
+       * ===================================================
+       * SECURITY:
+       * OUTLET ADMIN TIDAK BOLEH PINDAH OUTLET
+       * ===================================================
        */
 
       if (
@@ -678,7 +748,10 @@ export async function GET(
       }
 
       /*
-       * SECURITY CHECK RELASI USER -> OUTLET
+       * ===================================================
+       * SECURITY:
+       * RELASI USER -> OUTLET
+       * ===================================================
        */
 
       if (
@@ -702,7 +775,10 @@ export async function GET(
       }
 
       /*
-       * SECURITY CHECK STATUS OUTLET USER
+       * ===================================================
+       * SECURITY:
+       * OUTLET USER HARUS AKTIF
+       * ===================================================
        */
 
       if (
@@ -723,9 +799,11 @@ export async function GET(
       }
     }
 
-    // =====================================================
-    // 10. WHERE OUTLET STOCK
-    // =====================================================
+    /*
+     * =====================================================
+     * 9. OUTLET STOCK WHERE
+     * =====================================================
+     */
 
     const stockWhere: {
       outletId?: number;
@@ -738,9 +816,11 @@ export async function GET(
         outletId;
     }
 
-    // =====================================================
-    // 11. GET OUTLET STOCK
-    // =====================================================
+    /*
+     * =====================================================
+     * 10. GET OUTLET STOCK
+     * =====================================================
+     */
 
     const stocks =
       await prisma.outletStock.findMany(
@@ -775,6 +855,16 @@ export async function GET(
                 code: true,
                 name: true,
 
+                /*
+                 * =================================================
+                 * CATEGORY BARANG
+                 * =================================================
+                 *
+                 * Barang.category adalah field scalar String.
+                 */
+
+                category: true,
+
                 unit: true,
 
                 baseUnit: true,
@@ -807,9 +897,11 @@ export async function GET(
         }
       );
 
-    // =====================================================
-    // 12. BUILD BARANG ID LIST
-    // =====================================================
+    /*
+     * =====================================================
+     * 11. BARANG IDS
+     * =====================================================
+     */
 
     const barangIds =
       Array.from(
@@ -821,24 +913,23 @@ export async function GET(
         )
       );
 
-    // =====================================================
-    // 13. GET LAST TRANSACTION PRICE
-    // =====================================================
-    //
-    // SUMBER HARGA:
-    //
-    // ReceiptItem.price
-    //
-    // Urutan:
-    //
-    // Receipt.receiptDate DESC
-    // ReceiptItem.id DESC
-    //
-    // Karena semua receipt dikumpulkan sekaligus,
-    // kita kemudian mengambil transaksi pertama untuk
-    // masing-masing barang.
-    //
-    // =====================================================
+    /*
+     * =====================================================
+     * 12. GET LAST RECEIPT PRICE
+     * =====================================================
+     *
+     * Harga terakhir berasal dari:
+     *
+     * ReceiptItem.price
+     *
+     * Urutan:
+     *
+     * Receipt.receiptDate DESC
+     * ReceiptItem.id DESC
+     *
+     * Data receipt dikumpulkan satu kali kemudian
+     * dipetakan berdasarkan barangId.
+     */
 
     const latestReceiptItems =
       barangIds.length > 0
@@ -895,9 +986,11 @@ export async function GET(
           )
         : [];
 
-    // =====================================================
-    // 14. MAP LAST PRICE
-    // =====================================================
+    /*
+     * =====================================================
+     * 13. MAP LAST PRICE
+     * =====================================================
+     */
 
     const latestPriceByBarang =
       new Map<
@@ -905,15 +998,14 @@ export async function GET(
         LatestPriceInfo
       >();
 
-    /*
-     * Karena data sudah diurutkan DESC,
-     * item pertama yang ditemukan adalah transaksi
-     * Barang Masuk terakhir untuk barang tersebut.
-     */
-
     for (
       const item of latestReceiptItems
     ) {
+      /*
+       * Karena sudah DESC,
+       * transaksi pertama adalah transaksi terakhir.
+       */
+
       if (
         latestPriceByBarang.has(
           item.barangId
@@ -991,9 +1083,15 @@ export async function GET(
       );
     }
 
-    // =====================================================
-    // 15. STOCK OPNAME
-    // =====================================================
+    /*
+     * =====================================================
+     * 14. STOCK OPNAME
+     * =====================================================
+     *
+     * Stock opname di endpoint ini hanya INFORMASI.
+     *
+     * Tidak melakukan adjustment.
+     */
 
     const opnameWhere: {
       outletId?: number;
@@ -1063,6 +1161,14 @@ export async function GET(
                     id: true,
                     code: true,
                     name: true,
+
+                    /*
+                     * Category juga ditambahkan
+                     * pada data stock opname.
+                     */
+
+                    category: true,
+
                     unit: true,
                     baseUnit: true,
                     conversionRate: true,
@@ -1074,9 +1180,11 @@ export async function GET(
         }
       );
 
-    // =====================================================
-    // 16. MAP OPNAME HISTORY
-    // =====================================================
+    /*
+     * =====================================================
+     * 15. OPNAME HISTORY TYPE
+     * =====================================================
+     */
 
     type OpnameHistoryItem = {
       opnameId: number;
@@ -1096,11 +1204,18 @@ export async function GET(
         id: number;
         code: string;
         name: string;
+        category: string | null;
         unit: string;
         baseUnit: string | null;
         conversionRate: number;
       } | null;
     };
+
+    /*
+     * =====================================================
+     * 16. OPNAME HISTORY MAP
+     * =====================================================
+     */
 
     const opnameHistoryByBarang =
       new Map<
@@ -1108,9 +1223,11 @@ export async function GET(
         OpnameHistoryItem[]
       >();
 
-    // =====================================================
-    // 17. BUILD OPNAME HISTORY
-    // =====================================================
+    /*
+     * =====================================================
+     * 17. BUILD OPNAME HISTORY
+     * =====================================================
+     */
 
     for (
       const opname of opnameList
@@ -1130,7 +1247,7 @@ export async function GET(
           Number(
             item.barang
               ?.conversionRate ??
-              1
+            1
           );
 
         const safeConversionRate =
@@ -1197,6 +1314,11 @@ export async function GET(
                   name:
                     item.barang.name,
 
+                  category:
+                    item.barang
+                      .category ??
+                    null,
+
                   unit:
                     item.barang.unit,
 
@@ -1217,9 +1339,11 @@ export async function GET(
       }
     }
 
-    // =====================================================
-    // 18. COMBINE STOCK + OPNAME + PRICE
-    // =====================================================
+    /*
+     * =====================================================
+     * 18. COMBINE STOCK + PRICE + OPNAME
+     * =====================================================
+     */
 
     const data =
       stocks.map(
@@ -1241,9 +1365,23 @@ export async function GET(
           const barang =
             stock.barang as BarangUnitInfo;
 
-          // =================================================
-          // MAIN UNIT
-          // =================================================
+          /*
+           * =================================================
+           * CATEGORY
+           * =================================================
+           */
+
+          const category =
+            String(
+              barang.category ??
+              ""
+            ).trim() || null;
+
+          /*
+           * =================================================
+           * UNIT
+           * =================================================
+           */
 
           const mainUnit =
             getMainUnit(
@@ -1260,18 +1398,22 @@ export async function GET(
               barang
             );
 
-          // =================================================
-          // STOCK
-          // =================================================
+          /*
+           * =================================================
+           * STOCK
+           * =================================================
+           */
 
           const stockQty =
             getSafeNumber(
               stock.stock
             );
 
-          // =================================================
-          // CONVERSION
-          // =================================================
+          /*
+           * =================================================
+           * CONVERSION
+           * =================================================
+           */
 
           const converted =
             calculateConvertedStock(
@@ -1279,9 +1421,11 @@ export async function GET(
               barang
             );
 
-          // =================================================
-          // MINIMUM STOCK
-          // =================================================
+          /*
+           * =================================================
+           * MINIMUM STOCK
+           * =================================================
+           */
 
           const minimumStock =
             getSafeNumber(
@@ -1292,54 +1436,53 @@ export async function GET(
             minimumStock *
             conversionRate;
 
-          // =================================================
-          // LAST PRICE
-          // =================================================
+          /*
+           * =================================================
+           * LAST PRICE
+           * =================================================
+           */
 
           const transactionPrice =
             latestPriceByBarang.get(
               stock.barangId
             );
 
-          /*
-           * Jika belum pernah ada transaksi Barang Masuk,
-           * jangan membuat harga transaksi palsu.
-           *
-           * Gunakan Barang.purchasePrice hanya sebagai
-           * fallback informasi master.
-           */
-
           const price: LatestPriceInfo =
-            transactionPrice
-              ? transactionPrice
-              : {
-                  barangId:
-                    stock.barangId,
+            transactionPrice ??
+            {
+              barangId:
+                stock.barangId,
 
-                  latestPurchasePrice:
-                    null,
+              latestPurchasePrice:
+                null,
 
-                  latestPurchasePriceFormatted:
-                    null,
+              latestPurchasePriceFormatted:
+                null,
 
-                  latestTransactionDate:
-                    null,
+              latestTransactionDate:
+                null,
 
-                  latestReceiptNumber:
-                    null,
+              latestReceiptNumber:
+                null,
 
-                  latestSupplierId:
-                    null,
+              latestSupplierId:
+                null,
 
-                  latestSupplier:
-                    null,
+              latestSupplier:
+                null,
 
-                  source:
-                    "NO_TRANSACTION",
+              source:
+                "NO_TRANSACTION",
 
-                  hasTransaction:
-                    false,
-                };
+              hasTransaction:
+                false,
+            };
+
+          /*
+           * =================================================
+           * MASTER PURCHASE PRICE
+           * =================================================
+           */
 
           const masterPurchasePrice =
             getSafeNumber(
@@ -1347,16 +1490,21 @@ export async function GET(
                 .purchasePrice
             );
 
-          // =================================================
-          // RETURN ITEM
-          // =================================================
+          /*
+           * =================================================
+           * RETURN ITEM
+           * =================================================
+           */
 
           return {
             ...stock,
 
             /*
+             * =================================================
              * STOCK UTAMA
+             * =================================================
              */
+
             stock:
               stockQty,
 
@@ -1369,20 +1517,27 @@ export async function GET(
               ),
 
             /*
+             * =================================================
              * BARANG
+             * =================================================
              */
+
             barang: {
               ...stock.barang,
 
               /*
-               * Satuan utama tetap Barang.unit
+               * Category barang.
                */
+
+              category,
+
+              /*
+               * Main unit tetap Barang.unit.
+               */
+
               unit:
                 stock.barang.unit,
 
-              /*
-               * Informasi konversi
-               */
               baseUnit,
 
               conversionRate,
@@ -1394,8 +1549,9 @@ export async function GET(
                 converted.conversionLabel,
 
               /*
-               * Display stock utama
+               * Stock utama
                */
+
               stockDisplayQty:
                 stockQty,
 
@@ -1403,8 +1559,9 @@ export async function GET(
                 mainUnit,
 
               /*
-               * Display hasil konversi
+               * Stock hasil konversi
                */
+
               convertedStockQty:
                 converted.convertedQty,
 
@@ -1414,6 +1571,7 @@ export async function GET(
               /*
                * Minimum stock
                */
+
               minimumStockDisplayQty:
                 minimumStock,
 
@@ -1429,11 +1587,21 @@ export async function GET(
 
             /*
              * =================================================
-             * PRICE TABLE
+             * CATEGORY
              * =================================================
              *
-             * Harga transaksi Barang Masuk terakhir.
+             * Disediakan juga di level item agar frontend
+             * lebih mudah melakukan filter kategori.
              */
+
+            category,
+
+            /*
+             * =================================================
+             * PRICE
+             * =================================================
+             */
+
             price: {
               latestPurchasePrice:
                 price.latestPurchasePrice,
@@ -1460,8 +1628,9 @@ export async function GET(
                 price.hasTransaction,
 
               /*
-               * Harga master tetap disimpan terpisah.
+               * Master price tetap terpisah.
                */
+
               masterPurchasePrice,
 
               masterPurchasePriceFormatted:
@@ -1471,8 +1640,11 @@ export async function GET(
             },
 
             /*
-             * FIELD DISPLAY UTAMA
+             * =================================================
+             * DISPLAY
+             * =================================================
              */
+
             displayQty:
               stockQty,
 
@@ -1480,8 +1652,11 @@ export async function GET(
               mainUnit,
 
             /*
-             * STOCK CONVERTED
+             * =================================================
+             * CONVERTED STOCK
+             * =================================================
              */
+
             convertedStockQty:
               converted.convertedQty,
 
@@ -1489,8 +1664,11 @@ export async function GET(
               converted.convertedUnit,
 
             /*
-             * KONVERSI
+             * =================================================
+             * CONVERSION
+             * =================================================
              */
+
             baseQty:
               stockQty,
 
@@ -1502,8 +1680,11 @@ export async function GET(
               converted.conversionLabel,
 
             /*
+             * =================================================
              * MINIMUM
+             * =================================================
              */
+
             minimumStockBaseQty:
               minimumStock,
 
@@ -1520,8 +1701,11 @@ export async function GET(
               baseUnit,
 
             /*
+             * =================================================
              * OPNAME
+             * =================================================
              */
+
             lastOpname,
 
             opnameHistory,
@@ -1529,9 +1713,11 @@ export async function GET(
         }
       );
 
-    // =====================================================
-    // 19. PRICE SUMMARY
-    // =====================================================
+    /*
+     * =====================================================
+     * 19. PRICE SUMMARY
+     * =====================================================
+     */
 
     const itemsWithLatestPrice =
       data.filter(
@@ -1545,9 +1731,11 @@ export async function GET(
       data.length -
       itemsWithLatestPrice;
 
-    // =====================================================
-    // 20. STOCK SUMMARY
-    // =====================================================
+    /*
+     * =====================================================
+     * 20. STOCK SUMMARY
+     * =====================================================
+     */
 
     const totalStockQty =
       data.reduce(
@@ -1586,6 +1774,12 @@ export async function GET(
       data.length -
       itemsWithOpname;
 
+    /*
+     * =====================================================
+     * 21. OPNAME SUMMARY
+     * =====================================================
+     */
+
     const approvedOpnameCount =
       opnameList.filter(
         (item) =>
@@ -1609,9 +1803,108 @@ export async function GET(
           )
       ).length;
 
-    // =====================================================
-    // 21. RESPONSE
-    // =====================================================
+    /*
+     * =====================================================
+     * 22. CATEGORY SUMMARY
+     * =====================================================
+     *
+     * Daftar kategori unik dari data stock yang sedang
+     * dikembalikan.
+     *
+     * null / kosong tidak dimasukkan.
+     */
+
+    const categories =
+      Array.from(
+        new Set(
+          data
+            .map(
+              (item) =>
+                item.category
+            )
+            .filter(
+              (
+                category
+              ): category is string =>
+                Boolean(
+                  category
+                )
+            )
+        )
+      ).sort(
+        (
+          a,
+          b
+        ) =>
+          a.localeCompare(
+            b,
+            "id-ID"
+          )
+      );
+
+    /*
+     * =====================================================
+     * 23. CATEGORY SUMMARY COUNT
+     * =====================================================
+     */
+
+    const categorySummary =
+      categories.map(
+        (category) => ({
+          category,
+
+          itemCount:
+            data.filter(
+              (item) =>
+                item.category ===
+                category
+            ).length,
+
+          totalStockQty:
+            data
+              .filter(
+                (item) =>
+                  item.category ===
+                  category
+              )
+              .reduce(
+                (
+                  total,
+                  item
+                ) =>
+                  total +
+                  getSafeNumber(
+                    item.stock
+                  ),
+                0
+              ),
+
+          totalConvertedStockQty:
+            data
+              .filter(
+                (item) =>
+                  item.category ===
+                  category
+              )
+              .reduce(
+                (
+                  total,
+                  item
+                ) =>
+                  total +
+                  getSafeNumber(
+                    item.convertedStockQty
+                  ),
+                0
+              ),
+        })
+      );
+
+    /*
+     * =====================================================
+     * 24. RESPONSE
+     * =====================================================
+     */
 
     return NextResponse.json({
       success: true,
@@ -1623,8 +1916,7 @@ export async function GET(
        */
 
       scope: {
-        role:
-          role,
+        role,
 
         outletId,
 
@@ -1641,6 +1933,11 @@ export async function GET(
           outletAdmin
             ? "user.outletId"
             : "query-or-all",
+
+        /*
+         * Tetap ditampilkan untuk debugging.
+         * Tidak menjadi authority outlet admin.
+         */
 
         queryOutletId:
           outletIdParam,
@@ -1662,8 +1959,7 @@ export async function GET(
         fullname:
           user.fullname,
 
-        role:
-          role,
+        role,
 
         outletId:
           user.outletId,
@@ -1693,7 +1989,26 @@ export async function GET(
 
       /*
        * ===================================================
-       * PRICE TABLE META
+       * CATEGORY
+       * ===================================================
+       */
+
+      categoryTable: {
+        source:
+          "Barang.category",
+
+        totalCategories:
+          categories.length,
+
+        categories,
+
+        summary:
+          categorySummary,
+      },
+
+      /*
+       * ===================================================
+       * PRICE TABLE
        * ===================================================
        */
 
@@ -1743,15 +2058,15 @@ export async function GET(
 
         pendingOpnameCount,
 
-        /*
-         * PRICE
-         */
         itemsWithLatestPrice,
 
         itemsWithoutLatestPrice,
 
         latestPriceTransactionsLoaded:
           latestReceiptItems.length,
+
+        totalCategories:
+          categories.length,
       },
 
       /*
@@ -1778,6 +2093,31 @@ export async function GET(
         approvedOpnameCount,
 
         pendingOpnameCount,
+
+        /*
+         * =================================================
+         * CATEGORY
+         * =================================================
+         */
+
+        category: {
+          source:
+            "Barang.category",
+
+          type:
+            "scalar",
+
+          relation:
+            false,
+
+          description:
+            "Kategori barang berasal langsung dari field Barang.category.",
+
+          totalCategories:
+            categories.length,
+
+          categories,
+        },
 
         /*
          * =================================================
@@ -1813,28 +2153,27 @@ export async function GET(
 
         /*
          * =================================================
-         * STOCK SOURCE
+         * STOCK
          * =================================================
          */
 
         stockSource:
           "OutletStock.stock",
 
-        /*
-         * Endpoint READ ONLY
-         */
         stockLocked:
           true,
 
         /*
-         * Stock opname hanya informasi
+         * =================================================
+         * STOCK OPNAME
+         * =================================================
+         *
+         * Endpoint ini tidak melakukan adjustment.
          */
+
         opnameIsInformational:
           true,
 
-        /*
-         * Adjustment harus melalui flow approval
-         */
         adjustmentRequiresApproval:
           true,
 
@@ -1864,7 +2203,7 @@ export async function GET(
             "Barang.conversionRate",
 
           rule:
-            "Stock utama tetap menggunakan Barang.unit. Stock setelah konversi hanya informasi tambahan.",
+            "Stock utama tetap menggunakan Barang.unit. Stock hasil konversi hanya informasi tambahan.",
         },
 
         /*

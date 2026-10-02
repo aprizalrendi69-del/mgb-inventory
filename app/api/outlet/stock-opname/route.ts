@@ -163,6 +163,8 @@ function parseOpnameDate(value: unknown): Date | null {
 //
 // PENTING:
 // -> barang.category ikut dikirim
+// -> barang.baseUnit ikut dikirim
+// -> barang.conversionRate ikut dikirim
 // =====================================================
 
 export async function GET(req: NextRequest) {
@@ -240,14 +242,28 @@ export async function GET(req: NextRequest) {
               // =================================================
               // CATEGORY
               // =================================================
-              // Field category adalah field langsung pada Barang.
-              // Sebelumnya tidak dikirim sehingga frontend
-              // menerima undefined/null dan menampilkan "-".
-              // =================================================
 
               category: true,
 
+              // =================================================
+              // UNIT & CONVERSION
+              // =================================================
+              // Digunakan oleh frontend dan PDF Stock Opname.
+              //
+              // unit:
+              // Satuan transaksi / stok outlet.
+              //
+              // baseUnit:
+              // Satuan dasar barang.
+              //
+              // conversionRate:
+              // Nilai konversi dari unit ke baseUnit.
+              // =================================================
+
               unit: true,
+              baseUnit: true,
+              conversionRate: true,
+
               purchasePrice: true,
               sellingPrice: true,
             },
@@ -303,6 +319,76 @@ export async function GET(req: NextRequest) {
         });
     }
 
+    // =================================================
+    // OPNAME YANG SEDANG BERJALAN
+    //
+    // MONTHLY / COUNTING disimpan di database sehingga
+    // qty fisik yang sudah diedit dapat dibaca kembali
+    // setelah refresh / logout dan dapat dilihat Admin.
+    //
+    // Jika opnameId dikirim, ambil opname tersebut.
+    // Jika tidak, ambil opname MONTHLY COUNTING terbaru
+    // untuk outlet yang sedang ditampilkan.
+    // =================================================
+
+    const requestedOpnameId = Number(
+      searchParams.get("opnameId") ?? 0
+    );
+
+    let currentOpname = null;
+
+    if (activeOutlet?.id) {
+      const opnameWhere: any = {
+        outletId: Number(activeOutlet.id),
+      };
+
+      if (requestedOpnameId > 0) {
+        opnameWhere.id = requestedOpnameId;
+      } else {
+        opnameWhere.type = "MONTHLY";
+        opnameWhere.status = "COUNTING";
+      }
+
+      currentOpname =
+        await prisma.stockOpname.findFirst({
+          where: opnameWhere,
+
+          orderBy: {
+            id: "desc",
+          },
+
+          include: {
+            outlet: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
+            },
+
+            items: {
+              orderBy: {
+                id: "asc",
+              },
+
+              include: {
+                barang: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                    category: true,
+                    unit: true,
+                    baseUnit: true,
+                    conversionRate: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+    }
+
     return NextResponse.json({
       success: true,
 
@@ -316,6 +402,12 @@ export async function GET(req: NextRequest) {
       outlet: activeOutlet,
 
       data: stocks,
+
+      // Data opname disimpan permanen di database.
+      // Frontend dapat memakai field ini untuk mengembalikan
+      // qty fisik setelah refresh dan menampilkan hasil yang
+      // sama kepada Admin Pusat.
+      opname: currentOpname,
     });
   } catch (error: any) {
     console.error(
@@ -717,7 +809,14 @@ export async function POST(req: NextRequest) {
 
               category: true,
 
+              // =================================================
+              // UNIT & CONVERSION
+              // =================================================
+
               unit: true,
+              baseUnit: true,
+              conversionRate: true,
+
               purchasePrice: true,
               sellingPrice: true,
             },
@@ -1024,7 +1123,16 @@ export async function POST(req: NextRequest) {
 
                         category: true,
 
+                        // =================================================
+                        // UNIT & CONVERSION
+                        // =================================================
+                        // Disertakan juga pada hasil POST agar
+                        // response stock opname lengkap.
+                        // =================================================
+
                         unit: true,
+                        baseUnit: true,
+                        conversionRate: true,
                       },
                     },
                   },
@@ -1084,6 +1192,576 @@ export async function POST(req: NextRequest) {
         message:
           error?.message ||
           "Gagal membuat stock opname",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
+// =====================================================
+// PUT UPDATE STOCK OPNAME
+//
+// Digunakan ketika user mengedit QTY FISIK lalu menekan
+// "Simpan Perubahan".
+//
+// PENTING:
+// - Perubahan benar-benar ditulis ke database.
+// - Tidak hanya mengubah state/frontend.
+// - Tetap tersimpan setelah refresh / logout.
+// - ADMIN dapat membaca hasil perubahan melalui GET.
+// - Hanya opname MONTHLY dengan status COUNTING yang
+//   boleh diedit sebelum approval.
+// - outletStock.stock TIDAK diubah.
+// - systemQty tetap memakai snapshot saat opname dibuat.
+// =====================================================
+
+export async function PUT(req: NextRequest) {
+  try {
+    const login = await getLoginUser();
+
+    if ("error" in login) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: login.error,
+        },
+        {
+          status: login.status,
+        }
+      );
+    }
+
+    const { user, role } = login;
+
+    let body: any;
+
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Body request tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const opnameId = Number(
+      body?.opnameId ?? body?.id ?? 0
+    );
+
+    const items = Array.isArray(body?.items)
+      ? body.items
+      : [];
+
+    if (
+      !Number.isInteger(opnameId) ||
+      opnameId <= 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Opname ID tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (items.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Tidak ada perubahan qty fisik yang dikirim",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const opname =
+      await prisma.stockOpname.findUnique({
+        where: {
+          id: opnameId,
+        },
+
+        include: {
+          outlet: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              active: true,
+            },
+          },
+
+          items: {
+            include: {
+              barang: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  category: true,
+                  unit: true,
+                  baseUnit: true,
+                  conversionRate: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+    if (!opname) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Stock opname tidak ditemukan",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    // =================================================
+    // CEK AKSES OUTLET
+    // =================================================
+
+    const isAdminOutlet =
+      role === "ADMIN_OUTLET" ||
+      role === "OUTLET_ADMIN";
+
+    if (
+      isAdminOutlet &&
+      Number(user.outletId) !== Number(opname.outletId)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Anda tidak dapat mengubah stock opname outlet lain",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    // ADMIN PUSAT boleh melihat/memperbarui data opname
+    // yang berada pada outlet mana pun yang dipilihnya.
+    if (
+      role !== "ADMIN" &&
+      !isAdminOutlet
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Anda tidak memiliki akses mengubah stock opname",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    // =================================================
+    // OPNAME HANYA BOLEH DIUBAH SAAT COUNTING
+    // =================================================
+
+    if (String(opname.status).toUpperCase() !== "COUNTING") {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            `Stock opname ${opname.code} sudah tidak dapat diedit karena statusnya ${opname.status}`,
+        },
+        {
+          status: 409,
+        }
+      );
+    }
+
+    if (String(opname.type).toUpperCase() !== "MONTHLY") {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Hanya stock opname MONTHLY yang dapat diedit sebelum approval",
+        },
+        {
+          status: 409,
+        }
+      );
+    }
+
+    // =================================================
+    // PARSE PERUBAHAN
+    //
+    // itemId didukung jika frontend menyimpan ID item
+    // opname. stockId juga didukung agar kompatibel
+    // dengan form stock opname yang sudah ada.
+    // =================================================
+
+    const parsedItems = items.map(
+      (item: any, index: number) => {
+        const itemId = Number(
+          item?.itemId ??
+            item?.opnameItemId ??
+            item?.id ??
+            0
+        );
+
+        const stockId = Number(
+          item?.stockId ?? 0
+        );
+
+        const physicalQty = Number(
+          item?.physicalQty
+        );
+
+        const hasNote =
+          item?.note !== undefined &&
+          item?.note !== null;
+
+        return {
+          index,
+          itemId,
+          stockId,
+          physicalQty,
+          note: hasNote
+            ? String(item.note).trim()
+            : undefined,
+        };
+      }
+    );
+
+    const invalidQty =
+      parsedItems.find(
+        (item) =>
+          !Number.isFinite(item.physicalQty) ||
+          item.physicalQty < 0
+      );
+
+    if (invalidQty) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            `Qty fisik pada item ke-${
+              invalidQty.index + 1
+            } tidak valid`,
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =================================================
+    // DUPLIKAT ITEM
+    // =================================================
+
+    const itemKeys = parsedItems.map(
+      (item) =>
+        item.itemId > 0
+          ? `ITEM:${item.itemId}`
+          : `STOCK:${item.stockId}`
+    );
+
+    if (
+      new Set(itemKeys).size !==
+      itemKeys.length
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Item stock opname yang sama dikirim lebih dari satu kali",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =================================================
+    // UPDATE DATABASE
+    //
+    // Semua perubahan dilakukan dalam satu transaction.
+    // Kalau salah satu item gagal, seluruh perubahan
+    // dibatalkan sehingga tidak terjadi data setengah
+    // tersimpan.
+    // =================================================
+
+    const updatedOpname =
+      await prisma.$transaction(
+        async (tx) => {
+          const opnameItems =
+            await tx.stockOpnameItem.findMany({
+              where: {
+                opnameId,
+              },
+
+              select: {
+                id: true,
+                opnameId: true,
+                barangId: true,
+                systemQty: true,
+                physicalQty: true,
+                difference: true,
+                note: true,
+              },
+            });
+
+          const opnameItemById =
+            new Map(
+              opnameItems.map((item) => [
+                Number(item.id),
+                item,
+              ])
+            );
+
+          const stockIds = parsedItems
+            .filter(
+              (item) => item.itemId <= 0
+            )
+            .map((item) => item.stockId)
+            .filter(
+              (id) =>
+                Number.isInteger(id) && id > 0
+            );
+
+          const stocksById =
+            new Map<
+              number,
+              {
+                id: number;
+                barangId: number;
+                outletId: number;
+              }
+            >();
+
+          if (stockIds.length > 0) {
+            const stocks =
+              await tx.outletStock.findMany({
+                where: {
+                  id: {
+                    in: stockIds,
+                  },
+                  outletId:
+                    opname.outletId,
+                },
+
+                select: {
+                  id: true,
+                  barangId: true,
+                  outletId: true,
+                },
+              });
+
+            for (const stock of stocks) {
+              stocksById.set(
+                Number(stock.id),
+                {
+                  id: Number(stock.id),
+                  barangId: Number(
+                    stock.barangId
+                  ),
+                  outletId: Number(
+                    stock.outletId
+                  ),
+                }
+              );
+            }
+          }
+
+          for (const item of parsedItems) {
+            let targetItem:
+              | (typeof opnameItems)[number]
+              | null = null;
+
+            // -----------------------------------------
+            // PRIORITAS 1: itemId
+            // -----------------------------------------
+
+            if (item.itemId > 0) {
+              targetItem =
+                opnameItemById.get(
+                  item.itemId
+                ) ?? null;
+            }
+
+            // -----------------------------------------
+            // PRIORITAS 2: stockId -> barangId
+            // -----------------------------------------
+
+            if (!targetItem) {
+              if (
+                !Number.isInteger(
+                  item.stockId
+                ) ||
+                item.stockId <= 0
+              ) {
+                throw new Error(
+                  `Stock ID pada item ke-${
+                    item.index + 1
+                  } tidak valid`
+                );
+              }
+
+              const stock =
+                stocksById.get(
+                  item.stockId
+                );
+
+              if (!stock) {
+                throw new Error(
+                  `Stock ID ${item.stockId} tidak ditemukan pada outlet opname`
+                );
+              }
+
+              targetItem =
+                opnameItems.find(
+                  (opnameItem) =>
+                    Number(
+                      opnameItem.barangId
+                    ) ===
+                    Number(stock.barangId)
+                ) ?? null;
+            }
+
+            if (!targetItem) {
+              throw new Error(
+                `Item opname pada baris ${
+                  item.index + 1
+                } tidak ditemukan`
+              );
+            }
+
+            const systemQty =
+              Number(
+                targetItem.systemQty ?? 0
+              );
+
+            const physicalQty =
+              Math.max(
+                0,
+                Number(item.physicalQty)
+              );
+
+            const difference =
+              physicalQty - systemQty;
+
+            const updateData: any = {
+              physicalQty,
+              difference,
+            };
+
+            // Jangan mengosongkan note lama hanya karena
+            // frontend tidak mengirim field note.
+            if (item.note !== undefined) {
+              updateData.note =
+                item.note || null;
+            }
+
+            await tx.stockOpnameItem.update({
+              where: {
+                id: targetItem.id,
+              },
+
+              data: updateData,
+            });
+          }
+
+          return tx.stockOpname.findUnique({
+            where: {
+              id: opnameId,
+            },
+
+            include: {
+              outlet: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                },
+              },
+
+              items: {
+                orderBy: {
+                  id: "asc",
+                },
+
+                include: {
+                  barang: {
+                    select: {
+                      id: true,
+                      code: true,
+                      name: true,
+                      category: true,
+                      unit: true,
+                      baseUnit: true,
+                      conversionRate: true,
+                    },
+                  },
+                },
+              },
+            },
+          });
+        }
+      );
+
+    if (!updatedOpname) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Stock opname gagal ditemukan setelah disimpan",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+
+      message:
+        "Perubahan qty fisik berhasil disimpan ke database",
+
+      data: updatedOpname,
+
+      meta: {
+        persisted: true,
+        status: updatedOpname.status,
+        type: updatedOpname.type,
+        stockChanged: false,
+        requiresApproval: true,
+      },
+    });
+  } catch (error: any) {
+    console.error(
+      "PUT OUTLET STOCK OPNAME ERROR:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          error?.message ||
+          "Gagal menyimpan perubahan stock opname",
       },
       {
         status: 500,

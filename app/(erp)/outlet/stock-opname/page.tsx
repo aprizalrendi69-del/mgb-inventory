@@ -27,6 +27,7 @@ import {
   FileDown,
   Loader2,
   Tag,
+  ListFilter,
 } from "lucide-react";
 
 type Outlet = {
@@ -49,6 +50,8 @@ type Barang = {
   code: string;
   name: string;
   unit: string;
+  baseUnit?: string | null;
+  conversionRate?: number | null;
   purchasePrice: number;
   sellingPrice: number;
 
@@ -122,6 +125,15 @@ export default function OutletStockOpnamePage() {
 
   const [search, setSearch] = useState("");
 
+  /*
+   * FILTER KATEGORI
+   *
+   * ALL = semua kategori
+   * Selain ALL = nama kategori tertentu
+   */
+  const [selectedCategories, setSelectedCategories] =
+    useState<string[]>([]);
+
   const [loading, setLoading] =
     useState(true);
 
@@ -130,6 +142,20 @@ export default function OutletStockOpnamePage() {
 
   const [exportingPdf, setExportingPdf] =
     useState(false);
+
+  const [exportingResultPdf, setExportingResultPdf] =
+    useState(false);
+
+  // =====================================================
+  // DRAFT PERUBAHAN STOCK FISIK
+  // =====================================================
+  // Draft disimpan di browser, bukan membuat Stock Opname baru.
+  // Perubahan tetap ada saat pindah halaman atau refresh.
+  const [hasUnsavedChanges, setHasUnsavedChanges] =
+    useState(false);
+
+  const [draftSavedAt, setDraftSavedAt] =
+    useState<string | null>(null);
 
   const [loadingOutlets, setLoadingOutlets] =
     useState(false);
@@ -213,6 +239,136 @@ export default function OutletStockOpnamePage() {
     }
 
     return "-";
+  }
+
+  // =====================================================
+  // FORMAT BASE UNIT
+  // =====================================================
+
+  function getBaseUnit(
+    barang?: Barang | null
+  ) {
+    if (!barang) {
+      return "-";
+    }
+
+    const value =
+      String(
+        barang.baseUnit || ""
+      ).trim();
+
+    return value || "-";
+  }
+
+  // =====================================================
+  // FORMAT KONVERSI
+  // =====================================================
+
+  function getConversionRate(
+    barang?: Barang | null
+  ) {
+    if (!barang) {
+      return "-";
+    }
+
+    const value =
+      Number(
+        barang.conversionRate
+      );
+
+    if (
+      !Number.isFinite(value) ||
+      value <= 0
+    ) {
+      return "-";
+    }
+
+    return formatNumber(value);
+  }
+
+  // =====================================================
+  // DRAFT STORAGE HELPERS
+  // =====================================================
+
+  function getDraftOutletId(outletIdOverride?: number) {
+    const candidate =
+      outletIdOverride !== undefined
+        ? Number(outletIdOverride)
+        : Number(selectedOutletId || user?.outletId || outlet?.id || 0);
+
+    return Number.isFinite(candidate) && candidate > 0 ? candidate : 0;
+  }
+
+  function getDraftStorageKey(outletIdOverride?: number) {
+    const outletId = getDraftOutletId(outletIdOverride);
+    if (!outletId) return null;
+
+    return [
+      "mgb-stock-opname-draft",
+      outletId,
+      opnameType,
+      opnameDate,
+    ].join(":");
+  }
+
+  function restoreSavedDraft(items: CountItem[], outletIdOverride?: number) {
+    if (typeof window === "undefined" || items.length === 0) {
+      return { items, restored: false, savedAt: null as string | null };
+    }
+
+    const key = getDraftStorageKey(outletIdOverride);
+    if (!key) {
+      return { items, restored: false, savedAt: null as string | null };
+    }
+
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) {
+        return { items, restored: false, savedAt: null as string | null };
+      }
+
+      const draft = JSON.parse(raw);
+      if (!draft || typeof draft !== "object" || !draft.items || typeof draft.items !== "object") {
+        window.localStorage.removeItem(key);
+        return { items, restored: false, savedAt: null as string | null };
+      }
+
+      const restoredItems = items.map((item) => {
+        const saved = draft.items[String(item.id)];
+        if (!saved || typeof saved !== "object") return item;
+
+        const physicalQty = Number(saved.physicalQty);
+        return {
+          ...item,
+          physicalQty:
+            Number.isFinite(physicalQty) && physicalQty >= 0
+              ? physicalQty
+              : Number(item.stock || 0),
+          note: typeof saved.note === "string" ? saved.note : item.note,
+        };
+      });
+
+      return {
+        items: restoredItems,
+        restored: true,
+        savedAt: typeof draft.savedAt === "string" ? draft.savedAt : null,
+      };
+    } catch (error) {
+      console.error("RESTORE STOCK OPNAME DRAFT ERROR:", error);
+      return { items, restored: false, savedAt: null as string | null };
+    }
+  }
+
+  function clearSavedDraft(outletIdOverride?: number) {
+    if (typeof window === "undefined") return;
+    const key = getDraftStorageKey(outletIdOverride);
+    if (!key) return;
+
+    try {
+      window.localStorage.removeItem(key);
+    } catch (error) {
+      console.error("CLEAR STOCK OPNAME DRAFT ERROR:", error);
+    }
   }
 
   // =====================================================
@@ -333,15 +489,57 @@ export default function OutletStockOpnamePage() {
           ? json.data
           : [];
 
-      setData(
-        stocks.map((item) => ({
-          ...item,
-          physicalQty: Number(
-            item.stock || 0
-          ),
-          note: "",
-        }))
+      const mappedData: CountItem[] =
+        stocks.map((item: any) => {
+          const barang = item?.barang
+            ? {
+                ...item.barang,
+                baseUnit:
+                  item.barang.baseUnit ??
+                  item.barang.base_unit ??
+                  item.barang.baseunit ??
+                  item.barang.unitBase ??
+                  null,
+                conversionRate:
+                  item.barang.conversionRate ??
+                  item.barang.conversion_rate ??
+                  item.barang.conversion ??
+                  item.barang.conversionValue ??
+                  null,
+              }
+            : item.barang;
+
+          return {
+            ...item,
+            barang,
+            physicalQty: Number(item.stock || 0),
+            note: "",
+          };
+        });
+
+      const draftOutletId =
+        outletId > 0
+          ? outletId
+          : Number(
+              json.outlet?.id ??
+                json.user?.outletId ??
+                0
+            );
+
+      const restoredDraft = restoreSavedDraft(
+        mappedData,
+        draftOutletId
       );
+      setData(restoredDraft.items);
+      setDraftSavedAt(restoredDraft.savedAt);
+      setHasUnsavedChanges(false);
+
+      /*
+       * Saat outlet berubah,
+       * filter kategori dikembalikan ke semua.
+       */
+      setSelectedCategories([]);
+      setSearch("");
     } catch (error: any) {
       console.error(
         "LOAD OUTLET STOCK OPNAME ERROR:",
@@ -438,6 +636,7 @@ export default function OutletStockOpnamePage() {
 
     setSelectedOutletId(id);
     setSearch("");
+    setSelectedCategories([]);
 
     if (!id) {
       setOutlet(null);
@@ -471,6 +670,51 @@ export default function OutletStockOpnamePage() {
   }
 
   // =====================================================
+  // CATEGORY LIST
+  // =====================================================
+
+  const categories = useMemo(() => {
+    const unique = new Set<string>();
+
+    data.forEach((item) => {
+      const category =
+        getCategoryName(
+          item.barang
+        );
+
+      if (
+        category &&
+        category !== "-"
+      ) {
+        unique.add(category);
+      }
+    });
+
+    return Array.from(unique).sort(
+      (a, b) =>
+        a.localeCompare(
+          b,
+          "id-ID",
+          {
+            sensitivity: "base",
+          }
+        )
+    );
+  }, [data]);
+
+  function toggleCategory(category: string) {
+    setSelectedCategories((current) =>
+      current.includes(category)
+        ? current.filter((item) => item !== category)
+        : [...current, category]
+    );
+  }
+
+  function resetCategoryFilter() {
+    setSelectedCategories([]);
+  }
+
+  // =====================================================
   // FILTER
   // =====================================================
 
@@ -480,25 +724,43 @@ export default function OutletStockOpnamePage() {
         .toLowerCase()
         .trim();
 
-    if (!keyword) {
-      return data;
-    }
-
     return data.filter((item) => {
+      const category =
+        getCategoryName(
+          item.barang
+        );
+
+      const categoryMatch =
+        selectedCategories.length === 0 ||
+        selectedCategories.includes(category);
+
+      if (!categoryMatch) {
+        return false;
+      }
+
+      if (!keyword) {
+        return true;
+      }
+
       const text = [
         item.barang?.code,
         item.barang?.name,
-        getCategoryName(
-          item.barang
-        ),
+        category,
         item.barang?.unit,
+        item.barang?.baseUnit,
+        item.barang
+          ?.conversionRate,
       ]
         .join(" ")
         .toLowerCase();
 
       return text.includes(keyword);
     });
-  }, [data, search]);
+  }, [
+    data,
+    search,
+    selectedCategories,
+  ]);
 
   // =====================================================
   // UPDATE PHYSICAL
@@ -527,6 +789,8 @@ export default function OutletStockOpnamePage() {
           : item
       )
     );
+
+    setHasUnsavedChanges(true);
   }
 
   // =====================================================
@@ -547,6 +811,8 @@ export default function OutletStockOpnamePage() {
           : item
       )
     );
+
+    setHasUnsavedChanges(true);
   }
 
   // =====================================================
@@ -635,45 +901,30 @@ export default function OutletStockOpnamePage() {
       : 0;
 
   // =====================================================
-  // EXPORT PDF
+  // EXPORT PDF FORM HITUNG MANUAL
   // =====================================================
 
-  async function handleExportPdf() {
-    if (exportingPdf) {
-      return;
-    }
+  async function handleExportManualPdf() {
+    if (exportingPdf) return;
 
-    if (data.length === 0) {
+    if (filteredData.length === 0) {
       alert(
-        "Tidak ada data stock opname yang dapat diekspor."
+        "Tidak ada barang yang dapat dimasukkan ke Form Hitung Manual."
       );
       return;
     }
 
-    if (
-      isAdminPusat &&
-      selectedOutletId <= 0
-    ) {
-      alert(
-        "Silakan pilih outlet terlebih dahulu."
-      );
+    if (isAdminPusat && selectedOutletId <= 0) {
+      alert("Silakan pilih outlet terlebih dahulu.");
       return;
     }
 
     try {
       setExportingPdf(true);
 
-      const { jsPDF } = await import(
-        "jspdf"
-      );
-
-      const autoTableModule =
-        await import(
-          "jspdf-autotable"
-        );
-
-      const autoTable =
-        autoTableModule.default;
+      const { jsPDF } = await import("jspdf");
+      const autoTableModule = await import("jspdf-autotable");
+      const autoTable = autoTableModule.default;
 
       const doc = new jsPDF({
         orientation: "landscape",
@@ -681,876 +932,949 @@ export default function OutletStockOpnamePage() {
         format: "a4",
       });
 
-      const pageWidth =
-        doc.internal.pageSize.getWidth();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 12;
 
-      const pageHeight =
-        doc.internal.pageSize.getHeight();
-
-      const margin = 10;
-
-      const greenDark = [
-        31, 76, 63,
-      ];
-
-      const green = [
-        65, 125, 101,
-      ];
-
-      const greenLight = [
-        235, 246, 241,
-      ];
-
-      const grayText = [
-        92, 108, 101,
-      ];
-
-      const grayLight = [
-        247, 250, 248,
-      ];
-
-      const red = [
-        191, 75, 75,
-      ];
-
-      const orange = [
-        157, 112, 34,
-      ];
+      const greenDark = [31, 76, 63];
+      const green = [65, 125, 101];
+      const greenLight = [235, 246, 241];
+      const greenVeryLight = [247, 251, 249];
+      const grayText = [82, 101, 94];
+      const grayMuted = [123, 139, 132];
+      const grayBorder = [218, 231, 224];
+      const grayFill = [249, 251, 250];
+      const manualFill = [252, 254, 253];
 
       const typeText =
-        opnameType === "WEEKLY"
-          ? "MINGGUAN"
-          : "BULANAN";
+        opnameType === "WEEKLY" ? "MINGGUAN" : "BULANAN";
 
-      // =================================================
-      // DOCUMENT PROPERTIES
-      // =================================================
+      const categoryText =
+        selectedCategories.length === 0
+          ? "SEMUA KATEGORI"
+          : selectedCategories.join(", ");
 
       doc.setProperties({
-        title: `Stock Opname Outlet - ${
-          outlet?.code || "Outlet"
-        }`,
-        subject:
-          "Laporan Stock Opname Outlet",
-        author:
-          user?.fullname || "MGB Inventory",
-        creator:
-          "MGB Inventory",
+        title: `Form Penghitungan Manual - ${outlet?.code || "Outlet"}`,
+        subject: "Form Penghitungan Manual Stock Opname",
+        author: "MGB Inventory",
+        creator: "MGB Inventory",
+      });
+
+      // =================================================
+      // HEADER
+      // Nama petugas dan tanggal TIDAK diisi otomatis.
+      // =================================================
+      doc.setFillColor(...greenDark);
+      doc.roundedRect(
+        margin,
+        9,
+        pageWidth - margin * 2,
+        34,
+        4,
+        4,
+        "F"
+      );
+
+      doc.setFillColor(73, 119, 101);
+      doc.circle(pageWidth - 17, 17, 13, "F");
+      doc.setFillColor(57, 101, 85);
+      doc.circle(pageWidth - 25, 36, 9, "F");
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text("FORM PENGHITUNGAN MANUAL", margin + 7, 20);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.2);
+      doc.text(
+        "Lembar kerja staff untuk penghitungan fisik barang",
+        margin + 7,
+        26
+      );
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text("MGB INVENTORY", margin + 7, 35);
+
+      doc.setTextColor(230, 244, 238);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.text(typeText, pageWidth - margin - 7, 20, { align: "right" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.8);
+      doc.text("FORM MANUAL", pageWidth - margin - 7, 26, {
+        align: "right",
+      });
+
+      // =================================================
+      // DOCUMENT INFORMATION
+      // =================================================
+      let currentY = 50;
+      const infoHeight = 31;
+
+      doc.setFillColor(...greenVeryLight);
+      doc.setDrawColor(...grayBorder);
+      doc.roundedRect(
+        margin,
+        currentY,
+        pageWidth - margin * 2,
+        infoHeight,
+        3,
+        3,
+        "FD"
+      );
+
+      const infoX1 = margin + 6;
+      const infoX2 = margin + 72;
+      const infoX3 = margin + 137;
+
+      doc.setTextColor(...grayMuted);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.2);
+      doc.text("OUTLET", infoX1, currentY + 8);
+      doc.text("NAMA PETUGAS", infoX2, currentY + 8);
+      doc.text("KATEGORI", infoX3, currentY + 8);
+
+      doc.setTextColor(...greenDark);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text(
+        outlet ? `${outlet.code} - ${outlet.name}` : "-",
+        infoX1,
+        currentY + 15
+      );
+
+      // Sengaja kosong agar staff mengisi manual pada kertas.
+      doc.setDrawColor(175, 194, 185);
+      doc.line(infoX2, currentY + 17, infoX2 + 55, currentY + 17);
+
+      const categoryLines = doc.splitTextToSize(categoryText, 45);
+      doc.text(categoryLines.slice(0, 2), infoX3, currentY + 15);
+
+      doc.setTextColor(...grayMuted);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.2);
+      doc.text("TANGGAL", infoX1, currentY + 24);
+      doc.text("SIKLUS", infoX2, currentY + 24);
+      doc.text("JUMLAH ITEM", infoX3, currentY + 24);
+
+      doc.setTextColor(...grayText);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.2);
+
+      // Tanggal sengaja kosong, tidak menggunakan opnameDate / tanggal hari ini.
+      doc.setDrawColor(175, 194, 185);
+      doc.line(infoX1, currentY + 28, infoX1 + 50, currentY + 28);
+
+      doc.text(typeText, infoX2, currentY + 28);
+      doc.text(formatNumber(filteredData.length), infoX3, currentY + 28);
+
+      currentY += infoHeight + 8;
+
+      // =================================================
+      // INSTRUCTION
+      // =================================================
+      doc.setFillColor(...greenLight);
+      doc.setDrawColor(210, 229, 219);
+      doc.roundedRect(
+        margin,
+        currentY,
+        pageWidth - margin * 2,
+        17,
+        3,
+        3,
+        "FD"
+      );
+
+      doc.setTextColor(...greenDark);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text("PETUNJUK PENGHITUNGAN", margin + 5, currentY + 6);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.2);
+      doc.setTextColor(...grayText);
+      doc.text(
+        "Gunakan daftar referensi barang berikut. Isi jumlah Ending dan Catatan secara manual pada area kosong yang tersedia.",
+        margin + 5,
+        currentY + 11
+      );
+
+      currentY += 23;
+
+      // =================================================
+      // REFERENCE ITEM TABLE
+      // SATU TABEL: REFERENSI + ENDING + CATATAN
+      // Kode Barang ditambahkan sebagai referensi utama.
+      // Tinggi baris dibuat sedang agar tetap nyaman ditulis manual tanpa membuat PDF terlalu panjang.
+      // =================================================
+      doc.setTextColor(...greenDark);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.text("DAFTAR REFERENSI BARANG", margin, currentY);
+
+      doc.setTextColor(...grayMuted);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.2);
+      doc.text(
+        "Kode barang, kategori, nama, unit, base unit dan konversi menjadi referensi. Ending dan Catatan dikosongkan untuk pengisian manual.",
+        margin,
+        currentY + 5
+      );
+
+      currentY += 9;
+
+      const referenceRows = filteredData.map((item, index) => [
+        String(index + 1),
+        item.barang?.code || "-",
+        getCategoryName(item.barang),
+        item.barang?.name || "-",
+        item.barang?.unit || "-",
+        getConversionRate(item.barang),
+        getBaseUnit(item.barang),
+        "",
+        "",
+      ]);
+
+      autoTable(doc, {
+        startY: currentY,
+        margin: { left: margin, right: margin, top: 10, bottom: 20 },
+        head: [[
+          "No",
+          "Kode Barang",
+          "Kategori",
+          "Nama Barang",
+          "Unit",
+          "Konversi",
+          "Base Unit",
+          "Ending",
+          "Catatan",
+        ]],
+        body: referenceRows,
+        theme: "grid",
+        showHead: "everyPage",
+        pageBreak: "auto",
+        rowPageBreak: "avoid",
+        styles: {
+          font: "helvetica",
+          fontSize: 5.8,
+          cellPadding: 1.9,
+          textColor: [52, 72, 65],
+          lineColor: grayBorder,
+          lineWidth: 0.18,
+          valign: "middle",
+          overflow: "linebreak",
+          minCellHeight: 9.5,
+          fillColor: manualFill,
+        },
+        headStyles: {
+          fillColor: greenDark,
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+          fontSize: 5.6,
+          halign: "center",
+          valign: "middle",
+          cellPadding: 1.8,
+          minCellHeight: 8,
+          overflow: "hidden",
+        },
+        alternateRowStyles: { fillColor: grayFill },
+        columnStyles: {
+          0: { cellWidth: 7, halign: "center" },
+          1: { cellWidth: 24, halign: "center", fontStyle: "bold" },
+          2: { cellWidth: 29 },
+          3: { cellWidth: 57, fontStyle: "bold" },
+          4: { cellWidth: 15, halign: "center" },
+          5: { cellWidth: 21, halign: "center" },
+          6: { cellWidth: 20, halign: "center" },
+          7: { cellWidth: 45, halign: "center" },
+          8: { cellWidth: 55 },
+        },
+        didParseCell: (data: any) => {
+          // Ending dan Catatan selalu kosong pada PDF.
+          if (
+            data.section === "body" &&
+            (data.column.index === 7 || data.column.index === 8)
+          ) {
+            data.cell.text = [""];
+            data.cell.styles.fillColor = [255, 255, 255];
+            data.cell.styles.minCellHeight = 9.5;
+          }
+        },
+        didDrawCell: (data: any) => {
+          // Buat area tulis manual lebih jelas pada Ending dan Catatan.
+          if (
+            data.section === "body" &&
+            (data.column.index === 7 || data.column.index === 8)
+          ) {
+            doc.setDrawColor(224, 233, 228);
+            doc.setLineWidth(0.1);
+
+            const innerPadding = 2.5;
+            doc.rect(
+              data.cell.x + innerPadding,
+              data.cell.y + innerPadding,
+              data.cell.width - innerPadding * 2,
+              data.cell.height - innerPadding * 2,
+              "S"
+            );
+          }
+        },
+        didDrawPage: () =>
+          drawManualPdfFooter(doc, pageWidth, pageHeight, margin),
+      });
+
+      let finalY = (doc as any).lastAutoTable?.finalY || currentY + 20;
+
+      // =================================================
+      // SIGNATURE ONLY
+      // =================================================
+      if (finalY + 48 > pageHeight - 15) {
+        doc.addPage();
+        finalY = 18;
+      } else {
+        finalY += 9;
+      }
+
+      const signatureY = finalY;
+      doc.setTextColor(...grayText);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.text("Staff Penghitung", margin + 25, signatureY, {
+        align: "center",
+      });
+      doc.text("Supervisor / Checker", pageWidth - margin - 45, signatureY, {
+        align: "center",
+      });
+
+      doc.setDrawColor(180, 194, 187);
+      doc.line(
+        margin + 8,
+        signatureY + 21,
+        margin + 70,
+        signatureY + 21
+      );
+      doc.line(
+        pageWidth - margin - 76,
+        signatureY + 21,
+        pageWidth - margin - 14,
+        signatureY + 21
+      );
+
+      // =================================================
+      // FILENAME
+      // Tidak menggunakan tanggal otomatis.
+      // =================================================
+      const safeOutletCode = outlet?.code
+        ? outlet.code
+            .replace(/[^a-zA-Z0-9-_]/g, "-")
+            .toUpperCase()
+        : "OUTLET";
+
+      const safeCategory =
+        selectedCategories.length > 0
+          ? selectedCategories
+              .join("-")
+              .replace(/[^a-zA-Z0-9-_]/g, "-")
+              .toUpperCase()
+          : "SEMUA-KATEGORI";
+
+      doc.save(
+        `form-hitung-manual-${safeOutletCode}-${safeCategory}.pdf`
+      );
+    } catch (error) {
+      console.error("EXPORT FORM MANUAL PDF ERROR:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Gagal membuat Form Penghitungan Manual PDF"
+      );
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
+  // =====================================================
+  // MANUAL PDF FOOTER HELPER
+  // =====================================================
+
+  function drawManualPdfFooter(
+    doc: any,
+    pageWidth: number,
+    pageHeight: number,
+    margin: number
+  ) {
+    const pageNumber =
+      doc.getNumberOfPages();
+
+    doc.setDrawColor(
+      220,
+      231,
+      225
+    );
+
+    doc.line(
+      margin,
+      pageHeight - 10,
+      pageWidth -
+        margin,
+      pageHeight - 10
+    );
+
+    doc.setFont(
+      "helvetica",
+      "normal"
+    );
+
+    doc.setFontSize(6);
+
+    doc.setTextColor(
+      130,
+      145,
+      138
+    );
+
+    doc.text(
+      "MGB Inventory • Form Penghitungan Manual",
+      margin,
+      pageHeight - 6
+    );
+
+    doc.text(
+      `Halaman ${pageNumber}`,
+      pageWidth -
+        margin,
+      pageHeight - 6,
+      {
+        align: "right",
+      }
+    );
+  }
+
+    // =====================================================
+  // EXPORT PDF HASIL OPNAME KESELURUHAN
+  // PDF ini selalu menggunakan SELURUH daftar barang pada
+  // outlet yang sedang diperiksa, tidak mengikuti filter
+  // kategori maupun pencarian di tabel.
+  // =====================================================
+
+  async function handleExportResultPdf() {
+    if (exportingResultPdf) return;
+
+    if (data.length === 0) {
+      alert("Tidak ada data barang untuk dibuatkan PDF hasil opname.");
+      return;
+    }
+
+    if (isAdminPusat && selectedOutletId <= 0) {
+      alert("Silakan pilih outlet terlebih dahulu.");
+      return;
+    }
+
+    try {
+      setExportingResultPdf(true);
+
+      const { jsPDF } = await import("jspdf");
+      const autoTableModule = await import("jspdf-autotable");
+      const autoTable = autoTableModule.default;
+
+      const doc = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 12;
+
+      const greenDark = [31, 76, 63];
+      const green = [65, 125, 101];
+      const greenLight = [235, 246, 241];
+      const greenVeryLight = [247, 251, 249];
+      const grayText = [82, 101, 94];
+      const grayMuted = [123, 139, 132];
+      const grayBorder = [218, 231, 224];
+      const grayFill = [249, 251, 250];
+
+      const typeText =
+        opnameType === "WEEKLY" ? "MINGGUAN" : "BULANAN";
+
+      const dateText = opnameDate
+        ? new Date(`${opnameDate}T00:00:00`).toLocaleDateString(
+            "id-ID",
+            {
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+            }
+          )
+        : "-";
+
+      const resultRows = data.map((item, index) => {
+        const systemQty = Number(item.stock || 0);
+        const physicalQty = Number(item.physicalQty || 0);
+        const difference = physicalQty - systemQty;
+
+        return [
+          String(index + 1),
+          item.barang?.code || "-",
+          getCategoryName(item.barang),
+          item.barang?.name || "-",
+          item.barang?.unit || "-",
+          formatNumber(systemQty),
+          formatNumber(physicalQty),
+          `${difference > 0 ? "+" : ""}${formatNumber(difference)}`,
+          item.note || "-",
+          difference === 0 ? "SESUAI" : "SELISIH",
+        ];
+      });
+
+      doc.setProperties({
+        title: `Hasil Stock Opname - ${outlet?.code || "Outlet"}`,
+        subject: "Hasil Stock Opname Keseluruhan",
+        author: "MGB Inventory",
+        creator: "MGB Inventory",
       });
 
       // =================================================
       // HEADER
       // =================================================
-
-      doc.setFillColor(
-        ...greenDark
-      );
-
+      doc.setFillColor(...greenDark);
       doc.roundedRect(
         margin,
-        8,
-        pageWidth -
-          margin * 2,
-        28,
+        9,
+        pageWidth - margin * 2,
+        34,
         4,
         4,
         "F"
       );
 
-      doc.setTextColor(
-        255,
-        255,
-        255
-      );
+      doc.setFillColor(73, 119, 101);
+      doc.circle(pageWidth - 17, 17, 13, "F");
+      doc.setFillColor(57, 101, 85);
+      doc.circle(pageWidth - 25, 36, 9, "F");
 
-      doc.setFont(
-        "helvetica",
-        "bold"
-      );
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text("HASIL STOCK OPNAME", margin + 7, 20);
 
-      doc.setFontSize(17);
-
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.2);
       doc.text(
-        "STOCK OPNAME OUTLET",
+        "Rekap keseluruhan daftar barang hasil pemeriksaan stock outlet",
         margin + 7,
-        18
+        26
       );
 
-      doc.setFont(
-        "helvetica",
-        "normal"
-      );
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text("MGB INVENTORY", margin + 7, 35);
 
-      doc.setFontSize(8);
+      doc.setTextColor(230, 244, 238);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.text(typeText, pageWidth - margin - 7, 20, {
+        align: "right",
+      });
 
-      doc.text(
-        "Pemeriksaan dan rekonsiliasi stock fisik terhadap stock sistem",
-        margin + 7,
-        24
-      );
-
-      doc.setFont(
-        "helvetica",
-        "bold"
-      );
-
-      doc.setFontSize(8.5);
-
-      doc.text(
-        typeText,
-        pageWidth -
-          margin -
-          7,
-        17,
-        {
-          align: "right",
-        }
-      );
-
-      doc.setFont(
-        "helvetica",
-        "normal"
-      );
-
-      doc.setFontSize(8);
-
-      doc.text(
-        opnameDate,
-        pageWidth -
-          margin -
-          7,
-        24,
-        {
-          align: "right",
-        }
-      );
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.8);
+      doc.text("HASIL OPNAME", pageWidth - margin - 7, 26, {
+        align: "right",
+      });
 
       // =================================================
-      // INFORMATION
+      // DOCUMENT INFORMATION
       // =================================================
+      let currentY = 50;
+      const infoHeight = 34;
 
-      let currentY = 44;
-
-      doc.setTextColor(
-        ...grayText
+      doc.setFillColor(...greenVeryLight);
+      doc.setDrawColor(...grayBorder);
+      doc.roundedRect(
+        margin,
+        currentY,
+        pageWidth - margin * 2,
+        infoHeight,
+        3,
+        3,
+        "FD"
       );
 
+      const infoX1 = margin + 6;
+      const infoX2 = margin + 72;
+      const infoX3 = margin + 137;
+      const infoX4 = margin + 202;
+
+      doc.setTextColor(...grayMuted);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.2);
+      doc.text("OUTLET", infoX1, currentY + 8);
+      doc.text("PETUGAS", infoX2, currentY + 8);
+      doc.text("TANGGAL", infoX3, currentY + 8);
+      doc.text("SIKLUS", infoX4, currentY + 8);
+
+      doc.setTextColor(...greenDark);
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
 
-      doc.setFont(
-        "helvetica",
-        "bold"
-      );
-
       doc.text(
-        "OUTLET",
-        margin,
-        currentY
-      );
-
-      doc.setFont(
-        "helvetica",
-        "normal"
-      );
-
-      doc.text(
-        outlet
-          ? `${outlet.code} - ${outlet.name}`
-          : "Semua Outlet / Tidak dipilih",
-        margin,
-        currentY + 5
-      );
-
-      doc.setFont(
-        "helvetica",
-        "bold"
-      );
-
-      doc.text(
-        "PETUGAS",
-        103,
-        currentY
-      );
-
-      doc.setFont(
-        "helvetica",
-        "normal"
+        outlet ? `${outlet.code} - ${outlet.name}` : "-",
+        infoX1,
+        currentY + 15
       );
 
       doc.text(
         user?.fullname || "-",
-        103,
-        currentY + 5
+        infoX2,
+        currentY + 15
       );
 
-      doc.setFont(
-        "helvetica",
-        "bold"
-      );
+      doc.text(dateText, infoX3, currentY + 15);
+      doc.text(typeText, infoX4, currentY + 15);
 
-      doc.text(
-        "ROLE",
-        188,
-        currentY
-      );
+      doc.setTextColor(...grayMuted);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.2);
+      doc.text("TOTAL BARANG", infoX1, currentY + 25);
+      doc.text("STOCK SISTEM", infoX2, currentY + 25);
+      doc.text("STOCK FISIK", infoX3, currentY + 25);
+      doc.text("TOTAL SELISIH", infoX4, currentY + 25);
 
-      doc.setFont(
-        "helvetica",
-        "normal"
-      );
+      doc.setTextColor(...grayText);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.2);
+      doc.text(formatNumber(totalBarang), infoX1, currentY + 30);
+      doc.text(formatNumber(totalSystemQty), infoX2, currentY + 30);
+      doc.text(formatNumber(totalPhysicalQty), infoX3, currentY + 30);
 
-      doc.text(
-        role || "-",
-        188,
-        currentY + 5
-      );
-
-      // =================================================
-      // KPI BOXES
-      // =================================================
-
-      currentY += 14;
-
-      const kpiGap = 3;
-
-      const kpiWidth =
-        (pageWidth -
-          margin * 2 -
-          kpiGap * 3) /
-        4;
-
-      const kpiHeight = 18;
-
-      const kpis = [
-        {
-          label: "TOTAL BARANG",
-          value: formatNumber(
-            totalBarang
-          ),
-        },
-        {
-          label: "STOCK SISTEM",
-          value: formatNumber(
-            totalSystemQty
-          ),
-        },
-        {
-          label: "STOCK FISIK",
-          value: formatNumber(
-            totalPhysicalQty
-          ),
-        },
-        {
-          label: "TOTAL SELISIH",
-          value: `${
-            totalDifference > 0
-              ? "+"
-              : ""
-          }${formatNumber(
-            totalDifference
-          )}`,
-        },
-      ];
-
-      kpis.forEach(
-        (kpi, index) => {
-          const x =
-            margin +
-            index *
-              (kpiWidth +
-                kpiGap);
-
-          doc.setFillColor(
-            ...greenLight
-          );
-
-          doc.roundedRect(
-            x,
-            currentY,
-            kpiWidth,
-            kpiHeight,
-            3,
-            3,
-            "F"
-          );
-
-          doc.setTextColor(
-            ...grayText
-          );
-
-          doc.setFont(
-            "helvetica",
-            "bold"
-          );
-
-          doc.setFontSize(6.3);
-
-          doc.text(
-            kpi.label,
-            x + 4,
-            currentY + 5.5
-          );
-
-          const isDifference =
-            index === 3;
-
-          if (
-            isDifference &&
-            totalDifference !== 0
-          ) {
-            doc.setTextColor(
-              ...red
-            );
-          } else {
-            doc.setTextColor(
-              ...greenDark
-            );
-          }
-
-          doc.setFontSize(10.5);
-
-          doc.text(
-            kpi.value,
-            x + 4,
-            currentY + 13.5
-          );
-        }
-      );
-
-      // =================================================
-      // ACCURACY
-      // =================================================
-
-      currentY +=
-        kpiHeight + 6;
+      const differenceLabel =
+        totalDifference > 0
+          ? `+${formatNumber(totalDifference)}`
+          : formatNumber(totalDifference);
 
       doc.setTextColor(
-        ...grayText
+        totalDifference === 0
+          ? 55
+          : totalDifference > 0
+          ? 52
+          : 192,
+        totalDifference === 0
+          ? 116
+          : totalDifference > 0
+          ? 118
+          : 77,
+        totalDifference === 0
+          ? 81
+          : totalDifference > 0
+          ? 80
+          : 77
+      );
+      doc.text(differenceLabel, infoX4, currentY + 30);
+
+      currentY += infoHeight + 8;
+
+      // =================================================
+      // SUMMARY STRIP
+      // =================================================
+      doc.setFillColor(...greenLight);
+      doc.setDrawColor(210, 229, 219);
+      doc.roundedRect(
+        margin,
+        currentY,
+        pageWidth - margin * 2,
+        19,
+        3,
+        3,
+        "FD"
       );
 
-      doc.setFont(
-        "helvetica",
-        "bold"
-      );
-
-      doc.setFontSize(7.5);
-
+      doc.setTextColor(...greenDark);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
       doc.text(
-        `AKURASI PEMERIKSAAN: ${accuracy}%`,
+        "RINGKASAN HASIL",
+        margin + 5,
+        currentY + 7
+      );
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.2);
+      doc.setTextColor(...grayText);
+      doc.text(
+        `${matchingItems} barang sesuai • ${totalSelisihBarang} barang selisih • Akurasi ${accuracy}%`,
+        margin + 5,
+        currentY + 13
+      );
+
+      currentY += 27;
+
+      // =================================================
+      // FULL RESULT TABLE
+      // =================================================
+      doc.setTextColor(...greenDark);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.text(
+        "DAFTAR HASIL OPNAME KESELURUHAN",
         margin,
         currentY
       );
 
-      doc.setFont(
-        "helvetica",
-        "normal"
-      );
-
+      doc.setTextColor(...grayMuted);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.2);
       doc.text(
-        `Sesuai: ${formatNumber(
-          matchingItems
-        )}   |   Selisih: ${formatNumber(
-          totalSelisihBarang
-        )}`,
-        pageWidth -
-          margin,
-        currentY,
-        {
-          align: "right",
-        }
+        "Seluruh barang pada outlet ditampilkan tanpa mengikuti filter kategori atau pencarian pada halaman.",
+        margin,
+        currentY + 5
       );
 
-      const progressX = margin;
+      currentY += 9;
 
-      const progressY =
-        currentY + 3;
+      autoTable(doc, {
+        startY: currentY,
+        margin: {
+          left: margin,
+          right: margin,
+          top: 10,
+          bottom: 18,
+        },
+        head: [[
+          "No",
+          "Kode Barang",
+          "Kategori",
+          "Nama Barang",
+          "Unit",
+          "Stock Sistem",
+          "Stock Fisik",
+          "Selisih",
+          "Catatan",
+          "Status",
+        ]],
+        body: resultRows,
+        theme: "grid",
+        showHead: "everyPage",
+        pageBreak: "auto",
+        rowPageBreak: "avoid",
+        styles: {
+          font: "helvetica",
+          fontSize: 5.7,
+          cellPadding: 1.8,
+          textColor: grayText,
+          lineColor: grayBorder,
+          lineWidth: 0.18,
+          valign: "middle",
+          overflow: "linebreak",
+        },
+        headStyles: {
+          fillColor: greenDark,
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+          fontSize: 5.6,
+          halign: "center",
+          valign: "middle",
+          cellPadding: 1.8,
+          overflow: "hidden",
+        },
+        alternateRowStyles: {
+          fillColor: grayFill,
+        },
+        columnStyles: {
+          0: { cellWidth: 7, halign: "center" },
+          1: { cellWidth: 23, halign: "center", fontStyle: "bold" },
+          2: { cellWidth: 27 },
+          3: { cellWidth: 48, fontStyle: "bold" },
+          4: { cellWidth: 13, halign: "center" },
+          5: { cellWidth: 21, halign: "right" },
+          6: { cellWidth: 21, halign: "right" },
+          7: { cellWidth: 20, halign: "right", fontStyle: "bold" },
+          8: { cellWidth: 44 },
+          9: { cellWidth: 20, halign: "center", fontStyle: "bold" },
+        },
+        didParseCell: (cellData: any) => {
+          if (
+            cellData.section === "body" &&
+            cellData.column.index === 9
+          ) {
+            const value = String(
+              cellData.cell.raw || ""
+            ).toUpperCase();
 
-      const progressWidth =
-        pageWidth -
-        margin * 2;
+            cellData.cell.styles.fillColor =
+              value === "SESUAI"
+                ? [240, 248, 242]
+                : [255, 249, 236];
 
-      doc.setFillColor(
-        231,
-        238,
-        234
-      );
-
-      doc.roundedRect(
-        progressX,
-        progressY,
-        progressWidth,
-        3,
-        1.5,
-        1.5,
-        "F"
-      );
-
-      if (accuracy > 0) {
-        doc.setFillColor(
-          ...green
-        );
-
-        doc.roundedRect(
-          progressX,
-          progressY,
-          progressWidth *
-            (accuracy / 100),
-          3,
-          1.5,
-          1.5,
-          "F"
-        );
-      }
-
-      // =================================================
-      // TABLE
-      // =================================================
-
-      currentY += 10;
-
-      /*
-       * PDF menggunakan SEMUA data stock opname,
-       * bukan hanya hasil search.
-       */
-      const tableRows =
-        data.map(
-          (item, index) => {
-            const difference =
-              getDifference(item);
-
-            const status =
-              difference === 0
-                ? "SESUAI"
-                : difference > 0
-                ? "SURPLUS"
-                : "SELISIH KURANG";
-
-            return [
-              String(index + 1),
-              item.barang?.code ||
-                "-",
-              getCategoryName(
-                item.barang
-              ),
-              item.barang?.name ||
-                "-",
-              item.barang?.unit ||
-                "-",
-              formatNumber(
-                Number(
-                  item.stock || 0
-                )
-              ),
-              formatNumber(
-                Number(
-                  item.physicalQty ||
-                    0
-                )
-              ),
-              `${
-                difference > 0
-                  ? "+"
-                  : ""
-              }${formatNumber(
-                difference
-              )}`,
-              item.note || "-",
-              status,
-            ];
+            cellData.cell.styles.textColor =
+              value === "SESUAI"
+                ? [57, 114, 80]
+                : [151, 110, 34];
           }
-        );
 
-      autoTable(
-        doc,
-        {
-          startY: currentY,
+          if (
+            cellData.section === "body" &&
+            cellData.column.index === 7
+          ) {
+            const raw = String(
+              cellData.cell.raw || ""
+            );
+            const value = Number(
+              raw.replace(/\./g, "").replace(",", ".")
+            );
 
-          margin: {
-            left: margin,
-            right: margin,
-            top: 10,
-            bottom: 14,
-          },
+            if (Number.isFinite(value)) {
+              cellData.cell.styles.textColor =
+                value === 0
+                  ? [125, 139, 132]
+                  : value > 0
+                  ? [52, 118, 80]
+                  : [192, 77, 77];
+            }
+          }
+        },
+        didDrawPage: () => {
+          drawResultPdfFooter(
+            doc,
+            pageWidth,
+            pageHeight,
+            margin
+          );
+        },
+      });
 
-          head: [
-            [
-              "No",
-              "Kode",
-              "Kategori",
-              "Barang",
-              "Satuan",
-              "Stock Sistem",
-              "Stock Fisik",
-              "Selisih",
-              "Catatan",
-              "Status",
-            ],
-          ],
+      const safeOutletCode = outlet?.code
+        ? outlet.code
+            .replace(/[^a-zA-Z0-9-_]/g, "-")
+            .toUpperCase()
+        : "OUTLET";
 
-          body: tableRows,
+      const safeDate = opnameDate
+        ? opnameDate.replace(/[^0-9-]/g, "")
+        : "TANPA-TANGGAL";
 
-          theme: "grid",
-
-          styles: {
-            font:
-              "helvetica",
-            fontSize: 6.7,
-            cellPadding: 2,
-            textColor: [
-              48,
-              67,
-              60,
-            ],
-            lineColor: [
-              220,
-              231,
-              225,
-            ],
-            lineWidth: 0.15,
-            valign:
-              "middle",
-            overflow:
-              "linebreak",
-          },
-
-          headStyles: {
-            fillColor:
-              greenDark,
-            textColor: [
-              255,
-              255,
-              255,
-            ],
-            fontStyle:
-              "bold",
-            fontSize: 6.5,
-            halign:
-              "center",
-            valign:
-              "middle",
-          },
-
-          alternateRowStyles: {
-            fillColor:
-              grayLight,
-          },
-
-          columnStyles: {
-            0: {
-              cellWidth: 8,
-              halign:
-                "center",
-            },
-
-            1: {
-              cellWidth: 22,
-              fontStyle:
-                "bold",
-            },
-
-            2: {
-              cellWidth: 30,
-            },
-
-            3: {
-              cellWidth: 48,
-            },
-
-            4: {
-              cellWidth: 16,
-              halign:
-                "center",
-            },
-
-            5: {
-              cellWidth: 24,
-              halign:
-                "right",
-            },
-
-            6: {
-              cellWidth: 24,
-              halign:
-                "right",
-            },
-
-            7: {
-              cellWidth: 22,
-              halign:
-                "right",
-              fontStyle:
-                "bold",
-            },
-
-            8: {
-              cellWidth: 51,
-            },
-
-            9: {
-              cellWidth: 25,
-              halign:
-                "center",
-              fontStyle:
-                "bold",
-            },
-          },
-
-          didParseCell:
-            function (
-              hookData: any
-            ) {
-              if (
-                hookData.section !==
-                "body"
-              ) {
-                return;
-              }
-
-              // SELISIH
-              if (
-                hookData.column.index ===
-                7
-              ) {
-                const raw =
-                  String(
-                    hookData
-                      .cell
-                      .raw ||
-                      ""
-                  );
-
-                const numeric =
-                  Number(
-                    raw
-                      .replace(
-                        /\./g,
-                        ""
-                      )
-                      .replace(
-                        ",",
-                        "."
-                      )
-                  );
-
-                if (
-                  raw.startsWith(
-                    "+"
-                  ) ||
-                  numeric > 0
-                ) {
-                  hookData.cell.styles.textColor =
-                    [
-                      48,
-                      118,
-                      80,
-                    ];
-                } else if (
-                  numeric < 0
-                ) {
-                  hookData.cell.styles.textColor =
-                    [
-                      190,
-                      70,
-                      70,
-                    ];
-                }
-              }
-
-              // STATUS
-              if (
-                hookData.column.index ===
-                9
-              ) {
-                const status =
-                  String(
-                    hookData
-                      .cell
-                      .text?.[0] ||
-                      ""
-                  );
-
-                if (
-                  status ===
-                  "SESUAI"
-                ) {
-                  hookData.cell.styles.textColor =
-                    [
-                      51,
-                      117,
-                      78,
-                    ];
-                } else if (
-                  status ===
-                  "SURPLUS"
-                ) {
-                  hookData.cell.styles.textColor =
-                    [
-                      48,
-                      118,
-                      80,
-                    ];
-                } else {
-                  hookData.cell.styles.textColor =
-                    [
-                      190,
-                      70,
-                      70,
-                    ];
-                }
-              }
-            },
-
-          didDrawPage:
-            function () {
-              const pageNumber =
-                doc.getNumberOfPages();
-
-              doc.setDrawColor(
-                220,
-                231,
-                225
-              );
-
-              doc.line(
-                margin,
-                pageHeight - 10,
-                pageWidth -
-                  margin,
-                pageHeight - 10
-              );
-
-              doc.setFont(
-                "helvetica",
-                "normal"
-              );
-
-              doc.setFontSize(
-                6.2
-              );
-
-              doc.setTextColor(
-                130,
-                145,
-                138
-              );
-
-              doc.text(
-                "MGB Inventory • Stock Opname Outlet",
-                margin,
-                pageHeight - 6
-              );
-
-              doc.text(
-                `Halaman ${pageNumber}`,
-                pageWidth -
-                  margin,
-                pageHeight - 6,
-                {
-                  align:
-                    "right",
-                }
-              );
-            },
-        }
+      doc.save(
+        `hasil-opname-${safeOutletCode}-${safeDate}.pdf`
       );
-
-      // =================================================
-      // FOOTER / GENERATION INFO
-      // =================================================
-
-      const generatedDate =
-        new Date().toLocaleString(
-          "id-ID",
-          {
-            dateStyle:
-              "medium",
-            timeStyle:
-              "short",
-          }
-        );
-
-      const finalY =
-        (
-          doc as any
-        ).lastAutoTable
-          ?.finalY ||
-        currentY;
-
-      if (
-        finalY + 20 <
-        pageHeight - 15
-      ) {
-        doc.setTextColor(
-          ...grayText
-        );
-
-        doc.setFont(
-          "helvetica",
-          "normal"
-        );
-
-        doc.setFontSize(6.8);
-
-        doc.text(
-          `Dokumen dibuat pada ${generatedDate}`,
-          margin,
-          finalY + 8
-        );
-
-        doc.text(
-          `Status opname: ${typeText}`,
-          pageWidth -
-            margin,
-          finalY + 8,
-          {
-            align:
-              "right",
-          }
-        );
-      }
-
-      // =================================================
-      // DOWNLOAD
-      // =================================================
-
-      const safeOutletCode =
-        outlet?.code
-          ? outlet.code
-              .replace(
-                /[^a-zA-Z0-9-_]/g,
-                "-"
-              )
-              .toUpperCase()
-          : "OUTLET";
-
-      const safeDate =
-        opnameDate ||
-        new Date()
-          .toISOString()
-          .slice(0, 10);
-
-      const filename =
-        `stock-opname-${safeOutletCode}-${safeDate}.pdf`;
-
-      /*
-       * doc.save() = langsung download.
-       * Tidak menggunakan window.open,
-       * window.print, atau browser print preview.
-       */
-      doc.save(filename);
     } catch (error) {
       console.error(
-        "EXPORT STOCK OPNAME PDF ERROR:",
+        "EXPORT HASIL OPNAME PDF ERROR:",
         error
       );
 
       alert(
         error instanceof Error
           ? error.message
-          : "Gagal membuat PDF"
+          : "Gagal membuat PDF hasil stock opname"
       );
     } finally {
-      setExportingPdf(false);
+      setExportingResultPdf(false);
+    }
+  }
+
+  // =====================================================
+  // HASIL OPNAME PDF FOOTER HELPER
+  // =====================================================
+
+  function drawResultPdfFooter(
+    doc: any,
+    pageWidth: number,
+    pageHeight: number,
+    margin: number
+  ) {
+    const pageNumber = doc.getNumberOfPages();
+
+    doc.setDrawColor(220, 231, 225);
+    doc.setLineWidth(0.2);
+
+    doc.line(
+      margin,
+      pageHeight - 10,
+      pageWidth - margin,
+      pageHeight - 10
+    );
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6);
+    doc.setTextColor(130, 145, 138);
+
+    doc.text(
+      "MGB Inventory • Hasil Stock Opname Keseluruhan",
+      margin,
+      pageHeight - 6
+    );
+
+    doc.text(
+      `Halaman ${pageNumber}`,
+      pageWidth - margin,
+      pageHeight - 6,
+      {
+        align: "right",
+      }
+    );
+  }
+
+  // =====================================================
+  // SIMPAN PERUBAHAN STOCK FISIK
+  // =====================================================
+
+  function handleSaveChanges() {
+    if (data.length === 0) {
+      alert("Tidak ada barang untuk disimpan.");
+      return;
+    }
+
+    if (isAdminPusat && selectedOutletId <= 0) {
+      alert("Silakan pilih outlet terlebih dahulu.");
+      return;
+    }
+
+    const outletId = getDraftOutletId();
+    const key = getDraftStorageKey(outletId);
+
+    if (!key) {
+      alert("Outlet belum terdeteksi. Silakan pilih outlet terlebih dahulu.");
+      return;
+    }
+
+    try {
+      const savedAt = new Date().toISOString();
+      const draftItems: Record<string, { physicalQty: number; note: string }> = {};
+
+      data.forEach((item) => {
+        draftItems[String(item.id)] = {
+          physicalQty: Number(item.physicalQty || 0),
+          note: item.note || "",
+        };
+      });
+
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({
+          version: 1,
+          outletId,
+          type: opnameType,
+          date: opnameDate,
+          savedAt,
+          items: draftItems,
+        })
+      );
+
+      setDraftSavedAt(savedAt);
+      setHasUnsavedChanges(false);
+
+      alert(
+        "Perubahan Stock Fisik berhasil disimpan. Perubahan tetap tersimpan saat pindah halaman dan akan dipulihkan ketika halaman Stock Opname dibuka kembali."
+      );
+    } catch (error: any) {
+      console.error("SAVE STOCK OPNAME DRAFT ERROR:", error);
+      alert(error?.message || "Gagal menyimpan perubahan Stock Fisik.");
     }
   }
 
@@ -1677,6 +2001,16 @@ export default function OutletStockOpnamePage() {
             "Gagal menyimpan stock opname"
         );
       }
+
+      clearSavedDraft(
+        isAdminPusat
+          ? selectedOutletId
+          : user?.outletId
+          ? Number(user.outletId)
+          : undefined
+      );
+      setDraftSavedAt(null);
+      setHasUnsavedChanges(false);
 
       alert(
         opnameType ===
@@ -1884,13 +2218,15 @@ export default function OutletStockOpnamePage() {
                 <button
                   type="button"
                   onClick={
-                    handleExportPdf
+                    handleExportResultPdf
                   }
                   disabled={
                     loading ||
                     saving ||
                     exportingPdf ||
-                    data.length === 0 ||
+                    exportingResultPdf ||
+                    data.length ===
+                      0 ||
                     (
                       isAdminPusat &&
                       selectedOutletId <=
@@ -1899,20 +2235,20 @@ export default function OutletStockOpnamePage() {
                   }
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#CFE1D9] bg-[#F8FCFA] px-4 text-sm font-bold text-[#39725F] shadow-sm transition hover:-translate-y-0.5 hover:border-[#AFCDBF] hover:bg-[#EDF7F2] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {exportingPdf ? (
+                  {exportingResultPdf ? (
                     <Loader2
                       size={16}
                       className="animate-spin"
-                    />
+                  />
                   ) : (
-                    <FileDown
+                    <FileCheck2
                       size={16}
                     />
                   )}
 
-                  {exportingPdf
+                  {exportingResultPdf
                     ? "Membuat PDF..."
-                    : "Export PDF"}
+                    : "Hasil Opname PDF"}
                 </button>
 
                 <button
@@ -1924,6 +2260,7 @@ export default function OutletStockOpnamePage() {
                     loading ||
                     saving ||
                     exportingPdf ||
+                    exportingResultPdf ||
                     data.length === 0 ||
                     (
                       isAdminPusat &&
@@ -2415,73 +2752,242 @@ export default function OutletStockOpnamePage() {
 
           <div className="border-b border-[#E4ECE8] bg-white p-5 md:px-6">
 
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-5">
 
-              <div className="flex items-start gap-3">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F0F6F3] text-[#4D8B78]">
-                  <Boxes
-                    size={18}
-                  />
+                <div className="flex items-start gap-3">
+
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F0F6F3] text-[#4D8B78]">
+                    <Boxes
+                      size={18}
+                    />
+                  </div>
+
+                  <div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+
+                      <h2 className="text-base font-extrabold text-[#193A31]">
+                        Daftar Barang
+                      </h2>
+
+                      {!loading && (
+                        <span className="rounded-full bg-[#EDF5F1] px-2 py-0.5 text-[10px] font-bold text-[#55776C]">
+                          {formatNumber(
+                            filteredData.length
+                          )}{" "}
+                          item
+                        </span>
+                      )}
+
+                    </div>
+
+                    <p className="mt-1 text-xs leading-5 text-[#87948F]">
+                      Masukkan jumlah fisik berdasarkan
+                      hasil perhitungan aktual di outlet.
+                    </p>
+
+                  </div>
+
                 </div>
 
-                <div>
+                <div className="flex flex-col gap-2 sm:flex-row">
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  {/* =================================================
+                      CATEGORY FILTER — MULTI SELECT
+                  ================================================= */}
 
-                    <h2 className="text-base font-extrabold text-[#193A31]">
-                      Daftar Barang
-                    </h2>
+                  <div className="relative w-full sm:w-auto">
 
-                    {!loading && (
-                      <span className="rounded-full bg-[#EDF5F1] px-2 py-0.5 text-[10px] font-bold text-[#55776C]">
-                        {formatNumber(
-                          filteredData.length
-                        )}{" "}
-                        item
-                      </span>
+                    <div className="flex min-h-11 max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-[#D7E5DF] bg-[#FAFCFB] p-1.5 sm:max-w-[520px]">
+
+                      <div className="flex shrink-0 items-center gap-1.5 px-1.5 text-[#789188]">
+                        <ListFilter size={16} />
+                        <span className="text-[10px] font-extrabold uppercase tracking-[0.05em]">
+                          Kategori
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={resetCategoryFilter}
+                        disabled={loading || saving || data.length === 0}
+                        className={`rounded-lg px-2.5 py-2 text-[11px] font-extrabold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                          selectedCategories.length === 0
+                            ? "bg-[#4D8B78] text-white shadow-sm"
+                            : "text-[#5C746B] hover:bg-[#EAF5F0]"
+                        }`}
+                      >
+                        Semua
+                      </button>
+
+                      {categories.map((category) => {
+                        const active = selectedCategories.includes(category);
+
+                        return (
+                          <button
+                            key={category}
+                            type="button"
+                            onClick={() => toggleCategory(category)}
+                            disabled={loading || saving || data.length === 0}
+                            className={`rounded-lg px-2.5 py-2 text-[11px] font-extrabold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                              active
+                                ? "bg-[#4D8B78] text-white shadow-sm"
+                                : "text-[#5C746B] hover:bg-[#EAF5F0]"
+                            }`}
+                          >
+                            {category}
+                          </button>
+                        );
+                      })}
+
+                    </div>
+
+                    {selectedCategories.length > 0 && (
+                      <p className="mt-1.5 text-[10px] font-semibold text-[#71847C]">
+                        {selectedCategories.length} kategori dipilih · klik kategori untuk memilih lebih dari satu.
+                      </p>
                     )}
 
                   </div>
 
-                  <p className="mt-1 text-xs leading-5 text-[#87948F]">
-                    Masukkan jumlah fisik berdasarkan
-                    hasil perhitungan aktual di outlet.
-                  </p>
+                  {/* =================================================
+                      SEARCH
+                  ================================================= */}
+
+                  <div className="relative w-full sm:w-[330px]">
+
+                    <Search
+                      size={17}
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94A29C]"
+                    />
+
+                    <input
+                      value={search}
+                      onChange={(e) =>
+                        setSearch(
+                          e.target.value
+                        )
+                      }
+                      placeholder="Cari kode, nama, kategori, atau satuan..."
+                      className="h-11 w-full rounded-xl border border-[#D7E5DF] bg-[#FAFCFB] pl-10 pr-16 text-sm font-medium text-[#294B40] outline-none transition placeholder:text-[#A1ADA8] hover:border-[#C5D8CF] focus:border-[#4D8B78] focus:bg-white focus:ring-4 focus:ring-[#4D8B78]/10"
+                    />
+
+                    {search && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSearch(
+                            ""
+                          )
+                        }
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md px-1.5 py-1 text-[11px] font-bold text-[#71837B] hover:bg-[#EDF4F1]"
+                      >
+                        Clear
+                      </button>
+                    )}
+
+                  </div>
 
                 </div>
 
               </div>
 
-              <div className="relative w-full lg:w-[350px]">
+              {/* =================================================
+                  FILTER INFO + PDF
+              ================================================= */}
 
-                <Search
-                  size={17}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94A29C]"
-                />
+              <div className="flex flex-col gap-3 rounded-[18px] border border-[#E2ECE7] bg-[#F8FBF9] p-3.5 md:flex-row md:items-center md:justify-between">
 
-                <input
-                  value={search}
-                  onChange={(e) =>
-                    setSearch(
-                      e.target.value
-                    )
-                  }
-                  placeholder="Cari kode, nama, kategori, atau satuan..."
-                  className="h-11 w-full rounded-xl border border-[#D7E5DF] bg-[#FAFCFB] pl-10 pr-16 text-sm font-medium text-[#294B40] outline-none transition placeholder:text-[#A1ADA8] hover:border-[#C5D8CF] focus:border-[#4D8B78] focus:bg-white focus:ring-4 focus:ring-[#4D8B78]/10"
-                />
+                <div className="flex min-w-0 items-center gap-3">
 
-                {search && (
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#4D8B78] shadow-sm ring-1 ring-[#E0EAE5]">
+                    <Tag
+                      size={15}
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+
+                    <div className="flex flex-wrap items-center gap-2">
+
+                      <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#81938B]">
+                        Filter aktif
+                      </span>
+
+                      <span className="rounded-full bg-[#EAF5F0] px-2 py-1 text-[10px] font-extrabold text-[#3D7763]">
+                        {selectedCategories.length === 0
+                          ? "Semua Kategori"
+                          : `${selectedCategories.length} Kategori`}
+                      </span>
+
+                      {search && (
+                        <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-[#61766E] ring-1 ring-[#DCE8E2]">
+                          Search: "{search}"
+                        </span>
+                      )}
+
+                    </div>
+
+                    <p className="mt-1 text-[10px] text-[#92A09A]">
+                      Form Manual PDF mengikuti kategori dan pencarian aktif.
+                      Perubahan Stock Fisik dapat disimpan dan dipulihkan kembali.
+                    </p>
+
+                  </div>
+
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2">
+
+                  {draftSavedAt && (
+                    <span className="hidden items-center gap-1.5 rounded-xl border border-[#DCE9E3] bg-white px-3 py-2 text-[10px] font-bold text-[#6F817A] lg:inline-flex">
+                      <CheckCircle2 size={13} className="text-[#4D8B78]" />
+                      Tersimpan {new Date(draftSavedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  )}
+
                   <button
                     type="button"
-                    onClick={() =>
-                      setSearch("")
+                    onClick={handleSaveChanges}
+                    disabled={
+                      loading ||
+                      saving ||
+                      data.length === 0 ||
+                      (isAdminPusat && selectedOutletId <= 0)
                     }
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md px-1.5 py-1 text-[11px] font-bold text-[#71837B] hover:bg-[#EDF4F1]"
+                    className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl px-4 text-xs font-extrabold shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${
+                      hasUnsavedChanges
+                        ? "border border-[#4D8B78] bg-[#4D8B78] text-white shadow-[0_8px_18px_rgba(77,139,120,0.22)] hover:bg-[#3F7867]"
+                        : "border border-[#C7DED3] bg-white text-[#39725F] hover:border-[#A9C9BA] hover:bg-[#EDF7F2]"
+                    }`}
                   >
-                    Clear
+                    <Save size={15} />
+                    {hasUnsavedChanges ? "Simpan Perubahan" : "Perubahan Tersimpan"}
                   </button>
-                )}
+
+                  <button
+                    type="button"
+                    onClick={handleExportManualPdf}
+                    disabled={
+                      loading ||
+                      saving ||
+                      exportingPdf ||
+                      filteredData.length === 0 ||
+                      (isAdminPusat && selectedOutletId <= 0)
+                    }
+                    className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[#C7DED3] bg-white px-4 text-xs font-extrabold text-[#39725F] shadow-sm transition hover:-translate-y-0.5 hover:border-[#A9C9BA] hover:bg-[#EDF7F2] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {exportingPdf ? (
+                      <Loader2 size={15} className="animate-spin" />
+                    ) : (
+                      <FileDown size={15} />
+                    )}
+                    {exportingPdf ? "Membuat Form..." : "PDF Form Hitung Manual"}
+                  </button>
+
+                </div>
 
               </div>
 
@@ -2573,7 +3079,8 @@ export default function OutletStockOpnamePage() {
                       <div className="mx-auto flex max-w-sm flex-col items-center">
 
                         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] bg-[#F2F6F4] text-[#A4B1AB]">
-                          {search ? (
+                          {search ||
+                          selectedCategories.length > 0 ? (
                             <Search
                               size={25}
                             />
@@ -2585,7 +3092,8 @@ export default function OutletStockOpnamePage() {
                         </div>
 
                         <p className="text-sm font-extrabold text-[#516760]">
-                          {search
+                          {search ||
+                          selectedCategories.length > 0
                             ? "Barang tidak ditemukan"
                             : isAdminPusat &&
                               selectedOutletId <=
@@ -2595,14 +3103,31 @@ export default function OutletStockOpnamePage() {
                         </p>
 
                         <p className="mt-1 text-xs leading-5 text-[#98A49F]">
-                          {search
-                            ? "Coba gunakan kata kunci atau kode barang yang berbeda."
+                          {search ||
+                          selectedCategories.length > 0
+                            ? "Coba ubah kata kunci atau pilih kategori yang berbeda."
                             : isAdminPusat &&
                               selectedOutletId <=
                                 0
                             ? "Pilih outlet pada panel di atas untuk menampilkan daftar stock."
                             : "Belum terdapat data stock untuk outlet yang dipilih."}
                         </p>
+
+                        {(search ||
+                          selectedCategories.length > 0) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSearch(
+                                ""
+                              );
+                              setSelectedCategories([]);
+                            }}
+                            className="mt-4 rounded-xl bg-[#EDF6F2] px-4 py-2 text-xs font-extrabold text-[#3E7764] transition hover:bg-[#E2F0EA]"
+                          >
+                            Reset Filter
+                          </button>
+                        )}
 
                       </div>
                     </td>

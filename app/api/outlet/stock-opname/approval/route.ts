@@ -121,6 +121,406 @@ async function getLoginUser() {
 }
 
 // =====================================================
+// HELPER: AMBIL MASTER BARANG OUTLET TERBARU
+//
+// HANYA BARANG MASTER OUTLET YANG AKTIF
+//
+// OutletBarang:
+//   outletId
+//   barangId
+//   aktif
+//
+// Barang:
+//   category
+//   code
+//   name
+//   unit
+// =====================================================
+
+async function getOutletMasterBarang(
+  outletId: number
+) {
+  return prisma.outletBarang.findMany({
+    where: {
+      outletId,
+      aktif: true,
+    },
+
+    select: {
+      id: true,
+      outletId: true,
+      barangId: true,
+      harga: true,
+      aktif: true,
+
+      barang: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          category: true,
+          unit: true,
+          baseUnit: true,
+          conversionRate: true,
+          purchasePrice: true,
+          sellingPrice: true,
+          active: true,
+        },
+      },
+    },
+
+    orderBy: {
+      barang: {
+        name: "asc",
+      },
+    },
+  });
+}
+
+// =====================================================
+// HELPER: MERGE DETAIL OPNAME DENGAN MASTER BARANG OUTLET
+//
+// RULE:
+// - COUNTING:
+//   otomatis membaca Master Barang Outlet terbaru
+//
+// - Barang yang belum ada di StockOpnameItem:
+//   dibuat sebagai virtual detail dengan:
+//   masterBaru = true
+//
+// - systemQty barang baru:
+//   membaca OutletStock terbaru
+//
+// - physicalQty barang baru:
+//   0
+//
+// - Barang lama:
+//   TETAP menggunakan StockOpnameItem existing
+//
+// - Barang yang sudah tidak ada di Master Barang Outlet:
+//   TETAP dipertahankan jika sudah menjadi detail opname
+//
+// Ini penting supaya perubahan master tidak menghapus
+// histori/detail yang sudah ada.
+// =====================================================
+
+async function mergeCountingWithOutletMaster(
+  opname: any
+) {
+  const outletId = Number(opname.outletId);
+
+  if (!Number.isInteger(outletId) || outletId <= 0) {
+    return opname;
+  }
+
+  const masterBarang =
+    await getOutletMasterBarang(outletId);
+
+  const existingItems =
+    Array.isArray(opname.items)
+      ? opname.items
+      : [];
+
+  const existingBarangIds =
+    new Set<number>();
+
+  const existingItemsByBarangId =
+    new Map<number, any>();
+
+  for (const item of existingItems) {
+    const barangId = Number(item.barangId);
+
+    if (
+      Number.isInteger(barangId) &&
+      barangId > 0
+    ) {
+      existingBarangIds.add(barangId);
+      existingItemsByBarangId.set(
+        barangId,
+        item
+      );
+    }
+  }
+
+  const missingMaster =
+    masterBarang.filter(
+      (master) =>
+        !existingBarangIds.has(
+          Number(master.barangId)
+        )
+    );
+
+  // =====================================================
+  // TIDAK ADA BARANG BARU
+  // =====================================================
+
+  if (missingMaster.length === 0) {
+    return {
+      ...opname,
+
+      items: existingItems.map(
+        (item: any) => ({
+          ...item,
+
+          masterBaru: false,
+
+          barang: item.barang
+            ? {
+                ...item.barang,
+
+                category:
+                  item.barang.category ??
+                  null,
+              }
+            : null,
+        })
+      ),
+
+      meta: {
+        ...(opname.meta || {}),
+        masterSynced: true,
+        masterBarangCount:
+          masterBarang.length,
+        masterBaruCount: 0,
+      },
+    };
+  }
+
+  // =====================================================
+  // AMBIL STOCK OUTLET TERKINI UNTUK BARANG BARU
+  // =====================================================
+
+  const missingBarangIds =
+    missingMaster.map(
+      (master) => Number(master.barangId)
+    );
+
+  const outletStocks =
+    missingBarangIds.length > 0
+      ? await prisma.outletStock.findMany({
+          where: {
+            outletId,
+
+            barangId: {
+              in: missingBarangIds,
+            },
+          },
+
+          select: {
+            id: true,
+            outletId: true,
+            barangId: true,
+            stock: true,
+            minimumStock: true,
+            averageCost: true,
+          },
+        })
+      : [];
+
+  const stockMap =
+    new Map<number, any>();
+
+  for (const stock of outletStocks) {
+    stockMap.set(
+      Number(stock.barangId),
+      stock
+    );
+  }
+
+  // =====================================================
+  // TAMBAHKAN MASTER BARU KE DETAIL
+  // =====================================================
+
+  const newItems =
+    missingMaster.map(
+      (master, index) => {
+        const barangId =
+          Number(master.barangId);
+
+        const outletStock =
+          stockMap.get(barangId);
+
+        const systemQty = Number(
+          outletStock?.stock ?? 0
+        );
+
+        const safeSystemQty =
+          Number.isFinite(systemQty) &&
+          systemQty >= 0
+            ? systemQty
+            : 0;
+
+        return {
+          id: null,
+
+          // PENTING:
+          // Frontend harus menganggap null sebagai
+          // detail baru dan ketika PUT mengirim
+          // barangId.
+          opnameId: opname.id,
+
+          barangId,
+
+          systemQty:
+            safeSystemQty,
+
+          physicalQty: 0,
+
+          difference:
+            0 - safeSystemQty,
+
+          note: null,
+
+          masterBaru: true,
+
+          // temporary ordering supaya berada
+          // bersama daftar barang.
+          _masterOrder: index,
+
+          barang: {
+            id: master.barang.id,
+            code: master.barang.code,
+            name: master.barang.name,
+
+            // =================================================
+            // KATEGORI
+            // =================================================
+            category:
+              master.barang.category ??
+              null,
+
+            unit: master.barang.unit,
+            baseUnit:
+              master.barang.baseUnit ??
+              null,
+
+            conversionRate:
+              Number(
+                master.barang.conversionRate ??
+                  1
+              ),
+
+            purchasePrice:
+              Number(
+                master.barang.purchasePrice ??
+                  0
+              ),
+
+            sellingPrice:
+              Number(
+                master.barang.sellingPrice ??
+                  0
+              ),
+          },
+
+          outletMaster: {
+            id: master.id,
+            outletId: master.outletId,
+            barangId: master.barangId,
+            harga:
+              Number(master.harga ?? 0),
+            aktif: master.aktif,
+          },
+        };
+      }
+    );
+
+  // =====================================================
+  // NORMALISASI ITEM LAMA
+  // =====================================================
+
+  const oldItems =
+    existingItems.map(
+      (item: any) => ({
+        ...item,
+
+        masterBaru: false,
+
+        barang: item.barang
+          ? {
+              ...item.barang,
+
+              category:
+                item.barang.category ??
+                null,
+            }
+          : null,
+
+        outletMaster:
+          null,
+      })
+    );
+
+  // =====================================================
+  // GABUNGKAN
+  // =====================================================
+
+  const mergedItems = [
+    ...oldItems,
+    ...newItems,
+  ].sort((a: any, b: any) => {
+    const nameA =
+      String(
+        a?.barang?.name ?? ""
+      ).toLowerCase();
+
+    const nameB =
+      String(
+        b?.barang?.name ?? ""
+      ).toLowerCase();
+
+    return nameA.localeCompare(
+      nameB,
+      "id"
+    );
+  });
+
+  return {
+    ...opname,
+
+    items: mergedItems,
+
+    meta: {
+      ...(opname.meta || {}),
+      masterSynced: true,
+      masterBarangCount:
+        masterBarang.length,
+      masterBaruCount:
+        newItems.length,
+    },
+  };
+}
+
+// =====================================================
+// HELPER: NORMALISASI ITEM RESPONSE
+//
+// Semua response item sekarang konsisten memiliki:
+// - category
+// - masterBaru
+// =====================================================
+
+function normalizeOpnameItems(
+  items: any[]
+) {
+  return items.map((item: any) => ({
+    ...item,
+
+    masterBaru:
+      item.masterBaru === true,
+
+    barang: item.barang
+      ? {
+          ...item.barang,
+
+          category:
+            item.barang.category ??
+            null,
+        }
+      : null,
+  }));
+}
+
+// =====================================================
 // GET APPROVAL STOCK OPNAME
 //
 // ADMIN
@@ -136,6 +536,10 @@ async function getLoginUser() {
 //
 // OUTLET_ADMIN
 // -> hanya outlet sendiri
+//
+// KHUSUS COUNTING:
+// -> detail otomatis disinkronkan dengan
+//    Master Barang Outlet terbaru.
 // =====================================================
 
 export async function GET(
@@ -289,7 +693,7 @@ export async function GET(
     // DATA
     // =================================================
 
-    const data =
+    const rawData =
       await prisma.stockOpname.findMany({
         where,
 
@@ -309,7 +713,15 @@ export async function GET(
                   id: true,
                   code: true,
                   name: true,
+
+                  // =================================================
+                  // KATEGORI SEKARANG IKUT DIKIRIM
+                  // =================================================
+                  category: true,
+
                   unit: true,
+                  baseUnit: true,
+                  conversionRate: true,
                   purchasePrice: true,
                   sellingPrice: true,
                 },
@@ -328,6 +740,50 @@ export async function GET(
           createdAt: "desc",
         },
       });
+
+    // =================================================
+    // SINKRONISASI MASTER BARANG
+    //
+    // HANYA COUNTING
+    //
+    // APPROVED TIDAK BOLEH DITAMBAH OTOMATIS
+    // COMPLETED JUGA TIDAK.
+    // =================================================
+
+    const data = [];
+
+    for (const opname of rawData) {
+      const status =
+        String(
+          opname.status || ""
+        ).toUpperCase();
+
+      if (
+        status === "COUNTING" &&
+        opname.outletId
+      ) {
+        const merged =
+          await mergeCountingWithOutletMaster(
+            opname
+          );
+
+        data.push(merged);
+      } else {
+        data.push({
+          ...opname,
+
+          items: normalizeOpnameItems(
+            opname.items || []
+          ),
+
+          meta: {
+            masterSynced: false,
+            masterBarangCount: 0,
+            masterBaruCount: 0,
+          },
+        });
+      }
+    }
 
     // =================================================
     // LIST OUTLET
@@ -375,10 +831,28 @@ export async function GET(
         adminCanDeleteAll: true,
 
         // =================================================
+        // MASTER BARANG OUTLET
+        // =================================================
+
+        countingReadsLatestOutletMaster:
+          true,
+
+        approvedReadsLatestOutletMaster:
+          false,
+
+        masterBarangSource:
+          "OutletBarang",
+
+        masterBarangOnlyActive:
+          true,
+
+        // =================================================
         // REPORT LEDGER
         // =================================================
+
         stockOpnameOutboundLedger:
           "STOCK_OPNAME_OUT",
+
         stockOpnameInboundLedger:
           "STOCK_OPNAME_IN",
       },
@@ -452,15 +926,6 @@ export async function POST(
       role,
       isOutletAdmin,
     } = login;
-
-    // =================================================
-    // APPROVAL STOCK OPNAME MONTHLY
-    //
-    // Tetap mengikuti rule existing:
-    // ADMIN / MANAGER / OUTLET_ADMIN
-    // dapat melakukan endpoint approval sesuai
-    // security outlet yang berlaku.
-    // =================================================
 
     if (
       role !== "ADMIN" &&
@@ -545,7 +1010,10 @@ export async function POST(
                   id: true,
                   code: true,
                   name: true,
+                  category: true,
                   unit: true,
+                  baseUnit: true,
+                  conversionRate: true,
                   purchasePrice: true,
                   sellingPrice: true,
                 },
@@ -786,7 +1254,10 @@ export async function POST(
                         id: true,
                         code: true,
                         name: true,
+                        category: true,
                         unit: true,
+                        baseUnit: true,
+                        conversionRate: true,
                       },
                     },
                   },
@@ -883,18 +1354,6 @@ export async function POST(
 
           // =========================================
           // UPDATE STOCK OUTLET
-          //
-          // PENTING:
-          // stockBefore harus dibaca SEBELUM stock
-          // diganti menjadi physicalQty.
-          //
-          // Ini menjadi dasar ledger:
-          //
-          // stockBefore > physicalQty
-          // -> STOCK_OPNAME_OUT
-          //
-          // stockBefore < physicalQty
-          // -> STOCK_OPNAME_IN
           // =========================================
 
           const movementSummary = {
@@ -938,11 +1397,6 @@ export async function POST(
 
             // =======================================
             // STOCK BELUM ADA
-            //
-            // Tidak ada stockBefore yang bisa
-            // dianggap sebagai outbound.
-            //
-            // Stock langsung dibuat sesuai fisik.
             // =======================================
 
             if (!outletStock) {
@@ -952,9 +1406,13 @@ export async function POST(
                     Number(
                       currentOpname.outletId
                     ),
+
                   barangId,
+
                   stock: physicalQty,
+
                   minimumStock: 0,
+
                   averageCost: 0,
                 },
               });
@@ -963,15 +1421,13 @@ export async function POST(
                 movementSummary.totalIn +=
                   physicalQty;
 
-                movementSummary.inCount += 1;
-
-                // =================================
-                // STOCK OPNAME IN
-                // =================================
+                movementSummary.inCount +=
+                  1;
 
                 await tx.stockCard.create({
                   data: {
                     barangId,
+
                     trxDate:
                       currentOpname.date ??
                       new Date(),
@@ -1026,12 +1482,15 @@ export async function POST(
               stockBefore < 0
             ) {
               throw new Error(
-                `Stock outlet tidak valid untuk barang ${item.barang?.name || barangId}`
+                `Stock outlet tidak valid untuk barang ${
+                  item.barang?.name ||
+                  barangId
+                }`
               );
             }
 
             // =======================================
-            // SELISIH STOCK OPNAME
+            // SELISIH
             // =======================================
 
             const difference =
@@ -1040,16 +1499,6 @@ export async function POST(
 
             // =======================================
             // OUTBOUND
-            //
-            // physical < stockBefore
-            //
-            // Contoh:
-            // stockBefore = 100
-            // physical    = 92
-            // difference  = -8
-            //
-            // Maka:
-            // STOCK_OPNAME_OUT = 8
             // =======================================
 
             if (difference < 0) {
@@ -1064,21 +1513,19 @@ export async function POST(
 
               const totalValue =
                 qtyOut *
-                (Number.isFinite(
-                  averageCost
-                )
-                  ? averageCost
-                  : 0);
+                (
+                  Number.isFinite(
+                    averageCost
+                  )
+                    ? averageCost
+                    : 0
+                );
 
               movementSummary.totalOut +=
                 qtyOut;
 
               movementSummary.outCount +=
                 1;
-
-              // =====================================
-              // STOCK CARD OUT
-              // =====================================
 
               await tx.stockCard.create({
                 data: {
@@ -1121,15 +1568,6 @@ export async function POST(
                 },
               });
 
-              // =====================================
-              // STOCK MUTATION
-              //
-              // Dipakai sebagai audit tambahan.
-              // Qty tetap tidak digunakan sebagai
-              // sumber utama report agar tidak
-              // double-count dengan StockCard.
-              // =====================================
-
               await tx.stockMutation.create({
                 data: {
                   outletId:
@@ -1160,14 +1598,6 @@ export async function POST(
 
             // =======================================
             // INBOUND
-            //
-            // physical > stockBefore
-            //
-            // Contoh:
-            // stockBefore = 92
-            // physical    = 100
-            //
-            // STOCK_OPNAME_IN = 8
             // =======================================
 
             else if (difference > 0) {
@@ -1192,10 +1622,6 @@ export async function POST(
 
               movementSummary.inCount +=
                 1;
-
-              // =====================================
-              // STOCK CARD IN
-              // =====================================
 
               await tx.stockCard.create({
                 data: {
@@ -1235,13 +1661,6 @@ export async function POST(
                     `Stock Opname Bulanan ${currentOpname.code} - selisih fisik (${stockBefore} → ${physicalQty})`,
                 },
               });
-
-              // =====================================
-              // STOCK MUTATION
-              //
-              // Audit tambahan.
-              // Tidak dijadikan sumber utama report.
-              // =====================================
 
               await tx.stockMutation.create({
                 data: {
@@ -1326,7 +1745,10 @@ export async function POST(
                         id: true,
                         code: true,
                         name: true,
+                        category: true,
                         unit: true,
+                        baseUnit: true,
+                        conversionRate: true,
                       },
                     },
                   },
@@ -1359,19 +1781,11 @@ export async function POST(
         stockChanged: true,
         centralStockChanged: false,
 
-        // =================================================
-        // LEDGER
-        // =================================================
-
         outboundLedger:
           "STOCK_OPNAME_OUT",
 
         inboundLedger:
           "STOCK_OPNAME_IN",
-
-        // =================================================
-        // SUMMARY
-        // =================================================
 
         movementSummary:
           result.movementSummary,
@@ -1389,6 +1803,1002 @@ export async function POST(
         message:
           error?.message ||
           "Gagal menyetujui stock opname",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
+// =====================================================
+// PUT EDIT STOCK OPNAME
+//
+// COUNTING ONLY
+//
+// ITEM LAMA:
+// {
+//   itemId,
+//   physicalQty,
+//   note
+// }
+//
+// ITEM BARU:
+// {
+//   barangId,
+//   physicalQty,
+//   note
+// }
+//
+// BARANG BARU:
+// -> wajib ada pada OutletBarang aktif
+// -> outlet harus sesuai
+// -> StockOpnameItem dibuat
+// -> systemQty mengambil OutletStock terbaru
+// -> difference = physicalQty - systemQty
+//
+// PUT TIDAK:
+// -> mengubah OutletStock
+// -> membuat StockCard
+// -> membuat StockMutation
+// -> mengubah status
+//
+// STATUS TETAP COUNTING.
+// =====================================================
+
+export async function PUT(
+  req: NextRequest
+) {
+  try {
+    const login = await getLoginUser();
+
+    if ("error" in login) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: login.error,
+        },
+        {
+          status: login.status,
+        }
+      );
+    }
+
+    const {
+      user,
+      role,
+      isOutletAdmin,
+    } = login;
+
+    // =================================================
+    // MANAGER READ ONLY
+    // =================================================
+
+    if (role === "MANAGER") {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Manager hanya dapat melihat stock opname",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    if (
+      role !== "ADMIN" &&
+      role !== "OUTLET_ADMIN"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Anda tidak memiliki akses edit stock opname",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    // =================================================
+    // BODY
+    // =================================================
+
+    let body: any;
+
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Body request tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const opnameId = Number(
+      body?.opnameId ?? 0
+    );
+
+    if (
+      !Number.isInteger(opnameId) ||
+      opnameId <= 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "ID stock opname tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      !Array.isArray(body?.items) ||
+      body.items.length === 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Tidak ada perubahan item stock opname",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =================================================
+    // NORMALISASI INPUT
+    //
+    // EXISTING:
+    // itemId
+    //
+    // BARANG BARU:
+    // barangId
+    // =================================================
+
+    const requestedItems =
+      body.items.map(
+        (item: any) => {
+          const rawItemId =
+            Number(
+              item?.itemId ??
+                item?.id ??
+                0
+            );
+
+          const rawBarangId =
+            Number(
+              item?.barangId ??
+                0
+            );
+
+          return {
+            itemId:
+              Number.isInteger(
+                rawItemId
+              ) &&
+              rawItemId > 0
+                ? rawItemId
+                : null,
+
+            barangId:
+              Number.isInteger(
+                rawBarangId
+              ) &&
+              rawBarangId > 0
+                ? rawBarangId
+                : null,
+
+            physicalQty:
+              Number(
+                item?.physicalQty ??
+                  0
+              ),
+
+            note:
+              item?.note === null ||
+              item?.note === undefined
+                ? null
+                : String(
+                    item.note
+                  ).trim(),
+          };
+        }
+      );
+
+    // =================================================
+    // VALIDASI INPUT DASAR
+    // =================================================
+
+    const itemIdSet =
+      new Set<number>();
+
+    const barangIdSet =
+      new Set<number>();
+
+    for (
+      const item
+        of requestedItems
+    ) {
+      // ===============================================
+      // HARUS MEMILIKI IDENTITAS
+      //
+      // Existing:
+      // itemId
+      //
+      // New:
+      // barangId
+      // ===============================================
+
+      if (
+        !item.itemId &&
+        !item.barangId
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Detail stock opname harus memiliki itemId atau barangId",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      // ===============================================
+      // ITEM ID DUPLIKAT
+      // ===============================================
+
+      if (item.itemId) {
+        if (
+          itemIdSet.has(
+            item.itemId
+          )
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "Terdapat detail stock opname duplikat",
+            },
+            {
+              status: 400,
+            }
+          );
+        }
+
+        itemIdSet.add(
+          item.itemId
+        );
+      }
+
+      // ===============================================
+      // BARANG ID DUPLIKAT
+      //
+      // Ini mencegah frontend mengirim barang yang sama
+      // sebagai item lama dan item baru sekaligus.
+      // ===============================================
+
+      if (item.barangId) {
+        if (
+          barangIdSet.has(
+            item.barangId
+          )
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "Terdapat barang duplikat pada perubahan stock opname",
+            },
+            {
+              status: 400,
+            }
+          );
+        }
+
+        barangIdSet.add(
+          item.barangId
+        );
+      }
+
+      // ===============================================
+      // QTY FISIK
+      // ===============================================
+
+      if (
+        !Number.isFinite(
+          item.physicalQty
+        ) ||
+        item.physicalQty < 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Qty fisik harus berupa angka yang valid dan tidak boleh kurang dari 0",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      // ===============================================
+      // BATAS DESIMAL
+      // ===============================================
+
+      const physicalText =
+        String(
+          item.physicalQty
+        );
+
+      const decimalPart =
+        physicalText.includes(".")
+          ? physicalText.split(".")[1]
+          : "";
+
+      if (
+        decimalPart.length > 6
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Qty fisik maksimal 6 angka desimal",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+    }
+
+    // =================================================
+    // TRANSACTION
+    // =================================================
+
+    const result =
+      await prisma.$transaction(
+        async (tx) => {
+          const currentOpname =
+            await tx.stockOpname.findUnique({
+              where: {
+                id: opnameId,
+              },
+
+              include: {
+                outlet: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                  },
+                },
+
+                items: {
+                  include: {
+                    barang: {
+                      select: {
+                        id: true,
+                        code: true,
+                        name: true,
+                        category: true,
+                        unit: true,
+                        baseUnit: true,
+                        conversionRate: true,
+                        purchasePrice: true,
+                        sellingPrice: true,
+                      },
+                    },
+                  },
+
+                  orderBy: {
+                    barang: {
+                      name: "asc",
+                    },
+                  },
+                },
+              },
+            });
+
+          if (!currentOpname) {
+            throw new Error(
+              "Stock opname tidak ditemukan"
+            );
+          }
+
+          // =============================================
+          // WAJIB STOCK OPNAME OUTLET
+          // =============================================
+
+          if (
+            !currentOpname.outletId
+          ) {
+            throw new Error(
+              "Stock opname ini bukan stock opname outlet"
+            );
+          }
+
+          if (!currentOpname.outlet) {
+            throw new Error(
+              "Outlet stock opname tidak ditemukan"
+            );
+          }
+
+          const outletId =
+            Number(
+              currentOpname.outletId
+            );
+
+          // =============================================
+          // SECURITY OUTLET
+          // =============================================
+
+          if (
+            isOutletAdmin &&
+            (
+              !user.outletId ||
+              Number(user.outletId) !==
+                outletId
+            )
+          ) {
+            throw new Error(
+              "Anda tidak dapat mengedit stock opname outlet lain"
+            );
+          }
+
+          // =============================================
+          // STATUS
+          //
+          // HANYA COUNTING
+          // =============================================
+
+          const currentStatus =
+            String(
+              currentOpname.status ||
+                ""
+            ).toUpperCase();
+
+          if (
+            currentStatus !==
+            "COUNTING"
+          ) {
+            throw new Error(
+              `Stock Opname tidak dapat diedit karena status saat ini ${currentOpname.status}`
+            );
+          }
+
+          // =============================================
+          // TYPE
+          // =============================================
+
+          const currentType =
+            String(
+              currentOpname.type ||
+                ""
+            ).toUpperCase();
+
+          if (
+            currentType !==
+            "MONTHLY"
+          ) {
+            throw new Error(
+              "Stock Opname Mingguan tidak memerlukan approval"
+            );
+          }
+
+          // =============================================
+          // MAP ITEM EXISTING
+          // =============================================
+
+          const currentItemMap =
+            new Map<
+              number,
+              any
+            >();
+
+          const existingBarangIdSet =
+            new Set<number>();
+
+          for (
+            const item
+              of currentOpname.items
+          ) {
+            const itemId =
+              Number(item.id);
+
+            const barangId =
+              Number(
+                item.barangId
+              );
+
+            currentItemMap.set(
+              itemId,
+              item
+            );
+
+            if (
+              Number.isInteger(
+                barangId
+              ) &&
+              barangId > 0
+            ) {
+              existingBarangIdSet.add(
+                barangId
+              );
+            }
+          }
+
+          // =============================================
+          // AMBIL MASTER BARANG OUTLET TERBARU
+          //
+          // Barang baru hanya boleh berasal dari sini.
+          // =============================================
+
+          const masterBarang =
+            await tx.outletBarang.findMany({
+              where: {
+                outletId,
+
+                aktif: true,
+              },
+
+              select: {
+                id: true,
+                outletId: true,
+                barangId: true,
+                harga: true,
+                aktif: true,
+
+                barang: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                    category: true,
+                    unit: true,
+                    baseUnit: true,
+                    conversionRate: true,
+                    purchasePrice: true,
+                    sellingPrice: true,
+                    active: true,
+                  },
+                },
+              },
+            });
+
+          const masterBarangMap =
+            new Map<number, any>();
+
+          for (
+            const master
+              of masterBarang
+          ) {
+            masterBarangMap.set(
+              Number(
+                master.barangId
+              ),
+              master
+            );
+          }
+
+          // =============================================
+          // VALIDASI SEMUA REQUEST
+          // =============================================
+
+          for (
+            const requestedItem
+              of requestedItems
+          ) {
+            // ===========================================
+            // ITEM LAMA
+            // ===========================================
+
+            if (
+              requestedItem.itemId
+            ) {
+              const currentItem =
+                currentItemMap.get(
+                  requestedItem.itemId
+                );
+
+              if (!currentItem) {
+                throw new Error(
+                  `Detail stock opname ${requestedItem.itemId} tidak ditemukan pada ${currentOpname.code}`
+                );
+              }
+
+              // Jika frontend mengirim barangId bersamaan
+              // dengan itemId, pastikan tidak mengarah
+              // ke barang yang berbeda.
+              if (
+                requestedItem.barangId &&
+                Number(
+                  currentItem.barangId
+                ) !==
+                  Number(
+                    requestedItem.barangId
+                  )
+              ) {
+                throw new Error(
+                  `Barang pada detail stock opname ${requestedItem.itemId} tidak sesuai`
+                );
+              }
+
+              continue;
+            }
+
+            // ===========================================
+            // ITEM BARU
+            // ===========================================
+
+            const barangId =
+              Number(
+                requestedItem.barangId
+              );
+
+            if (
+              !Number.isInteger(
+                barangId
+              ) ||
+              barangId <= 0
+            ) {
+              throw new Error(
+                "Barang baru tidak memiliki barangId yang valid"
+              );
+            }
+
+            // ===========================================
+            // JANGAN IZINKAN BARANG YANG SUDAH ADA
+            // ===========================================
+
+            if (
+              existingBarangIdSet.has(
+                barangId
+              )
+            ) {
+              throw new Error(
+                `Barang ${barangId} sudah menjadi detail stock opname`
+              );
+            }
+
+            // ===========================================
+            // WAJIB ADA DI MASTER BARANG OUTLET AKTIF
+            // ===========================================
+
+            const master =
+              masterBarangMap.get(
+                barangId
+              );
+
+            if (!master) {
+              throw new Error(
+                `Barang ${barangId} bukan merupakan Master Barang Outlet aktif`
+              );
+            }
+
+            // ===========================================
+            // BARANG HARUS AKTIF
+            // ===========================================
+
+            if (
+              master.barang &&
+              master.barang.active === false
+            ) {
+              throw new Error(
+                `Barang ${master.barang.name || barangId} tidak aktif`
+              );
+            }
+          }
+
+          // =============================================
+          // UPDATE ITEM EXISTING
+          // =============================================
+
+          for (
+            const requestedItem
+              of requestedItems
+          ) {
+            if (
+              !requestedItem.itemId
+            ) {
+              continue;
+            }
+
+            const currentItem =
+              currentItemMap.get(
+                requestedItem.itemId
+              );
+
+            if (!currentItem) {
+              continue;
+            }
+
+            const systemQty =
+              Number(
+                currentItem.systemQty ??
+                  0
+              );
+
+            if (
+              !Number.isFinite(
+                systemQty
+              )
+            ) {
+              throw new Error(
+                `System Qty barang ${
+                  currentItem.barang?.name ||
+                  currentItem.barangId
+                } tidak valid`
+              );
+            }
+
+            const physicalQty =
+              requestedItem.physicalQty;
+
+            const difference =
+              physicalQty -
+              systemQty;
+
+            await tx.stockOpnameItem.update({
+              where: {
+                id: currentItem.id,
+              },
+
+              data: {
+                physicalQty,
+
+                difference,
+
+                note:
+                  requestedItem.note,
+              },
+            });
+          }
+
+          // =============================================
+          // CREATE ITEM BARU
+          //
+          // PENTING:
+          // systemQty dibaca dari OutletStock saat save.
+          //
+          // Ini menjaga snapshot systemQty untuk opname.
+          // =============================================
+
+          for (
+            const requestedItem
+              of requestedItems
+          ) {
+            if (
+              requestedItem.itemId
+            ) {
+              continue;
+            }
+
+            const barangId =
+              Number(
+                requestedItem.barangId
+              );
+
+            const master =
+              masterBarangMap.get(
+                barangId
+              );
+
+            if (!master) {
+              throw new Error(
+                `Master Barang Outlet untuk barang ${barangId} tidak ditemukan`
+              );
+            }
+
+            // ===========================================
+            // AMBIL STOCK TERKINI
+            // ===========================================
+
+            const outletStock =
+              await tx.outletStock.findUnique({
+                where: {
+                  outletId_barangId: {
+                    outletId,
+                    barangId,
+                  },
+                },
+
+                select: {
+                  id: true,
+                  outletId: true,
+                  barangId: true,
+                  stock: true,
+                  minimumStock: true,
+                  averageCost: true,
+                },
+              });
+
+            const rawSystemQty =
+              Number(
+                outletStock?.stock ??
+                  0
+              );
+
+            const systemQty =
+              Number.isFinite(
+                rawSystemQty
+              ) &&
+              rawSystemQty >= 0
+                ? rawSystemQty
+                : 0;
+
+            const physicalQty =
+              requestedItem.physicalQty;
+
+            const difference =
+              physicalQty -
+              systemQty;
+
+            // ===========================================
+            // CREATE DETAIL BARU
+            // ===========================================
+
+            await tx.stockOpnameItem.create({
+              data: {
+                opnameId:
+                  currentOpname.id,
+
+                barangId,
+
+                systemQty,
+
+                physicalQty,
+
+                difference,
+
+                note:
+                  requestedItem.note,
+              },
+            });
+
+            // ===========================================
+            // TAMBAHKAN KE SET AGAR TIDAK ADA DUPLIKAT
+            // DALAM REQUEST YANG SAMA
+            // ===========================================
+
+            existingBarangIdSet.add(
+              barangId
+            );
+          }
+
+          // =============================================
+          // AMBIL ULANG DATA TERBARU
+          // =============================================
+
+          const updated =
+            await tx.stockOpname.findUnique({
+              where: {
+                id: currentOpname.id,
+              },
+
+              include: {
+                outlet: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                  },
+                },
+
+                items: {
+                  include: {
+                    barang: {
+                      select: {
+                        id: true,
+                        code: true,
+                        name: true,
+                        category: true,
+                        unit: true,
+                        baseUnit: true,
+                        conversionRate: true,
+                        purchasePrice: true,
+                        sellingPrice: true,
+                      },
+                    },
+                  },
+
+                  orderBy: {
+                    barang: {
+                      name: "asc",
+                    },
+                  },
+                },
+              },
+            });
+
+          if (!updated) {
+            throw new Error(
+              "Gagal mengambil data stock opname setelah disimpan"
+            );
+          }
+
+          return updated;
+        }
+      );
+
+    // =================================================
+    // RESPONSE
+    //
+    // STATUS TIDAK DIUBAH.
+    // =================================================
+
+    return NextResponse.json({
+      success: true,
+
+      message:
+        "Perubahan Stock Opname berhasil disimpan",
+
+      data: {
+        ...result,
+
+        items:
+          normalizeOpnameItems(
+            result.items || []
+          ),
+      },
+
+      meta: {
+        type: String(
+          result.type || ""
+        ).toUpperCase(),
+
+        status: String(
+          result.status || ""
+        ).toUpperCase(),
+
+        stockChanged: false,
+
+        outletStockChanged: false,
+
+        stockCardCreated: false,
+
+        stockMutationCreated: false,
+
+        approvalRequired: true,
+
+        statusPreserved:
+          String(
+            result.status || ""
+          ).toUpperCase() ===
+          "COUNTING",
+
+        masterBarangSupported:
+          true,
+      },
+    });
+  } catch (error: any) {
+    console.error(
+      "EDIT OUTLET STOCK OPNAME ERROR:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          error?.message ||
+          "Gagal menyimpan perubahan stock opname",
       },
       {
         status: 500,
@@ -1472,7 +2882,7 @@ export async function DELETE(
       return NextResponse.json(
         {
           success: false,
-          message:
+        message:
             "ID stock opname tidak valid",
         },
         {
@@ -1525,7 +2935,6 @@ export async function DELETE(
     //
     // Stock outlet tidak disentuh.
     //
-    // IMPORTANT:
     // StockCard historical ledger tetap ada.
     // =================================================
 

@@ -2100,14 +2100,32 @@ export default function PurchaseOutletDetailPage() {
    * WHATSAPP PURCHASE ORDER
    * ==========================================================
    *
-   * Membuka WhatsApp Web dengan pesan PO yang sudah diformat
-   * premium dan siap dikirim.
+   * Format pesan mengikuti template Purchase Order perusahaan:
    *
-   * Format detail:
-   * 01. Nama Barang : qty satuan
+   * 🛒 *PURCHASE ORDER*
+   * ━━━━━━━━━━━━━━━━━━━━
+   * *PT.MITRA GARAM BOGATAMA*
+   * ━━━━━━━━━━━━━━━━━━━━
    *
-   * Harga per item tidak ditampilkan sesuai kebutuhan pesan.
-   * Total/Subtotal PO ditampilkan di bagian paling bawah.
+   * 📋 *PO* : ...
+   * 🏪 *Outlet* : ...
+   * 🏢 *Supplier* : ...
+   * 📅 *Tanggal Pengiriman* : ...
+   * ━━━━━━━━━━━━━━━━━━━━
+   * > 📦 *DETAIL BARANG*
+   * ━━━━━━━━━━━━━━━━━━━━
+   * 1. Nama Barang : 2 tbg ↝ (Harga Rp.1.020.000/tbg)
+   * ━━━━━━━━━━━━━━━━━━━━
+   *   💰 *SUBTOTAL PO* Rp 2.040.000
+   * ━━━━━━━━━━━━━━━━━━━━
+   *
+   * Note standar tetap dibuat sebagai bagian dari pesan PO.
+   * Jika PO memiliki remarks, remarks tersebut ditambahkan
+   * sebagai informasi tambahan setelah note standar.
+   *
+   * Satu sumber pesan dipakai oleh WhatsApp dan tombol Salin,
+   * sehingga isi yang disalin selalu identik dengan isi yang
+   * dikirim ke WhatsApp.
    */
   function buildWhatsappMessage(): string | null {
     if (!purchase) {
@@ -2160,30 +2178,65 @@ export default function PurchaseOutletDetailPage() {
       });
     };
 
+    const formatWhatsappPrice = (
+      value: number | string
+    ) => {
+      const numericValue = toNumber(value);
+
+      return `Rp.${numericValue.toLocaleString("id-ID")}`;
+    };
+
     const detailLines = items.map(
       (item, index) => {
         const itemQty = formatWhatsappQty(
           item.qty
         );
 
+        const itemPrice = formatWhatsappPrice(
+          item.price
+        );
+
         const unit = String(
           item.barang?.unit || ""
         ).trim();
 
+        const unitSuffix = unit
+          ? `/${unit}`
+          : "";
+
         return `${index + 1}. ${
           item.barang?.name || "Barang"
-        } : ${itemQty}${unit ? ` ${unit}` : ""}`;
+        } : ${itemQty}${
+          unit ? ` ${unit}` : ""
+        } ↝ (Harga *${itemPrice}*${unitSuffix})`;
       }
     );
 
-    /*
-     * Satu sumber pesan untuk WhatsApp dan tombol Salin.
-     * Dengan begitu isi yang disalin selalu identik
-     * dengan isi yang dikirim ke WhatsApp.
-     */
+    const standardNoteLines = [
+      "📌 *Note :*",
+      "_Mohon diproses sesuai Purchase Order di atas ya Bapak/Ibu,_",
+      "_Apabila terdapat perubahan harga, jumlah, ketersediaan barang, maupun ketentuan lainnya,_",
+      "_mohon dikonfirmasikan terlebih dahulu kepada pihak kami._",
+    ];
+
+    const remarksText =
+      remarks.trim() ||
+      purchase.remarks?.trim() ||
+      "";
+
+    const additionalRemarks =
+      remarksText &&
+      remarksText !==
+        "Mohon diproses sesuai Purchase Order di atas ya Bapak/Ibu."
+        ? [
+            "",
+            "📝 *Keterangan Tambahan :*",
+            `_${remarksText}_`,
+          ]
+        : [];
+
     return [
       "🛒 *PURCHASE ORDER*",
-      "",
       "━━━━━━━━━━━━━━━━━━━━",
       "*PT.MITRA GARAM BOGATAMA*",
       "━━━━━━━━━━━━━━━━━━━━",
@@ -2192,19 +2245,21 @@ export default function PurchaseOutletDetailPage() {
       `🏪 *Outlet* : ${currentOutlet?.name || "-"}`,
       `🏢 *Supplier* : ${currentSupplier?.name || "-"}`,
       `📅 *Tanggal Pengiriman* : ${purchaseDate}`,
-      "",
       "━━━━━━━━━━━━━━━━━━━━",
       "> 📦 *DETAIL BARANG*",
       "━━━━━━━━━━━━━━━━━━━━",
-      "",
       ...detailLines,
-      "",
       "━━━━━━━━━━━━━━━━━━━━",
-      `> 💰 *SUBTOTAL PO*  Rp ${formatRupiah(total)}`,
+      `　💰 *SUBTOTAL PO* Rp ${formatRupiah(total)}`,
       "━━━━━━━━━━━━━━━━━━━━",
       "",
-      "Mohon diproses sesuai Purchase Order di atas.",
+      ...standardNoteLines,
+      ...additionalRemarks,
+      "",
       "Terima kasih. 🙏",
+      "",
+      "*PT. MITRA GARAM BOGATAMA*",
+      "_^Purchase Management • Inventory • Finance^_",
     ].join("\n");
   }
 

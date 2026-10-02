@@ -771,9 +771,161 @@ export default function LaporanPurchaseOutletPage() {
    * *Supplier Berikutnya*
    * ────────────────────
    */
+  /**
+   * =========================================================
+   * WHATSAPP MESSAGE
+   * =========================================================
+   *
+   * Format pesan:
+   *
+   * ━━━━━━━━━━━━━━━━━━━━
+   * 📋 *PURCHASE ORDER OUTLET*
+   * 🏢 *PT.MITRA GARAM BOGATAMA*
+   * ━━━━━━━━━━━━━━━━━━━━
+   * *Tanggal Pengiriman* : *03 Oct 2026*
+   * ────────────────────
+   * *Nama Supplier*
+   * ────────────────────
+   * _*No.PO*_ → *OP-00112*
+   * • *Telur Ayam* : 10 kg _*(Price - Rp 26.000)*_
+   * > 💰 Subtotal  : *Rp 260.000*
+   *
+   * ...
+   *
+   * ━━━━━━━━━━━━━━━━━━━━
+   * 💼 *TOTAL LAPORAN*
+   * • Total Purchase Order : *2*
+   * • Total Qty            : *44,2*
+   * • Total Nominal        : *Rp 828.100*
+   *
+   * Status: DRAFT 2
+   * Dibuat: 2/10/2026, 15.49.02
+   *
+   * Terima kasih 🙏🏻
+   */
+
+  function formatWhatsAppDate(value?: string) {
+    if (!value) return "-";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+
+    return `${day} ${month} ${year}`;
+  }
+
+  function getWhatsAppDeliveryDate() {
+    const dates = filteredData
+      .map((po) => {
+        if (!po.purchaseDate) return null;
+
+        const date = new Date(po.purchaseDate);
+
+        if (Number.isNaN(date.getTime())) {
+          return null;
+        }
+
+        return {
+          key: `${date.getFullYear()}-${String(
+            date.getMonth() + 1,
+          ).padStart(2, "0")}-${String(
+            date.getDate(),
+          ).padStart(2, "0")}`,
+          value: po.purchaseDate,
+        };
+      })
+      .filter(
+        (
+          item,
+        ): item is {
+          key: string;
+          value: string;
+        } => Boolean(item),
+      );
+
+    const uniqueDates = Array.from(
+      new Map(
+        dates.map((item) => [
+          item.key,
+          item.value,
+        ]),
+      ).values(),
+    );
+
+    if (uniqueDates.length === 0) {
+      return "-";
+    }
+
+    if (uniqueDates.length === 1) {
+      return formatWhatsAppDate(
+        uniqueDates[0],
+      );
+    }
+
+    const sortedDates = uniqueDates
+      .map((value) => ({
+        value,
+        time: new Date(value).getTime(),
+      }))
+      .sort(
+        (a, b) =>
+          a.time - b.time,
+      );
+
+    return `${formatWhatsAppDate(
+      sortedDates[0].value,
+    )} s/d ${formatWhatsAppDate(
+      sortedDates[
+        sortedDates.length - 1
+      ].value,
+    )}`;
+  }
+
+  function formatWhatsAppCreatedDate(
+    value: Date,
+  ) {
+    const day = value.getDate();
+    const month = value.getMonth() + 1;
+    const year = value.getFullYear();
+
+    const hours = String(
+      value.getHours(),
+    ).padStart(2, "0");
+
+    const minutes = String(
+      value.getMinutes(),
+    ).padStart(2, "0");
+
+    const seconds = String(
+      value.getSeconds(),
+    ).padStart(2, "0");
+
+    return `${day}/${month}/${year}, ${hours}.${minutes}.${seconds}`;
+  }
+
   function buildWhatsAppMessage() {
-    const lines: string[] =
-      [];
+    const lines: string[] = [];
 
     const totalFilteredQty =
       filteredData.reduce(
@@ -786,16 +938,22 @@ export default function LaporanPurchaseOutletPage() {
     lines.push(
       "━━━━━━━━━━━━━━━━━━━━",
     );
+
     lines.push(
       "📋 *PURCHASE ORDER OUTLET*",
     );
+
     lines.push(
-      "🏢 *MGB INVENTORY & DISTRIBUTION*",
+      "🏢 *PT.MITRA GARAM BOGATAMA*",
     );
+
     lines.push(
       "━━━━━━━━━━━━━━━━━━━━",
     );
-    lines.push("");
+
+    lines.push(
+      `*Tanggal Pengiriman* : *${getWhatsAppDeliveryDate()}*`,
+    );
 
     /**
      * Group berdasarkan supplier.
@@ -851,8 +1009,6 @@ export default function LaporanPurchaseOutletPage() {
             `_*No.PO*_ → *${po.number || "-"}*`,
           );
 
-          lines.push("");
-
           if (
             items.length > 0
           ) {
@@ -898,10 +1054,8 @@ export default function LaporanPurchaseOutletPage() {
             );
           }
 
-          lines.push("");
-
           lines.push(
-            `💰 Subtotal  : *${formatRupiah(po.total)}*`,
+            `> 💰 Subtotal  : *${formatRupiah(po.total)}*`,
           );
 
           lines.push("");
@@ -930,7 +1084,7 @@ export default function LaporanPurchaseOutletPage() {
     );
 
     lines.push(
-      `• Total Nilai          : *${formatRupiah(
+      `• Total Nominal        : *${formatRupiah(
         totalNominal,
       )}*`,
     );
@@ -938,17 +1092,12 @@ export default function LaporanPurchaseOutletPage() {
     lines.push("");
 
     lines.push(
-      `📊 Status: ${getWhatsAppStatusSummary()}`,
+      `Status: ${getWhatsAppStatusSummary()}`,
     );
 
-    lines.push("");
-
     lines.push(
-      `🕒 Dibuat: ${new Date().toLocaleString(
-        "id-ID",
-        {
-          hour12: false,
-        },
+      `Dibuat: ${formatWhatsAppCreatedDate(
+        new Date(),
       )}`,
     );
 

@@ -5,7 +5,13 @@ import {
 
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
-import { toBaseQty, baseToMainQty, getConversionRate } from "@/lib/base-unit";
+import {
+  normalizeBaseQty,
+  calculateStockAfter,
+  assertEnoughStock,
+  roundQty,
+  roundMoney,
+} from "@/lib/unit-conversion";
 
 export const dynamic = "force-dynamic";
 
@@ -14,49 +20,142 @@ export const dynamic = "force-dynamic";
  * COMPLETE MANUFACTURE ORDER
  * ============================================================
  *
- * FINAL STOCK POLICY:
+ * FINAL STOCK POLICY
+ * ============================================================
  *
- * Manufacture hanya bekerja pada STOCK OUTLET.
+ * Manufacture pada route ini bekerja HANYA terhadap:
  *
- * BAHAN:
- *   OutletStock.stock -= plannedQty
+ *   OutletStock
  *
- * HASIL:
- *   OutletStock.stock += producedQty
+ * BUKAN:
  *
- * TIDAK BOLEH:
- *   - mengurangi Barang.stock pusat
- *   - menambah Barang.stock pusat
- *   - mengubah Inventory pusat
+ *   Barang.stock
+ *   Inventory.stock
  *
- * Semua saldo yang dipakai sebagai sumber kebenaran
- * untuk Manufacture adalah OutletStock.
+ * ------------------------------------------------------------
+ * STOCK UNIT POLICY
+ * ------------------------------------------------------------
  *
- * Outlet berasal dari ManufactureOrder.outletId.
+ * PENTING:
  *
- * SECURITY:
+ * OutletStock.stock menggunakan UNIT BARANG.
  *
- * OUTLET_ADMIN:
- *   hanya boleh complete MO milik outlet sendiri.
+ * Contoh:
  *
- * GUDANG:
- *   hanya boleh complete MO milik outlet sendiri.
+ *   unit           = botol
+ *   baseUnit       = ml
+ *   conversionRate = 650
  *
- * ADMIN / MANAGER:
- *   boleh complete MO outlet mana pun.
+ * Maka:
+ *
+ *   OutletStock.stock = 3
+ *
+ * berarti:
+ *
+ *   3 botol
+ *   = 3 × 650 ml
+ *   = 1.950 ml
+ *
+ * ------------------------------------------------------------
+ * MANUFACTURE / BOM
+ * ------------------------------------------------------------
+ *
+ * BOM dan ManufactureOrderItem.plannedQty menggunakan
+ * BASE UNIT.
+ *
+ * Contoh:
+ *
+ *   BOM = 30 ml
+ *
+ * Maka kebutuhan bahan adalah:
+ *
+ *   30 ml
+ *
+ * BUKAN:
+ *
+ *   30 botol
+ *
+ * ------------------------------------------------------------
+ * SAAT CONSUME
+ * ------------------------------------------------------------
+ *
+ * OutletStock:
+ *
+ *   stock = 3 botol
+ *   conversionRate = 650 ml / botol
+ *
+ * maka:
+ *
+ *   stockBase = 3 × 650
+ *             = 1.950 ml
+ *
+ * Jika BOM:
+ *
+ *   qtyOut = 30 ml
+ *
+ * maka:
+ *
+ *   remainingBase = 1.950 - 30
+ *                 = 1.920 ml
+ *
+ * lalu OutletStock dikembalikan ke unit barang:
+ *
+ *   stockAfter = 1.920 / 650
+ *              = 2,953846 botol
+ *
+ * Jadi TIDAK BOLEH:
+ *
+ *   30 ml → 30 botol
+ *
+ * dan TIDAK BOLEH:
+ *
+ *   30 ml → 1 botol
+ *
+ * karena conversion harus mempertahankan quantity sebenarnya.
+ *
+ * ------------------------------------------------------------
+ * STOCK CARD / STOCK MUTATION
+ * ------------------------------------------------------------
+ *
+ * StockCard dan StockMutation tetap menggunakan BASE UNIT
+ * untuk transaksi manufacture.
+ *
+ * Contoh:
+ *
+ *   stockBefore = 1.950 ml
+ *   qtyOut      = 30 ml
+ *   stockAfter  = 1.920 ml
+ *
+ * Sedangkan OutletStock menyimpan:
+ *
+ *   stock = 2,953846 botol
+ *
+ * ------------------------------------------------------------
+ * CREATE MO
+ * ------------------------------------------------------------
  *
  * CREATE MO tidak mengubah stock.
  *
- * COMPLETE MO:
- *   1. Validasi order
- *   2. Validasi outlet
- *   3. Validasi bahan pada OutletStock
- *   4. Kurangi OutletStock bahan
- *   5. Tambah OutletStock output
- *   6. Catat StockCard
- *   7. Catat StockMutation
- *   8. Update actualQty
- *   9. Set order COMPLETED
+ * ------------------------------------------------------------
+ * COMPLETE MO
+ * ------------------------------------------------------------
+ *
+ * 1. Validasi order
+ * 2. Validasi outlet
+ * 3. Validasi status
+ * 4. Validasi output
+ * 5. Validasi semua bahan
+ * 6. Konversi OutletStock UNIT → BASE UNIT
+ * 7. Kurangi bahan dalam BASE UNIT
+ * 8. Konversi hasil kembali BASE UNIT → UNIT
+ * 9. Catat StockCard bahan
+ * 10. Catat StockMutation bahan
+ * 11. Update actualQty
+ * 12. Tambah output dalam BASE UNIT
+ * 13. Konversi output kembali ke UNIT
+ * 14. Catat StockCard output
+ * 15. Catat StockMutation output
+ * 16. Set order COMPLETED
  *
  * ============================================================
  */
@@ -114,6 +213,170 @@ function fail(
   );
 }
 
+function finiteNumber(
+  value: unknown,
+): number {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+
+  return number;
+}
+
+/*
+ * ============================================================
+ * UNIT HELPERS
+ * ============================================================
+ *
+ * OutletStock.stock:
+ *
+ *   UNIT BARANG
+ *
+ * Manufacture:
+ *
+ *   BASE UNIT
+ *
+ * ============================================================
+ */
+
+/**
+ * Mengambil conversion rate yang aman.
+ *
+ * Jika unit dan baseUnit sama:
+ *
+ *   rate = 1
+ *
+ * Jika unit berbeda:
+ *
+ *   conversionRate wajib > 0
+ */
+function getConversionRate(
+  unit: unknown,
+  baseUnit: unknown,
+  conversionRate: unknown,
+  barangName: string,
+): number {
+  const normalizedUnit =
+    String(unit ?? "")
+      .trim()
+      .toLowerCase();
+
+  const normalizedBaseUnit =
+    String(baseUnit ?? "")
+      .trim()
+      .toLowerCase();
+
+  /*
+   * Kalau unit dan baseUnit sama,
+   * tidak membutuhkan conversion.
+   */
+
+  if (
+    normalizedUnit &&
+    normalizedBaseUnit &&
+    normalizedUnit ===
+      normalizedBaseUnit
+  ) {
+    return 1;
+  }
+
+  const rate =
+    finiteNumber(
+      conversionRate,
+    );
+
+  if (
+    !Number.isFinite(rate) ||
+    rate <= 0
+  ) {
+    throw new Error(
+      `Barang ${barangName} memiliki Unit "${String(
+        unit ?? "",
+      )}" dan Base Unit "${String(
+        baseUnit ?? "",
+      )}", tetapi Conversion Rate belum valid.`,
+    );
+  }
+
+  return rate;
+}
+
+/**
+ * OutletStock UNIT → BASE UNIT
+ *
+ * Contoh:
+ *
+ *   3 botol × 650 = 1.950 ml
+ */
+function stockUnitToBase(
+  stockUnit: number,
+  conversionRate: number,
+): number {
+  return normalizeBaseQty(
+    stockUnit * conversionRate,
+  );
+}
+
+/**
+ * BASE UNIT → OutletStock UNIT
+ *
+ * Contoh:
+ *
+ *   1.920 ml ÷ 650 = 2,953846 botol
+ */
+function baseToStockUnit(
+  baseQty: number,
+  conversionRate: number,
+): number {
+  if (
+    conversionRate <= 0
+  ) {
+    throw new Error(
+      "Conversion Rate tidak valid.",
+    );
+  }
+
+  return roundQty(
+    baseQty /
+      conversionRate,
+  );
+}
+
+/**
+ * Cost per OutletStock UNIT → cost per BASE UNIT.
+ *
+ * Contoh:
+ *
+ *   averageCost = Rp65.000 / botol
+ *   conversion  = 650 ml
+ *
+ * maka:
+ *
+ *   Rp65.000 / 650
+ *   = Rp100 / ml
+ *
+ * Jika unit dan baseUnit sama:
+ *
+ *   cost tetap.
+ */
+function stockUnitCostToBaseCost(
+  costPerUnit: number,
+  conversionRate: number,
+): number {
+  if (
+    conversionRate <= 0
+  ) {
+    return 0;
+  }
+
+  return roundMoney(
+    costPerUnit /
+      conversionRate,
+  );
+}
+
 /*
  * ============================================================
  * SESSION
@@ -147,6 +410,7 @@ async function getUser(): Promise<SessionUser | null> {
           token:
             sessionCookie.value,
         },
+
         select: {
           expiresAt: true,
 
@@ -230,11 +494,12 @@ async function getUser(): Promise<SessionUser | null> {
  * OUTLET ACCESS
  * ============================================================
  *
- * Admin / Manager:
- *   boleh semua outlet.
+ * ADMIN / MANAGER
+ *   → boleh semua outlet.
  *
- * Outlet Admin / Gudang:
- *   hanya outlet sendiri.
+ * OUTLET_ADMIN / GUDANG
+ *   → hanya outlet sendiri.
+ *
  * ============================================================
  */
 
@@ -245,12 +510,21 @@ function validateOrderOutletAccess(
   const role =
     normalizeRole(user.role);
 
+  /*
+   * ADMIN dan MANAGER dapat mengakses semua outlet.
+   */
+
   if (
     role === "ADMIN" ||
     role === "MANAGER"
   ) {
     return null;
   }
+
+  /*
+   * OUTLET_ADMIN dan GUDANG harus
+   * memiliki outlet sendiri.
+   */
 
   if (
     role === "OUTLET_ADMIN" ||
@@ -279,27 +553,6 @@ function validateOrderOutletAccess(
   }
 
   return null;
-}
-
-/*
- * ============================================================
- * NUMBER
- * ============================================================
- */
-
-function finiteNumber(
-  value: unknown,
-): number {
-  const number =
-    Number(value);
-
-  if (
-    !Number.isFinite(number)
-  ) {
-    return 0;
-  }
-
-  return number;
 }
 
 /*
@@ -453,7 +706,7 @@ export async function POST(
 
           /*
            * ==================================================
-           * OUTLET
+           * OUTLET VALIDATION
            * ==================================================
            */
 
@@ -463,17 +716,13 @@ export async function POST(
             );
           }
 
-          if (
-            !order.outlet
-          ) {
+          if (!order.outlet) {
             throw new Error(
               "Outlet Manufacture tidak ditemukan.",
             );
           }
 
-          if (
-            !order.outlet.active
-          ) {
+          if (!order.outlet.active) {
             throw new Error(
               `Outlet ${order.outlet.name} sedang tidak aktif.`,
             );
@@ -512,6 +761,17 @@ export async function POST(
             );
           }
 
+          if (
+            order.status ===
+              "CANCELLED" ||
+            order.status ===
+              "VOID"
+          ) {
+            throw new Error(
+              "Order produksi sudah dibatalkan dan tidak dapat diselesaikan.",
+            );
+          }
+
           /*
            * ==================================================
            * RECIPE VALIDATION
@@ -528,7 +788,15 @@ export async function POST(
 
           /*
            * ==================================================
-           * OUTPUT
+           * OUTPUT BARANG
+           * ==================================================
+           *
+           * Prioritas:
+           *
+           * 1. ProductCK.outputBarang
+           * 2. Recipe.outputBarang
+           *
+           * Output harus merupakan Barang inventory.
            * ==================================================
            */
 
@@ -550,17 +818,22 @@ export async function POST(
            * QTY PRODUKSI
            * ==================================================
            *
-           * plannedQty pada MO adalah jumlah hasil
-           * yang akan diproduksi.
+           * plannedQty pada ManufactureOrder
+           * dianggap BASE UNIT.
            *
-           * outputQty hanya digunakan sebagai informasi
-           * BOM dan validasi.
+           * Jadi:
+           *
+           *   plannedQty = 650 ml
+           *
+           * tidak dikalikan conversionRate lagi.
            * ==================================================
            */
 
           const qtyProduced =
-            finiteNumber(
-              order.plannedQty,
+            normalizeBaseQty(
+              finiteNumber(
+                order.plannedQty,
+              ),
             );
 
           if (
@@ -571,14 +844,22 @@ export async function POST(
             );
           }
 
-          const outputQty =
-            finiteNumber(
-              order.recipe
-                .outputQty,
-            ) || 1;
+          /*
+           * ==================================================
+           * OUTPUT QTY BOM
+           * ==================================================
+           */
+
+          const outputQtyBom =
+            normalizeBaseQty(
+              finiteNumber(
+                order.recipe
+                  .outputQty,
+              ),
+            );
 
           if (
-            outputQty <= 0
+            outputQtyBom <= 0
           ) {
             throw new Error(
               "Qty output BOM tidak valid.",
@@ -587,24 +868,35 @@ export async function POST(
 
           /*
            * ==================================================
-           * LOAD OUTPUT OUTLET STOCK
+           * VALIDATE MATERIAL ITEMS
            * ==================================================
            *
-           * PENTING:
+           * ManufactureOrderItem.plannedQty
+           * = BASE UNIT.
            *
-           * Kita TIDAK menggunakan:
+           * OutletStock.stock
+           * = UNIT BARANG.
            *
-           *   output.stock
+           * Karena itu stock harus dikonversi:
            *
-           * Kita menggunakan:
+           *   stockUnit × conversionRate
            *
-           *   OutletStock.stock
-           *
-           * dengan:
-           *
-           *   outletId = order.outletId
-           *   barangId = output.id
-           *
+           * sebelum dibandingkan dengan qty BOM.
+           * ==================================================
+           */
+
+          if (
+            !order.items ||
+            order.items.length === 0
+          ) {
+            throw new Error(
+              "Manufacture Order belum memiliki bahan produksi.",
+            );
+          }
+
+          /*
+           * ==================================================
+           * LOAD OUTPUT OUTLET STOCK
            * ==================================================
            */
 
@@ -659,22 +951,88 @@ export async function POST(
 
           /*
            * ==================================================
-           * CURRENT OUTPUT STOCK
+           * OUTPUT UNIT
            * ==================================================
            */
 
-          const beforeOutput =
-            finiteNumber(
-              outputStock.stock,
+          const outputUnit =
+            String(
+              outputStock.barang
+                .unit ||
+                "",
+            ).trim();
+
+          const outputBaseUnit =
+            String(
+              outputStock.barang
+                .baseUnit ||
+                outputStock.barang
+                  .unit ||
+                "",
+            ).trim();
+
+          if (!outputUnit) {
+            throw new Error(
+              `Barang hasil ${output.name} belum memiliki Unit.`,
+            );
+          }
+
+          if (!outputBaseUnit) {
+            throw new Error(
+              `Barang hasil ${output.name} belum memiliki Base Unit.`,
+            );
+          }
+
+          /*
+           * ==================================================
+           * OUTPUT CONVERSION RATE
+           * ==================================================
+           */
+
+          const outputConversionRate =
+            getConversionRate(
+              outputUnit,
+              outputBaseUnit,
+              outputStock.barang
+                .conversionRate,
+              output.name,
+            );
+
+          /*
+           * ==================================================
+           * OUTPUT STOCK BEFORE
+           * ==================================================
+           *
+           * OutletStock.stock = UNIT BARANG.
+           *
+           * Jadi nilai database tidak boleh langsung
+           * dianggap sebagai BASE UNIT.
+           */
+
+          const beforeOutputUnit =
+            roundQty(
+              finiteNumber(
+                outputStock.stock,
+              ),
             );
 
           if (
-            beforeOutput < 0
+            beforeOutputUnit < 0
           ) {
             throw new Error(
               `Stock outlet ${output.name} tidak valid.`,
             );
           }
+
+          /*
+           * Konversi ke BASE UNIT hanya untuk kalkulasi.
+           */
+
+          const beforeOutputBase =
+            stockUnitToBase(
+              beforeOutputUnit,
+              outputConversionRate,
+            );
 
           /*
            * ==================================================
@@ -687,30 +1045,63 @@ export async function POST(
 
           /*
            * ==================================================
-           * CONSUME MATERIAL
+           * PRE-VALIDATE ALL MATERIAL STOCK
            * ==================================================
            *
-           * ManufactureOrderItem.plannedQty sudah disimpan
-           * dalam satuan yang digunakan OutletStock.
+           * Semua stock dicek dahulu.
            *
-           * JANGAN melakukan konversi ulang di sini.
+           * OutletStock:
            *
-           * Contoh:
+           *   UNIT
            *
-           * OutletStock minyak = 10.000 ml
-           * MO item            = 500 ml
+           * BOM:
            *
-           * after = 9.500 ml
+           *   BASE UNIT
            *
+           * Perbandingan:
+           *
+           *   stockUnit × conversionRate >= qtyBase
            * ==================================================
            */
+
+          const materialChecks: Array<{
+            itemId: number;
+            barangId: number;
+            barangName: string;
+            stockId: number;
+
+            stockBeforeUnit: number;
+            stockBeforeBase: number;
+
+            qtyOut: number;
+
+            stockAfterBase: number;
+            stockAfterUnit: number;
+
+            unit: string;
+            baseUnit: string;
+            conversionRate: number;
+
+            unitPrice: number;
+            baseUnitPrice: number;
+          }> = [];
 
           for (
             const item of order.items
           ) {
+            /*
+             * ------------------------------------------------
+             * QTY BOM
+             * ------------------------------------------------
+             *
+             * plannedQty = BASE UNIT.
+             */
+
             const qty =
-              finiteNumber(
-                item.plannedQty,
+              normalizeBaseQty(
+                finiteNumber(
+                  item.plannedQty,
+                ),
               );
 
             if (
@@ -726,7 +1117,19 @@ export async function POST(
 
             /*
              * ------------------------------------------------
-             * LOAD OUTLET STOCK BAHAN
+             * BARANG
+             * ------------------------------------------------
+             */
+
+            if (!item.barang) {
+              throw new Error(
+                `Barang bahan ${item.barangId} tidak ditemukan.`,
+              );
+            }
+
+            /*
+             * ------------------------------------------------
+             * LOAD OUTLET STOCK
              * ------------------------------------------------
              */
 
@@ -767,16 +1170,13 @@ export async function POST(
 
             if (!outletStock) {
               throw new Error(
-                `Bahan ${
-                  item.barang?.name ||
-                  item.barangId
-                } belum terdaftar pada stock outlet ${order.outlet.name}.`,
+                `Bahan ${item.barang.name} belum terdaftar pada stock outlet ${order.outlet.name}.`,
               );
             }
 
             /*
              * ------------------------------------------------
-             * BARANG AKTIF
+             * ACTIVE
              * ------------------------------------------------
              */
 
@@ -790,49 +1190,256 @@ export async function POST(
 
             /*
              * ------------------------------------------------
-             * STOCK BEFORE
+             * UNIT
              * ------------------------------------------------
              */
 
-            const before = finiteNumber(outletStock.stock);
-
-            if (before < 0) {
-              throw new Error(`Stock outlet ${outletStock.barang.name} tidak valid.`);
-            }
-
-            // ManufactureOrderItem.plannedQty disimpan dalam BASE UNIT.
-            const availableBase = toBaseQty(
-              before,
-              outletStock.barang.unit,
-              outletStock.barang,
-            );
-
-            if (availableBase + 1e-9 < qty) {
-              const baseUnit = String(
-                outletStock.barang.baseUnit || outletStock.barang.unit || "",
+            const unit =
+              String(
+                outletStock.barang
+                  .unit ||
+                  "",
               ).trim();
+
+            const baseUnit =
+              String(
+                outletStock.barang
+                  .baseUnit ||
+                  outletStock.barang
+                    .unit ||
+                  "",
+              ).trim();
+
+            if (!unit) {
               throw new Error(
-                `Stock bahan ${outletStock.barang.name} di outlet ${order.outlet.name} tidak cukup. Dibutuhkan ${qty} ${baseUnit}, tersedia ${availableBase} ${baseUnit}.`,
+                `Bahan ${outletStock.barang.name} belum memiliki Unit.`,
               );
             }
 
-            const qtyOutMain = baseToMainQty(qty, outletStock.barang);
-            const after = normalizeStock(before - qtyOutMain);
+            if (!baseUnit) {
+              throw new Error(
+                `Bahan ${outletStock.barang.name} belum memiliki Base Unit.`,
+              );
+            }
 
             /*
              * ------------------------------------------------
-             * UPDATE OUTLET STOCK
+             * CONVERSION RATE
+             * ------------------------------------------------
+             */
+
+            const conversionRate =
+              getConversionRate(
+                unit,
+                baseUnit,
+                outletStock.barang
+                  .conversionRate,
+                outletStock.barang
+                  .name,
+              );
+
+            /*
+             * ------------------------------------------------
+             * STOCK BEFORE
              * ------------------------------------------------
              *
-             * INILAH SATU-SATUNYA STOCK YANG DIUBAH.
+             * DATABASE:
              *
-             * TIDAK ADA:
+             *   OutletStock.stock = UNIT
              *
-             * tx.barang.update()
+             * Contoh:
              *
-             * TIDAK ADA:
+             *   3 botol
+             */
+
+            const beforeUnit =
+              roundQty(
+                finiteNumber(
+                  outletStock.stock,
+                ),
+              );
+
+            if (
+              beforeUnit < 0
+            ) {
+              throw new Error(
+                `Stock outlet ${outletStock.barang.name} tidak valid.`,
+              );
+            }
+
+            /*
+             * ------------------------------------------------
+             * STOCK UNIT → BASE
+             * ------------------------------------------------
              *
-             * tx.inventory.update()
+             * Contoh:
+             *
+             *   3 botol × 650
+             *   = 1.950 ml
+             */
+
+            const beforeBase =
+              stockUnitToBase(
+                beforeUnit,
+                conversionRate,
+              );
+
+            /*
+             * ------------------------------------------------
+             * STOCK VALIDATION
+             * ------------------------------------------------
+             *
+             * qty = BASE UNIT
+             */
+
+            assertEnoughStock(
+              beforeBase,
+              qty,
+              `${outletStock.barang.name} di outlet ${order.outlet.name}`,
+            );
+
+            /*
+             * ------------------------------------------------
+             * STOCK AFTER BASE
+             * ------------------------------------------------
+             *
+             * Contoh:
+             *
+             *   1.950 ml - 30 ml
+             *   = 1.920 ml
+             */
+
+            const stockResult =
+              calculateStockAfter({
+                stockBefore:
+                  beforeBase,
+
+                qtyIn:
+                  0,
+
+                qtyOut:
+                  qty,
+              });
+
+            const afterBase =
+              normalizeBaseQty(
+                stockResult.stockAfter,
+              );
+
+            /*
+             * ------------------------------------------------
+             * STOCK BASE → UNIT
+             * ------------------------------------------------
+             *
+             * Contoh:
+             *
+             *   1.920 / 650
+             *   = 2,953846 botol
+             */
+
+            const afterUnit =
+              baseToStockUnit(
+                afterBase,
+                conversionRate,
+              );
+
+            /*
+             * ------------------------------------------------
+             * UNIT PRICE
+             * ------------------------------------------------
+             *
+             * averageCost pada OutletStock dianggap
+             * sebagai cost per UNIT STOCK.
+             *
+             * Contoh:
+             *
+             *   Rp65.000 / botol
+             *
+             * Maka cost per ml:
+             *
+             *   Rp65.000 / 650
+             *   = Rp100 / ml
+             */
+
+            const unitPrice =
+              roundMoney(
+                finiteNumber(
+                  outletStock.averageCost,
+                ) ||
+                  finiteNumber(
+                    outletStock
+                      .barang
+                      .purchasePrice,
+                  ) ||
+                  0,
+              );
+
+            const baseUnitPrice =
+              stockUnitCostToBaseCost(
+                unitPrice,
+                conversionRate,
+              );
+
+            materialChecks.push({
+              itemId:
+                item.id,
+
+              barangId:
+                outletStock.barangId,
+
+              barangName:
+                outletStock.barang.name,
+
+              stockId:
+                outletStock.id,
+
+              stockBeforeUnit:
+                beforeUnit,
+
+              stockBeforeBase:
+                beforeBase,
+
+              qtyOut:
+                qty,
+
+              stockAfterBase:
+                afterBase,
+
+              stockAfterUnit:
+                afterUnit,
+
+              unit,
+
+              baseUnit,
+
+              conversionRate,
+
+              unitPrice,
+
+              baseUnitPrice,
+            });
+          }
+
+          /*
+           * ==================================================
+           * CONSUME MATERIAL
+           * ==================================================
+           *
+           * OutletStock disimpan kembali dalam UNIT.
+           *
+           * StockCard / StockMutation:
+           *
+           *   BASE UNIT.
+           * ==================================================
+           */
+
+          for (
+            const material of
+              materialChecks
+          ) {
+            /*
+             * ------------------------------------------------
+             * UPDATE OUTLET STOCK
              * ------------------------------------------------
              */
 
@@ -840,66 +1447,56 @@ export async function POST(
               {
                 where: {
                   id:
-                    outletStock.id,
+                    material.stockId,
                 },
 
                 data: {
-                  stock: after,
+                  stock:
+                    material.stockAfterUnit,
                 },
               },
             );
 
             /*
              * ------------------------------------------------
-             * ACTUAL QTY
+             * UPDATE ACTUAL QTY
              * ------------------------------------------------
+             *
+             * actualQty tetap BASE UNIT karena merupakan
+             * quantity consumption manufacture.
              */
 
             await tx.manufactureOrderItem.update(
               {
                 where: {
-                  id: item.id,
+                  id:
+                    material.itemId,
                 },
 
                 data: {
-                  actualQty: qty,
+                  actualQty:
+                    material.qtyOut,
                 },
               },
             );
 
             /*
              * ------------------------------------------------
-             * UNIT PRICE
-             * ------------------------------------------------
-             *
-             * Prioritas:
-             *
-             * 1. averageCost outlet
-             * 2. purchasePrice barang
-             * 3. 0
-             * ------------------------------------------------
-             */
-
-            const unitPrice =
-              finiteNumber(outletStock.averageCost) ||
-              finiteNumber(outletStock.barang.purchasePrice) ||
-              0;
-            const conversionRate = getConversionRate(outletStock.barang);
-            const unitCostBase = conversionRate > 0 ? unitPrice / conversionRate : unitPrice;
-
-            /*
-             * ------------------------------------------------
              * STOCK CARD
              * ------------------------------------------------
+             *
+             * Semua quantity transaksi manufacture
+             * dicatat dalam BASE UNIT.
              */
 
             await tx.stockCard.create(
               {
                 data: {
                   barangId:
-                    outletStock.barangId,
+                    material.barangId,
 
-                  trxDate: now,
+                  trxDate:
+                    now,
 
                   trxType:
                     "MANUFACTURE_CONSUME",
@@ -913,18 +1510,26 @@ export async function POST(
                   warehouse:
                     `OUTLET:${order.outlet.code}`,
 
-                  qtyIn: 0,
+                  qtyIn:
+                    0,
 
-                  qtyOut: qtyOutMain,
+                  qtyOut:
+                    material.qtyOut,
 
-                  balance: after,
+                  balance:
+                    material.stockAfterBase,
 
-                  unitPrice,
+                  unitPrice:
+                    material.baseUnitPrice,
 
-                  totalValue: qtyOutMain * unitPrice,
+                  totalValue:
+                    roundMoney(
+                      material.qtyOut *
+                        material.baseUnitPrice,
+                    ),
 
                   note:
-                    `Konsumsi Manufacture ${order.number} • Outlet ${order.outlet.name} • ${qty} ${outletStock.barang.baseUnit || outletStock.barang.unit || ""}`,
+                    `Konsumsi Manufacture ${order.number} • Outlet ${order.outlet.name} • ${material.qtyOut} ${material.baseUnit} • Stock ${material.stockBeforeUnit} ${material.unit} → ${material.stockAfterUnit} ${material.unit}`,
                 },
               },
             );
@@ -933,18 +1538,35 @@ export async function POST(
              * ------------------------------------------------
              * STOCK MUTATION
              * ------------------------------------------------
+             *
+             * qty / before / after = BASE UNIT.
              */
 
             await tx.stockMutation.create({
               data: {
-                outletId: order.outletId,
-                barangId: outletStock.barangId,
-                type: "MANUFACTURE_CONSUME",
-                qty: qtyOutMain,
-                stockBefore: before,
-                stockAfter: after,
-                reference: order.number,
-                description: `Konsumsi bahan Manufacture ${order.number} • Outlet ${order.outlet.name} • ${qty} ${outletStock.barang.baseUnit || outletStock.barang.unit || ""}`,
+                outletId:
+                  order.outletId,
+
+                barangId:
+                  material.barangId,
+
+                type:
+                  "MANUFACTURE_CONSUME",
+
+                qty:
+                  material.qtyOut,
+
+                stockBefore:
+                  material.stockBeforeBase,
+
+                stockAfter:
+                  material.stockAfterBase,
+
+                reference:
+                  order.number,
+
+                description:
+                  `Konsumsi bahan Manufacture ${order.number} • Outlet ${order.outlet.name} • ${material.qtyOut} ${material.baseUnit} • Stock ${material.stockBeforeUnit} ${material.unit} → ${material.stockAfterUnit} ${material.unit}`,
               },
             });
           }
@@ -954,23 +1576,46 @@ export async function POST(
            * OUTPUT STOCK
            * ==================================================
            *
-           * PENTING:
+           * qtyProduced = BASE UNIT.
            *
-           * Output juga masuk ke OutletStock.
+           * OutletStock = UNIT BARANG.
            *
-           * BUKAN:
+           * Jadi:
            *
-           * Barang.stock
+           *   beforeOutputBase
+           *   +
+           *   qtyProduced
            *
-           * BUKAN:
-           *
-           * Inventory.stock
+           * lalu hasil dikonversi kembali ke UNIT.
            * ==================================================
            */
 
-          const afterOutput =
-            beforeOutput +
-            qtyProduced;
+          const outputStockResult =
+            calculateStockAfter({
+              stockBefore:
+                beforeOutputBase,
+
+              qtyIn:
+                qtyProduced,
+
+              qtyOut:
+                0,
+            });
+
+          const afterOutputBase =
+            normalizeBaseQty(
+              outputStockResult.stockAfter,
+            );
+
+          /*
+           * BASE → UNIT
+           */
+
+          const afterOutputUnit =
+            baseToStockUnit(
+              afterOutputBase,
+              outputConversionRate,
+            );
 
           /*
            * ------------------------------------------------
@@ -987,7 +1632,7 @@ export async function POST(
 
               data: {
                 stock:
-                  afterOutput,
+                  afterOutputUnit,
               },
             },
           );
@@ -997,31 +1642,30 @@ export async function POST(
            * OUTPUT COST
            * ------------------------------------------------
            *
-           * Manufacture output menggunakan averageCost
-           * outlet yang sudah ada.
+           * averageCost dianggap cost per UNIT stock.
            *
-           * Kalau belum ada, fallback purchasePrice.
-           * ------------------------------------------------
+           * Untuk StockCard BASE UNIT, konversikan ke
+           * cost per BASE UNIT.
            */
 
           const outputUnitPrice =
-            finiteNumber(
-              outputStock.averageCost,
-            ) ||
-            finiteNumber(
-              outputStock.barang
-                .purchasePrice,
-            ) ||
-            0;
+            roundMoney(
+              finiteNumber(
+                outputStock.averageCost,
+              ) ||
+                finiteNumber(
+                  outputStock
+                    .barang
+                    .purchasePrice,
+                ) ||
+                0,
+            );
 
-          const outputBaseUnit =
-            String(
-              outputStock.barang
-                .baseUnit ||
-                outputStock.barang
-                  .unit ||
-                "",
-            ).trim();
+          const outputBaseUnitPrice =
+            stockUnitCostToBaseCost(
+              outputUnitPrice,
+              outputConversionRate,
+            );
 
           /*
            * ------------------------------------------------
@@ -1035,7 +1679,8 @@ export async function POST(
                 barangId:
                   outputStock.barangId,
 
-                trxDate: now,
+                trxDate:
+                  now,
 
                 trxType:
                   "MANUFACTURE_OUTPUT",
@@ -1052,20 +1697,23 @@ export async function POST(
                 qtyIn:
                   qtyProduced,
 
-                qtyOut: 0,
+                qtyOut:
+                  0,
 
                 balance:
-                  afterOutput,
+                  afterOutputBase,
 
                 unitPrice:
-                  outputUnitPrice,
+                  outputBaseUnitPrice,
 
                 totalValue:
-                  qtyProduced *
-                  outputUnitPrice,
+                  roundMoney(
+                    qtyProduced *
+                      outputBaseUnitPrice,
+                  ),
 
                 note:
-                  `Hasil Manufacture ${order.number} • Outlet ${order.outlet.name} • ${qtyProduced} ${outputBaseUnit}`,
+                  `Hasil Manufacture ${order.number} • Outlet ${order.outlet.name} • ${qtyProduced} ${outputBaseUnit} • Stock ${beforeOutputUnit} ${outputUnit} → ${afterOutputUnit} ${outputUnit}`,
               },
             },
           );
@@ -1074,32 +1722,37 @@ export async function POST(
            * ------------------------------------------------
            * STOCK MUTATION OUTPUT
            * ------------------------------------------------
+           *
+           * BASE UNIT.
            */
 
-          await tx.stockMutation.create(
-            {
-              data: {
-                outletId: order.outletId,
-                barangId: outputStock.barangId,
-                type: "MANUFACTURE_OUTPUT",
+          await tx.stockMutation.create({
+            data: {
+              outletId:
+                order.outletId,
 
-                qty:
-                  qtyProduced,
+              barangId:
+                outputStock.barangId,
 
-                stockBefore:
-                  beforeOutput,
+              type:
+                "MANUFACTURE_OUTPUT",
 
-                stockAfter:
-                  afterOutput,
+              qty:
+                qtyProduced,
 
-                reference:
-                  order.number,
+              stockBefore:
+                beforeOutputBase,
 
-                description:
-                  `Output Manufacture ${order.number} • Outlet ${order.outlet.name} • ${qtyProduced} ${outputBaseUnit}`,
-              },
+              stockAfter:
+                afterOutputBase,
+
+              reference:
+                order.number,
+
+              description:
+                `Output Manufacture ${order.number} • Outlet ${order.outlet.name} • ${qtyProduced} ${outputBaseUnit} • Stock ${beforeOutputUnit} ${outputUnit} → ${afterOutputUnit} ${outputUnit}`,
             },
-          );
+          });
 
           /*
            * ==================================================
@@ -1111,7 +1764,8 @@ export async function POST(
             await tx.manufactureOrder.update(
               {
                 where: {
-                  id: order.id,
+                  id:
+                    order.id,
                 },
 
                 data: {
@@ -1189,17 +1843,67 @@ export async function POST(
                 outputStock.barang.name,
 
               stockBefore:
-                beforeOutput,
+                beforeOutputUnit,
+
+              stockBeforeBase:
+                beforeOutputBase,
 
               produced:
                 qtyProduced,
 
+              producedUnit:
+                outputBaseUnit,
+
               stockAfter:
-                afterOutput,
+                afterOutputUnit,
+
+              stockAfterBase:
+                afterOutputBase,
 
               unit:
+                outputUnit,
+
+              baseUnit:
                 outputBaseUnit,
+
+              conversionRate:
+                outputConversionRate,
             },
+
+            materials:
+              materialChecks.map(
+                (material) => ({
+                  barangId:
+                    material.barangId,
+
+                  name:
+                    material.barangName,
+
+                  stockBefore:
+                    material.stockBeforeUnit,
+
+                  stockBeforeBase:
+                    material.stockBeforeBase,
+
+                  qtyOut:
+                    material.qtyOut,
+
+                  stockAfter:
+                    material.stockAfterUnit,
+
+                  stockAfterBase:
+                    material.stockAfterBase,
+
+                  unit:
+                    material.unit,
+
+                  baseUnit:
+                    material.baseUnit,
+
+                  conversionRate:
+                    material.conversionRate,
+                }),
+              ),
           };
         },
       );
@@ -1220,7 +1924,8 @@ export async function POST(
         result.order,
 
       stockPolicy: {
-        type: "OUTLET",
+        type:
+          "OUTLET",
 
         outletId:
           result.outlet.id,
@@ -1230,6 +1935,23 @@ export async function POST(
 
         source:
           "OutletStock",
+
+        /*
+         * PENTING:
+         *
+         * OutletStock menggunakan UNIT BARANG.
+         *
+         * Transaction log menggunakan BASE UNIT.
+         */
+
+        unitPolicy:
+          "OUTLET_STOCK_UNIT_TRANSACTION_BASE_UNIT",
+
+        outletStockUnit:
+          "BARANG_UNIT",
+
+        transactionUnit:
+          "BASE_UNIT",
 
         centralStockChanged:
           false,
@@ -1242,6 +1964,9 @@ export async function POST(
 
         outputStock:
           result.output,
+
+        materials:
+          result.materials,
       },
     });
   } catch (error: any) {

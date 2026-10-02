@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   PackageCheck,
   RefreshCw,
@@ -37,7 +43,11 @@ type Supplier = {
   name: string;
 };
 
-type SourceFilter = "ALL" | "PURCHASE" | "DELIVERY_ORDER" | "TRANSFER";
+type SourceFilter =
+  | "ALL"
+  | "PURCHASE"
+  | "DELIVERY_ORDER"
+  | "TRANSFER";
 
 type StatusFilter =
   | "ALL"
@@ -67,10 +77,6 @@ type BarangMasuk = {
   totalItem: number;
   totalReceived: number;
 
-  // =====================================================
-  // VOID
-  // =====================================================
-
   hasVoid?: boolean;
   voidItemCount?: number;
   voidTotalQty?: number;
@@ -85,46 +91,138 @@ type BarangMasuk = {
   supplier?: Supplier | null;
 };
 
+type MonthOption = {
+  value: string;
+  label: string;
+  year: number;
+  month: number;
+};
+
+type LoginUser = {
+  id?: number;
+  role?: string | null;
+  outletId?: number | null;
+  outlet?: Outlet | null;
+};
+
 export default function OutletBarangMasukPage() {
   const router = useRouter();
 
+  // =====================================================
+  // DATA
+  // =====================================================
+
   const [data, setData] = useState<BarangMasuk[]>([]);
-  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   // =====================================================
-  // USER LOGIN
+  // USER
   // =====================================================
 
   const [role, setRole] = useState("");
   const [userOutletId, setUserOutletId] =
     useState<number | null>(null);
+  const [loginOutlet, setLoginOutlet] =
+    useState<Outlet | null>(null);
+  const [userReady, setUserReady] = useState(false);
 
   const isAdminPusat =
     role === "ADMIN" || role === "MANAGER";
 
-  const isOutletAdmin = role === "OUTLET_ADMIN";
+  const isOutletAdmin =
+    role === "OUTLET_ADMIN";
+
+  const hasPeriodFilterRole =
+    isAdminPusat || isOutletAdmin;
 
   // =====================================================
-  // FILTER ADMIN PUSAT
+  // CURRENT MONTH
   // =====================================================
 
-  const [selectedOutlet, setSelectedOutlet] = useState("ALL");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const currentDate = useMemo(() => new Date(), []);
+
+  const currentYear =
+    currentDate.getFullYear();
+
+  const currentMonth =
+    currentDate.getMonth();
+
+  const currentMonthValue =
+    `${currentYear}-${String(
+      currentMonth + 1
+    ).padStart(2, "0")}`;
 
   // =====================================================
-  // FILTER SUMBER
+  // MONTH OPTIONS
   // =====================================================
+
+  const monthOptions = useMemo<MonthOption[]>(() => {
+    const options: MonthOption[] = [];
+
+    for (
+      let month = 0;
+      month <= currentMonth;
+      month++
+    ) {
+      const date = new Date(
+        currentYear,
+        month,
+        1
+      );
+
+      const value =
+        `${currentYear}-${String(
+          month + 1
+        ).padStart(2, "0")}`;
+
+      const rawLabel =
+        date.toLocaleDateString(
+          "id-ID",
+          {
+            month: "long",
+            year: "numeric",
+          }
+        );
+
+      options.push({
+        value,
+        label:
+          rawLabel.charAt(0).toUpperCase() +
+          rawLabel.slice(1),
+        year: currentYear,
+        month,
+      });
+    }
+
+    return options.reverse();
+  }, [
+    currentYear,
+    currentMonth,
+  ]);
+
+  // =====================================================
+  // FILTER
+  // =====================================================
+
+  const [selectedOutlet, setSelectedOutlet] =
+    useState("ALL");
+
+  const [dateFrom, setDateFrom] =
+    useState("");
+
+  const [dateTo, setDateTo] =
+    useState("");
+
+  const [selectedMonth, setSelectedMonth] =
+    useState(currentMonthValue);
+
+  const [customDateMode, setCustomDateMode] =
+    useState(false);
 
   const [selectedSource, setSelectedSource] =
     useState<SourceFilter>("ALL");
-
-  const defaultSourceAppliedRef = useRef(false);
-
-  // =====================================================
-  // FILTER STATUS
-  // =====================================================
 
   const [selectedStatus, setSelectedStatus] =
     useState<StatusFilter>("ALL");
@@ -136,27 +234,562 @@ export default function OutletBarangMasukPage() {
     useRef<HTMLDivElement | null>(null);
 
   // =====================================================
-  // CLOSE FILTER MENUS WHEN CLICK OUTSIDE
+  // REQUEST CONTROL
+  // =====================================================
+
+  const abortControllerRef =
+    useRef<AbortController | null>(null);
+
+  const requestIdRef =
+    useRef(0);
+
+  const initialLoadDoneRef =
+    useRef(false);
+
+  const manualRefreshRef =
+    useRef(false);
+
+  // =====================================================
+  // MONTH RANGE
+  // =====================================================
+
+  const getMonthDateRange = useCallback(
+    (monthValue: string) => {
+      if (!monthValue) {
+        return {
+          from: "",
+          to: "",
+        };
+      }
+
+      const [
+        yearString,
+        monthString,
+      ] = monthValue.split("-");
+
+      const year = Number(
+        yearString
+      );
+
+      const month = Number(
+        monthString
+      );
+
+      if (
+        !Number.isInteger(year) ||
+        !Number.isInteger(month) ||
+        month < 1 ||
+        month > 12
+      ) {
+        return {
+          from: "",
+          to: "",
+        };
+      }
+
+      const from =
+        `${year}-${String(
+          month
+        ).padStart(2, "0")}-01`;
+
+      const lastDay =
+        new Date(
+          year,
+          month,
+          0
+        ).getDate();
+
+      const to =
+        `${year}-${String(
+          month
+        ).padStart(2, "0")}-${String(
+          lastDay
+        ).padStart(2, "0")}`;
+
+      return {
+        from,
+        to,
+      };
+    },
+    []
+  );
+
+  // =====================================================
+  // INITIAL PERIOD
   // =====================================================
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      const target = event.target as Node;
+    const range =
+      getMonthDateRange(
+        currentMonthValue
+      );
 
-      if (
-        statusMenuRef.current &&
-        !statusMenuRef.current.contains(target)
-      ) {
-        setStatusMenuOpen(false);
+    setSelectedMonth(
+      currentMonthValue
+    );
+
+    setDateFrom(
+      range.from
+    );
+
+    setDateTo(
+      range.to
+    );
+  }, [
+    currentMonthValue,
+    getMonthDateRange,
+  ]);
+
+  // =====================================================
+  // DEBOUNCE SEARCH
+  //
+  // Search dilakukan client-side.
+  // Tidak perlu request API setiap ketikan.
+  // =====================================================
+
+  useEffect(() => {
+    const timer =
+      window.setTimeout(() => {
+        setDebouncedSearch(
+          search
+        );
+      }, 180);
+
+    return () => {
+      window.clearTimeout(
+        timer
+      );
+    };
+  }, [search]);
+
+  // =====================================================
+  // LOAD CURRENT USER
+  //
+  // HANYA SEKALI.
+  //
+  // Sebelumnya /api/me dipanggil setiap loadData().
+  // Sekarang user session disimpan di state.
+  // =====================================================
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCurrentUser() {
+      try {
+        const response =
+          await fetch(
+            "/api/me",
+            {
+              method: "GET",
+              cache: "no-store",
+            }
+          );
+
+        const json =
+          await response.json();
+
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        if (
+          !response.ok ||
+          !json.success
+        ) {
+          console.error(
+            "LOAD USER:",
+            json.message
+          );
+
+          setRole("");
+          setUserOutletId(null);
+          setLoginOutlet(null);
+          setUserReady(true);
+          return;
+        }
+
+        const user:
+          LoginUser =
+          json.user || {};
+
+        const loginRole =
+          String(
+            user.role || ""
+          ).toUpperCase();
+
+        const outletId =
+          user.outletId !==
+            null &&
+          user.outletId !==
+            undefined
+            ? Number(
+                user.outletId
+              )
+            : null;
+
+        setRole(
+          loginRole
+        );
+
+        setUserOutletId(
+          Number.isInteger(
+            outletId
+          )
+            ? outletId
+            : null
+        );
+
+        if (
+          user.outlet &&
+          Number.isInteger(
+            Number(
+              user.outlet.id
+            )
+          )
+        ) {
+          setLoginOutlet({
+            id: Number(
+              user.outlet.id
+            ),
+            code:
+              user.outlet
+                .code || "",
+            name:
+              user.outlet
+                .name || "",
+          });
+        }
+
+        // OUTLET_ADMIN selalu PURCHASE sebagai default.
+        if (
+          loginRole ===
+          "OUTLET_ADMIN"
+        ) {
+          setSelectedSource(
+            "PURCHASE"
+          );
+        }
+
+        setUserReady(true);
+      } catch (error) {
+        if (
+          cancelled
+        ) {
+          return;
+        }
+
+        console.error(
+          "LOAD USER ERROR:",
+          error
+        );
+
+        setRole("");
+        setUserOutletId(null);
+        setLoginOutlet(null);
+        setUserReady(true);
       }
     }
 
-    if (statusMenuOpen) {
-      document.addEventListener(
-        "mousedown",
-        handleClickOutside
-      );
+    loadCurrentUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // =====================================================
+  // LOAD BARANG MASUK
+  //
+  // OPTIMIZATION:
+  // 1. Tidak fetch /api/me lagi.
+  // 2. Abort request sebelumnya.
+  // 3. Request ID mencegah response lama menimpa data baru.
+  // =====================================================
+
+  const loadData = useCallback(
+    async (
+      options?: {
+        manual?: boolean;
+      }
+    ) => {
+      if (
+        !userReady ||
+        !role
+      ) {
+        return;
+      }
+
+      const currentRequestId =
+        ++requestIdRef.current;
+
+      if (
+        abortControllerRef.current
+      ) {
+        abortControllerRef.current.abort();
+      }
+
+      const controller =
+        new AbortController();
+
+      abortControllerRef.current =
+        controller;
+
+      try {
+        setLoading(true);
+
+        const params =
+          new URLSearchParams();
+
+        // -------------------------------------------------
+        // OUTLET
+        // -------------------------------------------------
+
+        if (
+          isOutletAdmin
+        ) {
+          if (
+            userOutletId ===
+            null
+          ) {
+            setData([]);
+            return;
+          }
+
+          params.set(
+            "outletId",
+            String(
+              userOutletId
+            )
+          );
+        } else if (
+          isAdminPusat &&
+          selectedOutlet !==
+            "ALL"
+        ) {
+          params.set(
+            "outletId",
+            selectedOutlet
+          );
+        }
+
+        // -------------------------------------------------
+        // PERIODE
+        // -------------------------------------------------
+
+        if (
+          hasPeriodFilterRole
+        ) {
+          if (dateFrom) {
+            params.set(
+              "dateFrom",
+              dateFrom
+            );
+          }
+
+          if (dateTo) {
+            params.set(
+              "dateTo",
+              dateTo
+            );
+          }
+        }
+
+        const query =
+          params.toString();
+
+        const response =
+          await fetch(
+            `/api/outlet/barang-masuk${
+              query
+                ? `?${query}`
+                : ""
+            }`,
+            {
+              method: "GET",
+              cache: "no-store",
+              signal:
+                controller.signal,
+            }
+          );
+
+        const json =
+          await response.json();
+
+        if (
+          controller.signal.aborted ||
+          currentRequestId !==
+            requestIdRef.current
+        ) {
+          return;
+        }
+
+        if (
+          !response.ok ||
+          !json.success
+        ) {
+          console.error(
+            "LOAD BARANG MASUK:",
+            json.message
+          );
+
+          setData([]);
+          return;
+        }
+
+        const rows =
+          Array.isArray(
+            json.data
+          )
+            ? json.data
+            : [];
+
+        setData(
+          rows
+        );
+
+        initialLoadDoneRef.current =
+          true;
+
+        if (
+          options?.manual
+        ) {
+          manualRefreshRef.current =
+            true;
+        }
+      } catch (error) {
+        if (
+          error instanceof
+            DOMException &&
+          error.name ===
+            "AbortError"
+        ) {
+          return;
+        }
+
+        if (
+          controller.signal
+            .aborted ||
+          currentRequestId !==
+            requestIdRef.current
+        ) {
+          return;
+        }
+
+        console.error(
+          "LOAD OUTLET BARANG MASUK ERROR:",
+          error
+        );
+
+        setData([]);
+      } finally {
+        if (
+          currentRequestId ===
+          requestIdRef.current
+        ) {
+          setLoading(false);
+        }
+      }
+    },
+    [
+      userReady,
+      role,
+      isOutletAdmin,
+      isAdminPusat,
+      userOutletId,
+      selectedOutlet,
+      dateFrom,
+      dateTo,
+      hasPeriodFilterRole,
+    ]
+  );
+
+  // =====================================================
+  // INITIAL + FILTER LOAD
+  //
+  // HANYA SATU EFFECT.
+  //
+  // Ini menghilangkan masalah:
+  // - initial useEffect
+  // - effect filter
+  // - loadData
+  // yang sebelumnya dapat menyebabkan request ganda.
+  // =====================================================
+
+  useEffect(() => {
+    if (
+      !userReady ||
+      !role
+    ) {
+      return;
     }
+
+    if (
+      hasPeriodFilterRole &&
+      (!dateFrom ||
+        !dateTo)
+    ) {
+      return;
+    }
+
+    loadData();
+  }, [
+    userReady,
+    role,
+    hasPeriodFilterRole,
+    dateFrom,
+    dateTo,
+    selectedOutlet,
+    userOutletId,
+    loadData,
+  ]);
+
+  // =====================================================
+  // CLEANUP REQUEST
+  // =====================================================
+
+  useEffect(() => {
+    return () => {
+      if (
+        abortControllerRef.current
+      ) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // =====================================================
+  // CLOSE STATUS MENU
+  // =====================================================
+
+  useEffect(() => {
+    if (!statusMenuOpen) {
+      return;
+    }
+
+    function handleClickOutside(
+      event: MouseEvent
+    ) {
+      const target =
+        event.target as Node;
+
+      if (
+        statusMenuRef.current &&
+        !statusMenuRef.current.contains(
+          target
+        )
+      ) {
+        setStatusMenuOpen(
+          false
+        );
+      }
+    }
+
+    document.addEventListener(
+      "mousedown",
+      handleClickOutside
+    );
 
     return () => {
       document.removeEventListener(
@@ -169,35 +802,43 @@ export default function OutletBarangMasukPage() {
   ]);
 
   // =====================================================
-  // SOURCE LABEL
+  // SOURCE
   // =====================================================
 
   function sourceFilterLabel(
     source: SourceFilter
   ) {
-    if (source === "PURCHASE") {
-      return "Purchase Order";
+    switch (source) {
+      case "PURCHASE":
+        return "Purchase Order";
+      case "DELIVERY_ORDER":
+        return "Delivery Order";
+      case "TRANSFER":
+        return "Transfer Antar Outlet";
+      default:
+        return "Semua Transaksi";
     }
-
-    if (source === "DELIVERY_ORDER") {
-      return "Delivery Order";
-    }
-
-    if (source === "TRANSFER") {
-      return "Transfer Antar Outlet";
-    }
-
-    return "Semua Transaksi";
   }
 
-  function getTransactionType(item: BarangMasuk): Exclude<SourceFilter, "ALL"> {
-    if (item.sumber === "PURCHASE") {
+  function getTransactionType(
+    item: BarangMasuk
+  ): Exclude<
+    SourceFilter,
+    "ALL"
+  > {
+    if (
+      item.sumber ===
+      "PURCHASE"
+    ) {
       return "PURCHASE";
     }
 
     if (
-      item.jenisTransfer === "OUTLET_TO_OUTLET" ||
-      Boolean(item.sourceOutletId)
+      item.jenisTransfer ===
+        "OUTLET_TO_OUTLET" ||
+      Boolean(
+        item.sourceOutletId
+      )
     ) {
       return "TRANSFER";
     }
@@ -206,254 +847,145 @@ export default function OutletBarangMasukPage() {
   }
 
   // =====================================================
-  // STATUS LABEL
+  // STATUS
   // =====================================================
 
   function statusFilterLabel(
     status: StatusFilter
   ) {
-    if (status === "RECEIVED") {
-      return "Diterima";
-    }
-
-    if (status === "PARTIAL") {
-      return "Sebagian";
-    }
-
-    if (status === "SENT") {
-      return "Menunggu";
-    }
-
-    if (status === "APPROVED") {
-      return "Approved";
-    }
-
-    if (status === "DRAFT") {
-      return "Draft";
-    }
-
-    return "Semua Status";
-  }
-
-  // =====================================================
-  // LOAD DATA
-  // =====================================================
-
-  async function loadData() {
-    try {
-      setLoading(true);
-
-      // =================================================
-      // CURRENT USER
-      // =================================================
-
-      const meRes = await fetch("/api/me", {
-        cache: "no-store",
-      });
-
-      const meJson = await meRes.json();
-
-      if (!meRes.ok || !meJson.success) {
-        console.error(
-          "LOAD USER:",
-          meJson.message
-        );
-
-        setData([]);
-        return;
-      }
-
-      const loginUser = meJson.user;
-
-      const loginRole = String(
-        loginUser?.role || ""
-      ).toUpperCase();
-
-      const loginOutletId = loginUser?.outletId
-        ? Number(loginUser.outletId)
-        : null;
-
-      setRole(loginRole);
-
-      if (
-        loginRole === "OUTLET_ADMIN" &&
-        !defaultSourceAppliedRef.current
-      ) {
-        setSelectedSource("PURCHASE");
-        defaultSourceAppliedRef.current = true;
-      }
-
-      setUserOutletId(
-        Number.isInteger(loginOutletId)
-          ? loginOutletId
-          : null
-      );
-
-      // =================================================
-      // BARANG MASUK OUTLET
-      // =================================================
-
-      const params = new URLSearchParams();
-
-      if (
-        loginRole === "ADMIN" ||
-        loginRole === "MANAGER"
-      ) {
-        if (selectedOutlet !== "ALL") {
-          params.set(
-            "outletId",
-            selectedOutlet
-          );
-        }
-
-        if (dateFrom) {
-          params.set(
-            "dateFrom",
-            dateFrom
-          );
-        }
-
-        if (dateTo) {
-          params.set(
-            "dateTo",
-            dateTo
-          );
-        }
-      }
-
-      const query = params.toString();
-
-      const res = await fetch(
-        `/api/outlet/barang-masuk${
-          query ? `?${query}` : ""
-        }`,
-        {
-          method: "GET",
-          cache: "no-store",
-        }
-      );
-
-      const json = await res.json();
-
-      console.log(
-        "FRONTEND BARANG MASUK:",
-        json
-      );
-
-      if (!res.ok || !json.success) {
-        console.error(
-          "LOAD BARANG MASUK:",
-          json.message
-        );
-
-        setData([]);
-        return;
-      }
-
-      const rows: BarangMasuk[] =
-        Array.isArray(json.data)
-          ? json.data
-          : [];
-
-      setData(rows);
-    } catch (error) {
-      console.error(
-        "LOAD OUTLET BARANG MASUK ERROR:",
-        error
-      );
-
-      setData([]);
-    } finally {
-      setLoading(false);
+    switch (status) {
+      case "RECEIVED":
+        return "Diterima";
+      case "PARTIAL":
+        return "Sebagian";
+      case "SENT":
+        return "Menunggu";
+      case "APPROVED":
+        return "Approved";
+      case "DRAFT":
+        return "Draft";
+      default:
+        return "Semua Status";
     }
   }
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  // =====================================================
-  // RELOAD SAAT FILTER ADMIN BERUBAH
-  // =====================================================
-
-  useEffect(() => {
-    if (!role) {
-      return;
-    }
-
-    if (!isAdminPusat) {
-      return;
-    }
-
-    loadData();
-  }, [
-    selectedOutlet,
-    dateFrom,
-    dateTo,
-  ]);
 
   // =====================================================
   // OUTLET OPTIONS
+  //
+  // Untuk OUTLET_ADMIN tidak bergantung pada data.
+  // Jadi outlet login tetap tampil meskipun bulan tersebut
+  // belum memiliki transaksi.
   // =====================================================
 
-  const outletOptions = useMemo(() => {
-    const map = new Map<number, Outlet>();
+  const outletOptions =
+    useMemo(() => {
+      const map =
+        new Map<
+          number,
+          Outlet
+        >();
 
-    data.forEach((item) => {
-      const outlet =
-        item.destinationOutlet ||
-        item.outlet;
-
-      if (outlet && outlet.id) {
-        map.set(outlet.id, outlet);
+      if (
+        loginOutlet
+      ) {
+        map.set(
+          loginOutlet.id,
+          loginOutlet
+        );
       }
-    });
 
-    return Array.from(map.values()).sort(
-      (a, b) =>
-        `${a.code} ${a.name}`.localeCompare(
-          `${b.code} ${b.name}`,
-          "id"
-        )
-    );
-  }, [data]);
+      data.forEach(
+        (item) => {
+          const outlet =
+            item.destinationOutlet ||
+            item.outlet;
+
+          if (
+            outlet &&
+            Number.isInteger(
+              Number(
+                outlet.id
+              )
+            )
+          ) {
+            map.set(
+              Number(
+                outlet.id
+              ),
+              {
+                id: Number(
+                  outlet.id
+                ),
+                code:
+                  outlet.code ||
+                  "",
+                name:
+                  outlet.name ||
+                  "",
+              }
+            );
+          }
+        }
+      );
+
+      return Array.from(
+        map.values()
+      ).sort(
+        (a, b) =>
+          `${a.code} ${a.name}`.localeCompare(
+            `${b.code} ${b.name}`,
+            "id"
+          )
+      );
+    }, [
+      data,
+      loginOutlet,
+    ]);
 
   // =====================================================
-  // DATE FORMAT
+  // DATE
   // =====================================================
 
-  function getDateOnly(value: string) {
+  function getDateOnly(
+    value: string
+  ) {
     if (!value) {
       return "";
     }
 
-    const date = new Date(value);
+    const date =
+      new Date(value);
 
-    if (Number.isNaN(date.getTime())) {
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
       return "";
     }
 
-    const year = date.getFullYear();
-
-    const month = String(
+    return `${date.getFullYear()}-${String(
       date.getMonth() + 1
-    ).padStart(2, "0");
-
-    const day = String(
+    ).padStart(2, "0")}-${String(
       date.getDate()
-    ).padStart(2, "0");
-
-    return `${year}-${month}-${day}`;
+    ).padStart(2, "0")}`;
   }
 
-  function formatDate(value: string) {
+  function formatDate(
+    value: string
+  ) {
     if (!value) {
       return "-";
     }
 
-    const date = new Date(value);
+    const date =
+      new Date(value);
 
-    if (Number.isNaN(date.getTime())) {
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
       return "-";
     }
 
@@ -468,297 +1000,390 @@ export default function OutletBarangMasukPage() {
   }
 
   // =====================================================
-  // FILTER DATA
+  // FILTERED DATA
+  //
+  // Server sudah memfilter:
+  // - outlet
+  // - periode
+  //
+  // Client hanya memfilter:
+  // - search
+  // - source
+  // - status
+  //
+  // Ini membuat kerja browser lebih ringan.
   // =====================================================
 
-  const filteredData = useMemo(() => {
-    const keyword = search
-      .toLowerCase()
-      .trim();
+  const filteredData =
+    useMemo(() => {
+      const keyword =
+        debouncedSearch
+          .toLowerCase()
+          .trim();
 
-    return data.filter((item) => {
-      const destinationOutlet =
-        item.destinationOutlet ||
-        item.outlet;
+      return data.filter(
+        (item) => {
+          const destinationOutlet =
+            item.destinationOutlet ||
+            item.outlet;
 
-      const sourceOutlet =
-        item.sourceOutlet;
+          const sourceOutlet =
+            item.sourceOutlet;
 
-      const itemStatus =
-        String(
-          item.status || ""
-        ).toUpperCase();
+          const itemStatus =
+            String(
+              item.status || ""
+            ).toUpperCase();
 
-      // =============================================
-      // SECURITY CLIENT
-      // =============================================
+          // ---------------------------------------------
+          // CLIENT SECURITY
+          // ---------------------------------------------
 
-      if (
-        isOutletAdmin &&
-        userOutletId !== null
-      ) {
-        if (
-          Number(destinationOutlet?.id) !==
-          Number(userOutletId)
-        ) {
-          return false;
+          if (
+            isOutletAdmin &&
+            userOutletId !==
+              null
+          ) {
+            if (
+              Number(
+                destinationOutlet?.id
+              ) !==
+              Number(
+                userOutletId
+              )
+            ) {
+              return false;
+            }
+          }
+
+          // ---------------------------------------------
+          // SOURCE
+          // ---------------------------------------------
+
+          if (
+            selectedSource !==
+              "ALL" &&
+            getTransactionType(
+              item
+            ) !==
+              selectedSource
+          ) {
+            return false;
+          }
+
+          // ---------------------------------------------
+          // STATUS
+          // ---------------------------------------------
+
+          if (
+            selectedStatus !==
+              "ALL" &&
+            itemStatus !==
+              selectedStatus
+          ) {
+            return false;
+          }
+
+          // ---------------------------------------------
+          // OUTLET
+          // ---------------------------------------------
+
+          if (
+            isAdminPusat &&
+            selectedOutlet !==
+              "ALL"
+          ) {
+            if (
+              Number(
+                destinationOutlet?.id
+              ) !==
+              Number(
+                selectedOutlet
+              )
+            ) {
+              return false;
+            }
+          }
+
+          // ---------------------------------------------
+          // SEARCH
+          // ---------------------------------------------
+
+          if (
+            keyword
+          ) {
+            const values = [
+              item.nomor,
+              item.status,
+              item.sumber,
+              item.jenisTransfer,
+              destinationOutlet?.code,
+              destinationOutlet?.name,
+              sourceOutlet?.code,
+              sourceOutlet?.name,
+              item.supplier?.code,
+              item.supplier?.name,
+              item.hasVoid
+                ? "void"
+                : "",
+            ];
+
+            const matches =
+              values.some(
+                (value) =>
+                  String(
+                    value || ""
+                  )
+                    .toLowerCase()
+                    .includes(
+                      keyword
+                    )
+              );
+
+            if (!matches) {
+              return false;
+            }
+          }
+
+          // ---------------------------------------------
+          // LOCAL DATE SAFETY FILTER
+          //
+          // API sudah melakukan filter periode.
+          // Ini hanya menjaga konsistensi apabila data
+          // API memiliki tanggal di luar range.
+          // ---------------------------------------------
+
+          if (
+            hasPeriodFilterRole
+          ) {
+            const itemDate =
+              getDateOnly(
+                item.tanggal
+              );
+
+            if (
+              dateFrom &&
+              itemDate &&
+              itemDate <
+                dateFrom
+            ) {
+              return false;
+            }
+
+            if (
+              dateTo &&
+              itemDate &&
+              itemDate >
+                dateTo
+            ) {
+              return false;
+            }
+          }
+
+          return true;
         }
-      }
-
-      // =============================================
-      // FILTER SUMBER
-      // =============================================
-
-      if (
-        selectedSource !== "ALL" &&
-        getTransactionType(item) !== selectedSource
-      ) {
-        return false;
-      }
-
-      // =============================================
-      // FILTER STATUS
-      // =============================================
-
-      if (
-        selectedStatus !== "ALL"
-      ) {
-        if (
-          itemStatus !==
-          selectedStatus
-        ) {
-          return false;
-        }
-      }
-
-      // =============================================
-      // SEARCH
-      // =============================================
-
-      if (keyword) {
-        const matchesSearch =
-          item.nomor
-            ?.toLowerCase()
-            .includes(keyword) ||
-
-          item.status
-            ?.toLowerCase()
-            .includes(keyword) ||
-
-          item.sumber
-            ?.toLowerCase()
-            .includes(keyword) ||
-
-          item.jenisTransfer
-            ?.toLowerCase()
-            .includes(keyword) ||
-
-          destinationOutlet?.code
-            ?.toLowerCase()
-            .includes(keyword) ||
-
-          destinationOutlet?.name
-            ?.toLowerCase()
-            .includes(keyword) ||
-
-          sourceOutlet?.code
-            ?.toLowerCase()
-            .includes(keyword) ||
-
-          sourceOutlet?.name
-            ?.toLowerCase()
-            .includes(keyword) ||
-
-          item.supplier?.code
-            ?.toLowerCase()
-            .includes(keyword) ||
-
-          item.supplier?.name
-            ?.toLowerCase()
-            .includes(keyword) ||
-
-          (
-            item.hasVoid
-              ? "void"
-              : ""
-          ).includes(keyword);
-
-        if (!matchesSearch) {
-          return false;
-        }
-      }
-
-      // =============================================
-      // FILTER OUTLET
-      // =============================================
-
-      if (
-        isAdminPusat &&
-        selectedOutlet !== "ALL"
-      ) {
-        if (
-          Number(destinationOutlet?.id) !==
-          Number(selectedOutlet)
-        ) {
-          return false;
-        }
-      }
-
-      // =============================================
-      // FILTER TANGGAL
-      // =============================================
-
-      if (
-        isAdminPusat &&
-        dateFrom
-      ) {
-        const itemDate =
-          getDateOnly(item.tanggal);
-
-        if (
-          itemDate &&
-          itemDate < dateFrom
-        ) {
-          return false;
-        }
-      }
-
-      if (
-        isAdminPusat &&
-        dateTo
-      ) {
-        const itemDate =
-          getDateOnly(item.tanggal);
-
-        if (
-          itemDate &&
-          itemDate > dateTo
-        ) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [
-    data,
-    search,
-    selectedSource,
-    selectedStatus,
-    isAdminPusat,
-    isOutletAdmin,
-    userOutletId,
-    selectedOutlet,
-    dateFrom,
-    dateTo,
-  ]);
+      );
+    }, [
+      data,
+      debouncedSearch,
+      selectedSource,
+      selectedStatus,
+      isAdminPusat,
+      isOutletAdmin,
+      userOutletId,
+      selectedOutlet,
+      dateFrom,
+      dateTo,
+      hasPeriodFilterRole,
+    ]);
 
   // =====================================================
-  // TRANSACTION TYPE COUNTS
+  // SOURCE COUNTS
   // =====================================================
 
-  const sourceCounts = useMemo(() => {
-    const counts: Record<Exclude<SourceFilter, "ALL">, number> = {
-      PURCHASE: 0,
-      DELIVERY_ORDER: 0,
-      TRANSFER: 0,
-    };
+  const sourceCounts =
+    useMemo(() => {
+      const counts: Record<
+        Exclude<
+          SourceFilter,
+          "ALL"
+        >,
+        number
+      > = {
+        PURCHASE: 0,
+        DELIVERY_ORDER: 0,
+        TRANSFER: 0,
+      };
 
-    data.forEach((item) => {
-      const destinationOutlet =
-        item.destinationOutlet || item.outlet;
+      data.forEach(
+        (item) => {
+          const destinationOutlet =
+            item.destinationOutlet ||
+            item.outlet;
 
-      if (
-        isOutletAdmin &&
-        userOutletId !== null &&
-        Number(destinationOutlet?.id) !== Number(userOutletId)
-      ) {
-        return;
-      }
+          if (
+            isOutletAdmin &&
+            userOutletId !==
+              null &&
+            Number(
+              destinationOutlet?.id
+            ) !==
+              Number(
+                userOutletId
+              )
+          ) {
+            return;
+          }
 
-      counts[getTransactionType(item)]++;
-    });
+          counts[
+            getTransactionType(
+              item
+            )
+          ]++;
+        }
+      );
 
-    return counts;
-  }, [data, isOutletAdmin, userOutletId]);
+      return counts;
+    }, [
+      data,
+      isOutletAdmin,
+      userOutletId,
+    ]);
 
   // =====================================================
   // KPI
   // =====================================================
 
-  const statistics = useMemo(() => {
-    let received = 0;
-    let waiting = 0;
-    let partial = 0;
-    let voidCount = 0;
+  const statistics =
+    useMemo(() => {
+      let received = 0;
+      let waiting = 0;
+      let partial = 0;
+      let voidCount = 0;
 
-    filteredData.forEach((item) => {
-      const status = String(
-        item.status || ""
-      ).toUpperCase();
+      filteredData.forEach(
+        (item) => {
+          const status =
+            String(
+              item.status || ""
+            ).toUpperCase();
 
-      if (
-        status === "RECEIVED" ||
-        status === "SELESAI"
-      ) {
-        received++;
-      } else if (status === "PARTIAL") {
-        partial++;
-      } else {
-        waiting++;
-      }
+          if (
+            status ===
+              "RECEIVED" ||
+            status ===
+              "SELESAI"
+          ) {
+            received++;
+          } else if (
+            status ===
+            "PARTIAL"
+          ) {
+            partial++;
+          } else {
+            waiting++;
+          }
 
-      if (
-        item.hasVoid &&
-        Number(item.voidItemCount ?? 0) > 0
-      ) {
-        voidCount++;
-      }
-    });
+          if (
+            item.hasVoid &&
+            Number(
+              item.voidItemCount ??
+                0
+            ) > 0
+          ) {
+            voidCount++;
+          }
+        }
+      );
 
-    return {
-      total: filteredData.length,
-      received,
-      waiting,
-      partial,
-      voidCount,
-    };
-  }, [filteredData]);
+      return {
+        total:
+          filteredData.length,
+        received,
+        waiting,
+        partial,
+        voidCount,
+      };
+    }, [
+      filteredData,
+    ]);
 
   // =====================================================
-  // RESET FILTER
+  // RESET
   // =====================================================
 
   function resetFilter() {
-    setSelectedOutlet("ALL");
-    setDateFrom("");
-    setDateTo("");
+    const range =
+      getMonthDateRange(
+        currentMonthValue
+      );
+
+    setSelectedOutlet(
+      "ALL"
+    );
+
+    setSelectedMonth(
+      currentMonthValue
+    );
+
+    setCustomDateMode(
+      false
+    );
+
+    setDateFrom(
+      range.from
+    );
+
+    setDateTo(
+      range.to
+    );
+
     setSearch("");
-    setSelectedSource(isOutletAdmin ? "PURCHASE" : "ALL");
-    setSelectedStatus("ALL");
-    setStatusMenuOpen(false);
+
+    setSelectedSource(
+      isOutletAdmin
+        ? "PURCHASE"
+        : "ALL"
+    );
+
+    setSelectedStatus(
+      "ALL"
+    );
+
+    setStatusMenuOpen(
+      false
+    );
   }
 
   const hasActiveFilter =
-    selectedOutlet !== "ALL" ||
-    dateFrom ||
-    dateTo ||
-    search ||
-    selectedSource !== "ALL" ||
-    selectedStatus !== "ALL";
+    selectedOutlet !==
+      "ALL" ||
+    search.length > 0 ||
+    selectedSource !==
+      "ALL" ||
+    selectedStatus !==
+      "ALL" ||
+    customDateMode ||
+    selectedMonth !==
+      currentMonthValue;
 
   // =====================================================
   // STATUS BADGE
   // =====================================================
 
-  function statusBadge(status: string) {
+  function statusBadge(
+    status: string
+  ) {
     const value =
-      String(status || "")
-        .toUpperCase();
+      String(
+        status || ""
+      ).toUpperCase();
 
     if (
-      value === "RECEIVED" ||
-      value === "SELESAI"
+      value ===
+        "RECEIVED" ||
+      value ===
+        "SELESAI"
     ) {
       return (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 ring-1 ring-inset ring-emerald-200">
@@ -768,7 +1393,9 @@ export default function OutletBarangMasukPage() {
       );
     }
 
-    if (value === "PARTIAL") {
+    if (
+      value === "PARTIAL"
+    ) {
       return (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 ring-1 ring-inset ring-amber-200">
           <Clock3 size={13} />
@@ -777,7 +1404,9 @@ export default function OutletBarangMasukPage() {
       );
     }
 
-    if (value === "SENT") {
+    if (
+      value === "SENT"
+    ) {
       return (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 ring-1 ring-inset ring-blue-200">
           <Truck size={13} />
@@ -786,17 +1415,23 @@ export default function OutletBarangMasukPage() {
       );
     }
 
-    if (value === "APPROVED") {
+    if (
+      value === "APPROVED"
+    ) {
       return (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 ring-1 ring-inset ring-violet-200">
+          <CheckCircle2 size={13} />
           Approved
         </span>
       );
     }
 
-    if (value === "DRAFT") {
+    if (
+      value === "DRAFT"
+    ) {
       return (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600 ring-1 ring-inset ring-slate-200">
+          <FileText size={13} />
           Draft
         </span>
       );
@@ -813,19 +1448,27 @@ export default function OutletBarangMasukPage() {
   // VOID BADGE
   // =====================================================
 
-  function voidBadge(item: BarangMasuk) {
+  function voidBadge(
+    item: BarangMasuk
+  ) {
+    const count =
+      Number(
+        item.voidItemCount ??
+          0
+      );
+
     if (
       !item.hasVoid ||
-      Number(item.voidItemCount ?? 0) <= 0
+      count <= 0
     ) {
       return null;
     }
 
-    const voidItemCount =
-      Number(item.voidItemCount ?? 0);
-
-    const voidTotalQty =
-      Number(item.voidTotalQty ?? 0);
+    const qty =
+      Number(
+        item.voidTotalQty ??
+          0
+      );
 
     return (
       <div className="flex flex-col items-center gap-1">
@@ -835,8 +1478,8 @@ export default function OutletBarangMasukPage() {
         </span>
 
         <span className="text-[10px] font-semibold text-red-500">
-          {voidItemCount} item · qty{" "}
-          {voidTotalQty.toLocaleString(
+          {count} item · qty{" "}
+          {qty.toLocaleString(
             "id-ID"
           )}
         </span>
@@ -848,14 +1491,22 @@ export default function OutletBarangMasukPage() {
   // SOURCE BADGE
   // =====================================================
 
-  function sourceBadge(item: BarangMasuk) {
+  function sourceBadge(
+    item: BarangMasuk
+  ) {
     if (
-      item.sumber === "TRANSFER"
+      item.sumber ===
+      "TRANSFER"
     ) {
-      if (
+      const antarOutlet =
         item.jenisTransfer ===
           "OUTLET_TO_OUTLET" ||
-        item.sourceOutletId
+        Boolean(
+          item.sourceOutletId
+        );
+
+      if (
+        antarOutlet
       ) {
         return (
           <div className="flex min-w-[190px] flex-col items-start gap-2">
@@ -872,7 +1523,11 @@ export default function OutletBarangMasukPage() {
                 />
                 Dari{" "}
                 <span className="font-semibold text-slate-700">
-                  {item.sourceOutlet.code}
+                  {
+                    item
+                      .sourceOutlet
+                      .code
+                  }
                 </span>
               </div>
             )}
@@ -913,8 +1568,17 @@ export default function OutletBarangMasukPage() {
             />
 
             <span>
-              {item.supplier.code} ·{" "}
-              {item.supplier.name}
+              {
+                item
+                  .supplier
+                  .code
+              }{" "}
+              ·{" "}
+              {
+                item
+                  .supplier
+                  .name
+              }
             </span>
           </div>
         )}
@@ -926,7 +1590,9 @@ export default function OutletBarangMasukPage() {
   // DETAIL
   // =====================================================
 
-  function bukaDetail(item: BarangMasuk) {
+  function bukaDetail(
+    item: BarangMasuk
+  ) {
     router.push(
       `/outlet/barang-masuk/${encodeURIComponent(
         item.id
@@ -942,21 +1608,14 @@ export default function OutletBarangMasukPage() {
     <div className="min-h-full bg-[#F4F7F5]">
       <div className="mx-auto max-w-[1700px] p-4 md:p-6 lg:p-8">
 
-        {/* =================================================
-            PREMIUM HERO
-            ================================================= */}
-
+        {/* HERO */}
         <section className="relative mb-6 overflow-hidden rounded-[28px] border border-[#D8E7E0] bg-white shadow-[0_12px_40px_rgba(24,53,45,0.06)]">
-
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.12),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(73,127,112,0.06),transparent_30%)]" />
 
           <div className="relative flex flex-col gap-6 p-6 md:p-7 lg:flex-row lg:items-center lg:justify-between">
-
             <div className="flex items-start gap-4">
-
               <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#497F70] text-white shadow-lg shadow-[#497F70]/20">
                 <PackageCheck size={26} />
-
                 <span className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full border-[3px] border-white bg-emerald-400" />
               </div>
 
@@ -991,14 +1650,13 @@ export default function OutletBarangMasukPage() {
                 </h1>
 
                 <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500">
-                  Monitoring seluruh penerimaan barang dengan pemisahan
-                  Purchase Order, Delivery Order, dan transfer antar outlet.
+                  Monitoring penerimaan barang berdasarkan Purchase
+                  Order, Delivery Order, dan transfer antar outlet.
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-
               <div className="hidden rounded-2xl border border-[#DDE9E4] bg-[#FAFCFB] px-4 py-3 sm:block">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Total Transaksi
@@ -1013,8 +1671,15 @@ export default function OutletBarangMasukPage() {
 
               <button
                 type="button"
-                onClick={loadData}
-                disabled={loading}
+                onClick={() =>
+                  loadData({
+                    manual: true,
+                  })
+                }
+                disabled={
+                  loading ||
+                  !userReady
+                }
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-[#D5E5DC] bg-white px-5 text-sm font-bold text-[#35564C] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#BFD6CC] hover:bg-[#F7FAF8] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RefreshCw
@@ -1027,22 +1692,13 @@ export default function OutletBarangMasukPage() {
                 />
                 Refresh
               </button>
-
             </div>
-
           </div>
         </section>
 
-        {/* =================================================
-            KPI CARDS
-            ================================================= */}
-
+        {/* KPI */}
         <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-
-          {/* TOTAL */}
-
           <div className="group relative overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg">
-
             <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-[#497F70]/5 transition-transform group-hover:scale-125" />
 
             <div className="relative flex items-start justify-between">
@@ -1068,10 +1724,7 @@ export default function OutletBarangMasukPage() {
             </div>
           </div>
 
-          {/* RECEIVED */}
-
           <div className="group relative overflow-hidden rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg">
-
             <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-emerald-50 transition-transform group-hover:scale-125" />
 
             <div className="relative flex items-start justify-between">
@@ -1097,10 +1750,7 @@ export default function OutletBarangMasukPage() {
             </div>
           </div>
 
-          {/* WAITING */}
-
           <div className="group relative overflow-hidden rounded-2xl border border-blue-100 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg">
-
             <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-blue-50 transition-transform group-hover:scale-125" />
 
             <div className="relative flex items-start justify-between">
@@ -1126,10 +1776,7 @@ export default function OutletBarangMasukPage() {
             </div>
           </div>
 
-          {/* VOID */}
-
           <div className="group relative overflow-hidden rounded-2xl border border-red-100 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg">
-
             <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-red-50 transition-transform group-hover:scale-125" />
 
             <div className="relative flex items-start justify-between">
@@ -1154,20 +1801,13 @@ export default function OutletBarangMasukPage() {
               </div>
             </div>
           </div>
-
         </section>
 
-        {/* =================================================
-            FILTER ADMIN
-            ================================================= */}
-
-        {isAdminPusat && (
+        {/* FILTER */}
+        {hasPeriodFilterRole && (
           <section className="mb-6 overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
-
             <div className="flex flex-col gap-3 border-b border-[#E8EEEB] px-5 py-4 md:flex-row md:items-center md:justify-between">
-
               <div className="flex items-center gap-3">
-
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
                   <SlidersHorizontal size={17} />
                 </div>
@@ -1178,65 +1818,194 @@ export default function OutletBarangMasukPage() {
                   </h2>
 
                   <p className="text-xs text-slate-400">
-                    Saring transaksi berdasarkan outlet dan periode
+                    {isOutletAdmin
+                      ? "Saring penerimaan outlet berdasarkan periode transaksi"
+                      : "Saring transaksi berdasarkan outlet dan periode"}
                   </p>
                 </div>
-
               </div>
 
-              {(selectedOutlet !== "ALL" ||
-                dateFrom ||
-                dateTo) && (
-                <button
-                  type="button"
-                  onClick={resetFilter}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-500 transition hover:bg-[#F4F7F5] hover:text-[#35564C]"
-                >
-                  <RotateCcw size={13} />
-                  Reset Filter
-                </button>
-              )}
-
+              <button
+                type="button"
+                onClick={
+                  resetFilter
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-500 transition hover:bg-[#F4F7F5] hover:text-[#35564C]"
+              >
+                <RotateCcw size={13} />
+                Reset ke Bulan Berjalan
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-3">
+            <div
+              className={`grid grid-cols-1 gap-4 p-5 ${
+                isAdminPusat
+                  ? "md:grid-cols-2 xl:grid-cols-4"
+                  : "md:grid-cols-2 xl:grid-cols-3"
+              }`}
+            >
+              {/* OUTLET ADMIN / ADMIN */}
+              {isAdminPusat && (
+                <div>
+                  <label className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    <MapPin size={12} />
+                    Outlet
+                  </label>
 
-              {/* OUTLET */}
+                  <select
+                    value={
+                      selectedOutlet
+                    }
+                    onChange={(e) =>
+                      setSelectedOutlet(
+                        e.target.value
+                      )
+                    }
+                    className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm font-semibold text-[#35564C] outline-none transition focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                  >
+                    <option value="ALL">
+                      Semua Outlet
+                    </option>
 
+                    {outletOptions.map(
+                      (outlet) => (
+                        <option
+                          key={
+                            outlet.id
+                          }
+                          value={String(
+                            outlet.id
+                          )}
+                        >
+                          {outlet.code} -{" "}
+                          {outlet.name}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+              )}
+
+              {isOutletAdmin && (
+                <div>
+                  <label className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    <MapPin size={12} />
+                    Outlet Login
+                  </label>
+
+                  <div className="flex min-h-[46px] items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3">
+                    <Building2
+                      size={16}
+                      className="shrink-0 text-blue-600"
+                    />
+
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-black text-blue-800">
+                        {loginOutlet?.name ||
+                          (userOutletId !==
+                          null
+                            ? `Outlet #${userOutletId}`
+                            : "Outlet Login")}
+                      </div>
+
+                      <div className="text-[10px] font-semibold text-blue-600/70">
+                        {loginOutlet?.code
+                          ? `${loginOutlet.code} · `
+                          : ""}
+                        Terkunci sesuai akun login
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* MONTH */}
               <div>
                 <label className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                  <MapPin size={12} />
-                  Outlet
+                  <CalendarDays size={12} />
+                  Bulan & Tahun
                 </label>
 
-                <select
-                  value={selectedOutlet}
-                  onChange={(e) =>
-                    setSelectedOutlet(
-                      e.target.value
-                    )
-                  }
-                  className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-3 text-sm font-semibold text-[#35564C] outline-none transition focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
-                >
-                  <option value="ALL">
-                    Semua Outlet
-                  </option>
+                <div className="relative">
+                  <CalendarDays
+                    size={16}
+                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#497F70]"
+                  />
 
-                  {outletOptions.map(
-                    (item) => (
-                      <option
-                        key={item.id}
-                        value={item.id}
-                      >
-                        {item.code} - {item.name}
-                      </option>
-                    )
-                  )}
-                </select>
+                  <select
+                    value={
+                      customDateMode
+                        ? ""
+                        : selectedMonth
+                    }
+                    onChange={(e) => {
+                      const value =
+                        e.target.value;
+
+                      if (!value) {
+                        setCustomDateMode(
+                          true
+                        );
+                        return;
+                      }
+
+                      const range =
+                        getMonthDateRange(
+                          value
+                        );
+
+                      setSelectedMonth(
+                        value
+                      );
+
+                      setCustomDateMode(
+                        false
+                      );
+
+                      setDateFrom(
+                        range.from
+                      );
+
+                      setDateTo(
+                        range.to
+                      );
+                    }}
+                    className="w-full appearance-none rounded-xl border border-[#BFD8CE] bg-[#EAF3EF] py-3 pl-10 pr-10 text-sm font-bold text-[#35564C] outline-none transition focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                  >
+                    {monthOptions.map(
+                      (month) => (
+                        <option
+                          key={
+                            month.value
+                          }
+                          value={
+                            month.value
+                          }
+                        >
+                          {month.label}
+                        </option>
+                      )
+                    )}
+
+                    <option value="">
+                      Periode Custom
+                    </option>
+                  </select>
+
+                  <ChevronDown
+                    size={16}
+                    className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[#497F70]"
+                  />
+                </div>
+
+                <p className="mt-1.5 text-[10px] font-medium text-slate-400">
+                  {isOutletAdmin
+                    ? "Periode hanya memengaruhi outlet login."
+                    : "Otomatis mengikuti bulan berjalan."}
+                </p>
               </div>
 
               {/* FROM */}
-
               <div>
                 <label className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
                   <CalendarDays size={12} />
@@ -1246,27 +2015,46 @@ export default function OutletBarangMasukPage() {
                 <div className="relative">
                   <CalendarDays
                     size={16}
-                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                    className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 ${
+                      customDateMode
+                        ? "text-[#497F70]"
+                        : "text-slate-300"
+                    }`}
                   />
 
                   <input
                     type="date"
-                    value={dateFrom}
-                    max={
-                      dateTo || undefined
+                    value={
+                      dateFrom
                     }
-                    onChange={(e) =>
+                    max={
+                      dateTo ||
+                      undefined
+                    }
+                    disabled={
+                      !customDateMode
+                    }
+                    onChange={(e) => {
+                      setCustomDateMode(
+                        true
+                      );
+                      setSelectedMonth(
+                        ""
+                      );
                       setDateFrom(
                         e.target.value
-                      )
-                    }
-                    className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-10 pr-4 text-sm font-semibold text-[#35564C] outline-none transition focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                      );
+                    }}
+                    className={`w-full rounded-xl border py-3 pl-10 pr-4 text-sm font-semibold outline-none transition ${
+                      customDateMode
+                        ? "border-[#D5E5DC] bg-[#FAFCFB] text-[#35564C] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                        : "cursor-not-allowed border-[#E5ECE8] bg-slate-50 text-slate-400"
+                    }`}
                   />
                 </div>
               </div>
 
               {/* TO */}
-
               <div>
                 <label className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
                   <CalendarDays size={12} />
@@ -1276,43 +2064,91 @@ export default function OutletBarangMasukPage() {
                 <div className="relative">
                   <CalendarDays
                     size={16}
-                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                    className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 ${
+                      customDateMode
+                        ? "text-[#497F70]"
+                        : "text-slate-300"
+                    }`}
                   />
 
                   <input
                     type="date"
-                    value={dateTo}
-                    min={
-                      dateFrom || undefined
+                    value={
+                      dateTo
                     }
-                    onChange={(e) =>
+                    min={
+                      dateFrom ||
+                      undefined
+                    }
+                    disabled={
+                      !customDateMode
+                    }
+                    onChange={(e) => {
+                      setCustomDateMode(
+                        true
+                      );
+                      setSelectedMonth(
+                        ""
+                      );
                       setDateTo(
                         e.target.value
-                      )
-                    }
-                    className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-3 pl-10 pr-4 text-sm font-semibold text-[#35564C] outline-none transition focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                      );
+                    }}
+                    className={`w-full rounded-xl border py-3 pl-10 pr-4 text-sm font-semibold outline-none transition ${
+                      customDateMode
+                        ? "border-[#D5E5DC] bg-[#FAFCFB] text-[#35564C] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                        : "cursor-not-allowed border-[#E5ECE8] bg-slate-50 text-slate-400"
+                    }`}
                   />
                 </div>
               </div>
+            </div>
 
+            <div className="flex flex-wrap items-center gap-2 border-t border-[#E8EEEB] bg-[#FAFCFB] px-5 py-3">
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#EAF3EF] px-2.5 py-1.5 text-[10px] font-black text-[#497F70]">
+                <CalendarDays size={11} />
+
+                {customDateMode
+                  ? "PERIODE CUSTOM"
+                  : `BULAN ${
+                      monthOptions.find(
+                        (item) =>
+                          item.value ===
+                          selectedMonth
+                      )?.label ||
+                      selectedMonth ||
+                      "-"
+                    }`}
+              </span>
+
+              {dateFrom && (
+                <span className="text-[10px] font-semibold text-slate-500">
+                  {dateFrom}
+                </span>
+              )}
+
+              {dateFrom &&
+                dateTo && (
+                  <span className="text-[10px] font-bold text-slate-300">
+                    →
+                  </span>
+                )}
+
+              {dateTo && (
+                <span className="text-[10px] font-semibold text-slate-500">
+                  {dateTo}
+                </span>
+              )}
             </div>
           </section>
         )}
 
-        {/* =================================================
-            MAIN DATA CARD
-            ================================================= */}
-
+        {/* MAIN */}
         <section className="overflow-hidden rounded-[24px] border border-[#DDE9E4] bg-white shadow-[0_10px_35px_rgba(24,53,45,0.05)]">
 
-          {/* =================================================
-              TOOLBAR
-              ================================================= */}
-
+          {/* TOOLBAR */}
           <div className="border-b border-[#E8EEEB] p-5 md:p-6">
-
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-
               <div>
                 <div className="flex items-center gap-2">
                   <div className="h-2 w-2 rounded-full bg-[#497F70]" />
@@ -1323,16 +2159,15 @@ export default function OutletBarangMasukPage() {
                 </div>
 
                 <p className="mt-1 text-xs text-slate-400">
-                  Klik detail untuk melihat isi dan proses penerimaan barang.
+                  Klik detail untuk melihat isi dan proses penerimaan
+                  barang.
                 </p>
               </div>
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
 
                 {/* SEARCH */}
-
                 <div className="relative min-w-[280px]">
-
                   <Search
                     size={17}
                     className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -1340,7 +2175,9 @@ export default function OutletBarangMasukPage() {
 
                   <input
                     type="text"
-                    value={search}
+                    value={
+                      search
+                    }
                     onChange={(e) =>
                       setSearch(
                         e.target.value
@@ -1361,64 +2198,87 @@ export default function OutletBarangMasukPage() {
                       <X size={14} />
                     </button>
                   )}
-
                 </div>
 
-                {/* =================================================
-                    TRANSACTION TYPE FILTER
-                    ================================================= */}
-
+                {/* SOURCE */}
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 rounded-2xl border border-[#DDE9E4] bg-[#F8FBF9] p-1.5 xl:flex-none">
 
                   <button
                     type="button"
-                    onClick={() => setSelectedSource("ALL")}
+                    onClick={() =>
+                      setSelectedSource(
+                        "ALL"
+                      )
+                    }
                     className={`group inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-xs font-black transition-all ${
-                      selectedSource === "ALL"
+                      selectedSource ===
+                      "ALL"
                         ? "bg-white text-[#18352D] shadow-[0_4px_14px_rgba(24,53,45,0.10)] ring-1 ring-inset ring-[#D5E5DC]"
                         : "text-slate-500 hover:bg-white/80 hover:text-[#35564C]"
                     }`}
                   >
                     <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${
-                      selectedSource === "ALL"
+                      selectedSource ===
+                      "ALL"
                         ? "bg-[#EAF3EF] text-[#497F70]"
                         : "bg-slate-100 text-slate-400"
                     }`}>
                       <Boxes size={13} />
                     </span>
+
                     Semua Transaksi
-                    {selectedSource === "ALL" && (
+
+                    {selectedSource ===
+                      "ALL" && (
                       <span className="rounded-full bg-[#497F70] px-1.5 py-0.5 text-[9px] font-black text-white">
-                        {data.length.toLocaleString("id-ID")}
+                        {data.length.toLocaleString(
+                          "id-ID"
+                        )}
                       </span>
                     )}
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setSelectedSource("PURCHASE")}
+                    onClick={() =>
+                      setSelectedSource(
+                        "PURCHASE"
+                      )
+                    }
                     className={`group inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-xs font-black transition-all ${
-                      selectedSource === "PURCHASE"
+                      selectedSource ===
+                      "PURCHASE"
                         ? "bg-violet-600 text-white shadow-[0_6px_18px_rgba(124,58,237,0.20)]"
                         : "text-slate-500 hover:bg-white/80 hover:text-violet-700"
                     }`}
                   >
                     <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${
-                      selectedSource === "PURCHASE"
+                      selectedSource ===
+                      "PURCHASE"
                         ? "bg-white/15 text-white"
                         : "bg-violet-50 text-violet-500"
                     }`}>
                       <FileText size={13} />
                     </span>
-                    <span className="whitespace-nowrap">Purchase Order</span>
+
+                    <span className="whitespace-nowrap">
+                      Purchase Order
+                    </span>
+
                     <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
-                      selectedSource === "PURCHASE"
+                      selectedSource ===
+                      "PURCHASE"
                         ? "bg-white/15 text-white"
                         : "bg-violet-50 text-violet-600"
                     }`}>
-                      {sourceCounts.PURCHASE.toLocaleString("id-ID")}
+                      {sourceCounts.PURCHASE.toLocaleString(
+                        "id-ID"
+                      )}
                     </span>
-                    {selectedSource === "PURCHASE" && isOutletAdmin && (
+
+                    {selectedSource ===
+                      "PURCHASE" &&
+                      isOutletAdmin && (
                       <span className="rounded-full bg-white/15 px-1.5 py-0.5 text-[9px] font-black text-white ring-1 ring-inset ring-white/20">
                         DEFAULT
                       </span>
@@ -1427,82 +2287,106 @@ export default function OutletBarangMasukPage() {
 
                   <button
                     type="button"
-                    onClick={() => setSelectedSource("DELIVERY_ORDER")}
+                    onClick={() =>
+                      setSelectedSource(
+                        "DELIVERY_ORDER"
+                      )
+                    }
                     className={`group inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-xs font-black transition-all ${
-                      selectedSource === "DELIVERY_ORDER"
+                      selectedSource ===
+                      "DELIVERY_ORDER"
                         ? "bg-blue-600 text-white shadow-[0_6px_18px_rgba(37,99,235,0.20)]"
                         : "text-slate-500 hover:bg-white/80 hover:text-blue-700"
                     }`}
                   >
                     <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${
-                      selectedSource === "DELIVERY_ORDER"
+                      selectedSource ===
+                      "DELIVERY_ORDER"
                         ? "bg-white/15 text-white"
                         : "bg-blue-50 text-blue-500"
                     }`}>
                       <Truck size={13} />
                     </span>
-                    <span className="whitespace-nowrap">Delivery Order</span>
+
+                    <span className="whitespace-nowrap">
+                      Delivery Order
+                    </span>
+
                     <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
-                      selectedSource === "DELIVERY_ORDER"
+                      selectedSource ===
+                      "DELIVERY_ORDER"
                         ? "bg-white/15 text-white"
                         : "bg-blue-50 text-blue-600"
                     }`}>
-                      {sourceCounts.DELIVERY_ORDER.toLocaleString("id-ID")}
+                      {sourceCounts.DELIVERY_ORDER.toLocaleString(
+                        "id-ID"
+                      )}
                     </span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setSelectedSource("TRANSFER")}
+                    onClick={() =>
+                      setSelectedSource(
+                        "TRANSFER"
+                      )
+                    }
                     className={`group inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-xs font-black transition-all ${
-                      selectedSource === "TRANSFER"
+                      selectedSource ===
+                      "TRANSFER"
                         ? "bg-indigo-600 text-white shadow-[0_6px_18px_rgba(79,70,229,0.20)]"
                         : "text-slate-500 hover:bg-white/80 hover:text-indigo-700"
                     }`}
                   >
                     <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${
-                      selectedSource === "TRANSFER"
+                      selectedSource ===
+                      "TRANSFER"
                         ? "bg-white/15 text-white"
                         : "bg-indigo-50 text-indigo-500"
                     }`}>
                       <ArrowRightLeft size={13} />
                     </span>
-                    <span className="whitespace-nowrap">Transfer Antar Outlet</span>
+
+                    <span className="whitespace-nowrap">
+                      Transfer Antar Outlet
+                    </span>
+
                     <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
-                      selectedSource === "TRANSFER"
+                      selectedSource ===
+                      "TRANSFER"
                         ? "bg-white/15 text-white"
                         : "bg-indigo-50 text-indigo-600"
                     }`}>
-                      {sourceCounts.TRANSFER.toLocaleString("id-ID")}
+                      {sourceCounts.TRANSFER.toLocaleString(
+                        "id-ID"
+                      )}
                     </span>
                   </button>
-
                 </div>
 
-                {/* =================================================
-                    STATUS BUTTON
-                    ================================================= */}
-
+                {/* STATUS */}
                 <div
-                  ref={statusMenuRef}
+                  ref={
+                    statusMenuRef
+                  }
                   className="relative"
                 >
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={() =>
                       setStatusMenuOpen(
-                        (prev) => !prev
-                      );
-                                    }}
+                        (value) =>
+                          !value
+                      )
+                    }
                     className={`inline-flex h-[46px] min-w-[150px] items-center justify-center gap-2 rounded-xl border px-4 text-sm font-bold transition-all ${
-                      selectedStatus !== "ALL"
+                      selectedStatus !==
+                      "ALL"
                         ? "border-[#AFCFC2] bg-[#EAF3EF] text-[#35564C] shadow-sm"
                         : "border-[#D5E5DC] bg-[#FAFCFB] text-[#35564C] hover:border-[#BFD6CC] hover:bg-white"
                     }`}
                   >
-                    <CheckCircle2
-                      size={16}
-                    />
+                    <CheckCircle2 size={16} />
 
                     <span>
                       {selectedStatus ===
@@ -1515,11 +2399,11 @@ export default function OutletBarangMasukPage() {
 
                     <ChevronDown
                       size={15}
-                      className={`transition-transform ${
+                      className={
                         statusMenuOpen
-                          ? "rotate-180"
-                          : ""
-                      }`}
+                          ? "rotate-180 transition-transform"
+                          : "transition-transform"
+                      }
                     />
 
                     {selectedStatus !==
@@ -1532,228 +2416,91 @@ export default function OutletBarangMasukPage() {
 
                   {statusMenuOpen && (
                     <div className="absolute right-0 z-50 mt-2 w-[220px] overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white p-1.5 shadow-[0_15px_45px_rgba(24,53,45,0.15)]">
-
                       <div className="px-3 pb-2 pt-2">
                         <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                           Filter Status
                         </p>
                       </div>
 
-                      {/* ALL STATUS */}
+                      {(
+                        [
+                          [
+                            "ALL",
+                            "Semua Status",
+                            Boxes,
+                          ],
+                          [
+                            "RECEIVED",
+                            "Diterima",
+                            CheckCircle2,
+                          ],
+                          [
+                            "PARTIAL",
+                            "Sebagian",
+                            Clock3,
+                          ],
+                          [
+                            "SENT",
+                            "Menunggu",
+                            Truck,
+                          ],
+                          [
+                            "APPROVED",
+                            "Approved",
+                            CheckCircle2,
+                          ],
+                          [
+                            "DRAFT",
+                            "Draft",
+                            FileText,
+                          ],
+                        ] as const
+                      ).map(
+                        ([
+                          value,
+                          label,
+                          Icon,
+                        ]) => (
+                          <button
+                            key={
+                              value
+                            }
+                            type="button"
+                            onClick={() => {
+                              setSelectedStatus(
+                                value
+                              );
+                              setStatusMenuOpen(
+                                false
+                              );
+                            }}
+                            className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
+                              selectedStatus ===
+                              value
+                                ? "bg-[#EAF3EF] text-[#35564C]"
+                                : "text-slate-600 hover:bg-[#F4F7F5]"
+                            }`}
+                          >
+                            <span className="flex items-center gap-2">
+                              <Icon
+                                size={15}
+                              />
+                              {label}
+                            </span>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedStatus(
-                            "ALL"
-                          );
-                          setStatusMenuOpen(
-                            false
-                          );
-                        }}
-                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
-                          selectedStatus ===
-                          "ALL"
-                            ? "bg-[#EAF3EF] text-[#35564C]"
-                            : "text-slate-600 hover:bg-[#F4F7F5]"
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <Boxes
-                            size={15}
-                          />
-                          Semua Status
-                        </span>
-
-                        {selectedStatus ===
-                          "ALL" && (
-                          <Check
-                            size={15}
-                            className="text-[#497F70]"
-                          />
-                        )}
-                      </button>
-
-                      {/* RECEIVED */}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedStatus(
-                            "RECEIVED"
-                          );
-                          setStatusMenuOpen(
-                            false
-                          );
-                        }}
-                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
-                          selectedStatus ===
-                          "RECEIVED"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "text-slate-600 hover:bg-[#F4F7F5]"
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <CheckCircle2
-                            size={15}
-                          />
-                          Diterima
-                        </span>
-
-                        {selectedStatus ===
-                          "RECEIVED" && (
-                          <Check
-                            size={15}
-                            className="text-emerald-600"
-                          />
-                        )}
-                      </button>
-
-                      {/* PARTIAL */}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedStatus(
-                            "PARTIAL"
-                          );
-                          setStatusMenuOpen(
-                            false
-                          );
-                        }}
-                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
-                          selectedStatus ===
-                          "PARTIAL"
-                            ? "bg-amber-50 text-amber-700"
-                            : "text-slate-600 hover:bg-[#F4F7F5]"
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <Clock3
-                            size={15}
-                          />
-                          Sebagian
-                        </span>
-
-                        {selectedStatus ===
-                          "PARTIAL" && (
-                          <Check
-                            size={15}
-                            className="text-amber-600"
-                          />
-                        )}
-                      </button>
-
-                      {/* SENT */}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedStatus(
-                            "SENT"
-                          );
-                          setStatusMenuOpen(
-                            false
-                          );
-                        }}
-                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
-                          selectedStatus ===
-                          "SENT"
-                            ? "bg-blue-50 text-blue-700"
-                            : "text-slate-600 hover:bg-[#F4F7F5]"
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <Truck
-                            size={15}
-                          />
-                          Menunggu
-                        </span>
-
-                        {selectedStatus ===
-                          "SENT" && (
-                          <Check
-                            size={15}
-                            className="text-blue-600"
-                          />
-                        )}
-                      </button>
-
-                      {/* APPROVED */}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedStatus(
-                            "APPROVED"
-                          );
-                          setStatusMenuOpen(
-                            false
-                          );
-                        }}
-                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
-                          selectedStatus ===
-                          "APPROVED"
-                            ? "bg-violet-50 text-violet-700"
-                            : "text-slate-600 hover:bg-[#F4F7F5]"
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <CheckCircle2
-                            size={15}
-                          />
-                          Approved
-                        </span>
-
-                        {selectedStatus ===
-                          "APPROVED" && (
-                          <Check
-                            size={15}
-                            className="text-violet-600"
-                          />
-                        )}
-                      </button>
-
-                      {/* DRAFT */}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedStatus(
-                            "DRAFT"
-                          );
-                          setStatusMenuOpen(
-                            false
-                          );
-                        }}
-                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition ${
-                          selectedStatus ===
-                          "DRAFT"
-                            ? "bg-slate-100 text-slate-700"
-                            : "text-slate-600 hover:bg-[#F4F7F5]"
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <FileText
-                            size={15}
-                          />
-                          Draft
-                        </span>
-
-                        {selectedStatus ===
-                          "DRAFT" && (
-                          <Check
-                            size={15}
-                            className="text-slate-600"
-                          />
-                        )}
-                      </button>
-
+                            {selectedStatus ===
+                              value && (
+                              <Check
+                                size={15}
+                                className="text-[#497F70]"
+                              />
+                            )}
+                          </button>
+                        )
+                      )}
                     </div>
                   )}
                 </div>
-
-                {/* COUNT */}
 
                 <div className="rounded-xl bg-[#F4F7F5] px-4 py-3 text-xs font-semibold text-slate-500">
                   <span className="font-black text-[#35564C]">
@@ -1763,15 +2510,12 @@ export default function OutletBarangMasukPage() {
                   </span>{" "}
                   transaksi
                 </div>
-
               </div>
             </div>
 
             {/* ACTIVE FILTER */}
-
             {hasActiveFilter && (
               <div className="mt-4 flex flex-wrap items-center gap-2">
-
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                   Filter aktif:
                 </span>
@@ -1785,21 +2529,32 @@ export default function OutletBarangMasukPage() {
                 {selectedSource !==
                   "ALL" && (
                   <span className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-bold ring-1 ring-inset ${
-                    selectedSource === "PURCHASE"
+                    selectedSource ===
+                    "PURCHASE"
                       ? "bg-violet-50 text-violet-700 ring-violet-200"
-                      : selectedSource === "DELIVERY_ORDER"
+                      : selectedSource ===
+                          "DELIVERY_ORDER"
                         ? "bg-blue-50 text-blue-700 ring-blue-200"
                         : "bg-indigo-50 text-indigo-700 ring-indigo-200"
                   }`}>
-                    {selectedSource === "PURCHASE" ? (
+                    {selectedSource ===
+                    "PURCHASE" ? (
                       <FileText size={11} />
-                    ) : selectedSource === "DELIVERY_ORDER" ? (
+                    ) : selectedSource ===
+                      "DELIVERY_ORDER" ? (
                       <Truck size={11} />
                     ) : (
                       <ArrowRightLeft size={11} />
                     )}
-                    Sumber: {sourceFilterLabel(selectedSource)}
-                    {isOutletAdmin && selectedSource === "PURCHASE" && (
+
+                    Sumber:{" "}
+                    {sourceFilterLabel(
+                      selectedSource
+                    )}
+
+                    {isOutletAdmin &&
+                      selectedSource ===
+                        "PURCHASE" && (
                       <span className="rounded-full bg-violet-600 px-1.5 py-0.5 text-[8px] font-black text-white">
                         DEFAULT
                       </span>
@@ -1810,9 +2565,7 @@ export default function OutletBarangMasukPage() {
                 {selectedStatus !==
                   "ALL" && (
                   <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700">
-                    <CheckCircle2
-                      size={11}
-                    />
+                    <CheckCircle2 size={11} />
                     Status:{" "}
                     {statusFilterLabel(
                       selectedStatus
@@ -1823,80 +2576,88 @@ export default function OutletBarangMasukPage() {
                 {isAdminPusat &&
                   selectedOutlet !==
                     "ALL" && (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700">
-                      Outlet terpilih
-                    </span>
-                  )}
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700">
+                    <MapPin size={11} />
+                    Outlet terpilih
+                  </span>
+                )}
 
-                {dateFrom && (
+                {isOutletAdmin && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700">
+                    <MapPin size={11} />
+                    Outlet login
+                  </span>
+                )}
+
+                {!customDateMode &&
+                  selectedMonth && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#EAF3EF] px-2.5 py-1.5 text-[11px] font-bold text-[#497F70]">
+                    <CalendarDays size={11} />
+                    Bulan:{" "}
+                    {monthOptions.find(
+                      (item) =>
+                        item.value ===
+                        selectedMonth
+                    )?.label ||
+                      selectedMonth}
+                  </span>
+                )}
+
+                {customDateMode &&
+                  dateFrom && (
                   <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-bold text-slate-600">
+                    <CalendarDays size={11} />
                     Dari {dateFrom}
                   </span>
                 )}
 
-                {dateTo && (
+                {customDateMode &&
+                  dateTo && (
                   <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-bold text-slate-600">
+                    <CalendarDays size={11} />
                     Sampai {dateTo}
                   </span>
                 )}
-
               </div>
             )}
-
           </div>
 
-          {/* =================================================
-              TABLE
-              ================================================= */}
-
+          {/* TABLE */}
           <div className="overflow-x-auto">
-
             <table className="min-w-[1250px] w-full text-sm">
-
               <thead>
                 <tr className="border-b border-[#E4EBE7] bg-[#F7F9F8]">
-
                   <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-wider text-slate-400">
                     #
                   </th>
-
                   <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-wider text-slate-400">
                     Dokumen
                   </th>
-
                   <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-wider text-slate-400">
                     Sumber
                   </th>
-
                   <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-wider text-slate-400">
                     Tanggal
                   </th>
-
                   <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-wider text-slate-400">
                     Outlet Tujuan
                   </th>
-
                   <th className="px-5 py-4 text-center text-[10px] font-black uppercase tracking-wider text-slate-400">
                     Total
                   </th>
-
                   <th className="px-5 py-4 text-center text-[10px] font-black uppercase tracking-wider text-slate-400">
                     Diterima
                   </th>
-
                   <th className="px-5 py-4 text-center text-[10px] font-black uppercase tracking-wider text-slate-400">
                     Status
                   </th>
-
                   <th className="px-5 py-4 text-center text-[10px] font-black uppercase tracking-wider text-slate-400">
                     Detail
                   </th>
-
                 </tr>
               </thead>
 
               <tbody>
-
                 {loading ? (
                   <tr>
                     <td
@@ -1904,7 +2665,6 @@ export default function OutletBarangMasukPage() {
                       className="px-5 py-20"
                     >
                       <div className="flex flex-col items-center justify-center">
-
                         <div className="relative mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EAF3EF] text-[#497F70]">
                           <PackageCheck size={28} />
 
@@ -1922,18 +2682,17 @@ export default function OutletBarangMasukPage() {
                           />
                           Sinkronisasi data...
                         </div>
-
                       </div>
                     </td>
                   </tr>
-                ) : filteredData.length === 0 ? (
+                ) : filteredData.length ===
+                  0 ? (
                   <tr>
                     <td
                       colSpan={9}
                       className="px-5 py-20"
                     >
                       <div className="flex flex-col items-center justify-center">
-
                         <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EAF3EF] text-[#497F70]">
                           <PackageCheck size={29} />
                         </div>
@@ -1943,35 +2702,39 @@ export default function OutletBarangMasukPage() {
                         </p>
 
                         <p className="mt-1 max-w-md text-center text-xs leading-5 text-slate-400">
-                          Tidak ditemukan barang masuk yang
-                          sesuai dengan pencarian atau filter
-                          yang sedang digunakan.
+                          Tidak ditemukan barang masuk yang sesuai
+                          dengan pencarian atau filter yang sedang
+                          digunakan.
                         </p>
 
                         {hasActiveFilter && (
                           <button
                             type="button"
-                            onClick={resetFilter}
+                            onClick={
+                              resetFilter
+                            }
                             className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#497F70] px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#3E6F62]"
                           >
                             <RotateCcw size={14} />
-                            Bersihkan Filter
+                            Kembali ke Bulan Berjalan
                           </button>
                         )}
-
                       </div>
                     </td>
                   </tr>
                 ) : (
                   filteredData.map(
-                    (item, index) => {
-
+                    (
+                      item,
+                      index
+                    ) => {
                       const isTransfer =
                         item.sumber ===
                         "TRANSFER";
 
                       const hasVoid =
-                        item.hasVoid === true;
+                        item.hasVoid ===
+                        true;
 
                       const destinationOutlet =
                         item.destinationOutlet ||
@@ -1979,12 +2742,14 @@ export default function OutletBarangMasukPage() {
 
                       const totalItem =
                         Number(
-                          item.totalItem ?? 0
+                          item.totalItem ??
+                            0
                         );
 
                       const totalReceived =
                         Number(
-                          item.totalReceived ?? 0
+                          item.totalReceived ??
+                            0
                         );
 
                       const progress =
@@ -2002,7 +2767,9 @@ export default function OutletBarangMasukPage() {
 
                       return (
                         <tr
-                          key={item.id}
+                          key={
+                            item.id
+                          }
                           className={`group border-b transition-all last:border-0 ${
                             hasVoid
                               ? "border-red-100 bg-red-50/20 hover:bg-red-50/50"
@@ -2011,25 +2778,15 @@ export default function OutletBarangMasukPage() {
                                 : "border-[#EDF2EF] hover:bg-[#FAFCFB]"
                           }`}
                         >
-
-                          {/* NO */}
-
                           <td className="px-5 py-5 align-top">
-
                             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-xs font-black text-slate-500 group-hover:bg-white">
                               {index + 1}
                             </div>
-
                           </td>
 
-                          {/* DOKUMEN */}
-
                           <td className="px-5 py-5 align-top">
-
                             <div className="flex flex-col items-start gap-2">
-
                               <div className="flex flex-wrap items-center gap-2">
-
                                 <span className="font-black tracking-tight text-[#18352D]">
                                   {item.nomor}
                                 </span>
@@ -2040,15 +2797,12 @@ export default function OutletBarangMasukPage() {
                                     VOID
                                   </span>
                                 )}
-
                               </div>
 
                               {isTransfer &&
                                 item.sourceOutlet && (
                                   <span className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600">
-                                    <ArrowRightLeft
-                                      size={11}
-                                    />
+                                    <ArrowRightLeft size={11} />
                                     Dari{" "}
                                     {
                                       item
@@ -2061,23 +2815,17 @@ export default function OutletBarangMasukPage() {
                               <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
                                 ID #{item.id}
                               </span>
-
                             </div>
-
                           </td>
 
-                          {/* SUMBER */}
-
                           <td className="px-5 py-5 align-top">
-                            {sourceBadge(item)}
+                            {sourceBadge(
+                              item
+                            )}
                           </td>
 
-                          {/* TANGGAL */}
-
                           <td className="px-5 py-5 align-top">
-
                             <div className="flex items-start gap-2">
-
                               <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
                                 <CalendarDays size={14} />
                               </div>
@@ -2093,43 +2841,34 @@ export default function OutletBarangMasukPage() {
                                   Tanggal transaksi
                                 </div>
                               </div>
-
                             </div>
-
                           </td>
 
-                          {/* OUTLET */}
-
                           <td className="px-5 py-5 align-top">
-
                             <div className="flex items-start gap-2">
-
                               <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
                                 <MapPin size={14} />
                               </div>
 
                               <div>
                                 <div className="font-black text-[#18352D]">
-                                  {destinationOutlet
-                                    ?.name ||
-                                    "-"}
+                                  {
+                                    destinationOutlet?.name ||
+                                    "-"
+                                  }
                                 </div>
 
                                 <div className="mt-0.5 text-[11px] font-semibold text-slate-400">
-                                  {destinationOutlet
-                                    ?.code ||
-                                    "Kode outlet -"}
+                                  {
+                                    destinationOutlet?.code ||
+                                    "Kode outlet -"
+                                  }
                                 </div>
                               </div>
-
                             </div>
-
                           </td>
 
-                          {/* TOTAL ITEM */}
-
                           <td className="px-5 py-5 text-center align-top">
-
                             <div className="inline-flex min-w-[70px] flex-col items-center rounded-xl bg-slate-50 px-3 py-2">
                               <span className="text-base font-black text-[#18352D]">
                                 {totalItem.toLocaleString(
@@ -2141,17 +2880,11 @@ export default function OutletBarangMasukPage() {
                                 Qty
                               </span>
                             </div>
-
                           </td>
 
-                          {/* DITERIMA */}
-
                           <td className="px-5 py-5 align-top">
-
                             <div className="min-w-[120px]">
-
                               <div className="mb-2 flex items-center justify-between">
-
                                 <span className="text-xs font-black text-[#497F70]">
                                   {totalReceived.toLocaleString(
                                     "id-ID"
@@ -2164,15 +2897,16 @@ export default function OutletBarangMasukPage() {
                                   )}
                                   %
                                 </span>
-
                               </div>
 
                               <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                                 <div
                                   className={`h-full rounded-full transition-all ${
-                                    progress >= 100
+                                    progress >=
+                                    100
                                       ? "bg-emerald-500"
-                                      : progress > 0
+                                      : progress >
+                                          0
                                         ? "bg-[#497F70]"
                                         : "bg-slate-200"
                                   }`}
@@ -2194,33 +2928,28 @@ export default function OutletBarangMasukPage() {
                                   )}
                                 </div>
                               )}
-
                             </div>
-
                           </td>
 
-                          {/* STATUS */}
-
                           <td className="px-5 py-5 text-center align-top">
-
                             <div className="flex min-w-[110px] flex-col items-center gap-2">
                               {statusBadge(
                                 item.status
                               )}
 
-                              {voidBadge(item)}
+                              {voidBadge(
+                                item
+                              )}
                             </div>
-
                           </td>
 
-                          {/* DETAIL */}
-
                           <td className="px-5 py-5 text-center align-top">
-
                             <button
                               type="button"
                               onClick={() =>
-                                bukaDetail(item)
+                                bukaDetail(
+                                  item
+                                )
                               }
                               className={`group/button inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-xs font-black transition-all ${
                                 hasVoid
@@ -2233,7 +2962,6 @@ export default function OutletBarangMasukPage() {
                                   : "Lihat detail"
                               }
                             >
-
                               <Eye size={15} />
 
                               <span className="hidden xl:inline">
@@ -2244,30 +2972,22 @@ export default function OutletBarangMasukPage() {
                                 size={14}
                                 className="transition-transform group-hover/button:translate-x-0.5"
                               />
-
                             </button>
-
                           </td>
-
                         </tr>
                       );
                     }
                   )
                 )}
-
               </tbody>
-
             </table>
           </div>
 
-          {/* =================================================
-              FOOTER
-              ================================================= */}
-
+          {/* FOOTER */}
           {!loading &&
-            filteredData.length > 0 && (
+            filteredData.length >
+              0 && (
               <div className="flex flex-col gap-3 border-t border-[#E8EEEB] bg-[#FAFCFB] px-5 py-4 md:flex-row md:items-center md:justify-between">
-
                 <div className="flex items-center gap-2 text-xs text-slate-400">
                   <PackageCheck
                     size={14}
@@ -2290,7 +3010,6 @@ export default function OutletBarangMasukPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-
                   <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-700">
                     <CheckCircle2 size={11} />
                     {statistics.received} selesai
@@ -2301,34 +3020,29 @@ export default function OutletBarangMasukPage() {
                     {statistics.waiting} menunggu
                   </span>
 
-                  {statistics.partial > 0 && (
+                  {statistics.partial >
+                    0 && (
                     <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] font-bold text-amber-700">
                       <Clock3 size={11} />
                       {statistics.partial} sebagian
                     </span>
                   )}
 
-                  {statistics.voidCount > 0 && (
+                  {statistics.voidCount >
+                    0 && (
                     <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-[10px] font-bold text-red-700">
                       <X size={11} />
                       {statistics.voidCount} void
                     </span>
                   )}
-
                 </div>
-
               </div>
             )}
-
         </section>
 
-        {/* =================================================
-            SECURITY / ROLE NOTE
-            ================================================= */}
-
+        {/* OUTLET NOTE */}
         {isOutletAdmin && (
           <div className="mt-4 flex items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50/60 px-4 py-3.5">
-
             <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
               <Building2 size={15} />
             </div>
@@ -2339,14 +3053,13 @@ export default function OutletBarangMasukPage() {
               </p>
 
               <p className="mt-0.5 text-[11px] leading-5 text-blue-700/80">
-                Data penerimaan yang ditampilkan difokuskan
-                pada outlet yang terhubung dengan akun login.
+                Data penerimaan difilter otomatis berdasarkan outlet
+                yang terhubung dengan akun login dan periode yang
+                dipilih.
               </p>
             </div>
-
           </div>
         )}
-
       </div>
     </div>
   );

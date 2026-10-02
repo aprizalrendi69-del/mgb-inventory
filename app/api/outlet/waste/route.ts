@@ -1516,3 +1516,383 @@ export async function POST(
     );
   }
 }
+
+/*
+ * =========================================================
+ * DELETE WASTE OUTLET
+ *
+ * HANYA:
+ *   ADMIN
+ *   OUTLET_ADMIN
+ *
+ * HANYA STATUS:
+ *   PENDING
+ *
+ * ADMIN:
+ *   -> boleh hapus PENDING dari outlet mana pun
+ *
+ * OUTLET_ADMIN:
+ *   -> hanya boleh hapus PENDING milik outlet sendiri
+ *
+ * MANAGER:
+ *   -> TIDAK BOLEH HAPUS
+ *
+ * IMPORTANT:
+ * DELETE INI HANYA MENGHAPUS RECORD WASTE PENDING.
+ *
+ * TIDAK:
+ * - mengurangi / menambah OutletStock
+ * - mengubah StockCard
+ * - mengubah StockMutation
+ * - mengubah Barang Keluar
+ * - menghapus master barang
+ * - reset database
+ * =========================================================
+ */
+
+export async function DELETE(
+  req: NextRequest
+) {
+  try {
+    /*
+     * =======================================================
+     * CURRENT USER
+     * =======================================================
+     */
+
+    const user =
+      await getCurrentUser();
+
+    if (!user) {
+      return jsonError(
+        "Tidak login.",
+        401
+      );
+    }
+
+    const role = String(
+      user.role || ""
+    ).toUpperCase();
+
+    /*
+     * =======================================================
+     * ROLE ACCESS
+     *
+     * HANYA ADMIN DAN OUTLET_ADMIN.
+     * =======================================================
+     */
+
+    const allowedDeleteRoles = [
+      "ADMIN",
+      "OUTLET_ADMIN",
+    ];
+
+    if (
+      !allowedDeleteRoles.includes(
+        role
+      )
+    ) {
+      return jsonError(
+        "Anda tidak memiliki akses untuk menghapus Waste.",
+        403
+      );
+    }
+
+    /*
+     * =======================================================
+     * ID
+     *
+     * Support:
+     * DELETE /api/outlet/waste/123
+     *
+     * =======================================================
+     */
+
+    const url =
+      new URL(req.url);
+
+    const pathParts =
+      url.pathname
+        .split("/")
+        .filter(Boolean);
+
+    const wasteIdRaw =
+      pathParts[
+        pathParts.length - 1
+      ];
+
+    const wasteId =
+      Number(
+        wasteIdRaw
+      );
+
+    if (
+      !Number.isInteger(
+        wasteId
+      ) ||
+      wasteId <= 0
+    ) {
+      return jsonError(
+        "ID Waste tidak valid.",
+        400
+      );
+    }
+
+    /*
+     * =======================================================
+     * CEK WASTE
+     * =======================================================
+     */
+
+    const waste =
+      await prisma.outletStockOut.findUnique(
+        {
+          where: {
+            id: wasteId,
+          },
+
+          select: {
+            id: true,
+            number: true,
+            outletId: true,
+            type: true,
+            status: true,
+            wasteQty: true,
+            barangId: true,
+
+            outlet: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                active: true,
+              },
+            },
+
+            barang: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
+            },
+          },
+        }
+      );
+
+    if (!waste) {
+      return jsonError(
+        "Data Waste tidak ditemukan.",
+        404
+      );
+    }
+
+    /*
+     * =======================================================
+     * PASTIKAN TYPE WASTE
+     *
+     * Endpoint ini tidak boleh menghapus transaksi
+     * selain WASTE.
+     * =======================================================
+     */
+
+    if (
+      String(
+        waste.type || ""
+      ).toUpperCase() !==
+      "WASTE"
+    ) {
+      return jsonError(
+        "Data yang dipilih bukan transaksi Waste.",
+        400
+      );
+    }
+
+    /*
+     * =======================================================
+     * HANYA PENDING
+     *
+     * APPROVED / REJECTED TIDAK BOLEH DIHAPUS.
+     * =======================================================
+     */
+
+    if (
+      String(
+        waste.status || ""
+      ).toUpperCase() !==
+      "PENDING"
+    ) {
+      return jsonError(
+        "Waste hanya dapat dihapus jika status masih PENDING.",
+        400
+      );
+    }
+
+    /*
+     * =======================================================
+     * OUTLET ADMIN
+     *
+     * WAJIB MENGGUNAKAN OUTLET MILIK USER.
+     *
+     * Tidak mempercayai outletId dari request.
+     * =======================================================
+     */
+
+    if (
+      role === "OUTLET_ADMIN"
+    ) {
+      const userOutletId =
+        Number(
+          user.outletId
+        );
+
+      if (
+        !Number.isInteger(
+          userOutletId
+        ) ||
+        userOutletId <= 0
+      ) {
+        return jsonError(
+          "User Outlet Admin belum memiliki outlet.",
+          400
+        );
+      }
+
+      /*
+       * Pastikan outlet user masih valid.
+       */
+
+      if (
+        !user.outlet ||
+        !user.outlet.active
+      ) {
+        return jsonError(
+          "Outlet user tidak ditemukan atau sudah tidak aktif.",
+          400
+        );
+      }
+
+      /*
+       * Jangan izinkan Outlet Admin
+       * menghapus Waste outlet lain.
+       */
+
+      if (
+        waste.outletId !==
+        userOutletId
+      ) {
+        return jsonError(
+          "Anda hanya dapat menghapus Waste dari outlet Anda sendiri.",
+          403
+        );
+      }
+    }
+
+    /*
+     * =======================================================
+     * DELETE
+     *
+     * Gunakan kondisi status + type + id kembali
+     * supaya ada perlindungan tambahan terhadap race condition.
+     * =======================================================
+     */
+
+    const deleted =
+      await prisma.outletStockOut.deleteMany(
+        {
+          where: {
+            id: wasteId,
+
+            type: "WASTE",
+
+            status: "PENDING",
+
+            ...(role ===
+              "OUTLET_ADMIN"
+              ? {
+                  outletId:
+                    Number(
+                      user.outletId
+                    ),
+                }
+              : {}),
+          },
+        }
+      );
+
+    /*
+     * =======================================================
+     * DATA TIDAK TERHAPUS
+     *
+     * Bisa terjadi jika status berubah antara pengecekan
+     * dan DELETE.
+     * =======================================================
+     */
+
+    if (
+      deleted.count === 0
+    ) {
+      return jsonError(
+        "Waste tidak dapat dihapus. Status mungkin sudah berubah atau data bukan milik outlet Anda.",
+        409
+      );
+    }
+
+    /*
+     * =======================================================
+     * RESPONSE
+     * =======================================================
+     */
+
+    return NextResponse.json({
+      success: true,
+
+      message:
+        "Waste PENDING berhasil dihapus.",
+
+      data: {
+        id:
+          waste.id,
+
+        number:
+          waste.number,
+
+        outletId:
+          waste.outletId,
+
+        barangId:
+          waste.barangId,
+
+        type:
+          "WASTE",
+
+        status:
+          "PENDING",
+
+        deleted: true,
+      },
+    });
+  } catch (error: any) {
+    console.error(
+      "OUTLET WASTE DELETE ERROR:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+
+        message:
+          "Gagal menghapus Waste Outlet.",
+
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}

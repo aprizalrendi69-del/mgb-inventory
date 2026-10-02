@@ -24,8 +24,63 @@ import {
 export default function SuratJalanPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("SEMUA");
+
+  // =========================================================
+  // DATE FILTER
+  // Default = bulan berjalan
+  // =========================================================
+
+  function getCurrentMonthValue() {
+    const now = new Date();
+
+    return `${now.getFullYear()}-${String(
+      now.getMonth() + 1
+    ).padStart(2, "0")}`;
+  }
+
+  function getMonthStart(monthValue: string) {
+    const [year, month] = monthValue.split("-").map(Number);
+
+    if (!year || !month) return "";
+
+    return `${year}-${String(month).padStart(2, "0")}-01`;
+  }
+
+  function getMonthEnd(monthValue: string) {
+    const [year, month] = monthValue.split("-").map(Number);
+
+    if (!year || !month) return "";
+
+    const lastDay = new Date(
+      year,
+      month,
+      0
+    ).getDate();
+
+    return `${year}-${String(month).padStart(2, "0")}-${String(
+      lastDay
+    ).padStart(2, "0")}`;
+  }
+
+  const currentMonth = getCurrentMonthValue();
+
+  const [dateMode, setDateMode] = useState<
+    "MONTH" | "CUSTOM"
+  >("MONTH");
+
+  const [selectedMonth, setSelectedMonth] =
+    useState(currentMonth);
+
+  const [startDate, setStartDate] = useState(
+    getMonthStart(currentMonth)
+  );
+
+  const [endDate, setEndDate] = useState(
+    getMonthEnd(currentMonth)
+  );
 
   // =========================================================
   // LOAD DATA
@@ -65,6 +120,139 @@ export default function SuratJalanPage() {
   }, []);
 
   // =========================================================
+  // MONTH OPTIONS
+  // =========================================================
+
+  const monthOptions = useMemo(() => {
+    const now = new Date();
+
+    const result: {
+      value: string;
+      label: string;
+    }[] = [];
+
+    /*
+     * Tampilkan bulan dari awal tahun berjalan
+     * sampai bulan berjalan.
+     *
+     * Contoh Oktober 2026:
+     * Januari 2026 ... Oktober 2026
+     */
+    for (let month = 0; month <= now.getMonth(); month++) {
+      const value = `${now.getFullYear()}-${String(
+        month + 1
+      ).padStart(2, "0")}`;
+
+      const date = new Date(
+        now.getFullYear(),
+        month,
+        1
+      );
+
+      result.push({
+        value,
+        label: date.toLocaleDateString("id-ID", {
+          month: "long",
+          year: "numeric",
+        }),
+      });
+    }
+
+    return result.reverse();
+  }, []);
+
+  // =========================================================
+  // MONTH CHANGE
+  // =========================================================
+
+  function handleMonthChange(value: string) {
+    setDateMode("MONTH");
+    setSelectedMonth(value);
+
+    setStartDate(getMonthStart(value));
+    setEndDate(getMonthEnd(value));
+  }
+
+  // =========================================================
+  // CUSTOM DATE CHANGE
+  // =========================================================
+
+  function handleStartDateChange(value: string) {
+    setDateMode("CUSTOM");
+    setStartDate(value);
+
+    if (endDate && value > endDate) {
+      setEndDate(value);
+    }
+  }
+
+  function handleEndDateChange(value: string) {
+    setDateMode("CUSTOM");
+    setEndDate(value);
+
+    if (startDate && value < startDate) {
+      setStartDate(value);
+    }
+  }
+
+  // =========================================================
+  // RESET FILTER
+  // =========================================================
+
+  function resetFilters() {
+    const month = getCurrentMonthValue();
+
+    setSearch("");
+    setStatus("SEMUA");
+
+    setDateMode("MONTH");
+    setSelectedMonth(month);
+    setStartDate(getMonthStart(month));
+    setEndDate(getMonthEnd(month));
+  }
+
+  // =========================================================
+  // DATE HELPER
+  // =========================================================
+
+  function getDateKey(value: any) {
+    if (!value) return "";
+
+    const raw = String(value);
+
+    /*
+     * Untuk value ISO seperti:
+     * 2026-10-02T00:00:00.000Z
+     *
+     * Ambil YYYY-MM-DD langsung agar filter
+     * tidak bergeser karena timezone browser.
+     */
+    const match = raw.match(
+      /^(\d{4})-(\d{2})-(\d{2})/
+    );
+
+    if (match) {
+      return `${match[1]}-${match[2]}-${match[3]}`;
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    const year = date.getFullYear();
+    const month = String(
+      date.getMonth() + 1
+    ).padStart(2, "0");
+    const day = String(
+      date.getDate()
+    ).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  // =========================================================
   // FILTER
   // =========================================================
 
@@ -72,16 +260,25 @@ export default function SuratJalanPage() {
     const keyword = search.trim().toLowerCase();
 
     return data.filter((item: any) => {
-      const nomor = String(item.number ?? "").toLowerCase();
+      const nomor = String(
+        item.number ?? ""
+      ).toLowerCase();
+
       const customer = String(
         item.customer?.name ?? ""
       ).toLowerCase();
+
       const customerCode = String(
         item.customer?.code ?? ""
       ).toLowerCase();
+
       const itemStatus = String(
         item.status ?? ""
       ).toLowerCase();
+
+      const deliveryDate = getDateKey(
+        item.deliveryDate
+      );
 
       const cocokSearch =
         !keyword ||
@@ -92,51 +289,91 @@ export default function SuratJalanPage() {
 
       const cocokStatus =
         status === "SEMUA" ||
-        String(item.status ?? "").toUpperCase() === status;
+        String(
+          item.status ?? ""
+        ).toUpperCase() === status;
 
-      return cocokSearch && cocokStatus;
+      const cocokTanggal =
+        !startDate ||
+        !endDate ||
+        (deliveryDate >= startDate &&
+          deliveryDate <= endDate);
+
+      return (
+        cocokSearch &&
+        cocokStatus &&
+        cocokTanggal
+      );
     });
-  }, [data, search, status]);
+  }, [
+    data,
+    search,
+    status,
+    startDate,
+    endDate,
+  ]);
 
   // =========================================================
   // SUMMARY
   // =========================================================
 
-  const totalData = data.length;
+  const totalData = filteredData.length;
 
-  const totalPending = data.filter((item: any) =>
-    [
-      "PENDING",
-      "PROCESS",
-      "PROCESSING",
-      "DIKIRIM",
-    ].includes(
-      String(item.status ?? "").toUpperCase()
-    )
+  const totalPending = filteredData.filter(
+    (item: any) =>
+      [
+        "PENDING",
+        "PROCESS",
+        "PROCESSING",
+        "DIKIRIM",
+      ].includes(
+        String(
+          item.status ?? ""
+        ).toUpperCase()
+      )
   ).length;
 
-  const totalDelivered = data.filter((item: any) =>
-    [
-      "DELIVERED",
-      "RECEIVED",
-      "SELESAI",
-    ].includes(
-      String(item.status ?? "").toUpperCase()
-    )
+  const totalDelivered = filteredData.filter(
+    (item: any) =>
+      [
+        "DELIVERED",
+        "RECEIVED",
+        "SELESAI",
+      ].includes(
+        String(
+          item.status ?? ""
+        ).toUpperCase()
+      )
   ).length;
 
   const totalCustomer = useMemo(() => {
-    const customers = data
-      .map((item: any) => item.customer?.id ?? item.customer?.name)
+    const customers = filteredData
+      .map(
+        (item: any) =>
+          item.customer?.id ??
+          item.customer?.name
+      )
       .filter(Boolean);
 
     return new Set(customers).size;
-  }, [data]);
+  }, [filteredData]);
 
   const completionRate =
     totalData > 0
-      ? Math.round((totalDelivered / totalData) * 100)
+      ? Math.round(
+          (totalDelivered / totalData) * 100
+        )
       : 0;
+
+  // =========================================================
+  // ACTIVE FILTER STATE
+  // =========================================================
+
+  const hasActiveFilter =
+    search !== "" ||
+    status !== "SEMUA" ||
+    dateMode !== "MONTH" ||
+    selectedMonth !== currentMonth;
 
   // =========================================================
   // HELPERS
@@ -145,45 +382,69 @@ export default function SuratJalanPage() {
   function formatDate(value: any) {
     if (!value) return "-";
 
+    const raw = String(value);
+    const match = raw.match(
+      /^(\d{4})-(\d{2})-(\d{2})/
+    );
+
+    if (match) {
+      const date = new Date(
+        Number(match[1]),
+        Number(match[2]) - 1,
+        Number(match[3])
+      );
+
+      return date.toLocaleDateString(
+        "id-ID",
+        {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }
+      );
+    }
+
     const date = new Date(value);
 
     if (Number.isNaN(date.getTime())) {
       return "-";
     }
 
-    return date.toLocaleDateString("id-ID", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  }
-
-  function formatDateLong(value: any) {
-    if (!value) return "-";
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return "-";
-    }
-
-    return date.toLocaleDateString("id-ID", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
+    return date.toLocaleDateString(
+      "id-ID",
+      {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }
+    );
   }
 
   function getStatusLabel(value: any) {
-    const current = String(value || "").toUpperCase();
+    const current = String(
+      value || ""
+    ).toUpperCase();
 
-    if (current === "DELIVERED") return "Delivered";
-    if (current === "RECEIVED") return "Received";
-    if (current === "SELESAI") return "Selesai";
-    if (current === "PENDING") return "Pending";
-    if (current === "PROCESS") return "Process";
-    if (current === "PROCESSING") return "Processing";
-    if (current === "DIKIRIM") return "Dikirim";
+    if (current === "DELIVERED")
+      return "Delivered";
+
+    if (current === "RECEIVED")
+      return "Received";
+
+    if (current === "SELESAI")
+      return "Selesai";
+
+    if (current === "PENDING")
+      return "Pending";
+
+    if (current === "PROCESS")
+      return "Process";
+
+    if (current === "PROCESSING")
+      return "Processing";
+
+    if (current === "DIKIRIM")
+      return "Dikirim";
 
     return value || "Unknown";
   }
@@ -197,7 +458,9 @@ export default function SuratJalanPage() {
   }: {
     value: string;
   }) {
-    const current = String(value || "").toUpperCase();
+    const current = String(
+      value || ""
+    ).toUpperCase();
 
     if (
       [
@@ -270,7 +533,6 @@ export default function SuratJalanPage() {
   }) {
     return (
       <div className="group relative overflow-hidden rounded-[22px] border border-slate-200/80 bg-white px-5 py-5 shadow-[0_4px_18px_rgba(15,23,42,0.035)] transition-all duration-300 hover:-translate-y-1 hover:border-slate-300 hover:shadow-[0_16px_38px_rgba(15,23,42,0.075)]">
-        {/* Decorative glow */}
         <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-slate-100/70 blur-3xl transition duration-500 group-hover:scale-150" />
 
         <div className="relative">
@@ -295,7 +557,9 @@ export default function SuratJalanPage() {
               <p
                 className={`text-[29px] font-bold tracking-[-0.04em] ${valueClass}`}
               >
-                {value.toLocaleString("id-ID")}
+                {value.toLocaleString(
+                  "id-ID"
+                )}
               </p>
 
               {percentage !== undefined && (
@@ -327,7 +591,6 @@ export default function SuratJalanPage() {
         {/* ================================================= */}
 
         <section className="relative mb-7 overflow-hidden rounded-[28px] bg-[#16352D] shadow-[0_18px_50px_rgba(22,53,45,0.13)]">
-          {/* Decorative background */}
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             <div className="absolute -right-24 -top-32 h-80 w-80 rounded-full bg-[#497F70]/25 blur-3xl" />
             <div className="absolute -bottom-40 left-1/3 h-80 w-80 rounded-full bg-[#497F70]/10 blur-3xl" />
@@ -337,7 +600,6 @@ export default function SuratJalanPage() {
           </div>
 
           <div className="relative flex flex-col gap-7 px-6 py-7 md:px-8 md:py-8 xl:flex-row xl:items-center xl:justify-between">
-            {/* LEFT */}
             <div className="flex min-w-0 items-start gap-4">
               <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[18px] border border-white/10 bg-white/10 shadow-lg backdrop-blur-sm">
                 <div className="absolute inset-0 bg-gradient-to-br from-[#5B9282]/60 to-transparent" />
@@ -370,7 +632,6 @@ export default function SuratJalanPage() {
               </div>
             </div>
 
-            {/* RIGHT STATUS */}
             <div className="flex shrink-0 items-center gap-3 rounded-[20px] border border-white/10 bg-white/[0.07] px-4 py-3 backdrop-blur-md">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#497F70]/30">
                 <Activity className="h-4 w-4 text-[#A9D0C3]" />
@@ -401,7 +662,7 @@ export default function SuratJalanPage() {
           <SummaryCard
             title="Total Surat Jalan"
             value={totalData}
-            description="Seluruh dokumen pengiriman"
+            description="Sesuai periode filter"
             icon={<FileText className="h-5 w-5" />}
             iconClass="text-[#497F70]"
             iconBg="bg-[#EEF6F3]"
@@ -432,7 +693,7 @@ export default function SuratJalanPage() {
           <SummaryCard
             title="Customer"
             value={totalCustomer}
-            description="Customer dalam pengiriman"
+            description="Customer dalam periode"
             icon={<Users className="h-5 w-5" />}
             iconClass="text-blue-600"
             iconBg="bg-blue-50"
@@ -451,30 +712,35 @@ export default function SuratJalanPage() {
           {/* ================================================= */}
 
           <div className="border-b border-slate-100">
-            <div className="flex flex-col gap-5 px-5 py-5 lg:flex-row lg:items-center lg:justify-between lg:px-6">
+            <div className="flex flex-col gap-5 px-5 py-5 lg:px-6">
 
               {/* TITLE */}
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF6F3] text-[#497F70]">
-                  <PackageCheck className="h-4.5 w-4.5" />
-                </div>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF6F3] text-[#497F70]">
+                    <PackageCheck className="h-4.5 w-4.5" />
+                  </div>
 
-                <div>
-                  <h2 className="text-sm font-bold text-[#18352D]">
-                    Daftar Surat Jalan
-                  </h2>
+                  <div>
+                    <h2 className="text-sm font-bold text-[#18352D]">
+                      Daftar Surat Jalan
+                    </h2>
 
-                  <p className="mt-0.5 text-[10px] font-medium text-slate-400">
-                    Data pengiriman dan status terbaru
-                  </p>
+                    <p className="mt-0.5 text-[10px] font-medium text-slate-400">
+                      Data pengiriman dan status terbaru
+                    </p>
+                  </div>
                 </div>
               </div>
 
+              {/* ================================================= */}
               {/* TOOLBAR */}
-              <div className="flex flex-col gap-2.5 sm:flex-row">
+              {/* ================================================= */}
+
+              <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-[minmax(260px,1fr)_190px_190px_190px_110px]">
 
                 {/* SEARCH */}
-                <div className="relative w-full sm:w-[340px]">
+                <div className="relative">
                   <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
                   <input
@@ -498,16 +764,94 @@ export default function SuratJalanPage() {
                   )}
                 </div>
 
-                {/* FILTER */}
+                {/* MONTH */}
+                <div className="relative">
+                  <CalendarDays className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+
+                  <select
+                    value={
+                      dateMode === "MONTH"
+                        ? selectedMonth
+                        : ""
+                    }
+                    onChange={(e) => {
+                      const value =
+                        e.target.value;
+
+                      if (value) {
+                        handleMonthChange(value);
+                      }
+                    }}
+                    className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-[#F8FAF9] pl-9 pr-9 text-xs font-semibold text-slate-600 outline-none transition hover:border-slate-300 focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                  >
+                    {dateMode === "CUSTOM" && (
+                      <option value="">
+                        Periode Custom
+                      </option>
+                    )}
+
+                    {monthOptions.map(
+                      (month) => (
+                        <option
+                          key={month.value}
+                          value={month.value}
+                        >
+                          {month.label}
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                  <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-slate-400" />
+                </div>
+
+                {/* START DATE */}
+                <div className="relative">
+                  <CalendarDays className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) =>
+                      handleStartDateChange(
+                        e.target.value
+                      )
+                    }
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-[#F8FAF9] pl-9 pr-3 text-xs font-semibold text-slate-600 outline-none transition hover:border-slate-300 focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                    title="Tanggal mulai"
+                  />
+                </div>
+
+                {/* END DATE */}
+                <div className="relative">
+                  <CalendarDays className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+
+                  <input
+                    type="date"
+                    value={endDate}
+                    min={startDate || undefined}
+                    onChange={(e) =>
+                      handleEndDateChange(
+                        e.target.value
+                      )
+                    }
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-[#F8FAF9] pl-9 pr-3 text-xs font-semibold text-slate-600 outline-none transition hover:border-slate-300 focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                    title="Tanggal akhir"
+                  />
+                </div>
+
+                {/* STATUS */}
                 <div className="relative">
                   <Filter className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
 
                   <select
                     value={status}
                     onChange={(e) =>
-                      setStatus(e.target.value)
+                      setStatus(
+                        e.target.value
+                      )
                     }
-                    className="h-11 min-w-[155px] appearance-none rounded-xl border border-slate-200 bg-[#F8FAF9] pl-9 pr-9 text-xs font-semibold text-slate-600 outline-none transition hover:border-slate-300 focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                    className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-[#F8FAF9] pl-9 pr-9 text-xs font-semibold text-slate-600 outline-none transition hover:border-slate-300 focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
                   >
                     <option value="SEMUA">
                       Semua Status
@@ -550,11 +894,13 @@ export default function SuratJalanPage() {
                   type="button"
                   onClick={loadData}
                   disabled={loading}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition hover:border-[#C7DAD3] hover:bg-[#F8FAF9] hover:text-[#18352D] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition hover:border-[#C7DAD3] hover:bg-[#F8FAF9] hover:text-[#18352D] disabled:cursor-not-allowed disabled:opacity-50 xl:col-span-1"
                 >
                   <RefreshCw
                     className={`h-3.5 w-3.5 ${
-                      loading ? "animate-spin" : ""
+                      loading
+                        ? "animate-spin"
+                        : ""
                     }`}
                   />
 
@@ -563,21 +909,47 @@ export default function SuratJalanPage() {
               </div>
             </div>
 
-            {/* RESULT STRIP */}
-            <div className="flex flex-col gap-3 bg-[#FAFCFB] px-5 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-6">
-              <div className="flex items-center gap-2 text-[10px] font-medium text-slate-400">
+            {/* ================================================= */}
+            {/* PERIOD INFO */}
+            {/* ================================================= */}
+
+            <div className="flex flex-col gap-2 border-t border-slate-100 bg-[#FAFCFB] px-5 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-6">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium text-slate-400">
                 <span className="h-1.5 w-1.5 rounded-full bg-[#497F70]" />
+
+                Periode
+
+                <span className="rounded-lg border border-[#DCE9E4] bg-white px-2 py-1 font-bold text-[#18352D]">
+                  {dateMode === "MONTH"
+                    ? monthOptions.find(
+                        (item) =>
+                          item.value ===
+                          selectedMonth
+                      )?.label ??
+                      selectedMonth
+                    : `${startDate || "-"} s/d ${
+                        endDate || "-"
+                      }`}
+                </span>
+
+                <span className="text-slate-300">
+                  •
+                </span>
 
                 Menampilkan
 
                 <span className="font-bold text-slate-700">
-                  {filteredData.length.toLocaleString("id-ID")}
+                  {filteredData.length.toLocaleString(
+                    "id-ID"
+                  )}
                 </span>
 
                 dari
 
                 <span className="font-bold text-slate-700">
-                  {data.length.toLocaleString("id-ID")}
+                  {data.length.toLocaleString(
+                    "id-ID"
+                  )}
                 </span>
 
                 dokumen
@@ -587,19 +959,17 @@ export default function SuratJalanPage() {
                 <div className="hidden items-center gap-1.5 text-[10px] font-medium text-slate-400 sm:flex">
                   <CalendarDays className="h-3.5 w-3.5" />
 
-                  Update data otomatis saat refresh
+                  Filter berdasarkan deliveryDate
                 </div>
 
-                {(search || status !== "SEMUA") && (
+                {hasActiveFilter && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setSearch("");
-                      setStatus("SEMUA");
-                    }}
+                    onClick={resetFilters}
                     className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#497F70] transition hover:text-[#18352D]"
                   >
                     <X className="h-3 w-3" />
+
                     Reset filter
                   </button>
                 )}
@@ -613,7 +983,6 @@ export default function SuratJalanPage() {
 
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1000px]">
-
               <thead>
                 <tr className="border-b border-slate-100 bg-[#F9FBFA]">
                   <th className="w-16 px-6 py-4 text-left text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">
@@ -643,15 +1012,15 @@ export default function SuratJalanPage() {
               </thead>
 
               <tbody className="divide-y divide-slate-100">
-
-                {/* ================================================= */}
-                {/* LOADING */}
-                {/* ================================================= */}
-
                 {loading ? (
-                  Array.from({ length: 5 }).map((_, index) => (
+                  Array.from({
+                    length: 5,
+                  }).map((_, index) => (
                     <tr key={index}>
-                      <td colSpan={6} className="px-6 py-5">
+                      <td
+                        colSpan={6}
+                        className="px-6 py-5"
+                      >
                         <div className="flex animate-pulse items-center gap-4">
                           <div className="h-8 w-8 rounded-lg bg-slate-100" />
 
@@ -667,15 +1036,12 @@ export default function SuratJalanPage() {
                     </tr>
                   ))
                 ) : filteredData.length === 0 ? (
-
-                  /* ================================================= */
-                  /* EMPTY */
-                  /* ================================================= */
-
                   <tr>
-                    <td colSpan={6} className="px-6 py-24 text-center">
+                    <td
+                      colSpan={6}
+                      className="px-6 py-24 text-center"
+                    >
                       <div className="mx-auto flex max-w-sm flex-col items-center">
-
                         <div className="relative flex h-20 w-20 items-center justify-center rounded-[26px] border border-[#DCE9E4] bg-[#EEF6F3]">
                           <div className="absolute inset-2 rounded-[20px] border border-[#DCE9E4]" />
 
@@ -688,57 +1054,59 @@ export default function SuratJalanPage() {
 
                         <p className="mt-1.5 text-xs leading-5 text-slate-400">
                           Tidak ditemukan dokumen yang sesuai
-                          dengan pencarian atau filter saat ini.
+                          dengan periode, pencarian, atau
+                          filter saat ini.
                         </p>
 
-                        {(search || status !== "SEMUA") && (
+                        {hasActiveFilter && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setSearch("");
-                              setStatus("SEMUA");
-                            }}
+                            onClick={
+                              resetFilters
+                            }
                             className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#18352D] px-4 py-2.5 text-[11px] font-bold text-white shadow-lg shadow-[#18352D]/10 transition hover:-translate-y-0.5 hover:bg-[#24483E]"
                           >
                             <RefreshCw className="h-3.5 w-3.5" />
+
                             Reset Filter
                           </button>
                         )}
                       </div>
                     </td>
                   </tr>
-
                 ) : (
-
-                  /* ================================================= */
-                  /* DATA */
-                  /* ================================================= */
-
                   filteredData.map(
-                    (item: any, index: number) => (
+                    (
+                      item: any,
+                      index: number
+                    ) => (
                       <tr
                         key={item.id}
                         className="group transition-colors duration-200 hover:bg-[#FBFDFC]"
                       >
-
                         {/* NO */}
                         <td className="px-6 py-5">
                           <span className="font-mono text-[10px] font-bold text-slate-300">
-                            {String(index + 1).padStart(2, "0")}
+                            {String(
+                              index + 1
+                            ).padStart(
+                              2,
+                              "0"
+                            )}
                           </span>
                         </td>
 
                         {/* DOCUMENT */}
                         <td className="px-5 py-5">
                           <div className="flex items-center gap-3">
-
                             <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#DCE9E4] bg-[#EEF6F3] transition-all duration-200 group-hover:border-[#BCD5CA] group-hover:bg-[#E5F2ED]">
                               <FileText className="h-4 w-4 text-[#497F70]" />
                             </div>
 
                             <div className="min-w-0">
                               <p className="font-mono text-[13px] font-bold tracking-tight text-[#18352D]">
-                                {item.number || "-"}
+                                {item.number ||
+                                  "-"}
                               </p>
 
                               <div className="mt-1 flex items-center gap-1.5">
@@ -761,7 +1129,9 @@ export default function SuratJalanPage() {
 
                             <div>
                               <p className="text-xs font-bold text-slate-700">
-                                {formatDate(item.deliveryDate)}
+                                {formatDate(
+                                  item.deliveryDate
+                                )}
                               </p>
 
                               <p className="mt-0.5 text-[9px] font-medium text-slate-400">
@@ -780,12 +1150,19 @@ export default function SuratJalanPage() {
 
                             <div className="min-w-0 max-w-[250px]">
                               <p className="truncate text-xs font-bold text-slate-700">
-                                {item.customer?.name || "-"}
+                                {item.customer
+                                  ?.name ||
+                                  "-"}
                               </p>
 
-                              {item.customer?.code ? (
+                              {item.customer
+                                ?.code ? (
                                 <span className="mt-1 inline-flex rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[8px] font-bold tracking-wide text-slate-400">
-                                  {item.customer.code}
+                                  {
+                                    item
+                                      .customer
+                                      .code
+                                  }
                                 </span>
                               ) : (
                                 <p className="mt-1 text-[9px] text-slate-400">
@@ -799,7 +1176,9 @@ export default function SuratJalanPage() {
                         {/* STATUS */}
                         <td className="px-5 py-5 text-center">
                           <StatusBadge
-                            value={item.status}
+                            value={
+                              item.status
+                            }
                           />
                         </td>
 
@@ -830,34 +1209,37 @@ export default function SuratJalanPage() {
           {/* TABLE FOOTER */}
           {/* ================================================= */}
 
-          {!loading && filteredData.length > 0 && (
-            <div className="flex flex-col gap-3 border-t border-slate-100 bg-[#FAFCFB] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          {!loading &&
+            filteredData.length > 0 && (
+              <div className="flex flex-col gap-3 border-t border-slate-100 bg-[#FAFCFB] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#EEF6F3]">
+                    <Truck className="h-3 w-3 text-[#497F70]" />
+                  </div>
 
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#EEF6F3]">
-                  <Truck className="h-3 w-3 text-[#497F70]" />
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                      Delivery Management
+                    </p>
+
+                    <p className="text-[10px] font-semibold text-slate-500">
+                      {filteredData.length.toLocaleString(
+                        "id-ID"
+                      )}{" "}
+                      dokumen ditampilkan
+                    </p>
+                  </div>
                 </div>
 
-                <div>
-                  <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                    Delivery Management
-                  </p>
+                <div className="flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
 
-                  <p className="text-[10px] font-semibold text-slate-500">
-                    {filteredData.length.toLocaleString("id-ID")} dokumen ditampilkan
-                  </p>
+                  <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-emerald-700">
+                    Sistem Aktif
+                  </span>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-
-                <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-emerald-700">
-                  Sistem Aktif
-                </span>
-              </div>
-            </div>
-          )}
+            )}
         </section>
 
         {/* ================================================= */}

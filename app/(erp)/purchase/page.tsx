@@ -36,7 +36,6 @@ import {
   PackageOpen,
   Building2,
   CalendarDays,
-  MoreHorizontal,
 } from "lucide-react";
 
 type PaymentMethod =
@@ -133,15 +132,69 @@ const STATUS_CONFIG: Record<
   },
 };
 
+const MONTH_OPTIONS: [string, string][] = [
+  ["01", "Januari"],
+  ["02", "Februari"],
+  ["03", "Maret"],
+  ["04", "April"],
+  ["05", "Mei"],
+  ["06", "Juni"],
+  ["07", "Juli"],
+  ["08", "Agustus"],
+  ["09", "September"],
+  ["10", "Oktober"],
+  ["11", "November"],
+  ["12", "Desember"],
+];
+
+function getCurrentMonth() {
+  return String(new Date().getMonth() + 1).padStart(2, "0");
+}
+
+function getCurrentYear() {
+  return String(new Date().getFullYear());
+}
+
+function getPurchaseDateParts(value: any) {
+  if (!value) return null;
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return {
+    month: String(date.getMonth() + 1).padStart(2, "0"),
+    year: String(date.getFullYear()),
+  };
+}
+
 export default function PurchasePage() {
   const [purchase, setPurchase] = useState<PurchaseRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("SEMUA");
+
   // Admin masuk langsung ke tampilan Purchase Pusat.
   const [source, setSource] = useState("PUSAT");
   const [paymentFilter, setPaymentFilter] = useState("SEMUA");
+
+  /*
+   * =========================================================
+   * FILTER PERIODE
+   *
+   * Default selalu bulan + tahun berjalan.
+   * Contoh:
+   * 2 Oktober 2026 -> Oktober 2026
+   * =========================================================
+   */
+  const [selectedMonth, setSelectedMonth] =
+    useState(getCurrentMonth());
+
+  const [selectedYear, setSelectedYear] =
+    useState(getCurrentYear());
 
   useEffect(() => {
     loadPurchase();
@@ -335,10 +388,37 @@ export default function PurchasePage() {
     }
   }
 
+  /*
+   * =========================================================
+   * PURCHASE BERDASARKAN PERIODE
+   *
+   * Filter bulan + tahun diterapkan terlebih dahulu.
+   * Jadi seluruh tampilan Purchase mengikuti periode aktif.
+   * =========================================================
+   */
+  const periodPurchase = useMemo(() => {
+    return purchase.filter((item) => {
+      const parts = getPurchaseDateParts(
+        item.purchaseDate
+      );
+
+      if (!parts) return false;
+
+      return (
+        parts.month === selectedMonth &&
+        parts.year === selectedYear
+      );
+    });
+  }, [
+    purchase,
+    selectedMonth,
+    selectedYear,
+  ]);
+
   const filteredPurchase = useMemo(() => {
     const keyword = search.toLowerCase().trim();
 
-    return purchase.filter((item) => {
+    return periodPurchase.filter((item) => {
       const itemSource =
         item.source === "OUTLET"
           ? "OUTLET"
@@ -388,38 +468,46 @@ export default function PurchasePage() {
       );
     });
   }, [
-    purchase,
+    periodPurchase,
     search,
     status,
     source,
     paymentFilter,
   ]);
 
-  const totalPurchase = purchase.length;
+  /*
+   * =========================================================
+   * KPI
+   *
+   * Semua KPI sekarang mengikuti bulan + tahun terpilih.
+   * =========================================================
+   */
 
-  const totalPusat = purchase.filter(
+  const totalPurchase = periodPurchase.length;
+
+  const totalPusat = periodPurchase.filter(
     (item) => item.source !== "OUTLET"
   ).length;
 
-  const totalOutlet = purchase.filter(
+  const totalOutlet = periodPurchase.filter(
     (item) => item.source === "OUTLET"
   ).length;
 
-  const totalDraft = purchase.filter(
+  const totalDraft = periodPurchase.filter(
     (item) => item.status === "DRAFT"
   ).length;
 
-  const totalApproved = purchase.filter(
+  const totalApproved = periodPurchase.filter(
     (item) => item.status === "APPROVED"
   ).length;
 
-  const totalReceived = purchase.filter(
+  const totalReceived = periodPurchase.filter(
     (item) =>
       item.status === "RECEIVED" ||
       item.status === "COMPLETED"
   ).length;
 
-  const totalValue = purchase.reduce(
+  const totalValue = periodPurchase.reduce(
     (total, item) =>
       total + Number(item.total || 0),
     0
@@ -428,7 +516,7 @@ export default function PurchasePage() {
   const paymentSummary = useMemo(() => {
     const summary: Record<string, number> = {};
 
-    purchase.forEach((item) => {
+    periodPurchase.forEach((item) => {
       const method =
         getPaymentMethod(item) || "UNSET";
 
@@ -437,7 +525,7 @@ export default function PurchasePage() {
     });
 
     return summary;
-  }, [purchase]);
+  }, [periodPurchase]);
 
   const availablePaymentMethods = useMemo(() => {
     const methods = new Set<string>();
@@ -476,6 +564,14 @@ export default function PurchasePage() {
     );
   }
 
+  function getSelectedMonthLabel() {
+    return (
+      MONTH_OPTIONS.find(
+        ([value]) => value === selectedMonth
+      )?.[1] || selectedMonth
+    );
+  }
+
   function StatusBadge({
     status,
   }: {
@@ -507,14 +603,44 @@ export default function PurchasePage() {
     !!search ||
     status !== "SEMUA" ||
     source !== "PUSAT" ||
-    paymentFilter !== "SEMUA";
+    paymentFilter !== "SEMUA" ||
+    selectedMonth !== getCurrentMonth() ||
+    selectedYear !== getCurrentYear();
 
   function resetFilter() {
     setSearch("");
     setStatus("SEMUA");
     setSource("PUSAT");
     setPaymentFilter("SEMUA");
+
+    // Reset kembali ke bulan berjalan.
+    setSelectedMonth(getCurrentMonth());
+    setSelectedYear(getCurrentYear());
   }
+
+  /*
+   * Tahun filter dibuat dinamis dari data Purchase,
+   * tetapi tahun berjalan selalu tersedia.
+   */
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+
+    years.add(Number(getCurrentYear()));
+
+    purchase.forEach((item) => {
+      const parts = getPurchaseDateParts(
+        item.purchaseDate
+      );
+
+      if (parts) {
+        years.add(Number(parts.year));
+      }
+    });
+
+    return Array.from(years).sort(
+      (a, b) => b - a
+    );
+  }, [purchase]);
 
   return (
     <div className="min-h-full bg-[#F4F7F6] p-4 md:p-6 lg:p-8">
@@ -627,62 +753,84 @@ export default function PurchasePage() {
 
           {/* MINI METRICS */}
 
-          <div className="mt-7 grid grid-cols-2 gap-2 border-t border-[#E7EFEB] pt-5 sm:grid-cols-4">
+          <div className="mt-7 border-t border-[#E7EFEB] pt-5">
 
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
-                <ShoppingCart size={14} />
-              </div>
-              <div>
-                <p className="text-[8px] font-black uppercase tracking-wider text-gray-400">
-                  Pusat
-                </p>
-                <p className="text-sm font-black text-[#35564C]">
-                  {totalPusat}
-                </p>
-              </div>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#D4E5DD] bg-[#EFF7F3] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-[#497F70]">
+                <CalendarDays size={10} />
+                Periode Aktif
+              </span>
+
+              <span className="text-xs font-black text-[#35564C]">
+                {getSelectedMonthLabel()}{" "}
+                {selectedYear}
+              </span>
+
+              <span className="text-[9px] font-semibold text-gray-400">
+                • Transaksi berdasarkan tanggal Purchase Order
+              </span>
+
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                <Store size={14} />
-              </div>
-              <div>
-                <p className="text-[8px] font-black uppercase tracking-wider text-gray-400">
-                  Outlet
-                </p>
-                <p className="text-sm font-black text-[#35564C]">
-                  {totalOutlet}
-                </p>
-              </div>
-            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
 
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-                <Clock3 size={14} />
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
+                  <ShoppingCart size={14} />
+                </div>
+                <div>
+                  <p className="text-[8px] font-black uppercase tracking-wider text-gray-400">
+                    Pusat
+                  </p>
+                  <p className="text-sm font-black text-[#35564C]">
+                    {totalPusat}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-[8px] font-black uppercase tracking-wider text-gray-400">
-                  Draft
-                </p>
-                <p className="text-sm font-black text-[#35564C]">
-                  {totalDraft}
-                </p>
-              </div>
-            </div>
 
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                <PackageCheck size={14} />
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                  <Store size={14} />
+                </div>
+                <div>
+                  <p className="text-[8px] font-black uppercase tracking-wider text-gray-400">
+                    Outlet
+                  </p>
+                  <p className="text-sm font-black text-[#35564C]">
+                    {totalOutlet}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-[8px] font-black uppercase tracking-wider text-gray-400">
-                  Received
-                </p>
-                <p className="text-sm font-black text-[#35564C]">
-                  {totalReceived}
-                </p>
+
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                  <Clock3 size={14} />
+                </div>
+                <div>
+                  <p className="text-[8px] font-black uppercase tracking-wider text-gray-400">
+                    Draft
+                  </p>
+                  <p className="text-sm font-black text-[#35564C]">
+                    {totalDraft}
+                  </p>
+                </div>
               </div>
+
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                  <PackageCheck size={14} />
+                </div>
+                <div>
+                  <p className="text-[8px] font-black uppercase tracking-wider text-gray-400">
+                    Received
+                  </p>
+                  <p className="text-sm font-black text-[#35564C]">
+                    {totalReceived}
+                  </p>
+                </div>
+              </div>
+
             </div>
 
           </div>
@@ -692,7 +840,7 @@ export default function PurchasePage() {
       </section>
 
       {/* =====================================================
-          DRAFT ALERT / ACTIONABLE INFO
+          DRAFT ALERT
       ===================================================== */}
 
       {totalDraft > 0 && (
@@ -713,12 +861,20 @@ export default function PurchasePage() {
               <p className="text-sm font-black text-[#35564C]">
                 Ada {totalDraft} Purchase yang masih Draft
               </p>
+
               <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-700">
                 Perlu perhatian
               </span>
             </div>
+
             <p className="mt-1 text-xs leading-5 text-gray-500">
-              Purchase berstatus Draft belum masuk tahap approval. Klik informasi ini untuk langsung menampilkan daftar Draft.
+              Purchase berstatus Draft pada periode{" "}
+              <strong>
+                {getSelectedMonthLabel()}{" "}
+                {selectedYear}
+              </strong>{" "}
+              belum masuk tahap approval. Klik informasi ini
+              untuk langsung menampilkan daftar Draft.
             </p>
           </div>
 
@@ -751,8 +907,11 @@ export default function PurchasePage() {
               </p>
 
               <div className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-gray-400">
-                <TrendingUp size={11} className="text-emerald-500" />
-                Seluruh dokumen procurement
+                <TrendingUp
+                  size={11}
+                  className="text-emerald-500"
+                />
+                {getSelectedMonthLabel()} {selectedYear}
               </div>
             </div>
 
@@ -837,7 +996,8 @@ export default function PurchasePage() {
 
               <p className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-white/55">
                 <CircleDollarSign size={11} />
-                Nilai seluruh PO
+                Nilai {getSelectedMonthLabel()}{" "}
+                {selectedYear}
               </p>
             </div>
 
@@ -1027,7 +1187,11 @@ export default function PurchasePage() {
                 </h2>
 
                 <p className="mt-0.5 text-[10px] text-gray-400">
-                  Daftar procurement dan status penerimaan
+                  Daftar procurement periode{" "}
+                  <strong className="text-[#497F70]">
+                    {getSelectedMonthLabel()}{" "}
+                    {selectedYear}
+                  </strong>
                 </p>
               </div>
 
@@ -1077,6 +1241,7 @@ export default function PurchasePage() {
                   size={14}
                   className="text-[#497F70]"
                 />
+
                 <span className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-500">
                   Filter & Search
                 </span>
@@ -1095,127 +1260,227 @@ export default function PurchasePage() {
 
             </div>
 
-            <div className="flex flex-col gap-2.5 xl:flex-row">
+            <div className="flex flex-col gap-2.5">
 
-              <div className="relative min-w-0 flex-1">
+              {/* =================================================
+                  PERIODE BULAN + TAHUN
+              ================================================= */}
 
-                <Search
-                  size={16}
-                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
-                />
+              <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(220px,1fr)_minmax(180px,220px)]">
 
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) =>
-                    setSearch(e.target.value)
-                  }
-                  placeholder="Cari No PO, supplier, outlet, metode pembayaran..."
-                  className="w-full rounded-xl border border-[#DCE7E1] bg-white py-2.5 pl-10 pr-4 text-sm font-medium text-[#35564C] outline-none transition-all placeholder:text-gray-400 focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
-                />
+                <div className="relative">
 
-              </div>
+                  <CalendarDays
+                    size={15}
+                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#497F70]"
+                  />
 
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 xl:flex">
-
-                {/* SOURCE / JENIS PURCHASE — BUTTONS, BUKAN DROPDOWN */}
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-2xl border border-[#DCE7E1] bg-white p-1.5 shadow-sm xl:min-w-[430px]">
-
-                  {[
-                    {
-                      value: "PUSAT",
-                      label: "Purchase Pusat",
-                      shortLabel: "Pusat",
-                      icon: Building2,
-                      count: totalPusat,
-                    },
-                    {
-                      value: "OUTLET",
-                      label: "Purchase Outlet",
-                      shortLabel: "Outlet",
-                      icon: Store,
-                      count: totalOutlet,
-                    },
-                    {
-                      value: "SEMUA",
-                      label: "Semua Purchase",
-                      shortLabel: "Semua",
-                      icon: Layers3,
-                      count: totalPurchase,
-                    },
-                  ].map((item) => {
-                    const Icon = item.icon;
-                    const active = source === item.value;
-
-                    return (
-                      <button
-                        key={item.value}
-                        type="button"
-                        onClick={() => setSource(item.value)}
-                        className={`group inline-flex min-w-[112px] flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-all duration-200 ${
-                          active
-                            ? "bg-[#18352D] text-white shadow-[0_7px_18px_rgba(24,53,45,0.18)]"
-                            : "text-[#58736A] hover:bg-[#F1F7F4] hover:text-[#315E51]"
-                        }`}
-                      >
-                        <span
-                          className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
-                            active
-                              ? "bg-white/12 text-emerald-200"
-                              : "bg-[#EAF3EF] text-[#497F70] group-hover:bg-white"
-                          }`}
+                  <select
+                    value={selectedMonth}
+                    onChange={(e) =>
+                      setSelectedMonth(
+                        e.target.value
+                      )
+                    }
+                    className="w-full appearance-none rounded-xl border border-[#DCE7E1] bg-white py-2.5 pl-10 pr-10 text-sm font-bold text-[#35564C] outline-none transition-all hover:border-[#BFD4CB] focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                  >
+                    {MONTH_OPTIONS.map(
+                      ([value, label]) => (
+                        <option
+                          key={value}
+                          value={value}
                         >
-                          <Icon size={14} />
-                        </span>
+                          {label}
+                        </option>
+                      )
+                    )}
+                  </select>
 
-                        <span className="hidden sm:inline">
-                          {item.label}
-                        </span>
-                        <span className="sm:hidden">
-                          {item.shortLabel}
-                        </span>
-
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[9px] font-black ${
-                            active
-                              ? "bg-white/12 text-white"
-                              : "bg-[#F1F6F3] text-[#6A837A]"
-                          }`}
-                        >
-                          {item.count}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  <ChevronDown
+                    size={14}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
 
                 </div>
 
-                <FilterSelect
-                  value={status}
-                  onChange={setStatus}
-                  options={[
-                    ["SEMUA", "Semua Status"],
-                    ["DRAFT", "Draft"],
-                    ["APPROVED", "Approved"],
-                    ["RECEIVED", "Received"],
-                    ["COMPLETED", "Completed"],
-                    ["CANCELLED", "Cancelled"],
-                  ]}
-                />
+                <div className="relative">
 
-                <FilterSelect
-                  value={paymentFilter}
-                  onChange={setPaymentFilter}
-                  options={[
-                    ["SEMUA", "Semua Pembayaran"],
-                    ...availablePaymentMethods.map(
-                      (method) => [
-                        method,
-                        paymentLabel(method),
-                      ] as [string, string]
-                    ),
-                  ]}
-                />
+                  <CalendarDays
+                    size={15}
+                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#497F70]"
+                  />
+
+                  <select
+                    value={selectedYear}
+                    onChange={(e) =>
+                      setSelectedYear(
+                        e.target.value
+                      )
+                    }
+                    className="w-full appearance-none rounded-xl border border-[#DCE7E1] bg-white py-2.5 pl-10 pr-10 text-sm font-bold text-[#35564C] outline-none transition-all hover:border-[#BFD4CB] focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                  >
+                    {availableYears.map(
+                      (year) => (
+                        <option
+                          key={year}
+                          value={String(year)}
+                        >
+                          Tahun {year}
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                  <ChevronDown
+                    size={14}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+
+                </div>
+
+              </div>
+
+              <div className="flex flex-col gap-2.5 xl:flex-row">
+
+                <div className="relative min-w-0 flex-1">
+
+                  <Search
+                    size={16}
+                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) =>
+                      setSearch(
+                        e.target.value
+                      )
+                    }
+                    placeholder="Cari No PO, supplier, outlet, metode pembayaran..."
+                    className="w-full rounded-xl border border-[#DCE7E1] bg-white py-2.5 pl-10 pr-4 text-sm font-medium text-[#35564C] outline-none transition-all placeholder:text-gray-400 focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                  />
+
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 xl:flex">
+
+                  {/* SOURCE */}
+
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-2xl border border-[#DCE7E1] bg-white p-1.5 shadow-sm xl:min-w-[430px]">
+
+                    {[
+                      {
+                        value: "PUSAT",
+                        label: "Purchase Pusat",
+                        shortLabel: "Pusat",
+                        icon: Building2,
+                        count: totalPusat,
+                      },
+                      {
+                        value: "OUTLET",
+                        label: "Purchase Outlet",
+                        shortLabel: "Outlet",
+                        icon: Store,
+                        count: totalOutlet,
+                      },
+                      {
+                        value: "SEMUA",
+                        label: "Semua Purchase",
+                        shortLabel: "Semua",
+                        icon: Layers3,
+                        count: totalPurchase,
+                      },
+                    ].map((item) => {
+                      const Icon = item.icon;
+                      const active =
+                        source === item.value;
+
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          onClick={() =>
+                            setSource(
+                              item.value
+                            )
+                          }
+                          className={`group inline-flex min-w-[112px] flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-all duration-200 ${
+                            active
+                              ? "bg-[#18352D] text-white shadow-[0_7px_18px_rgba(24,53,45,0.18)]"
+                              : "text-[#58736A] hover:bg-[#F1F7F4] hover:text-[#315E51]"
+                          }`}
+                        >
+                          <span
+                            className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
+                              active
+                                ? "bg-white/12 text-emerald-200"
+                                : "bg-[#EAF3EF] text-[#497F70] group-hover:bg-white"
+                            }`}
+                          >
+                            <Icon size={14} />
+                          </span>
+
+                          <span className="hidden sm:inline">
+                            {item.label}
+                          </span>
+
+                          <span className="sm:hidden">
+                            {item.shortLabel}
+                          </span>
+
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[9px] font-black ${
+                              active
+                                ? "bg-white/12 text-white"
+                                : "bg-[#F1F6F3] text-[#6A837A]"
+                            }`}
+                          >
+                            {item.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+
+                  </div>
+
+                  <FilterSelect
+                    value={status}
+                    onChange={setStatus}
+                    options={[
+                      ["SEMUA", "Semua Status"],
+                      ["DRAFT", "Draft"],
+                      ["APPROVED", "Approved"],
+                      ["RECEIVED", "Received"],
+                      ["COMPLETED", "Completed"],
+                      ["CANCELLED", "Cancelled"],
+                    ]}
+                  />
+
+                  <FilterSelect
+                    value={paymentFilter}
+                    onChange={setPaymentFilter}
+                    options={[
+                      [
+                        "SEMUA",
+                        "Semua Pembayaran",
+                      ],
+                      ...availablePaymentMethods.map(
+                        (method) =>
+                          [
+                            method,
+                            paymentLabel(
+                              method
+                            ),
+                          ] as [
+                            string,
+                            string
+                          ]
+                      ),
+                    ]}
+                  />
+
+                </div>
 
               </div>
 
@@ -1225,8 +1490,17 @@ export default function PurchasePage() {
 
           <div className="mt-4 flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
 
-            <div className="flex items-center gap-2 text-gray-400">
-              <span>Menampilkan</span>
+            <div className="flex flex-wrap items-center gap-2 text-gray-400">
+
+              <span>Periode</span>
+
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#EAF3EF] px-2 py-1 font-black text-[#497F70]">
+                <CalendarDays size={11} />
+                {getSelectedMonthLabel()}{" "}
+                {selectedYear}
+              </span>
+
+              <span>• Menampilkan</span>
 
               <span className="rounded-lg bg-[#EAF3EF] px-2 py-1 font-black text-[#497F70]">
                 {filteredPurchase.length}
@@ -1235,10 +1509,11 @@ export default function PurchasePage() {
               <span>dari</span>
 
               <strong className="text-[#35564C]">
-                {purchase.length}
+                {periodPurchase.length}
               </strong>
 
               <span>Purchase Order</span>
+
             </div>
 
             {hasFilter && (
@@ -1336,6 +1611,11 @@ export default function PurchasePage() {
 
                       <p className="mt-1 max-w-sm text-xs leading-5 text-gray-400">
                         Tidak ditemukan Purchase Order
+                        pada periode{" "}
+                        <strong>
+                          {getSelectedMonthLabel()}{" "}
+                          {selectedYear}
+                        </strong>{" "}
                         yang sesuai dengan pencarian
                         atau filter yang dipilih.
                       </p>
@@ -1672,7 +1952,12 @@ export default function PurchasePage() {
                 </div>
 
                 <span className="text-[10px] font-semibold text-gray-400">
-                  Data Purchase Order berhasil dimuat
+                  Data Purchase Order periode{" "}
+                  <strong className="text-[#497F70]">
+                    {getSelectedMonthLabel()}{" "}
+                    {selectedYear}
+                  </strong>{" "}
+                  berhasil dimuat
                 </span>
 
               </div>

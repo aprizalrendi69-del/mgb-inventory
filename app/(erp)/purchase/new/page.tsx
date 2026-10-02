@@ -41,6 +41,10 @@ type Barang = {
   name: string;
   barcode?: string;
   unit?: string;
+
+  // Stock Pusat
+  stock?: number;
+  minimumStock?: number;
 };
 
 type PaymentMethod =
@@ -192,6 +196,85 @@ export default function NewPurchasePage() {
     } finally {
       setLoadingBarang(false);
     }
+  }
+
+  /* =========================================================
+     STOCK STATUS
+  ========================================================= */
+
+  function getBarangStock(item: Barang) {
+    const stock = Number(item.stock ?? 0);
+
+    return Number.isFinite(stock) ? stock : 0;
+  }
+
+  function getBarangMinimumStock(item: Barang) {
+    const minimumStock = Number(
+      item.minimumStock ?? 5
+    );
+
+    return Number.isFinite(minimumStock)
+      ? minimumStock
+      : 5;
+  }
+
+  function getBarangStockStatus(item: Barang) {
+    const stock = getBarangStock(item);
+    const minimumStock =
+      getBarangMinimumStock(item);
+
+    if (stock <= 0) {
+      return "out";
+    }
+
+    if (stock <= minimumStock) {
+      return "low";
+    }
+
+    return "safe";
+  }
+
+  function getBarangStockStatusLabel(item: Barang) {
+    const status = getBarangStockStatus(item);
+
+    if (status === "out") {
+      return "Habis";
+    }
+
+    if (status === "low") {
+      return "Menipis";
+    }
+
+    return "Aman";
+  }
+
+  function getBarangStockStatusClass(item: Barang) {
+    const status = getBarangStockStatus(item);
+
+    if (status === "out") {
+      return {
+        badge:
+          "border-[#F1CCCC] bg-[#FFF1F1] text-[#C34F4F]",
+        dot: "bg-[#D85D5D]",
+        stock: "text-[#C34F4F]",
+      };
+    }
+
+    if (status === "low") {
+      return {
+        badge:
+          "border-[#F0DDAF] bg-[#FFF8E7] text-[#A9781E]",
+        dot: "bg-[#D7A84B]",
+        stock: "text-[#A9781E]",
+      };
+    }
+
+    return {
+      badge:
+        "border-[#C9DCEB] bg-[#EEF7FC] text-[#36739A]",
+      dot: "bg-[#4C91B8]",
+      stock: "text-[#36739A]",
+    };
   }
 
   /* =========================================================
@@ -621,10 +704,6 @@ export default function NewPurchasePage() {
 
       const data = json.data;
 
-      /*
-       * Support beberapa kemungkinan nama
-       * field dari endpoint harga terakhir.
-       */
       const lastPrice = Number(
         data.hargaTerakhir ??
           data.lastPrice ??
@@ -662,11 +741,6 @@ export default function NewPurchasePage() {
         };
       });
 
-      /*
-       * Harga terakhir adalah harga referensi,
-       * jadi warning tidak ditampilkan sampai
-       * user mengubah harga menjadi berbeda.
-       */
       setPriceWarning((prev) => {
         const next = { ...prev };
         delete next[index];
@@ -891,9 +965,15 @@ export default function NewPurchasePage() {
               <Package size={13} />
             </div>
 
-            <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#8B9994]">
-              Pilih Barang
-            </span>
+            <div>
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#8B9994]">
+                Pilih Barang
+              </span>
+
+              <div className="mt-0.5 text-[8px] font-medium text-[#A1ADA8]">
+                Stock Pusat
+              </div>
+            </div>
           </div>
 
           <button
@@ -909,8 +989,16 @@ export default function NewPurchasePage() {
           </button>
         </div>
 
-        <div className="max-h-[320px] overflow-y-auto">
-          {filtered.length === 0 ? (
+        <div className="max-h-[360px] overflow-y-auto">
+          {loadingBarang ? (
+            <div className="flex items-center justify-center gap-2 px-4 py-9 text-xs font-semibold text-[#7C8B85]">
+              <Loader2
+                size={15}
+                className="animate-spin"
+              />
+              Memuat barang...
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="px-4 py-9 text-center">
               <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[#F1F5F3] text-[#9AA8A3]">
                 <Search size={16} />
@@ -926,64 +1014,149 @@ export default function NewPurchasePage() {
               </p>
             </div>
           ) : (
-            filtered.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                }}
-                onClick={() =>
-                  selectBarang(
-                    index,
-                    item
-                  )
-                }
-                className="group flex w-full items-center gap-3 border-b border-[#F0F3F2] px-4 py-3 text-left transition last:border-0 hover:bg-[#F5F9F7]"
-              >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#EAF2EE] text-[#497F70] transition group-hover:bg-[#DCEEE6]">
-                  <Package size={15} />
-                </div>
+            filtered.map((item) => {
+              const stock =
+                getBarangStock(item);
 
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-bold text-[#30443D]">
-                    {item.name}
+              const stockStatus =
+                getBarangStockStatus(
+                  item
+                );
+
+              const stockLabel =
+                getBarangStockStatusLabel(
+                  item
+                );
+
+              const stockClass =
+                getBarangStockStatusClass(
+                  item
+                );
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                  }}
+                  onClick={() =>
+                    selectBarang(
+                      index,
+                      item
+                    )
+                  }
+                  className="group flex w-full items-start gap-3 border-b border-[#F0F3F2] px-4 py-3 text-left transition last:border-0 hover:bg-[#F5F9F7]"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#EAF2EE] text-[#497F70] transition group-hover:bg-[#DCEEE6]">
+                    <Package size={15} />
                   </div>
 
-                  <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] font-medium text-[#9AA7A2]">
-                    {item.code && (
-                      <span>
-                        Kode:{" "}
-                        {item.code}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 truncate text-sm font-bold text-[#30443D]">
+                        {item.name}
+                      </div>
+
+                      {/* STATUS STOCK */}
+                      <span
+                        className={`flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[8px] font-extrabold uppercase tracking-wide ${stockClass.badge}`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${stockClass.dot}`}
+                        />
+
+                        {stockLabel}
                       </span>
+                    </div>
+
+                    <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] font-medium text-[#9AA7A2]">
+                      {item.code && (
+                        <span>
+                          Kode:{" "}
+                          {item.code}
+                        </span>
+                      )}
+
+                      {item.barcode && (
+                        <span>
+                          Barcode:{" "}
+                          {item.barcode}
+                        </span>
+                      )}
+
+                      {item.unit && (
+                        <span>
+                          Unit:{" "}
+                          {item.unit}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* STOCK DETAIL */}
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-[#9AA7A2]">
+                        Stock Pusat
+                      </span>
+
+                      <span
+                        className={`text-[10px] font-extrabold ${stockClass.stock}`}
+                      >
+                        {formatRupiah(
+                          stock
+                        )}{" "}
+                        {item.unit || ""}
+                      </span>
+
+                      {item.minimumStock !==
+                        undefined && (
+                        <>
+                          <span className="text-[#D2DAD6]">
+                            •
+                          </span>
+
+                          <span className="text-[8px] font-medium text-[#A0AAA6]">
+                            Min.{" "}
+                            {formatRupiah(
+                              getBarangMinimumStock(
+                                item
+                              )
+                            )}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {stockStatus ===
+                      "out" && (
+                      <div className="mt-1 text-[8px] font-semibold text-[#C34F4F]">
+                        Stock pusat habis,
+                        barang perlu segera
+                        dibeli.
+                      </div>
                     )}
 
-                    {item.barcode && (
-                      <span>
-                        Barcode:{" "}
-                        {item.barcode}
-                      </span>
-                    )}
-
-                    {item.unit && (
-                      <span>
-                        Unit:{" "}
-                        {item.unit}
-                      </span>
+                    {stockStatus ===
+                      "low" && (
+                      <div className="mt-1 text-[8px] font-semibold text-[#A9781E]">
+                        Stock pusat menipis,
+                        pertimbangkan untuk
+                        melakukan pembelian.
+                      </div>
                     )}
                   </div>
-                </div>
 
-                {String(item.id) ===
-                  form.items[
-                    index
-                  ]?.barangId && (
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E5F2EC] text-[#497F70]">
-                    <Check size={14} />
-                  </div>
-                )}
-              </button>
-            ))
+                  {String(item.id) ===
+                    form.items[
+                      index
+                    ]?.barangId && (
+                    <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E5F2EC] text-[#497F70]">
+                      <Check size={14} />
+                    </div>
+                  )}
+                </button>
+              );
+            })
           )}
         </div>
       </div>,

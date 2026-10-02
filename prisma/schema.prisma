@@ -553,19 +553,26 @@ model OutletSale {
   userId        Int?
   customerName  String?
   saleDate      DateTime         @default(now())
+
   subtotal      Float            @default(0)
   discount      Float            @default(0)
+  serviceCharge Float            @default(0)
+  ppn           Float            @default(0)
   total         Float            @default(0)
+
   paidAmount    Float            @default(0)
   changeAmount  Float            @default(0)
+
   paymentMethod String           @default("CASH")
   status        OutletSaleStatus @default(PAID)
+
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   voidedAt      DateTime?
   voidedBy      Int?
   voidReason    String?
   voidedById    Int?
+
   user          User?            @relation(fields: [userId], references: [id])
   outlet        Outlet           @relation(fields: [outletId], references: [id])
   items         OutletSaleItem[]

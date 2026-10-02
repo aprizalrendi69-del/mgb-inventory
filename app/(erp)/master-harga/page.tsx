@@ -42,7 +42,63 @@ export default function MasterHargaPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
+  // =========================================================
+  // BULAN TAHUN BERJALAN
+  // Default saat halaman dibuka = bulan berjalan.
+  // =========================================================
+
+  function getCurrentMonthValue() {
+    const now = new Date();
+
+    return `${now.getFullYear()}-${String(
+      now.getMonth() + 1
+    ).padStart(2, "0")}`;
+  }
+
+  function getMonthDateRange(monthValue: string) {
+    if (!monthValue) {
+      return {
+        from: "",
+        to: "",
+      };
+    }
+
+    const [year, month] = monthValue
+      .split("-")
+      .map(Number);
+
+    if (!year || !month) {
+      return {
+        from: "",
+        to: "",
+      };
+    }
+
+    const lastDay = new Date(
+      year,
+      month,
+      0
+    ).getDate();
+
+    return {
+      from: `${year}-${String(month).padStart(2, "0")}-01`,
+      to: `${year}-${String(month).padStart(2, "0")}-${String(
+        lastDay
+      ).padStart(2, "0")}`,
+    };
+  }
+
+  const [monthFilter, setMonthFilter] =
+    useState(getCurrentMonthValue);
+
   useEffect(() => {
+    const currentMonth = getCurrentMonthValue();
+    const range = getMonthDateRange(currentMonth);
+
+    setMonthFilter(currentMonth);
+    setDateFrom(range.from);
+    setDateTo(range.to);
+
     loadData();
   }, []);
 
@@ -289,10 +345,29 @@ export default function MasterHargaPage() {
   // =========================================================
 
   function resetFilter() {
+    const currentMonth = getCurrentMonthValue();
+    const range = getMonthDateRange(currentMonth);
+
     setSearch("");
     setStatusFilter("SEMUA");
-    setDateFrom("");
-    setDateTo("");
+    setMonthFilter(currentMonth);
+    setDateFrom(range.from);
+    setDateTo(range.to);
+  }
+
+  function handleMonthFilterChange(
+    value: string
+  ) {
+    setMonthFilter(value);
+
+    if (value === "CUSTOM") {
+      return;
+    }
+
+    const range = getMonthDateRange(value);
+
+    setDateFrom(range.from);
+    setDateTo(range.to);
   }
 
   const hasFilter =
@@ -1808,7 +1883,7 @@ export default function MasterHargaPage() {
                 </div>
 
                 <p className="mt-0.5 text-[10px] text-[#9AA6A1]">
-                  Saring histori berdasarkan barang, status dan periode penerimaan.
+                  Saring histori berdasarkan barang, status, bulan tahun berjalan dan periode penerimaan.
                 </p>
 
               </div>
@@ -1830,7 +1905,7 @@ export default function MasterHargaPage() {
 
           <div className="p-5">
 
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_230px_230px_210px]">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px_220px_220px_210px]">
 
               {/* SEARCH */}
 
@@ -1876,6 +1951,80 @@ export default function MasterHargaPage() {
 
               </div>
 
+              {/* BULAN TAHUN BERJALAN */}
+
+              <div>
+
+                <label className="mb-2 block text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#77867F]">
+                  Bulan Tahun Berjalan
+                </label>
+
+                <div className="relative">
+
+                  <CalendarDays
+                    size={15}
+                    className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-[#9BA7A2]"
+                  />
+
+                  <select
+                    value={monthFilter}
+                    onChange={(e) =>
+                      handleMonthFilterChange(
+                        e.target.value
+                      )
+                    }
+                    className="h-11 w-full appearance-none rounded-xl border border-[#D6E2DD] bg-[#FBFCFB] pl-10 pr-9 text-sm font-medium text-[#354840] outline-none transition-all hover:border-[#C5D5CE] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                  >
+
+                    {Array.from({
+                      length: 12,
+                    }).map((_, index) => {
+                      const now = new Date();
+                      const year =
+                        now.getFullYear();
+                      const month =
+                        index + 1;
+
+                      const value = `${year}-${String(
+                        month
+                      ).padStart(2, "0")}`;
+
+                      const label = new Date(
+                        year,
+                        index,
+                        1
+                      ).toLocaleDateString(
+                        "id-ID",
+                        {
+                          month: "long",
+                        }
+                      );
+
+                      return (
+                        <option
+                          key={value}
+                          value={value}
+                        >
+                          {label} {year}
+                        </option>
+                      );
+                    })}
+
+                    <option value="CUSTOM">
+                      Periode Custom
+                    </option>
+
+                  </select>
+
+                  <ChevronRight
+                    size={15}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-[#899690]"
+                  />
+
+                </div>
+
+              </div>
+
               {/* DATE FROM */}
 
               <div>
@@ -1897,11 +2046,12 @@ export default function MasterHargaPage() {
                     max={
                       dateTo || undefined
                     }
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      setMonthFilter("CUSTOM");
                       setDateFrom(
                         e.target.value
-                      )
-                    }
+                      );
+                    }}
                     className="h-11 w-full rounded-xl border border-[#D6E2DD] bg-[#FBFCFB] pl-10 pr-3 text-sm font-medium text-[#354840] outline-none transition-all hover:border-[#C5D5CE] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
                   />
 
@@ -1930,11 +2080,12 @@ export default function MasterHargaPage() {
                     min={
                       dateFrom || undefined
                     }
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      setMonthFilter("CUSTOM");
                       setDateTo(
                         e.target.value
-                      )
-                    }
+                      );
+                    }}
                     className="h-11 w-full rounded-xl border border-[#D6E2DD] bg-[#FBFCFB] pl-10 pr-3 text-sm font-medium text-[#354840] outline-none transition-all hover:border-[#C5D5CE] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
                   />
 
@@ -2002,6 +2153,22 @@ export default function MasterHargaPage() {
             <div className="mt-4 flex flex-col gap-3 border-t border-[#EDF2EF] pt-4 lg:flex-row lg:items-center lg:justify-between">
 
               <div className="flex flex-wrap items-center gap-2">
+
+                {monthFilter !== "CUSTOM" && monthFilter && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#CFE1D9] bg-[#EAF3EE] px-2.5 py-1.5 text-[10px] font-extrabold text-[#497F70]">
+                    <CalendarDays size={12} />
+                    Bulan{" "}
+                    {new Date(
+                      `${monthFilter}-01T00:00:00`
+                    ).toLocaleDateString(
+                      "id-ID",
+                      {
+                        month: "long",
+                        year: "numeric",
+                      }
+                    )}
+                  </span>
+                )}
 
                 {dateFrom && (
                   <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#DDE8E3] bg-[#F7FAF8] px-2.5 py-1.5 text-[10px] font-bold text-[#60736B]">
@@ -2398,7 +2565,7 @@ export default function MasterHargaPage() {
                           <p className="mt-2 max-w-sm text-xs leading-5 text-[#98A49F]">
 
                             {hasFilter
-                              ? "Tidak ada data yang sesuai dengan pencarian, status atau periode tanggal yang dipilih."
+                              ? "Tidak ada data yang sesuai dengan pencarian, status, bulan atau periode tanggal yang dipilih."
                               : "Histori perubahan harga akan muncul di halaman ini setelah tersedia."}
 
                           </p>

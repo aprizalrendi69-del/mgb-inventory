@@ -11,6 +11,7 @@ import {
   Search,
   CheckCircle2,
   Clock3,
+  ShieldCheck,
 } from "lucide-react";
 
 type UserData = {
@@ -24,8 +25,16 @@ type UserData = {
   } | null;
 };
 
+type StockOpnameItem = {
+  id: number;
+  code?: string;
+  date?: string | Date | null;
+  status?: string;
+  totalItem?: number;
+};
+
 export default function StockOpnamePage() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<StockOpnameItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
@@ -34,32 +43,23 @@ export default function StockOpnamePage() {
 
   // =================================
   // USER LOGIN
+  // HALAMAN INI KHUSUS PUSAT
   // =================================
 
   const [user, setUser] = useState<UserData | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
 
-  // =================================
-  // FILTER OUTLET
-  // =================================
-
-  const [outletFilter, setOutletFilter] =
-    useState("SEMUA");
-
-  // =================================
-  // CEK ADMIN PUSAT
-  // =================================
-
-  const isAdminPusat =
-    user?.role === "ADMIN" &&
-    (user?.outletId === null ||
-      user?.outletId === undefined);
+  const isPusatUser = Boolean(
+    user &&
+      (user.outletId === null ||
+        user.outletId === undefined)
+  );
 
   // =================================
   // LOAD USER
   // =================================
 
-  async function loadUser() {
+  async function loadUser(): Promise<UserData | null> {
     try {
       setLoadingUser(true);
 
@@ -71,16 +71,18 @@ export default function StockOpnamePage() {
 
       console.log("CURRENT USER:", json);
 
-      if (res.ok) {
-        const currentUser =
-          json.user ??
-          json.data ??
-          json;
-
-        setUser(currentUser);
-      } else {
+      if (!res.ok) {
         setUser(null);
+        return null;
       }
+
+      const currentUser =
+        json.user ??
+        json.data ??
+        json;
+
+      setUser(currentUser);
+      return currentUser;
     } catch (error) {
       console.error(
         "LOAD CURRENT USER ERROR:",
@@ -88,6 +90,7 @@ export default function StockOpnamePage() {
       );
 
       setUser(null);
+      return null;
     } finally {
       setLoadingUser(false);
     }
@@ -95,6 +98,7 @@ export default function StockOpnamePage() {
 
   // =================================
   // LOAD DATA
+  // KHUSUS DATA STOCK OPNAME PUSAT
   // =================================
 
   async function loadData() {
@@ -102,7 +106,7 @@ export default function StockOpnamePage() {
       setLoading(true);
 
       const res = await fetch(
-        "/api/stock-opname",
+        "/api/stock-opname?scope=PUSAT",
         {
           cache: "no-store",
         }
@@ -111,7 +115,7 @@ export default function StockOpnamePage() {
       const json = await res.json();
 
       console.log(
-        "STOCK OPNAME LIST:",
+        "STOCK OPNAME PUSAT:",
         json
       );
 
@@ -122,7 +126,7 @@ export default function StockOpnamePage() {
       }
     } catch (error) {
       console.error(
-        "LOAD STOCK OPNAME ERROR:",
+        "LOAD STOCK OPNAME PUSAT ERROR:",
         error
       );
 
@@ -132,112 +136,114 @@ export default function StockOpnamePage() {
     }
   }
 
+  // =================================
+  // INITIAL LOAD
+  // DATA TIDAK DIAMBIL SEBELUM USER
+  // TERIDENTIFIKASI SEBAGAI PUSAT
+  // =================================
+
   useEffect(() => {
-    loadUser();
-    loadData();
+    let mounted = true;
+
+    async function initialize() {
+      const currentUser = await loadUser();
+
+      if (
+        mounted &&
+        currentUser &&
+        (currentUser.outletId === null ||
+          currentUser.outletId === undefined)
+      ) {
+        await loadData();
+      } else if (mounted) {
+        setLoading(false);
+      }
+    }
+
+    initialize();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // =================================
-  // DAFTAR OUTLET
-  // HANYA DARI DATA STOCK OPNAME
-  // =================================
-
-  const outletOptions = useMemo(() => {
-    if (!isAdminPusat) {
-      return [];
-    }
-
-    const map = new Map<
-      string,
-      {
-        id: string;
-        code: string;
-        name: string;
-      }
-    >();
-
-    data.forEach((item: any) => {
-      const outlet = item.outlet;
-
-      if (!outlet) return;
-
-      const id = String(
-        outlet.id ??
-          item.outletId ??
-          ""
-      );
-
-      if (!id) return;
-
-      if (!map.has(id)) {
-        map.set(id, {
-          id,
-          code:
-            outlet.code ??
-            "-",
-          name:
-            outlet.name ??
-            "-",
-        });
-      }
-    });
-
-    return Array.from(
-      map.values()
-    ).sort((a, b) =>
-      a.name.localeCompare(
-        b.name,
-        "id"
-      )
-    );
-  }, [data, isAdminPusat]);
-
-  // =================================
   // BUAT STOCK OPNAME
+  //
+  // PENTING:
+  // - scope = PUSAT
+  // - onlyWithTransactions = true
+  //
+  // Backend /api/stock-opname harus menghormati
+  // dua parameter ini dan hanya membuat item dari
+  // barang pusat yang memiliki transaksi.
   // =================================
 
   async function buatOpname() {
+    if (!isPusatUser) {
+      alert(
+        "Stock Opname ini hanya dapat dibuat dari area Pusat."
+      );
+      return;
+    }
+
     const ok = confirm(
-      "Buat Stock Opname baru?\n\nSemua barang aktif akan dimasukkan ke dalam Stock Opname."
+      "Buat Stock Opname Pusat baru?\n\n" +
+        "Hanya barang Pusat yang memiliki transaksi yang akan dimasukkan.\n\n" +
+        "Barang master yang tidak memiliki transaksi tidak akan dimasukkan."
     );
 
     if (!ok) return;
 
     try {
+      setLoading(true);
+
       const res = await fetch(
         "/api/stock-opname",
         {
           method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            scope: "PUSAT",
+            onlyWithTransactions: true,
+          }),
         }
       );
 
       const json = await res.json();
 
       console.log(
-        "CREATE STOCK OPNAME:",
+        "CREATE STOCK OPNAME PUSAT:",
         json
       );
 
       if (json.success) {
         alert(
-          "Stock Opname berhasil dibuat"
+          json.message ||
+            "Stock Opname Pusat berhasil dibuat."
         );
 
         await loadData();
       } else {
+        setLoading(false);
+
         alert(
           json.message ||
-            "Gagal membuat Stock Opname"
+            "Gagal membuat Stock Opname Pusat."
         );
       }
     } catch (error) {
       console.error(
-        "CREATE STOCK OPNAME ERROR:",
+        "CREATE STOCK OPNAME PUSAT ERROR:",
         error
       );
 
+      setLoading(false);
+
       alert(
-        "Gagal membuat Stock Opname"
+        "Gagal membuat Stock Opname Pusat."
       );
     }
   }
@@ -251,7 +257,9 @@ export default function StockOpnamePage() {
     code: string
   ) {
     const ok = confirm(
-      `Hapus Stock Opname ${code}?\n\nData item Stock Opname juga akan ikut dihapus.\n\nTindakan ini tidak dapat dibatalkan.`
+      `Hapus Stock Opname ${code}?\n\n` +
+        "Data item Stock Opname juga akan ikut dihapus.\n\n" +
+        "Tindakan ini tidak dapat dibatalkan."
     );
 
     if (!ok) return;
@@ -275,14 +283,14 @@ export default function StockOpnamePage() {
 
       if (json.success) {
         alert(
-          "Stock Opname berhasil dihapus"
+          "Stock Opname berhasil dihapus."
         );
 
         await loadData();
       } else {
         alert(
           json.message ||
-            "Gagal menghapus Stock Opname"
+            "Gagal menghapus Stock Opname."
         );
       }
     } catch (error) {
@@ -292,7 +300,7 @@ export default function StockOpnamePage() {
       );
 
       alert(
-        "Gagal menghapus Stock Opname"
+        "Gagal menghapus Stock Opname."
       );
     } finally {
       setDeletingId(null);
@@ -304,69 +312,27 @@ export default function StockOpnamePage() {
   // =================================
 
   const filteredData = useMemo(() => {
-    const keyword =
-      search
-        .trim()
-        .toLowerCase();
+    const keyword = search
+      .trim()
+      .toLowerCase();
 
-    return data.filter(
-      (item: any) => {
-        const cocokSearch =
-          !keyword ||
-          String(
-            item.code ?? ""
-          )
-            .toLowerCase()
-            .includes(keyword);
+    return data.filter((item) => {
+      const cocokSearch =
+        !keyword ||
+        String(item.code ?? "")
+          .toLowerCase()
+          .includes(keyword);
 
-        const cocokStatus =
-          status === "SEMUA" ||
-          (status === "APPROVED" &&
-            item.status ===
-              "APPROVED") ||
-          (status === "COUNTING" &&
-            item.status !==
-              "APPROVED");
+      const cocokStatus =
+        status === "SEMUA" ||
+        (status === "APPROVED" &&
+          item.status === "APPROVED") ||
+        (status === "COUNTING" &&
+          item.status !== "APPROVED");
 
-        // =================================
-        // FILTER OUTLET
-        // HANYA ADMIN PUSAT
-        // =================================
-
-        let cocokOutlet = true;
-
-        if (isAdminPusat) {
-          if (
-            outletFilter !==
-            "SEMUA"
-          ) {
-            const itemOutletId =
-              item.outlet?.id ??
-              item.outletId ??
-              null;
-
-            cocokOutlet =
-              String(
-                itemOutletId
-              ) ===
-              outletFilter;
-          }
-        }
-
-        return (
-          cocokSearch &&
-          cocokStatus &&
-          cocokOutlet
-        );
-      }
-    );
-  }, [
-    data,
-    search,
-    status,
-    outletFilter,
-    isAdminPusat,
-  ]);
+      return cocokSearch && cocokStatus;
+    });
+  }, [data, search, status]);
 
   // =================================
   // SUMMARY
@@ -377,17 +343,41 @@ export default function StockOpnamePage() {
 
   const totalCounting =
     filteredData.filter(
-      (item: any) =>
-        item.status !==
-        "APPROVED"
+      (item) => item.status !== "APPROVED"
     ).length;
 
   const totalApproved =
     filteredData.filter(
-      (item: any) =>
-        item.status ===
-        "APPROVED"
+      (item) => item.status === "APPROVED"
     ).length;
+
+  // =================================
+  // ACCESS GUARD
+  // =================================
+
+  if (!loadingUser && !isPusatUser) {
+    return (
+      <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
+        <div className="mx-auto flex min-h-[60vh] max-w-3xl items-center justify-center">
+          <div className="w-full rounded-3xl border border-[#DDE9E4] bg-white p-8 text-center shadow-sm">
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EAF3EF] text-[#497F70]">
+              <ShieldCheck size={30} />
+            </div>
+
+            <h1 className="text-2xl font-bold tracking-tight text-[#18352D]">
+              Stock Opname Pusat
+            </h1>
+
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500">
+              Halaman ini khusus untuk area Pusat.
+              User yang terikat pada outlet tidak
+              dapat mengakses Stock Opname Pusat.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // =================================
   // RENDER
@@ -395,60 +385,79 @@ export default function StockOpnamePage() {
 
   return (
     <div className="min-h-full bg-[#F6F8F7] p-6 md:p-8">
-
       {/* ================= HEADER ================= */}
 
       <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-
         <div className="flex items-center gap-3">
-
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#497F70] text-white shadow-sm">
-            <ClipboardCheck
-              size={23}
-            />
+            <ClipboardCheck size={23} />
           </div>
 
           <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight text-[#18352D] md:text-3xl">
+                Stock Opname Pusat
+              </h1>
 
-            <h1 className="text-2xl font-bold tracking-tight text-[#18352D] md:text-3xl">
-              Stock Opname
-            </h1>
+              <span className="inline-flex items-center rounded-full bg-[#EAF3EF] px-2.5 py-1 text-[11px] font-bold text-[#497F70]">
+                PUSAT
+              </span>
+            </div>
 
             <p className="mt-1 text-sm text-gray-500">
-              Pemeriksaan dan
-              penyesuaian stok
-              fisik gudang
+              Pemeriksaan dan penyesuaian stok
+              fisik gudang Pusat
             </p>
-
           </div>
-
         </div>
 
         <button
           type="button"
-          onClick={
-            buatOpname
+          onClick={buatOpname}
+          disabled={
+            loading ||
+            loadingUser ||
+            !isPusatUser
           }
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#497F70] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3D6D60] active:scale-[0.98]"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#497F70] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3D6D60] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Plus size={18} />
           Buat Opname
         </button>
+      </div>
 
+      {/* ================= RULE INFO ================= */}
+
+      <div className="mb-6 rounded-2xl border border-[#DDE9E4] bg-white p-4 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+            <ShieldCheck size={18} />
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold text-[#18352D]">
+              Scope Stock Opname: Pusat
+            </p>
+
+            <p className="mt-1 text-xs leading-5 text-gray-500">
+              Saat membuat Stock Opname, sistem hanya
+              mengambil barang Pusat yang mempunyai
+              transaksi. Barang yang hanya ada di master
+              tetapi belum mempunyai transaksi tidak
+              dimasukkan ke Stock Opname.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* ================= SUMMARY ================= */}
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-
         {/* TOTAL */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
-
           <div className="flex items-center justify-between">
-
             <div>
-
               <p className="text-sm text-gray-500">
                 Total Opname
               </p>
@@ -456,27 +465,19 @@ export default function StockOpnamePage() {
               <p className="mt-1 text-2xl font-bold text-[#18352D]">
                 {totalOpname}
               </p>
-
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
-              <ClipboardCheck
-                size={21}
-              />
+              <ClipboardCheck size={21} />
             </div>
-
           </div>
-
         </div>
 
         {/* COUNTING */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
-
           <div className="flex items-center justify-between">
-
             <div>
-
               <p className="text-sm text-gray-500">
                 Belum Disahkan
               </p>
@@ -484,27 +485,19 @@ export default function StockOpnamePage() {
               <p className="mt-1 text-2xl font-bold text-amber-600">
                 {totalCounting}
               </p>
-
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-              <Clock3
-                size={21}
-              />
+              <Clock3 size={21} />
             </div>
-
           </div>
-
         </div>
 
         {/* APPROVED */}
 
         <div className="rounded-2xl border border-[#DDE9E4] bg-white p-5 shadow-sm">
-
           <div className="flex items-center justify-between">
-
             <div>
-
               <p className="text-sm text-gray-500">
                 Sudah Disahkan
               </p>
@@ -512,35 +505,25 @@ export default function StockOpnamePage() {
               <p className="mt-1 text-2xl font-bold text-green-600">
                 {totalApproved}
               </p>
-
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-50 text-green-600">
-              <CheckCircle2
-                size={21}
-              />
+              <CheckCircle2 size={21} />
             </div>
-
           </div>
-
         </div>
-
       </div>
 
       {/* ================= CONTENT ================= */}
 
       <div className="overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
-
         {/* ================= TOOLBAR ================= */}
 
         <div className="border-b border-[#E5ECE9] p-4 md:p-5">
-
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-
             {/* SEARCH */}
 
             <div className="relative w-full lg:max-w-md">
-
               <Search
                 size={18}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -548,79 +531,27 @@ export default function StockOpnamePage() {
 
               <input
                 type="text"
-                value={
-                  search
-                }
+                value={search}
                 onChange={(e) =>
-                  setSearch(
-                    e.target.value
-                  )
+                  setSearch(e.target.value)
                 }
                 placeholder="Cari kode Stock Opname..."
                 className="w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-[#497F70] focus:ring-2 focus:ring-[#497F70]/10"
               />
-
             </div>
 
             {/* FILTER */}
 
             <div className="flex flex-wrap gap-2">
-
-              {/* =================================
-                  FILTER OUTLET
-                  HANYA ADMIN PUSAT
-                 ================================= */}
-
-              {isAdminPusat && (
-                <select
-                  value={
-                    outletFilter
-                  }
-                  onChange={(e) =>
-                    setOutletFilter(
-                      e.target.value
-                    )
-                  }
-                  className="rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-2.5 text-sm outline-none focus:border-[#497F70]"
-                >
-
-                  <option value="SEMUA">
-                    Semua Outlet
-                  </option>
-
-                  {outletOptions.map(
-                    (outlet) => (
-                      <option
-                        key={
-                          outlet.id
-                        }
-                        value={
-                          outlet.id
-                        }
-                      >
-                        {outlet.code} -{" "}
-                        {outlet.name}
-                      </option>
-                    )
-                  )}
-
-                </select>
-              )}
-
               {/* STATUS */}
 
               <select
-                value={
-                  status
-                }
+                value={status}
                 onChange={(e) =>
-                  setStatus(
-                    e.target.value
-                  )
+                  setStatus(e.target.value)
                 }
                 className="rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] px-4 py-2.5 text-sm outline-none focus:border-[#497F70]"
               >
-
                 <option value="SEMUA">
                   Semua Status
                 </option>
@@ -632,22 +563,20 @@ export default function StockOpnamePage() {
                 <option value="APPROVED">
                   Sudah Disahkan
                 </option>
-
               </select>
 
               {/* REFRESH */}
 
               <button
                 type="button"
-                onClick={
-                  loadData
-                }
+                onClick={loadData}
                 disabled={
-                  loading
+                  loading ||
+                  loadingUser ||
+                  !isPusatUser
                 }
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D5E5DC] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#F5F8F6] disabled:cursor-not-allowed disabled:opacity-50"
               >
-
                 <RefreshCw
                   size={16}
                   className={
@@ -658,66 +587,31 @@ export default function StockOpnamePage() {
                 />
 
                 Refresh
-
               </button>
-
             </div>
-
           </div>
 
           {/* RESULT INFO */}
 
           <div className="mt-4 text-sm text-gray-500">
-
             Menampilkan{" "}
-
             <span className="font-semibold text-[#18352D]">
-              {
-                filteredData.length
-              }
-            </span>
-
-            {" "}dari{" "}
-
+              {filteredData.length}
+            </span>{" "}
+            dari{" "}
             <span className="font-semibold text-[#18352D]">
               {data.length}
-            </span>
-
-            {" "}Stock Opname
-
-            {isAdminPusat &&
-              outletFilter !==
-                "SEMUA" && (
-                <>
-                  {" "}
-                  untuk outlet{" "}
-                  <span className="font-semibold text-[#497F70]">
-                    {
-                      outletOptions.find(
-                        (outlet) =>
-                          outlet.id ===
-                          outletFilter
-                      )?.name ??
-                      "-"
-                    }
-                  </span>
-                </>
-              )}
-
+            </span>{" "}
+            Stock Opname Pusat
           </div>
-
         </div>
 
         {/* ================= TABLE ================= */}
 
         <div className="overflow-x-auto">
-
-          <table className="min-w-[1000px] w-full text-sm">
-
+          <table className="min-w-[900px] w-full text-sm">
             <thead className="bg-[#F5F8F6]">
-
               <tr className="border-b border-[#E5ECE9]">
-
                 <th className="px-5 py-4 text-center font-semibold text-[#35564C]">
                   No
                 </th>
@@ -725,12 +619,6 @@ export default function StockOpnamePage() {
                 <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
                   Kode
                 </th>
-
-                {isAdminPusat && (
-                  <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
-                    Outlet
-                  </th>
-                )}
 
                 <th className="px-5 py-4 text-left font-semibold text-[#35564C]">
                   Tanggal
@@ -747,104 +635,62 @@ export default function StockOpnamePage() {
                 <th className="px-5 py-4 text-center font-semibold text-[#35564C]">
                   Aksi
                 </th>
-
               </tr>
-
             </thead>
 
             <tbody>
-
               {/* LOADING */}
 
               {loading ||
               loadingUser ? (
-
                 <tr>
-
                   <td
-                    colSpan={
-                      isAdminPusat
-                        ? 7
-                        : 6
-                    }
+                    colSpan={6}
                     className="px-5 py-14 text-center"
                   >
-
                     <div className="flex flex-col items-center gap-3 text-gray-500">
-
                       <RefreshCw
                         size={24}
                         className="animate-spin text-[#497F70]"
                       />
 
                       <span>
-                        Memuat Stock Opname...
+                        Memuat Stock Opname Pusat...
                       </span>
-
                     </div>
-
                   </td>
-
                 </tr>
-
               ) : filteredData.length ===
                 0 ? (
-
                 <tr>
-
                   <td
-                    colSpan={
-                      isAdminPusat
-                        ? 7
-                        : 6
-                    }
+                    colSpan={6}
                     className="px-5 py-14 text-center"
                   >
-
                     <div className="flex flex-col items-center">
-
                       <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#EAF3EF] text-[#497F70]">
-                        <ClipboardCheck
-                          size={25}
-                        />
+                        <ClipboardCheck size={25} />
                       </div>
 
                       <p className="font-semibold text-gray-700">
                         {search ||
-                        status !==
-                          "SEMUA" ||
-                        (isAdminPusat &&
-                          outletFilter !==
-                            "SEMUA")
+                        status !== "SEMUA"
                           ? "Data Stock Opname tidak ditemukan"
-                          : "Belum ada Stock Opname"}
+                          : "Belum ada Stock Opname Pusat"}
                       </p>
 
                       <p className="mt-1 text-sm text-gray-400">
                         {search ||
-                        status !==
-                          "SEMUA" ||
-                        (isAdminPusat &&
-                          outletFilter !==
-                            "SEMUA")
+                        status !== "SEMUA"
                           ? "Coba ubah pencarian atau filter."
-                          : "Buat Stock Opname baru untuk mulai melakukan pemeriksaan stok."}
+                          : "Buat Stock Opname baru untuk memulai pemeriksaan stok Pusat."}
                       </p>
-
                     </div>
-
                   </td>
-
                 </tr>
-
               ) : (
-
                 filteredData.map(
-                  (
-                    item: any,
-                    index: number
-                  ) => {
-
+                  (item, index) => {
                     const approved =
                       item.status ===
                       "APPROVED";
@@ -855,12 +701,9 @@ export default function StockOpnamePage() {
 
                     return (
                       <tr
-                        key={
-                          item.id
-                        }
+                        key={item.id}
                         className="border-b border-[#EDF2EF] transition hover:bg-[#FAFCFB]"
                       >
-
                         {/* NO */}
 
                         <td className="px-5 py-4 text-center text-gray-500">
@@ -870,41 +713,18 @@ export default function StockOpnamePage() {
                         {/* KODE */}
 
                         <td className="px-5 py-4">
-
                           <div className="font-semibold text-[#18352D]">
-                            {item.code ||
-                              "-"}
+                            {item.code || "-"}
                           </div>
 
+                          <div className="mt-1 text-xs text-[#497F70]">
+                            Pusat
+                          </div>
                         </td>
-
-                        {/* OUTLET
-                            HANYA ADMIN PUSAT */}
-
-                        {isAdminPusat && (
-                          <td className="px-5 py-4">
-
-                            <div className="font-semibold text-[#18352D]">
-                              {item
-                                .outlet
-                                ?.name ||
-                                "-"}
-                            </div>
-
-                            <div className="mt-1 text-xs text-gray-400">
-                              {item
-                                .outlet
-                                ?.code ||
-                                "-"}
-                            </div>
-
-                          </td>
-                        )}
 
                         {/* TANGGAL */}
 
                         <td className="whitespace-nowrap px-5 py-4 text-gray-600">
-
                           {item.date
                             ? new Date(
                                 item.date
@@ -917,114 +737,73 @@ export default function StockOpnamePage() {
                                 }
                               )
                             : "-"}
-
                         </td>
 
                         {/* STATUS */}
 
                         <td className="px-5 py-4 text-center">
-
                           {approved ? (
-
                             <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700">
-
                               <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-
                               APPROVED
-
                             </span>
-
                           ) : (
-
                             <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-
                               <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-
                               COUNTING
-
                             </span>
-
                           )}
-
                         </td>
 
                         {/* TOTAL ITEM */}
 
                         <td className="px-5 py-4 text-center font-medium text-gray-700">
-
-                          {item.totalItem ??
-                            0}
-
+                          {item.totalItem ?? 0}
                         </td>
 
                         {/* AKSI */}
 
                         <td className="px-5 py-4">
-
                           <div className="flex items-center justify-center gap-2">
-
                             <Link
                               href={`/stock-opname/${item.id}`}
                               className="inline-flex items-center gap-1.5 rounded-lg bg-[#EAF3EF] px-3 py-2 text-xs font-semibold text-[#497F70] transition hover:bg-[#DDEDE6]"
                             >
-
-                              <Eye
-                                size={
-                                  14
-                                }
-                              />
-
+                              <Eye size={14} />
                               Detail
-
                             </Link>
 
                             {!approved && (
                               <button
                                 type="button"
-                                disabled={
-                                  deleting
-                                }
+                                disabled={deleting}
                                 onClick={() =>
                                   hapusOpname(
                                     item.id,
-                                    item.code
+                                    item.code ||
+                                      "-"
                                   )
                                 }
                                 className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                               >
-
-                                <Trash2
-                                  size={
-                                    14
-                                  }
-                                />
+                                <Trash2 size={14} />
 
                                 {deleting
                                   ? "Menghapus..."
                                   : "Hapus"}
-
                               </button>
                             )}
-
                           </div>
-
                         </td>
-
                       </tr>
                     );
                   }
                 )
-
               )}
-
             </tbody>
-
           </table>
-
         </div>
-
       </div>
-
     </div>
   );
 }

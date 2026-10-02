@@ -78,6 +78,95 @@ type UserInfo = {
   outletId?: number | null;
 };
 
+/* =========================================================
+   DATE HELPERS
+   ========================================================= */
+
+function getCurrentMonthValue() {
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+
+  return `${year}-${month}`;
+}
+
+function getMonthStart(monthValue: string) {
+  if (!monthValue) {
+    return "";
+  }
+
+  const [year, month] = monthValue.split("-").map(Number);
+
+  if (!year || !month) {
+    return "";
+  }
+
+  return `${year}-${String(month).padStart(2, "0")}-01`;
+}
+
+function getMonthEnd(monthValue: string) {
+  if (!monthValue) {
+    return "";
+  }
+
+  const [year, month] = monthValue.split("-").map(Number);
+
+  if (!year || !month) {
+    return "";
+  }
+
+  const lastDay = new Date(year, month, 0).getDate();
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(
+    lastDay
+  ).padStart(2, "0")}`;
+}
+
+function getMonthLabel(monthValue: string) {
+  if (!monthValue) {
+    return "";
+  }
+
+  const [year, month] = monthValue.split("-").map(Number);
+
+  if (!year || !month) {
+    return "";
+  }
+
+  return new Date(year, month - 1, 1).toLocaleDateString(
+    "id-ID",
+    {
+      month: "long",
+      year: "numeric",
+    }
+  );
+}
+
+function buildMonthOptions() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  return Array.from({ length: 12 }, (_, index) => {
+    const month = index + 1;
+
+    return {
+      value: `${currentYear}-${String(month).padStart(
+        2,
+        "0"
+      )}`,
+      label: new Date(
+        currentYear,
+        month - 1,
+        1
+      ).toLocaleDateString("id-ID", {
+        month: "long",
+        year: "numeric",
+      }),
+    };
+  });
+}
+
 export default function OutletPurchasePage() {
   const router = useRouter();
 
@@ -93,11 +182,28 @@ export default function OutletPurchasePage() {
   // FILTER
   // =====================================================
 
-  const [selectedOutlet, setSelectedOutlet] = useState<string>("ALL");
+  const currentMonth = getCurrentMonthValue();
+
+  const [selectedOutlet, setSelectedOutlet] =
+    useState<string>("ALL");
+
+  // Mode periode:
+  // MONTH = Bulan & Tahun
+  // CUSTOM = tanggal manual
+  const [periodMode, setPeriodMode] =
+    useState<"MONTH" | "CUSTOM">("MONTH");
+
+  const [selectedMonth, setSelectedMonth] =
+    useState<string>(currentMonth);
 
   // Tanggal transaksi: FROM - TO
-  const [tanggalDari, setTanggalDari] = useState("");
-  const [tanggalSampai, setTanggalSampai] = useState("");
+  const [tanggalDari, setTanggalDari] = useState(
+    getMonthStart(currentMonth)
+  );
+
+  const [tanggalSampai, setTanggalSampai] = useState(
+    getMonthEnd(currentMonth)
+  );
 
   // Status
   const [selectedStatus, setSelectedStatus] =
@@ -109,6 +215,14 @@ export default function OutletPurchasePage() {
 
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
+
+  // =====================================================
+  // MONTH OPTIONS
+  // =====================================================
+
+  const monthOptions = useMemo(() => {
+    return buildMonthOptions();
+  }, []);
 
   // =====================================================
   // LOAD USER
@@ -129,7 +243,8 @@ export default function OutletPurchasePage() {
         return;
       }
 
-      const currentUser = json?.user ?? json?.data ?? json;
+      const currentUser =
+        json?.user ?? json?.data ?? json;
 
       if (currentUser?.id) {
         setUser(currentUser);
@@ -137,7 +252,10 @@ export default function OutletPurchasePage() {
         setUser(null);
       }
     } catch (error) {
-      console.error("LOAD CURRENT USER ERROR:", error);
+      console.error(
+        "LOAD CURRENT USER ERROR:",
+        error
+      );
       setUser(null);
     } finally {
       setLoadingUser(false);
@@ -152,21 +270,32 @@ export default function OutletPurchasePage() {
     try {
       setLoading(true);
 
-      const res = await fetch("/api/outlet/purchase", {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        "/api/outlet/purchase",
+        {
+          cache: "no-store",
+        }
+      );
 
       const json = await res.json();
 
       if (!res.ok || !json.success) {
         throw new Error(
-          json.message || "Gagal mengambil Purchase Outlet"
+          json.message ||
+            "Gagal mengambil Purchase Outlet"
         );
       }
 
-      setData(Array.isArray(json.data) ? json.data : []);
+      setData(
+        Array.isArray(json.data)
+          ? json.data
+          : []
+      );
     } catch (error) {
-      console.error("LOAD OUTLET PURCHASE ERROR:", error);
+      console.error(
+        "LOAD OUTLET PURCHASE ERROR:",
+        error
+      );
       setData([]);
     } finally {
       setLoading(false);
@@ -186,7 +315,9 @@ export default function OutletPurchasePage() {
   // ROLE
   // =====================================================
 
-  const role = String(user?.role || "").toUpperCase();
+  const role = String(
+    user?.role || ""
+  ).toUpperCase();
 
   /**
    * ADMIN = ADMIN PUSAT
@@ -219,11 +350,76 @@ export default function OutletPurchasePage() {
   }, [data]);
 
   // =====================================================
+  // CHANGE MONTH
+  // =====================================================
+
+  function handleMonthChange(
+    value: string
+  ) {
+    if (value === "CUSTOM") {
+      setPeriodMode("CUSTOM");
+      setSelectedMonth("");
+      setTanggalDari("");
+      setTanggalSampai("");
+      return;
+    }
+
+    setPeriodMode("MONTH");
+    setSelectedMonth(value);
+    setTanggalDari(
+      getMonthStart(value)
+    );
+    setTanggalSampai(
+      getMonthEnd(value)
+    );
+  }
+
+  // =====================================================
+  // CHANGE CUSTOM DATE
+  // =====================================================
+
+  function handleTanggalDariChange(
+    value: string
+  ) {
+    setPeriodMode("CUSTOM");
+    setSelectedMonth("");
+
+    setTanggalDari(value);
+
+    if (
+      tanggalSampai &&
+      value &&
+      tanggalSampai < value
+    ) {
+      setTanggalSampai(value);
+    }
+  }
+
+  function handleTanggalSampaiChange(
+    value: string
+  ) {
+    setPeriodMode("CUSTOM");
+    setSelectedMonth("");
+
+    setTanggalSampai(value);
+
+    if (
+      tanggalDari &&
+      value &&
+      value < tanggalDari
+    ) {
+      setTanggalDari(value);
+    }
+  }
+
+  // =====================================================
   // FILTER DATA
   // =====================================================
 
   const filteredData = useMemo(() => {
-    const keyword = search.toLowerCase().trim();
+    const keyword = search
+      .toLowerCase()
+      .trim();
 
     return data.filter((item) => {
       // ---------------------------------------------------
@@ -232,13 +428,27 @@ export default function OutletPurchasePage() {
 
       const matchesSearch =
         !keyword ||
-        item.number?.toLowerCase().includes(keyword) ||
-        item.outlet?.code?.toLowerCase().includes(keyword) ||
-        item.outlet?.name?.toLowerCase().includes(keyword) ||
-        item.supplier?.code?.toLowerCase().includes(keyword) ||
-        item.supplier?.name?.toLowerCase().includes(keyword) ||
-        item.status?.toLowerCase().includes(keyword) ||
-        item.paymentMethod?.toLowerCase().includes(keyword);
+        item.number
+          ?.toLowerCase()
+          .includes(keyword) ||
+        item.outlet?.code
+          ?.toLowerCase()
+          .includes(keyword) ||
+        item.outlet?.name
+          ?.toLowerCase()
+          .includes(keyword) ||
+        item.supplier?.code
+          ?.toLowerCase()
+          .includes(keyword) ||
+        item.supplier?.name
+          ?.toLowerCase()
+          .includes(keyword) ||
+        item.status
+          ?.toLowerCase()
+          .includes(keyword) ||
+        item.paymentMethod
+          ?.toLowerCase()
+          .includes(keyword);
 
       if (!matchesSearch) {
         return false;
@@ -248,8 +458,14 @@ export default function OutletPurchasePage() {
       // FILTER OUTLET
       // ---------------------------------------------------
 
-      if (isAdminPusat && selectedOutlet !== "ALL") {
-        if (String(item.outletId) !== selectedOutlet) {
+      if (
+        isAdminPusat &&
+        selectedOutlet !== "ALL"
+      ) {
+        if (
+          String(item.outletId) !==
+          selectedOutlet
+        ) {
           return false;
         }
       }
@@ -259,37 +475,54 @@ export default function OutletPurchasePage() {
       // ---------------------------------------------------
 
       if (selectedStatus !== "ALL") {
-        if (item.status !== selectedStatus) {
+        if (
+          item.status !== selectedStatus
+        ) {
           return false;
         }
       }
 
       // ---------------------------------------------------
-      // FILTER TANGGAL DARI - SAMPAI
+      // FILTER TANGGAL
+      //
+      // Selalu menggunakan purchaseDate.
       // ---------------------------------------------------
 
-      const dateValue = item.purchaseDate;
+      const dateValue =
+        item.purchaseDate;
 
-      if (tanggalDari || tanggalSampai) {
+      if (
+        tanggalDari ||
+        tanggalSampai
+      ) {
         if (!dateValue) {
           return false;
         }
 
-        const itemDate = new Date(dateValue);
+        const itemDate =
+          new Date(dateValue);
 
-        if (Number.isNaN(itemDate.getTime())) {
+        if (
+          Number.isNaN(
+            itemDate.getTime()
+          )
+        ) {
           return false;
         }
 
-        const year = itemDate.getFullYear();
+        const year =
+          itemDate.getFullYear();
+
         const month = String(
           itemDate.getMonth() + 1
         ).padStart(2, "0");
+
         const day = String(
           itemDate.getDate()
         ).padStart(2, "0");
 
-        const itemDateOnly = `${year}-${month}-${day}`;
+        const itemDateOnly =
+          `${year}-${month}-${day}`;
 
         if (
           tanggalDari &&
@@ -322,65 +555,90 @@ export default function OutletPurchasePage() {
   // SUMMARY
   // =====================================================
 
-  const totalPurchase = filteredData.length;
+  const totalPurchase =
+    filteredData.length;
 
-  const totalDraft = filteredData.filter(
-    (item) => item.status === "DRAFT"
-  ).length;
+  const totalDraft =
+    filteredData.filter(
+      (item) =>
+        item.status === "DRAFT"
+    ).length;
 
-  const totalApproved = filteredData.filter(
-    (item) => item.status === "APPROVED"
-  ).length;
+  const totalApproved =
+    filteredData.filter(
+      (item) =>
+        item.status === "APPROVED"
+    ).length;
 
-  const totalReceived = filteredData.filter(
-    (item) => item.status === "RECEIVED"
-  ).length;
+  const totalReceived =
+    filteredData.filter(
+      (item) =>
+        item.status === "RECEIVED"
+    ).length;
 
-  const totalValue = filteredData.reduce(
-    (sum, item) => sum + Number(item.total || 0),
-    0
-  );
+  const totalValue =
+    filteredData.reduce(
+      (sum, item) =>
+        sum + Number(item.total || 0),
+      0
+    );
 
-  const totalItems = filteredData.reduce(
-    (sum, item) => sum + (item.items?.length || 0),
-    0
-  );
+  const totalItems =
+    filteredData.reduce(
+      (sum, item) =>
+        sum +
+        (item.items?.length || 0),
+      0
+    );
 
   // =====================================================
   // FORMAT RUPIAH
   // =====================================================
 
   function formatRupiah(value: number) {
-    return Number(value || 0).toLocaleString("id-ID");
+    return Number(
+      value || 0
+    ).toLocaleString("id-ID");
   }
 
   // =====================================================
   // FORMAT DATE
   // =====================================================
 
-  function formatDate(value?: string) {
+  function formatDate(
+    value?: string
+  ) {
     if (!value) {
       return "-";
     }
 
     const date = new Date(value);
 
-    if (Number.isNaN(date.getTime())) {
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
       return "-";
     }
 
-    return date.toLocaleDateString("id-ID", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+    return date.toLocaleDateString(
+      "id-ID",
+      {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }
+    );
   }
 
   // =====================================================
   // PAYMENT METHOD DISPLAY
   // =====================================================
 
-  function normalizePaymentMethod(value?: string | null) {
+  function normalizePaymentMethod(
+    value?: string | null
+  ) {
     if (!value) {
       return "-";
     }
@@ -389,7 +647,10 @@ export default function OutletPurchasePage() {
       .trim()
       .toUpperCase();
 
-    const labels: Record<string, string> = {
+    const labels: Record<
+      string,
+      string
+    > = {
       CASH: "Cash",
       TRANSFER: "Transfer",
       COD: "COD",
@@ -400,10 +661,15 @@ export default function OutletPurchasePage() {
       QRIS: "QRIS",
     };
 
-    return labels[normalized] || normalized;
+    return (
+      labels[normalized] ||
+      normalized
+    );
   }
 
-  function renderPaymentMethod(value?: string | null) {
+  function renderPaymentMethod(
+    value?: string | null
+  ) {
     if (!value) {
       return (
         <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
@@ -426,7 +692,9 @@ export default function OutletPurchasePage() {
     let iconClass =
       "bg-[#EAF3EF] text-[#497F70] border-[#DCE8E3]";
 
-    if (normalized === "TRANSFER") {
+    if (
+      normalized === "TRANSFER"
+    ) {
       iconClass =
         "bg-blue-50 text-blue-600 border-blue-100";
     }
@@ -465,7 +733,9 @@ export default function OutletPurchasePage() {
         <CreditCard size={14} />
 
         <span className="text-[10px] font-extrabold uppercase tracking-wide">
-          {normalizePaymentMethod(value)}
+          {normalizePaymentMethod(
+            value
+          )}
         </span>
       </div>
     );
@@ -509,11 +779,21 @@ export default function OutletPurchasePage() {
   // =====================================================
 
   function resetFilter() {
+    const month =
+      getCurrentMonthValue();
+
     setSearch("");
     setSelectedOutlet("ALL");
-    setTanggalDari("");
-    setTanggalSampai("");
     setSelectedStatus("ALL");
+
+    setPeriodMode("MONTH");
+    setSelectedMonth(month);
+    setTanggalDari(
+      getMonthStart(month)
+    );
+    setTanggalSampai(
+      getMonthEnd(month)
+    );
   }
 
   // =====================================================
@@ -523,16 +803,18 @@ export default function OutletPurchasePage() {
   const hasActiveFilter =
     Boolean(search) ||
     selectedOutlet !== "ALL" ||
-    Boolean(tanggalDari) ||
-    Boolean(tanggalSampai) ||
-    selectedStatus !== "ALL";
+    selectedStatus !== "ALL" ||
+    periodMode === "CUSTOM" ||
+    selectedMonth !== currentMonth;
 
   // =====================================================
   // DELIVERY REQUEST
   // =====================================================
 
   function handleNewDeliveryRequest() {
-    router.push("/outlet/delivery-request/new");
+    router.push(
+      "/outlet/delivery-request/new"
+    );
   }
 
   // =====================================================
@@ -540,14 +822,18 @@ export default function OutletPurchasePage() {
   // =====================================================
 
   function handleNewPurchase() {
-    router.push("/outlet/purchase/new");
+    router.push(
+      "/outlet/purchase/new"
+    );
   }
 
   // =====================================================
   // PAYMENT
   // =====================================================
 
-  function handlePayment(purchaseId: number) {
+  function handlePayment(
+    purchaseId: number
+  ) {
     if (!isAdminPusat) {
       return;
     }
@@ -672,7 +958,9 @@ export default function OutletPurchasePage() {
 
               <button
                 type="button"
-                onClick={handleNewDeliveryRequest}
+                onClick={
+                  handleNewDeliveryRequest
+                }
                 className="group relative inline-flex h-11 items-center justify-center gap-2 overflow-hidden rounded-xl border border-blue-500/30 bg-gradient-to-r from-[#2563EB] via-[#1D4ED8] to-[#1E40AF] px-4 text-xs font-extrabold text-white shadow-[0_10px_24px_rgba(37,99,235,0.22)] transition-all duration-200 hover:-translate-y-0.5 hover:from-[#1D4ED8] hover:via-[#1E40AF] hover:to-[#1E3A8A] hover:shadow-[0_14px_30px_rgba(37,99,235,0.30)] active:translate-y-0"
               >
                 <span className="absolute inset-x-0 top-0 h-px bg-white/40" />
@@ -699,7 +987,9 @@ export default function OutletPurchasePage() {
 
               <button
                 type="button"
-                onClick={handleNewPurchase}
+                onClick={
+                  handleNewPurchase
+                }
                 className="group relative inline-flex h-11 items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-[#497F70] via-[#3D6D60] to-[#315E51] px-4 text-xs font-extrabold text-white shadow-[0_10px_24px_rgba(73,127,112,0.24)] transition-all duration-200 hover:-translate-y-0.5 hover:from-[#3D6D60] hover:via-[#315E51] hover:to-[#274D42] hover:shadow-[0_14px_30px_rgba(73,127,112,0.30)] active:translate-y-0"
               >
                 <span className="absolute inset-x-0 top-0 h-px bg-white/30" />
@@ -887,7 +1177,10 @@ export default function OutletPurchasePage() {
               </p>
 
               <p className="mt-1 truncate text-2xl font-black tracking-tight text-[#18352D]">
-                Rp {formatRupiah(totalValue)}
+                Rp{" "}
+                {formatRupiah(
+                  totalValue
+                )}
               </p>
 
               <p className="mt-1 text-xs text-gray-400">
@@ -980,7 +1273,9 @@ export default function OutletPurchasePage() {
               {hasActiveFilter && (
                 <button
                   type="button"
-                  onClick={resetFilter}
+                  onClick={
+                    resetFilter
+                  }
                   className="group inline-flex items-center gap-1.5 rounded-xl border border-[#DCE7E1] bg-white px-3 py-2 text-[11px] font-bold text-[#497F70] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#BFD4CB] hover:bg-[#F5F9F7] hover:shadow-md"
                 >
                   <RotateCcw
@@ -1004,8 +1299,8 @@ export default function OutletPurchasePage() {
             <div
               className={`grid gap-3 ${
                 isAdminPusat
-                  ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-5"
-                  : "grid-cols-1 md:grid-cols-2 xl:grid-cols-4"
+                  ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-6"
+                  : "grid-cols-1 md:grid-cols-2 xl:grid-cols-5"
               }`}
             >
 
@@ -1035,7 +1330,9 @@ export default function OutletPurchasePage() {
                     type="text"
                     value={search}
                     onChange={(e) =>
-                      setSearch(e.target.value)
+                      setSearch(
+                        e.target.value
+                      )
                     }
                     placeholder="Cari nomor PO, supplier..."
                     className="w-full rounded-xl border border-[#D9E5DF] bg-white py-2.5 pl-10 pr-4 text-xs font-medium text-[#35564C] outline-none transition-all placeholder:text-gray-400 focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
@@ -1058,7 +1355,9 @@ export default function OutletPurchasePage() {
                   <div className="relative">
 
                     <select
-                      value={selectedOutlet}
+                      value={
+                        selectedOutlet
+                      }
                       onChange={(e) =>
                         setSelectedOutlet(
                           e.target.value
@@ -1071,14 +1370,21 @@ export default function OutletPurchasePage() {
                         Semua Outlet
                       </option>
 
-                      {outletOptions.map((outlet) => (
-                        <option
-                          key={outlet.id}
-                          value={String(outlet.id)}
-                        >
-                          {outlet.code} - {outlet.name}
-                        </option>
-                      ))}
+                      {outletOptions.map(
+                        (outlet) => (
+                          <option
+                            key={
+                              outlet.id
+                            }
+                            value={String(
+                              outlet.id
+                            )}
+                          >
+                            {outlet.code} -{" "}
+                            {outlet.name}
+                          </option>
+                        )
+                      )}
 
                     </select>
 
@@ -1091,6 +1397,81 @@ export default function OutletPurchasePage() {
 
                 </div>
               )}
+
+              {/* BULAN & TAHUN */}
+
+              <div>
+
+                <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#6D857B]">
+                  <CalendarDays size={11} />
+                  Bulan & Tahun
+                </label>
+
+                <div className="relative">
+
+                  <CalendarDays
+                    size={15}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#497F70]"
+                  />
+
+                  <select
+                    value={
+                      periodMode ===
+                      "CUSTOM"
+                        ? "CUSTOM"
+                        : selectedMonth
+                    }
+                    onChange={(e) =>
+                      handleMonthChange(
+                        e.target.value
+                      )
+                    }
+                    className="w-full appearance-none rounded-xl border border-[#D9E5DF] bg-white py-2.5 pl-9 pr-10 text-xs font-semibold text-gray-700 outline-none transition-all hover:border-[#BFD4CB] focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                  >
+
+                    {monthOptions.map(
+                      (month) => (
+                        <option
+                          key={
+                            month.value
+                          }
+                          value={
+                            month.value
+                          }
+                        >
+                          {month.label}
+                        </option>
+                      )
+                    )}
+
+                    <option value="CUSTOM">
+                      Periode Custom
+                    </option>
+
+                  </select>
+
+                  <ChevronDown
+                    size={15}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+
+                </div>
+
+                {periodMode ===
+                  "MONTH" &&
+                  selectedMonth && (
+                    <p className="mt-1.5 text-[9px] font-semibold text-[#497F70]">
+                      {getMonthStart(
+                        selectedMonth
+                      )}{" "}
+                      →{" "}
+                      {getMonthEnd(
+                        selectedMonth
+                      )}
+                    </p>
+                  )}
+
+              </div>
 
               {/* TANGGAL DARI */}
 
@@ -1110,17 +1491,38 @@ export default function OutletPurchasePage() {
 
                   <input
                     type="date"
-                    value={tanggalDari}
-                    max={tanggalSampai || undefined}
+                    value={
+                      tanggalDari
+                    }
+                    max={
+                      tanggalSampai ||
+                      undefined
+                    }
+                    disabled={
+                      periodMode ===
+                      "MONTH"
+                    }
                     onChange={(e) =>
-                      setTanggalDari(
+                      handleTanggalDariChange(
                         e.target.value
                       )
                     }
-                    className="w-full rounded-xl border border-[#D9E5DF] bg-white py-2.5 pl-9 pr-3 text-xs font-medium text-gray-700 outline-none transition-all focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                    className={`w-full rounded-xl border border-[#D9E5DF] py-2.5 pl-9 pr-3 text-xs font-medium outline-none transition-all focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10 ${
+                      periodMode ===
+                      "MONTH"
+                        ? "cursor-not-allowed bg-[#F1F5F3] text-gray-400"
+                        : "bg-white text-gray-700"
+                    }`}
                   />
 
                 </div>
+
+                {periodMode ===
+                  "MONTH" && (
+                  <p className="mt-1.5 text-[9px] font-medium text-gray-400">
+                    Otomatis dari bulan
+                  </p>
+                )}
 
               </div>
 
@@ -1142,17 +1544,38 @@ export default function OutletPurchasePage() {
 
                   <input
                     type="date"
-                    value={tanggalSampai}
-                    min={tanggalDari || undefined}
+                    value={
+                      tanggalSampai
+                    }
+                    min={
+                      tanggalDari ||
+                      undefined
+                    }
+                    disabled={
+                      periodMode ===
+                      "MONTH"
+                    }
                     onChange={(e) =>
-                      setTanggalSampai(
+                      handleTanggalSampaiChange(
                         e.target.value
                       )
                     }
-                    className="w-full rounded-xl border border-[#D9E5DF] bg-white py-2.5 pl-9 pr-3 text-xs font-medium text-gray-700 outline-none transition-all focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                    className={`w-full rounded-xl border border-[#D9E5DF] py-2.5 pl-9 pr-3 text-xs font-medium outline-none transition-all focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10 ${
+                      periodMode ===
+                      "MONTH"
+                        ? "cursor-not-allowed bg-[#F1F5F3] text-gray-400"
+                        : "bg-white text-gray-700"
+                    }`}
                   />
 
                 </div>
+
+                {periodMode ===
+                  "MONTH" && (
+                  <p className="mt-1.5 text-[9px] font-medium text-gray-400">
+                    Otomatis akhir bulan
+                  </p>
+                )}
 
               </div>
 
@@ -1168,7 +1591,9 @@ export default function OutletPurchasePage() {
                 <div className="relative">
 
                   <select
-                    value={selectedStatus}
+                    value={
+                      selectedStatus
+                    }
                     onChange={(e) =>
                       setSelectedStatus(
                         e.target.value
@@ -1249,7 +1674,8 @@ export default function OutletPurchasePage() {
                   />
 
                   <span>
-                    {selectedOutlet === "ALL"
+                    {selectedOutlet ===
+                    "ALL"
                       ? "Semua outlet"
                       : "Filter outlet aktif"}
                   </span>
@@ -1257,29 +1683,50 @@ export default function OutletPurchasePage() {
                 </div>
               )}
 
-              {selectedStatus !== "ALL" && (
+              {periodMode ===
+                "MONTH" &&
+                selectedMonth && (
+                  <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-700">
+
+                    <CalendarDays size={12} />
+
+                    {getMonthLabel(
+                      selectedMonth
+                    )}
+
+                  </div>
+                )}
+
+              {periodMode ===
+                "CUSTOM" && (
+                <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] font-bold text-amber-700">
+
+                  <CalendarDays size={12} />
+
+                  Custom:{" "}
+                  {tanggalDari ||
+                    "Awal"}
+                  {" → "}
+                  {tanggalSampai ||
+                    "Akhir"}
+
+                </div>
+              )}
+
+              {selectedStatus !==
+                "ALL" && (
                 <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-2.5 py-1.5 text-[10px] font-bold text-blue-700">
 
                   <Filter size={12} />
 
                   Status:{" "}
-                  {selectedStatus === "DRAFT"
+                  {selectedStatus ===
+                  "DRAFT"
                     ? "Draft"
-                    : selectedStatus === "APPROVED"
+                    : selectedStatus ===
+                      "APPROVED"
                     ? "Approved"
                     : "Received"}
-
-                </div>
-              )}
-
-              {(tanggalDari || tanggalSampai) && (
-                <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-700">
-
-                  <CalendarDays size={12} />
-
-                  {tanggalDari || "Awal"}
-                  {" → "}
-                  {tanggalSampai || "Akhir"}
 
                 </div>
               )}
@@ -1350,7 +1797,8 @@ export default function OutletPurchasePage() {
 
               {/* LOADING */}
 
-              {loading || loadingUser ? (
+              {loading ||
+              loadingUser ? (
                 <tr>
 
                   <td
@@ -1380,7 +1828,8 @@ export default function OutletPurchasePage() {
                   </td>
 
                 </tr>
-              ) : filteredData.length === 0 ? (
+              ) : filteredData.length ===
+                0 ? (
                 <tr>
 
                   <td
@@ -1393,7 +1842,9 @@ export default function OutletPurchasePage() {
                       <div className="relative mb-5">
 
                         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EAF3EF] text-[#497F70] shadow-sm">
-                          <ShoppingCart size={27} />
+                          <ShoppingCart
+                            size={27}
+                          />
                         </div>
 
                         <div className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-gray-100 text-gray-400">
@@ -1415,7 +1866,9 @@ export default function OutletPurchasePage() {
                       {hasActiveFilter && (
                         <button
                           type="button"
-                          onClick={resetFilter}
+                          onClick={
+                            resetFilter
+                          }
                           className="group mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#497F70] to-[#315E51] px-4 py-2.5 text-xs font-bold text-white shadow-[0_8px_18px_rgba(73,127,112,0.18)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_22px_rgba(73,127,112,0.24)]"
                         >
                           <RotateCcw
@@ -1432,185 +1885,31 @@ export default function OutletPurchasePage() {
 
                 </tr>
               ) : (
-                filteredData.map((item, index) => (
-                  <tr
-                    key={item.id}
-                    className="group border-b border-[#EDF2EF] transition-colors duration-150 hover:bg-[#FAFCFB]"
-                  >
+                filteredData.map(
+                  (item, index) => (
+                    <tr
+                      key={item.id}
+                      className="group border-b border-[#EDF2EF] transition-colors duration-150 hover:bg-[#FAFCFB]"
+                    >
 
-                    {/* NO */}
+                      {/* NO */}
 
-                    <td className="px-5 py-4">
+                      <td className="px-5 py-4">
 
-                      <span className="text-xs font-bold text-gray-400">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-
-                    </td>
-
-                    {/* NOMOR PO */}
-
-                    <td className="px-5 py-4">
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          router.push(
-                            `/outlet/purchase/${item.id}`
-                          )
-                        }
-                        className="group/po flex items-center gap-3 text-left"
-                      >
-
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70] transition-all duration-200 group-hover/po:bg-[#DCEBE5] group-hover/po:shadow-sm">
-                          <FileText size={16} />
-                        </div>
-
-                        <div className="min-w-0">
-
-                          <div className="font-extrabold text-[#18352D] transition-colors group-hover/po:text-[#497F70]">
-                            {item.number}
-                          </div>
-
-                          <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
-                            Purchase Outlet
-                          </div>
-
-                        </div>
-
-                      </button>
-
-                    </td>
-
-                    {/* OUTLET */}
-
-                    <td className="px-5 py-4">
-
-                      <div className="flex items-center gap-3">
-
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                          <Store size={16} />
-                        </div>
-
-                        <div className="min-w-0">
-
-                          <div className="max-w-[190px] truncate font-bold text-gray-700">
-                            {item.outlet?.name || "-"}
-                          </div>
-
-                          <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                            {item.outlet?.code || "-"}
-                          </div>
-
-                        </div>
-
-                      </div>
-
-                    </td>
-
-                    {/* SUPPLIER */}
-
-                    <td className="px-5 py-4">
-
-                      <div className="flex items-center gap-3">
-
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F2F6F4] text-[#497F70]">
-                          <Truck size={16} />
-                        </div>
-
-                        <div className="min-w-0">
-
-                          <div className="max-w-[190px] truncate font-bold text-gray-700">
-                            {item.supplier?.name || "-"}
-                          </div>
-
-                          <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                            {item.supplier?.code || "-"}
-                          </div>
-
-                        </div>
-
-                      </div>
-
-                    </td>
-
-                    {/* ITEM */}
-
-                    <td className="px-5 py-4 text-center">
-
-                      <div className="inline-flex items-center gap-2 rounded-xl border border-[#DCE8E3] bg-[#F7FAF8] px-3 py-2">
-
-                        <Package
-                          size={14}
-                          className="text-[#497F70]"
-                        />
-
-                        <span className="text-xs font-extrabold text-[#35564C]">
-                          {item.items?.length || 0}
+                        <span className="text-xs font-bold text-gray-400">
+                          {String(
+                            index + 1
+                          ).padStart(
+                            2,
+                            "0"
+                          )}
                         </span>
 
-                        <span className="text-[10px] font-medium text-gray-400">
-                          item
-                        </span>
+                      </td>
 
-                      </div>
+                      {/* NOMOR PO */}
 
-                    </td>
-
-                    {/* TOTAL */}
-
-                    <td className="px-5 py-4 text-right">
-
-                      <div className="font-black tracking-tight text-[#18352D]">
-                        Rp {formatRupiah(item.total)}
-                      </div>
-
-                      <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-400">
-                        Total Purchase
-                      </div>
-
-                    </td>
-
-                    {/* METODE PEMBAYARAN */}
-
-                    <td className="px-5 py-4 text-center">
-                      {renderPaymentMethod(
-                        item.paymentMethod
-                      )}
-                    </td>
-
-                    {/* STATUS */}
-
-                    <td className="px-5 py-4 text-center">
-                      {renderStatus(item.status)}
-                    </td>
-
-                    {/* TANGGAL */}
-
-                    <td className="px-5 py-4 text-center">
-
-                      <div className="inline-flex items-center gap-2 rounded-lg bg-[#F7F9F8] px-2.5 py-2 text-xs font-semibold text-gray-600">
-
-                        <CalendarDays
-                          size={13}
-                          className="text-[#497F70]"
-                        />
-
-                        {formatDate(
-                          item.purchaseDate
-                        )}
-
-                      </div>
-
-                    </td>
-
-                    {/* AKSI */}
-
-                    <td className="px-5 py-4">
-
-                      <div className="flex items-center justify-center gap-2">
-
-                        {/* DETAIL */}
+                      <td className="px-5 py-4">
 
                         <button
                           type="button"
@@ -1619,54 +1918,229 @@ export default function OutletPurchasePage() {
                               `/outlet/purchase/${item.id}`
                             )
                           }
-                          className="group/action inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DCE8E3] bg-white px-3 text-[10px] font-extrabold text-[#497F70] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#AFCBC0] hover:bg-[#EAF3EF] hover:shadow-md"
-                          title="Lihat Detail"
+                          className="group/po flex items-center gap-3 text-left"
                         >
 
-                          <Eye
-                            size={14}
-                            className="transition-transform group-hover/action:scale-110"
-                          />
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70] transition-all duration-200 group-hover/po:bg-[#DCEBE5] group-hover/po:shadow-sm">
+                            <FileText size={16} />
+                          </div>
 
-                          <span>
-                            Detail
-                          </span>
+                          <div className="min-w-0">
+
+                            <div className="font-extrabold text-[#18352D] transition-colors group-hover/po:text-[#497F70]">
+                              {item.number}
+                            </div>
+
+                            <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                              Purchase Outlet
+                            </div>
+
+                          </div>
 
                         </button>
 
-                        {/* PAYMENT */}
+                      </td>
 
-                        {isAdminPusat &&
-                          item.status === "APPROVED" && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handlePayment(item.id)
-                              }
-                              className="group/action relative inline-flex h-9 items-center gap-1.5 overflow-hidden rounded-lg bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] px-3 text-[10px] font-extrabold text-white shadow-[0_6px_16px_rgba(37,99,235,0.18)] transition-all hover:-translate-y-0.5 hover:from-[#1D4ED8] hover:to-[#1E40AF] hover:shadow-[0_9px_20px_rgba(37,99,235,0.25)]"
-                              title="Payment - Admin Pusat"
-                            >
+                      {/* OUTLET */}
 
-                              <span className="absolute inset-x-0 top-0 h-px bg-white/40" />
+                      <td className="px-5 py-4">
 
-                              <CreditCard
-                                size={14}
-                                className="relative transition-transform group-hover/action:scale-110"
-                              />
+                        <div className="flex items-center gap-3">
 
-                              <span className="relative">
-                                Payment
-                              </span>
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                            <Store size={16} />
+                          </div>
 
-                            </button>
+                          <div className="min-w-0">
+
+                            <div className="max-w-[190px] truncate font-bold text-gray-700">
+                              {item.outlet?.name ||
+                                "-"}
+                            </div>
+
+                            <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                              {item.outlet?.code ||
+                                "-"}
+                            </div>
+
+                          </div>
+
+                        </div>
+
+                      </td>
+
+                      {/* SUPPLIER */}
+
+                      <td className="px-5 py-4">
+
+                        <div className="flex items-center gap-3">
+
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F2F6F4] text-[#497F70]">
+                            <Truck size={16} />
+                          </div>
+
+                          <div className="min-w-0">
+
+                            <div className="max-w-[190px] truncate font-bold text-gray-700">
+                              {item.supplier?.name ||
+                                "-"}
+                            </div>
+
+                            <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                              {item.supplier?.code ||
+                                "-"}
+                            </div>
+
+                          </div>
+
+                        </div>
+
+                      </td>
+
+                      {/* ITEM */}
+
+                      <td className="px-5 py-4 text-center">
+
+                        <div className="inline-flex items-center gap-2 rounded-xl border border-[#DCE8E3] bg-[#F7FAF8] px-3 py-2">
+
+                          <Package
+                            size={14}
+                            className="text-[#497F70]"
+                          />
+
+                          <span className="text-xs font-extrabold text-[#35564C]">
+                            {item.items
+                              ?.length ||
+                              0}
+                          </span>
+
+                          <span className="text-[10px] font-medium text-gray-400">
+                            item
+                          </span>
+
+                        </div>
+
+                      </td>
+
+                      {/* TOTAL */}
+
+                      <td className="px-5 py-4 text-right">
+
+                        <div className="font-black tracking-tight text-[#18352D]">
+                          Rp{" "}
+                          {formatRupiah(
+                            item.total
+                          )}
+                        </div>
+
+                        <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+                          Total Purchase
+                        </div>
+
+                      </td>
+
+                      {/* METODE PEMBAYARAN */}
+
+                      <td className="px-5 py-4 text-center">
+                        {renderPaymentMethod(
+                          item.paymentMethod
+                        )}
+                      </td>
+
+                      {/* STATUS */}
+
+                      <td className="px-5 py-4 text-center">
+                        {renderStatus(
+                          item.status
+                        )}
+                      </td>
+
+                      {/* TANGGAL */}
+
+                      <td className="px-5 py-4 text-center">
+
+                        <div className="inline-flex items-center gap-2 rounded-lg bg-[#F7F9F8] px-2.5 py-2 text-xs font-semibold text-gray-600">
+
+                          <CalendarDays
+                            size={13}
+                            className="text-[#497F70]"
+                          />
+
+                          {formatDate(
+                            item.purchaseDate
                           )}
 
-                      </div>
+                        </div>
 
-                    </td>
+                      </td>
 
-                  </tr>
-                ))
+                      {/* AKSI */}
+
+                      <td className="px-5 py-4">
+
+                        <div className="flex items-center justify-center gap-2">
+
+                          {/* DETAIL */}
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              router.push(
+                                `/outlet/purchase/${item.id}`
+                              )
+                            }
+                            className="group/action inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DCE8E3] bg-white px-3 text-[10px] font-extrabold text-[#497F70] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#AFCBC0] hover:bg-[#EAF3EF] hover:shadow-md"
+                            title="Lihat Detail"
+                          >
+
+                            <Eye
+                              size={14}
+                              className="transition-transform group-hover/action:scale-110"
+                            />
+
+                            <span>
+                              Detail
+                            </span>
+
+                          </button>
+
+                          {/* PAYMENT */}
+
+                          {isAdminPusat &&
+                            item.status ===
+                              "APPROVED" && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handlePayment(
+                                    item.id
+                                  )
+                                }
+                                className="group/action relative inline-flex h-9 items-center gap-1.5 overflow-hidden rounded-lg bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] px-3 text-[10px] font-extrabold text-white shadow-[0_6px_16px_rgba(37,99,235,0.18)] transition-all hover:-translate-y-0.5 hover:from-[#1D4ED8] hover:to-[#1E40AF] hover:shadow-[0_9px_20px_rgba(37,99,235,0.25)]"
+                                title="Payment - Admin Pusat"
+                              >
+
+                                <span className="absolute inset-x-0 top-0 h-px bg-white/40" />
+
+                                <CreditCard
+                                  size={14}
+                                  className="relative transition-transform group-hover/action:scale-110"
+                                />
+
+                                <span className="relative">
+                                  Payment
+                                </span>
+
+                              </button>
+                            )}
+
+                        </div>
+
+                      </td>
+
+                    </tr>
+                  )
+                )
               )}
 
             </tbody>
@@ -1677,7 +2151,8 @@ export default function OutletPurchasePage() {
 
             {!loading &&
               !loadingUser &&
-              filteredData.length > 0 && (
+              filteredData.length >
+                0 && (
                 <tfoot>
 
                   <tr className="border-t border-[#DCE8E3] bg-[#F7FAF8]">
@@ -1692,7 +2167,8 @@ export default function OutletPurchasePage() {
                       </div>
 
                       <div className="mt-0.5 text-xs font-bold text-[#35564C]">
-                        {filteredData.length} Purchase Order
+                        {filteredData.length}{" "}
+                        Purchase Order
                       </div>
 
                     </td>
@@ -1707,10 +2183,14 @@ export default function OutletPurchasePage() {
                         Rp{" "}
                         {formatRupiah(
                           filteredData.reduce(
-                            (sum, item) =>
+                            (
+                              sum,
+                              item
+                            ) =>
                               sum +
                               Number(
-                                item.total || 0
+                                item.total ||
+                                  0
                               ),
                             0
                           )
@@ -1770,7 +2250,8 @@ export default function OutletPurchasePage() {
 
         {!loading &&
           !loadingUser &&
-          filteredData.length > 0 && (
+          filteredData.length >
+            0 && (
             <div className="flex flex-col gap-3 border-t border-[#E7EEEA] bg-white px-5 py-4 md:flex-row md:items-center md:justify-between md:px-6">
 
               <div className="flex items-center gap-2">
@@ -1808,7 +2289,8 @@ export default function OutletPurchasePage() {
                   <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
 
                   <span className="font-bold">
-                    {totalApproved} Approved
+                    {totalApproved}{" "}
+                    Approved
                   </span>
                 </div>
 
@@ -1816,7 +2298,8 @@ export default function OutletPurchasePage() {
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
 
                   <span className="font-bold">
-                    {totalReceived} Received
+                    {totalReceived}{" "}
+                    Received
                   </span>
                 </div>
 

@@ -76,6 +76,14 @@ type LastOpname = {
   note: string | null;
 };
 
+type BarangCategory = {
+  id?: number;
+  name?: string | null;
+  nama?: string | null;
+  code?: string | null;
+  kode?: string | null;
+};
+
 type Barang = {
   id: number;
   code: string;
@@ -90,6 +98,17 @@ type Barang = {
   purchasePrice: number;
   sellingPrice: number;
   minimumStock: number;
+
+  /*
+   * Support beberapa kemungkinan bentuk response
+   * dari API master Barang.
+   */
+  category?: BarangCategory | null;
+  kategori?: BarangCategory | null;
+  categoryName?: string | null;
+  kategoriName?: string | null;
+  categoryId?: number | null;
+  kategoriId?: number | null;
 
   displayUnit?: string;
   conversionLabel?: string;
@@ -135,6 +154,14 @@ type Stock = {
 
   minimumStockConvertedQty?: number;
   minimumStockConvertedUnit?: string;
+
+  // Be tolerant if the stock API exposes category at stock level.
+  category?: BarangCategory | string | null;
+  kategori?: BarangCategory | string | null;
+  categoryName?: string | null;
+  kategoriName?: string | null;
+  categoryId?: number | null;
+  kategoriId?: number | null;
 
   barang: Barang;
 
@@ -257,6 +284,9 @@ export default function OutletStockPage() {
   const [search, setSearch] =
     useState("");
 
+  const [categoryFilter, setCategoryFilter] =
+    useState("");
+
   const [loading, setLoading] =
     useState(true);
 
@@ -375,6 +405,145 @@ export default function OutletStockPage() {
       hour: "2-digit",
       minute: "2-digit",
     });
+  }
+
+  // =====================================================
+  // CATEGORY HELPER
+  // =====================================================
+
+  // =====================================================
+  // CATEGORY NORMALIZER
+  // =====================================================
+  //
+  // API master Barang pada beberapa versi bisa mengirim
+  // kategori dalam bentuk:
+  //   1. barang.category.name
+  //   2. barang.category.nama
+  //   3. barang.kategori.name
+  //   4. barang.kategori.nama
+  //   5. barang.categoryName / kategoriName
+  //   6. category / kategori di level Stock
+  //   7. category sebagai string langsung
+  //
+  // Jangan menganggap hanya satu bentuk response supaya
+  // kolom/filter kategori tidak kosong hanya karena serializer
+  // API berubah.
+  // =====================================================
+
+  function readCategoryName(
+    value: unknown
+  ): string {
+    if (typeof value === "string") {
+      return value.trim();
+    }
+
+    if (
+      value &&
+      typeof value === "object"
+    ) {
+      const row = value as Record<
+        string,
+        unknown
+      >;
+
+      const name =
+        row.name ??
+        row.nama ??
+        row.categoryName ??
+        row.kategoriName ??
+        row.label ??
+        row.title;
+
+      if (
+        typeof name === "string" &&
+        name.trim()
+      ) {
+        return name.trim();
+      }
+    }
+
+    return "";
+  }
+
+  function readCategoryCode(
+    value: unknown
+  ): string {
+    if (typeof value === "string") {
+      return "";
+    }
+
+    if (
+      value &&
+      typeof value === "object"
+    ) {
+      const row = value as Record<
+        string,
+        unknown
+      >;
+
+      const code =
+        row.code ??
+        row.kode ??
+        row.categoryCode ??
+        row.kategoriCode;
+
+      if (
+        typeof code === "string" ||
+        typeof code === "number"
+      ) {
+        return String(code).trim();
+      }
+    }
+
+    return "";
+  }
+
+  function getCategoryName(
+    barang?: Barang | null,
+    stock?: Stock | null
+  ) {
+    const candidates: unknown[] = [
+      barang?.category,
+      barang?.kategori,
+      barang?.categoryName,
+      barang?.kategoriName,
+      // Fallback untuk serializer API yang menaruh kategori
+      // langsung pada row stock.
+      stock?.category,
+      stock?.kategori,
+      stock?.categoryName,
+      stock?.kategoriName,
+    ];
+
+    for (const candidate of candidates) {
+      const value =
+        readCategoryName(candidate);
+
+      if (value) return value;
+    }
+
+    return "Tanpa Kategori";
+  }
+
+  function getCategoryCode(
+    barang?: Barang | null,
+    stock?: Stock | null
+  ) {
+    const candidates: unknown[] = [
+      barang?.category,
+      barang?.kategori,
+      stock?.category,
+      stock?.kategori,
+    ];
+
+    for (const candidate of candidates) {
+      const value =
+        readCategoryCode(candidate);
+
+      if (value) return value;
+    }
+
+    return "";
   }
 
   // =====================================================
@@ -503,6 +672,125 @@ export default function OutletStockPage() {
   }
 
   // =====================================================
+  // LOAD ALL ACTIVE TRANSACTION IDS
+  // =====================================================
+  /*
+   * Barang dianggap AKTIF apabila barang tersebut mempunyai
+   * minimal satu history/transaksi pada outlet yang sedang
+   * ditampilkan.
+   *
+   * Jadi bukan berdasarkan:
+   *   stock > 0
+   *
+   * Karena barang yang pernah transaksi lalu stock menjadi 0
+   * tetap harus tampil sebagai barang aktif/transaksional.
+   *
+   * History diambil SATU KALI untuk seluruh outlet,
+   * kemudian barangId-nya dibuat Set.
+   */
+
+  async function loadActiveTransactionBarangIds(
+    targetOutlet: string
+  ): Promise<Set<number>> {
+    const activeIds = new Set<number>();
+
+    try {
+      const params =
+        new URLSearchParams();
+
+      if (targetOutlet) {
+        params.set(
+          "outletId",
+          targetOutlet
+        );
+      }
+
+      params.set(
+        "scope",
+        "ALL"
+      );
+
+      params.set(
+        "includeAll",
+        "true"
+      );
+
+      params.set(
+        "includeAllSources",
+        "true"
+      );
+
+      params.set(
+        "includeAllTypes",
+        "true"
+      );
+
+      params.set(
+        "direction",
+        "ALL"
+      );
+
+      /*
+       * Ambil cukup besar karena ini dipakai untuk
+       * menentukan barang aktif pada outlet.
+       */
+      params.set(
+        "limit",
+        "10000"
+      );
+
+      const res = await fetch(
+        `/api/outlet/stock/history?${params.toString()}`,
+        {
+          cache: "no-store",
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(
+          "Gagal mengambil daftar transaksi stock outlet"
+        );
+      }
+
+      const result: HistoryResponse =
+        await res.json();
+
+      if (
+        !result?.success ||
+        !Array.isArray(result?.data)
+      ) {
+        throw new Error(
+          result?.message ||
+            "Response history stock tidak valid"
+        );
+      }
+
+      for (const row of result.data) {
+        const barangId =
+          Number(row?.barangId || 0);
+
+        if (barangId > 0) {
+          activeIds.add(barangId);
+        }
+      }
+    } catch (error) {
+      console.error(
+        "LOAD ACTIVE TRANSACTION BARANG ERROR:",
+        error
+      );
+
+      /*
+       * Jangan diam-diam menganggap semua barang aktif.
+       * Jika audit history gagal, loadStock akan menampilkan
+       * error sehingga user tidak melihat data yang misleading.
+       */
+      throw error;
+    }
+
+    return activeIds;
+  }
+
+  // =====================================================
   // LOAD STOCK
   // =====================================================
 
@@ -531,6 +819,12 @@ export default function OutletStockPage() {
           )}`
         : "/api/outlet/stock";
 
+      /*
+       * ===================================================
+       * 1. Ambil current stock
+       * ===================================================
+       */
+
       const res = await fetch(url, {
         cache: "no-store",
       });
@@ -545,11 +839,80 @@ export default function OutletStockPage() {
         );
       }
 
-      setData(
+      const stockRows = (
         Array.isArray(result.data)
           ? result.data
           : []
-      );
+      ).map((row: Stock) => {
+        const barang = row?.barang;
+
+        if (!barang) {
+          return row;
+        }
+
+        // Copy only response aliases; existing DB values are untouched.
+        const normalizedBarang: Barang = {
+          ...barang,
+          category:
+            barang.category ??
+            row.category ??
+            null,
+          kategori:
+            barang.kategori ??
+            row.kategori ??
+            null,
+          categoryName:
+            barang.categoryName ??
+            row.categoryName ??
+            null,
+          kategoriName:
+            barang.kategoriName ??
+            row.kategoriName ??
+            null,
+          categoryId:
+            barang.categoryId ??
+            row.categoryId ??
+            null,
+          kategoriId:
+            barang.kategoriId ??
+            row.kategoriId ??
+            null,
+        };
+
+        return {
+          ...row,
+          barang: normalizedBarang,
+        };
+      });
+
+      /*
+       * ===================================================
+       * 2. Ambil seluruh barang yang pernah bertransaksi
+       * ===================================================
+       */
+
+      const activeBarangIds =
+        await loadActiveTransactionBarangIds(
+          targetOutlet
+        );
+
+      /*
+       * ===================================================
+       * 3. Filter current stock berdasarkan transaksi
+       * ===================================================
+       *
+       * Hanya barang yang mempunyai minimal satu transaksi
+       * pada outlet tersebut yang ditampilkan.
+       */
+
+      const activeStockRows =
+        stockRows.filter((item) =>
+          activeBarangIds.has(
+            Number(item.barangId)
+          )
+        );
+
+      setData(activeStockRows);
     } catch (error: any) {
       console.error(
         "LOAD OUTLET STOCK ERROR:",
@@ -634,17 +997,55 @@ export default function OutletStockPage() {
         String(accountOutletId);
 
       setOutletId(lockedId);
+      setCategoryFilter("");
       loadStock(lockedId);
 
       return;
     }
 
     setOutletId(value);
+    setCategoryFilter("");
     loadStock(value);
   }
 
   // =====================================================
-  // SEARCH
+  // CATEGORY OPTIONS
+  // =====================================================
+
+  const categoryOptions = useMemo(() => {
+    const map = new Map<
+      string,
+      string
+    >();
+
+    for (const item of data) {
+      const name =
+        getCategoryName(item.barang, item);
+
+      const key = name
+        .trim()
+        .toLowerCase();
+
+      if (!map.has(key)) {
+        map.set(key, name);
+      }
+    }
+
+    return Array.from(
+      map.values()
+    ).sort((a, b) =>
+      a.localeCompare(
+        b,
+        "id-ID",
+        {
+          sensitivity: "base",
+        }
+      )
+    );
+  }, [data]);
+
+  // =====================================================
+  // SEARCH + CATEGORY
   // =====================================================
 
   const filteredData = useMemo(() => {
@@ -652,7 +1053,10 @@ export default function OutletStockPage() {
       .toLowerCase()
       .trim();
 
-    if (!keyword) return data;
+    const selectedCategory =
+      categoryFilter
+        .toLowerCase()
+        .trim();
 
     return data.filter((item) => {
       const code =
@@ -667,13 +1071,40 @@ export default function OutletStockPage() {
         item.barang?.barcode?.toLowerCase() ||
         "";
 
-      return (
+      const category =
+        getCategoryName(
+          item.barang,
+          item
+        ).toLowerCase();
+
+      const categoryCode =
+        getCategoryCode(
+          item.barang,
+          item
+        ).toLowerCase();
+
+      const matchesSearch =
+        !keyword ||
         code.includes(keyword) ||
         name.includes(keyword) ||
-        barcode.includes(keyword)
+        barcode.includes(keyword) ||
+        category.includes(keyword) ||
+        categoryCode.includes(keyword);
+
+      const matchesCategory =
+        !selectedCategory ||
+        category === selectedCategory;
+
+      return (
+        matchesSearch &&
+        matchesCategory
       );
     });
-  }, [data, search]);
+  }, [
+    data,
+    search,
+    categoryFilter,
+  ]);
 
   // =====================================================
   // STATUS
@@ -763,10 +1194,6 @@ export default function OutletStockPage() {
       .toUpperCase();
 
     switch (value) {
-      // =================================================
-      // PURCHASE / SUPPLIER
-      // =================================================
-
       case "PURCHASE":
       case "PURCHASE_ORDER":
       case "OUTLET_PURCHASE":
@@ -790,10 +1217,6 @@ export default function OutletStockPage() {
             "border-emerald-200 bg-emerald-50 text-emerald-700",
         };
 
-      // =================================================
-      // CENTRAL / WAREHOUSE
-      // =================================================
-
       case "WAREHOUSE_TRANSFER_IN":
       case "TRANSFER_FROM_WAREHOUSE":
       case "GUDANG_TRANSFER_IN":
@@ -816,10 +1239,6 @@ export default function OutletStockPage() {
             "border-orange-200 bg-orange-50 text-orange-700",
         };
 
-      // =================================================
-      // ANTAR OUTLET
-      // =================================================
-
       case "TRANSFER_IN":
       case "OUTLET_TRANSFER_IN":
       case "TRANSFER_ANTAR_OUTLET_IN":
@@ -840,10 +1259,6 @@ export default function OutletStockPage() {
             "border-orange-200 bg-orange-50 text-orange-700",
         };
 
-      // =================================================
-      // DELIVERY
-      // =================================================
-
       case "DELIVERY_IN":
       case "DELIVERY_RECEIPT":
       case "DELIVERY_RECEIVED":
@@ -863,10 +1278,6 @@ export default function OutletStockPage() {
           className:
             "border-orange-200 bg-orange-50 text-orange-700",
         };
-
-      // =================================================
-      // ADJUSTMENT
-      // =================================================
 
       case "ADJUSTMENT_IN":
       case "STOCK_ADJUSTMENT_IN":
@@ -895,10 +1306,6 @@ export default function OutletStockPage() {
             "border-violet-200 bg-violet-50 text-violet-700",
         };
 
-      // =================================================
-      // WASTE / STOCK OUT
-      // =================================================
-
       case "WASTE":
       case "OUTLET_WASTE":
       case "STOCK_WASTE":
@@ -920,10 +1327,6 @@ export default function OutletStockPage() {
             "border-red-200 bg-red-50 text-red-700",
         };
 
-      // =================================================
-      // POS
-      // =================================================
-
       case "POS_OUT":
       case "POS_SALE":
       case "POS_CONSUMPTION":
@@ -934,10 +1337,6 @@ export default function OutletStockPage() {
           className:
             "border-rose-200 bg-rose-50 text-rose-700",
         };
-
-      // =================================================
-      // MANUFACTURE
-      // =================================================
 
       case "MANUFACTURE_CONSUME":
       case "MANUFACTURING_CONSUME":
@@ -957,10 +1356,6 @@ export default function OutletStockPage() {
             "border-emerald-200 bg-emerald-50 text-emerald-700",
         };
 
-      // =================================================
-      // STOCK OPNAME
-      // =================================================
-
       case "STOCK_OPNAME":
         return {
           text: "Stock Opname",
@@ -976,10 +1371,6 @@ export default function OutletStockPage() {
           className:
             "border-purple-200 bg-purple-50 text-purple-700",
         };
-
-      // =================================================
-      // INVENTORY / MUTATION
-      // =================================================
 
       case "STOCK_IN":
         return {
@@ -998,10 +1389,6 @@ export default function OutletStockPage() {
             "border-slate-200 bg-slate-50 text-slate-700",
         };
 
-      // =================================================
-      // RECEIVING / PURCHASE OUTLET ALIASES
-      // =================================================
-
       case "PURCHASE_RECEIVED":
       case "PURCHASE_IN":
       case "RECEIVE_PURCHASE":
@@ -1014,10 +1401,6 @@ export default function OutletStockPage() {
             "border-emerald-200 bg-emerald-50 text-emerald-700",
         };
 
-      // =================================================
-      // USAGE / WASTE ALIASES
-      // =================================================
-
       case "USAGE":
       case "PEMAKAIAN":
       case "CONSUMPTION":
@@ -1028,10 +1411,6 @@ export default function OutletStockPage() {
           className:
             "border-red-200 bg-red-50 text-red-700",
         };
-
-      // =================================================
-      // FALLBACK
-      // =================================================
 
       default:
         return {
@@ -1273,29 +1652,6 @@ export default function OutletStockPage() {
         String(stock.barangId)
       );
 
-      /*
-       * ===================================================
-       * IMPORTANT
-       *
-       * scope=ALL meminta backend mengembalikan seluruh
-       * pergerakan stock untuk barang + outlet ini.
-       *
-       * Termasuk:
-       * - Purchase / PO
-       * - Goods Receipt / Barang Masuk
-       * - Gudang Pusat
-       * - Transfer Antar Outlet
-       * - Delivery
-       * - Adjustment
-       * - Waste
-       * - Barang Keluar / Pemakaian
-       * - POS
-       * - Manufacture
-       * - Stock Opname
-       * - dan movement stock lainnya.
-       * ===================================================
-       */
-
       params.set(
         "scope",
         "ALL"
@@ -1306,12 +1662,25 @@ export default function OutletStockPage() {
         "true"
       );
 
-      // Minta seluruh sumber dan seluruh arah mutasi stock.
-      // Parameter tambahan tetap aman untuk backend yang belum memakainya.
-      params.set("includeAllSources", "true");
-      params.set("includeAllTypes", "true");
-      params.set("direction", "ALL");
-      params.set("limit", "1000");
+      params.set(
+        "includeAllSources",
+        "true"
+      );
+
+      params.set(
+        "includeAllTypes",
+        "true"
+      );
+
+      params.set(
+        "direction",
+        "ALL"
+      );
+
+      params.set(
+        "limit",
+        "1000"
+      );
 
       const res = await fetch(
         `/api/outlet/stock/history?${params.toString()}`,
@@ -1339,10 +1708,6 @@ export default function OutletStockPage() {
         ? result.data
         : [];
 
-      /*
-       * Safety sorting di frontend.
-       * History terbaru berada paling atas.
-       */
       const sortedRows = [
         ...rows,
       ].sort((a, b) => {
@@ -1470,6 +1835,8 @@ export default function OutletStockPage() {
 
                 <p className="mt-1.5 max-w-2xl text-xs leading-5 text-white/60 md:text-sm">
                   Monitoring persediaan outlet,
+                  hanya menampilkan barang yang
+                  memiliki transaksi stock aktif,
                   stock opname, konversi satuan,
                   harga terakhir, nilai persediaan,
                   dan seluruh pergerakan stock.
@@ -1570,7 +1937,7 @@ export default function OutletStockPage() {
             <div className="rounded-2xl border border-white/10 bg-black/10 px-4 py-3">
 
               <p className="text-[9px] font-bold uppercase tracking-wider text-white/35">
-                Barang
+                Barang Aktif
               </p>
 
               <p className="mt-1 text-lg font-bold text-white">
@@ -1799,26 +2166,32 @@ export default function OutletStockPage() {
               </h2>
 
               <p className="text-[11px] text-gray-400">
-                Atur outlet dan pencarian barang
+                Atur outlet, kategori, dan pencarian barang
               </p>
 
             </div>
 
           </div>
 
-          {search && (
+          {(search ||
+            categoryFilter) && (
             <button
               type="button"
-              onClick={() => setSearch("")}
+              onClick={() => {
+                setSearch("");
+                setCategoryFilter("");
+              }}
               className="hidden rounded-lg px-2 py-1.5 text-[11px] font-semibold text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 md:block"
             >
-              Reset pencarian
+              Reset filter
             </button>
           )}
 
         </div>
 
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[0.8fr_1.2fr]">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[0.75fr_0.85fr_1.4fr]">
+
+          {/* OUTLET */}
 
           <div>
 
@@ -1990,6 +2363,96 @@ export default function OutletStockPage() {
 
           </div>
 
+          {/* CATEGORY */}
+
+          <div>
+
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-gray-400">
+              Kategori Barang
+            </label>
+
+            <div className="relative">
+
+              <Boxes
+                size={16}
+                className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-[#497F70]"
+              />
+
+              <select
+                value={categoryFilter}
+                onChange={(e) =>
+                  setCategoryFilter(
+                    e.target.value
+                  )
+                }
+                disabled={
+                  loading ||
+                  data.length === 0
+                }
+                className="
+                  w-full
+                  appearance-none
+                  rounded-xl
+                  border
+                  border-[#D6E4DE]
+                  bg-[#F9FBFA]
+                  px-4
+                  py-3
+                  pl-10
+                  pr-10
+                  text-sm
+                  font-semibold
+                  text-[#35564C]
+                  outline-none
+                  transition
+                  focus:border-[#497F70]
+                  focus:bg-white
+                  focus:ring-4
+                  focus:ring-[#497F70]/10
+                  disabled:cursor-not-allowed
+                  disabled:opacity-60
+                "
+              >
+
+                <option value="">
+                  Semua Kategori
+                </option>
+
+                {categoryOptions.map(
+                  (category) => (
+                    <option
+                      key={category}
+                      value={category}
+                    >
+                      {category}
+                    </option>
+                  )
+                )}
+
+              </select>
+
+              <ChevronDown
+                size={16}
+                className="
+                  pointer-events-none
+                  absolute
+                  right-3.5
+                  top-1/2
+                  -translate-y-1/2
+                  text-gray-400
+                "
+              />
+
+            </div>
+
+            <div className="mt-1.5 text-[10px] font-medium text-gray-400">
+              Filter berdasarkan kategori master barang
+            </div>
+
+          </div>
+
+          {/* SEARCH */}
+
           <div>
 
             <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-gray-400">
@@ -2005,7 +2468,7 @@ export default function OutletStockPage() {
 
               <input
                 type="text"
-                placeholder="Cari kode, barcode, atau nama barang..."
+                placeholder="Cari kode, barcode, nama, atau kategori..."
                 value={search}
                 onChange={(e) =>
                   setSearch(
@@ -2066,12 +2529,30 @@ export default function OutletStockPage() {
 
           </span>
 
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-700">
+
+            <Activity size={10} />
+
+            Hanya barang bertransaksi
+
+          </span>
+
           {outletLocked && (
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[10px] font-semibold text-gray-500">
 
               <LockKeyhole size={10} />
 
               Restricted
+
+            </span>
+          )}
+
+          {categoryFilter && (
+            <span className="inline-flex items-center gap-1 rounded-lg border border-purple-100 bg-purple-50 px-2.5 py-1.5 text-[10px] font-semibold text-purple-600">
+
+              <Boxes size={10} />
+
+              {categoryFilter}
 
             </span>
           )}
@@ -2112,7 +2593,7 @@ export default function OutletStockPage() {
             <div>
 
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                Jenis Barang
+                Barang Aktif
               </p>
 
               <p className="mt-2 text-2xl font-black tracking-tight text-[#18352D]">
@@ -2122,7 +2603,7 @@ export default function OutletStockPage() {
               </p>
 
               <p className="mt-1 text-[10px] text-gray-400">
-                item terdaftar
+                memiliki transaksi
               </p>
 
             </div>
@@ -2319,8 +2800,8 @@ export default function OutletStockPage() {
               </div>
 
               <p className="mt-0.5 text-[11px] text-gray-400">
-                Stock, harga terakhir, estimasi nilai,
-                dan audit pergerakan stock
+                Hanya barang aktif yang memiliki
+                transaksi stock pada outlet ini
               </p>
 
             </div>
@@ -2363,8 +2844,8 @@ export default function OutletStockPage() {
 
                 {[
                   "No",
-                  "Outlet",
                   "Barang",
+                  "Kategori",
                   "Satuan",
                   "Stock Sistem",
                   "Konversi",
@@ -2434,11 +2915,12 @@ export default function OutletStockPage() {
                       </div>
 
                       <p className="text-sm font-bold text-[#35564C]">
-                        Memuat persediaan
+                        Memuat persediaan aktif
                       </p>
 
                       <p className="mt-1 text-xs text-gray-400">
-                        Mengambil data stock outlet...
+                        Mengambil stock dan memeriksa
+                        transaksi outlet...
                       </p>
 
                     </div>
@@ -2463,13 +2945,13 @@ export default function OutletStockPage() {
                       </div>
 
                       <p className="font-bold text-gray-500">
-                        Belum ada data stock
+                        Tidak ada barang aktif
                       </p>
 
                       <p className="mt-1 text-xs leading-5 text-gray-400">
-                        Tidak ditemukan barang
-                        sesuai filter atau outlet
-                        belum memiliki persediaan.
+                        Tidak ditemukan barang yang
+                        memiliki transaksi stock pada
+                        outlet ini sesuai filter.
                       </p>
 
                     </div>
@@ -2542,6 +3024,16 @@ export default function OutletStockPage() {
                       ) *
                       lastPurchasePrice;
 
+                    const categoryName =
+                      getCategoryName(
+                        item.barang
+                      );
+
+                    const categoryCode =
+                      getCategoryCode(
+                        item.barang
+                      );
+
                     const StatusIcon =
                       stockStatus.icon;
 
@@ -2557,6 +3049,8 @@ export default function OutletStockPage() {
                         "
                       >
 
+                        {/* NO */}
+
                         <td className="px-5 py-4 text-xs font-semibold text-gray-400">
                           {String(
                             index + 1
@@ -2566,33 +3060,7 @@ export default function OutletStockPage() {
                           )}
                         </td>
 
-                        <td className="px-5 py-4">
-
-                          <div className="flex items-center gap-2.5">
-
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#EDF5F1] text-[#497F70]">
-                              <Warehouse size={14} />
-                            </div>
-
-                            <div>
-
-                              <div className="font-bold text-[#18352D]">
-                                {item.outlet
-                                  ?.name ||
-                                  "-"}
-                              </div>
-
-                              <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                                {item.outlet
-                                  ?.code ||
-                                  "-"}
-                              </div>
-
-                            </div>
-
-                          </div>
-
-                        </td>
+                        {/* BARANG */}
 
                         <td className="px-5 py-4">
 
@@ -2636,6 +3104,32 @@ export default function OutletStockPage() {
 
                         </td>
 
+                        {/* KATEGORI */}
+
+                        <td className="px-5 py-4">
+
+                          <div className="min-w-[130px]">
+
+                            <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#DDE9E4] bg-[#F4F9F7] px-2.5 py-1.5 text-[10px] font-bold text-[#497F70]">
+
+                              <Boxes size={11} />
+
+                              {categoryName}
+
+                            </span>
+
+                            {categoryCode && (
+                              <div className="mt-1 font-mono text-[9px] font-semibold uppercase text-gray-400">
+                                {categoryCode}
+                              </div>
+                            )}
+
+                          </div>
+
+                        </td>
+
+                        {/* SATUAN */}
+
                         <td className="px-5 py-4">
 
                           <div className="font-bold text-[#35564C]">
@@ -2659,6 +3153,8 @@ export default function OutletStockPage() {
                             )}
 
                         </td>
+
+                        {/* STOCK */}
 
                         <td className="px-5 py-4 text-right">
 
@@ -2688,6 +3184,8 @@ export default function OutletStockPage() {
                           </div>
 
                         </td>
+
+                        {/* KONVERSI */}
 
                         <td className="px-5 py-4 text-right">
 
@@ -2719,6 +3217,8 @@ export default function OutletStockPage() {
 
                         </td>
 
+                        {/* PRICE */}
+
                         <td className="px-5 py-4 text-right">
 
                           {lastPurchasePrice >
@@ -2747,6 +3247,8 @@ export default function OutletStockPage() {
                           )}
 
                         </td>
+
+                        {/* TOTAL VALUE */}
 
                         <td className="px-5 py-4 text-right">
 
@@ -2783,6 +3285,8 @@ export default function OutletStockPage() {
 
                         </td>
 
+                        {/* SO TERAKHIR */}
+
                         <td className="px-5 py-4 text-right">
 
                           {lastOpname ? (
@@ -2813,6 +3317,8 @@ export default function OutletStockPage() {
 
                         </td>
 
+                        {/* FISIK */}
+
                         <td className="px-5 py-4 text-right">
 
                           {lastOpname ? (
@@ -2842,6 +3348,8 @@ export default function OutletStockPage() {
                           )}
 
                         </td>
+
+                        {/* DIFFERENCE */}
 
                         <td className="px-5 py-4 text-right">
 
@@ -2890,6 +3398,8 @@ export default function OutletStockPage() {
 
                         </td>
 
+                        {/* STATUS SO */}
+
                         <td className="px-5 py-4 text-center">
 
                           {lastOpname ? (
@@ -2921,6 +3431,8 @@ export default function OutletStockPage() {
                           )}
 
                         </td>
+
+                        {/* MINIMUM */}
 
                         <td className="px-5 py-4 text-right">
 
@@ -2958,6 +3470,8 @@ export default function OutletStockPage() {
 
                         </td>
 
+                        {/* STATUS STOCK */}
+
                         <td className="px-5 py-4 text-center">
 
                           <span
@@ -2991,6 +3505,8 @@ export default function OutletStockPage() {
                           </span>
 
                         </td>
+
+                        {/* HISTORY */}
 
                         <td className="px-5 py-4 text-center">
 
@@ -3077,7 +3593,7 @@ export default function OutletStockPage() {
                     )}
                   </strong>{" "}
 
-                  item persediaan
+                  barang aktif
 
                 </div>
 
@@ -3163,9 +3679,7 @@ export default function OutletStockPage() {
 
           <div className="flex max-h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-[0_30px_100px_rgba(0,0,0,0.30)]">
 
-            {/* =================================================
-                MODAL HEADER
-            ================================================= */}
+            {/* MODAL HEADER */}
 
             <div className="relative overflow-hidden border-b border-[#E3ECE8] bg-[#173B31] px-5 py-5 text-white md:px-7 md:py-6">
 
@@ -3217,6 +3731,17 @@ export default function OutletStockPage() {
                       {
                         selectedHistory
                           .barang.code
+                      }
+
+                    </span>
+
+                    <span className="rounded-lg bg-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-white/70">
+
+                      Kategori:{" "}
+                      {
+                        getCategoryName(
+                          selectedHistory.barang
+                        )
                       }
 
                     </span>
@@ -3343,9 +3868,7 @@ export default function OutletStockPage() {
 
             </div>
 
-            {/* =================================================
-                HISTORY KPI
-            ================================================= */}
+            {/* HISTORY KPI */}
 
             <div className="grid grid-cols-2 gap-3 border-b border-[#E6EEEA] bg-[#F8FAF9] p-4 md:grid-cols-4 md:p-5">
 
@@ -3456,9 +3979,7 @@ export default function OutletStockPage() {
 
             </div>
 
-            {/* =================================================
-                BODY
-            ================================================= */}
+            {/* BODY */}
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
 
@@ -3672,8 +4193,6 @@ export default function OutletStockPage() {
                                 "
                               >
 
-                                {/* NO */}
-
                                 <td className="px-4 py-4 text-[10px] font-bold text-gray-400">
 
                                   {String(
@@ -3684,8 +4203,6 @@ export default function OutletStockPage() {
                                   )}
 
                                 </td>
-
-                                {/* DATE */}
 
                                 <td className="px-4 py-4">
 
@@ -3726,8 +4243,6 @@ export default function OutletStockPage() {
 
                                 </td>
 
-                                {/* TYPE */}
-
                                 <td className="px-4 py-4">
 
                                   <span
@@ -3757,8 +4272,6 @@ export default function OutletStockPage() {
 
                                 </td>
 
-                                {/* SOURCE */}
-
                                 <td className="px-4 py-4">
 
                                   <span className="inline-flex rounded-lg border border-[#DDE9E4] bg-[#F7FAF8] px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#587168]">
@@ -3771,8 +4284,6 @@ export default function OutletStockPage() {
 
                                 </td>
 
-                                {/* NUMBER */}
-
                                 <td className="px-4 py-4">
 
                                   <span className="rounded-lg bg-[#F5F8F6] px-2.5 py-1.5 font-mono text-[10px] font-bold text-[#35564C]">
@@ -3783,8 +4294,6 @@ export default function OutletStockPage() {
                                   </span>
 
                                 </td>
-
-                                {/* IN */}
 
                                 <td className="px-4 py-4 text-right">
 
@@ -3815,8 +4324,6 @@ export default function OutletStockPage() {
 
                                 </td>
 
-                                {/* OUT */}
-
                                 <td className="px-4 py-4 text-right">
 
                                   {isOut ? (
@@ -3846,8 +4353,6 @@ export default function OutletStockPage() {
 
                                 </td>
 
-                                {/* BEFORE */}
-
                                 <td className="px-4 py-4 text-right">
 
                                   {history.stockBefore !==
@@ -3872,8 +4377,6 @@ export default function OutletStockPage() {
                                   )}
 
                                 </td>
-
-                                {/* AFTER */}
 
                                 <td className="px-4 py-4 text-right">
 
@@ -3900,8 +4403,6 @@ export default function OutletStockPage() {
 
                                 </td>
 
-                                {/* STATUS */}
-
                                 <td className="px-4 py-4 text-center">
 
                                   {history.status ? (
@@ -3923,8 +4424,6 @@ export default function OutletStockPage() {
                                   )}
 
                                 </td>
-
-                                {/* USER */}
 
                                 <td className="px-4 py-4 text-center">
 
@@ -3952,8 +4451,6 @@ export default function OutletStockPage() {
                                   )}
 
                                 </td>
-
-                                {/* DESCRIPTION */}
 
                                 <td className="px-4 py-4">
 
@@ -4006,7 +4503,6 @@ export default function OutletStockPage() {
                                         )}
 
                                       </div>
-
                                     )}
 
                                     {(history.stockBefore !==
@@ -4077,9 +4573,7 @@ export default function OutletStockPage() {
 
             </div>
 
-            {/* =================================================
-                FOOTER
-            ================================================= */}
+            {/* FOOTER */}
 
             <div className="flex flex-col gap-3 border-t border-[#E4ECE8] bg-[#F8FAF9] px-5 py-4 md:flex-row md:items-center md:justify-between md:px-6">
 

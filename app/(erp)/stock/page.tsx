@@ -882,13 +882,13 @@ export default function StockPusatPage() {
   // =====================================================
 
   return (
-    <div className="min-h-full bg-[#F3F7F5] text-[#18352D]">
+    <div className="min-h-full bg-[radial-gradient(circle_at_top,_#EAF3EF_0,_#F3F7F5_32%,_#F3F7F5_100%)] text-[#18352D]">
 
       {/* =================================================
           PREMIUM HEADER
       ================================================= */}
 
-      <section className="relative overflow-hidden border-b border-[#183F33] bg-[#071F18]">
+      <section className="relative mx-4 mt-4 overflow-hidden rounded-[32px] border border-emerald-300/[0.10] bg-[#071F18] shadow-[0_24px_70px_rgba(7,31,24,0.20)] md:mx-6 xl:mx-8">
 
         <div className="pointer-events-none absolute -left-28 -top-32 h-80 w-80 rounded-full bg-emerald-400/[0.09] blur-[100px]" />
 
@@ -896,7 +896,7 @@ export default function StockPusatPage() {
 
         <div className="pointer-events-none absolute bottom-[-100px] left-1/2 h-56 w-[600px] -translate-x-1/2 rounded-full bg-emerald-300/[0.035] blur-[100px]" />
 
-        <div className="relative px-6 py-7 md:px-8 md:py-8">
+        <div className="relative px-5 py-6 md:px-8 md:py-8 xl:px-10 xl:py-9">
 
           <div className="flex flex-col gap-7 xl:flex-row xl:items-center xl:justify-between">
 
@@ -976,7 +976,7 @@ export default function StockPusatPage() {
                 loading ||
                 priceLoading
               }
-              className="group inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-300/[0.14] bg-emerald-300/[0.08] px-5 text-sm font-bold text-emerald-200 shadow-[0_10px_35px_rgba(16,185,129,0.07)] transition-all hover:-translate-y-0.5 hover:border-emerald-300/[0.22] hover:bg-emerald-300/[0.13] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+              className="group inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-emerald-300/[0.16] bg-white/[0.055] px-5 text-sm font-bold text-emerald-100 shadow-[0_12px_35px_rgba(0,0,0,0.14)] backdrop-blur-md transition-all hover:-translate-y-0.5 hover:border-emerald-300/[0.28] hover:bg-emerald-300/[0.12] hover:shadow-[0_16px_40px_rgba(16,185,129,0.10)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
             >
 
               <RefreshCw
@@ -1000,7 +1000,7 @@ export default function StockPusatPage() {
 
         </div>
 
-        <div className="relative h-px bg-gradient-to-r from-transparent via-emerald-300/[0.16] to-transparent" />
+        <div className="relative mx-5 h-px rounded-full bg-gradient-to-r from-transparent via-emerald-300/[0.18] to-transparent md:mx-8 xl:mx-10" />
 
       </section>
 
@@ -1012,7 +1012,7 @@ export default function StockPusatPage() {
 
         {/* SECURITY */}
 
-        <div className="mb-6 overflow-hidden rounded-[20px] border border-[#CFE1D9] bg-white shadow-[0_7px_30px_rgba(30,70,58,0.045)]">
+        <div className="mb-6 overflow-hidden rounded-[26px] border border-[#CFE1D9] bg-white shadow-[0_10px_35px_rgba(30,70,58,0.055)]">
 
           <div className="relative flex flex-col gap-5 p-5 md:flex-row md:items-center md:justify-between md:px-6">
 
@@ -1069,7 +1069,7 @@ export default function StockPusatPage() {
 
         {/* CONVERSION */}
 
-        <div className="mb-6 overflow-hidden rounded-[20px] border border-[#CFE1D9] bg-gradient-to-br from-[#EEF7F3] via-white to-[#F8FBF9] shadow-[0_7px_30px_rgba(30,70,58,0.035)]">
+        <div className="mb-6 overflow-hidden rounded-[26px] border border-[#CFE1D9] bg-gradient-to-br from-[#EEF7F3] via-white to-[#F8FBF9] shadow-[0_7px_30px_rgba(30,70,58,0.035)]">
 
           <div className="relative p-5 md:p-6">
 
@@ -1415,7 +1415,7 @@ export default function StockPusatPage() {
 
         {/* FILTER */}
 
-        <div className="mb-6 overflow-hidden rounded-[20px] border border-[#DDE9E4] bg-white shadow-[0_6px_25px_rgba(30,70,58,0.045)]">
+        <div className="mb-6 overflow-hidden rounded-[26px] border border-[#DDE9E4] bg-white shadow-[0_10px_35px_rgba(30,70,58,0.055)]">
 
           <div className="p-5 md:p-6">
 
@@ -1563,7 +1563,7 @@ export default function StockPusatPage() {
             TABLE
         ================================================= */}
 
-        <div className="overflow-hidden rounded-[22px] border border-[#DDE9E4] bg-white shadow-[0_8px_30px_rgba(30,70,58,0.055)]">
+        <div className="overflow-hidden rounded-[28px] border border-[#DDE9E4] bg-white shadow-[0_12px_38px_rgba(30,70,58,0.065)]">
 
           <div className="flex flex-col gap-3 border-b border-[#E5ECE9] px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
 

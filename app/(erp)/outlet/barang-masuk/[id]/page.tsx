@@ -1331,13 +1331,20 @@ export default function OutletBarangMasukDetailPage() {
             Number(item.qty || 0)
           );
 
-          const persistedReceivedQty = Math.min(
-            orderedQty,
-            Math.max(
-              0,
-              Number(item.receivedQty ?? 0)
-            )
+          // PURCHASE: Qty Diterima boleh melebihi Qty PO.
+          // TRANSFER: tetap dibatasi maksimal Qty Kirim.
+          const rawPersistedReceivedQty = Math.max(
+            0,
+            Number(item.receivedQty ?? 0)
           );
+
+          const persistedReceivedQty =
+            normalizedDetail.sumber === "TRANSFER"
+              ? Math.min(
+                  orderedQty,
+                  rawPersistedReceivedQty
+                )
+              : rawPersistedReceivedQty;
 
           if (detailAlreadyReceived) {
             /*
@@ -1376,8 +1383,11 @@ export default function OutletBarangMasukDetailPage() {
           /*
            * PURCHASE yang belum selesai: field input adalah QTY YANG
            * AKAN DITERIMA SEKARANG, jadi tampilkan sisa yang belum
-           * diterima. Ini hanya berlaku sebelum transaksi menjadi
-           * RECEIVED.
+           * diterima sebagai nilai awal.
+           *
+           * Setelah itu user boleh mengubah Qty Diterima melebihi
+           * Qty PO. Nilai receivedQty dari server tetap ditampilkan
+           * apa adanya untuk PURCHASE.
            */
           initialReceived[item.id] = Math.max(
             0,
@@ -1621,42 +1631,62 @@ export default function OutletBarangMasukDetailPage() {
     [voidedItems]
   );
 
-  const totalRemainingQty =
-    Math.max(
-      0,
-      totalQty - totalReceivedQty
-    );
+  const totalRemainingQty = isPurchase
+    ? Math.max(
+        0,
+        totalQty - totalReceivedQty
+      )
+    : Math.max(
+        0,
+        totalQty - totalReceivedQty
+      );
 
+  // Untuk PURCHASE, progress boleh mencapai >100% karena Qty
+  // Diterima memang diperbolehkan melebihi Qty PO.
+  // Untuk TRANSFER, progress tetap dibatasi 100%.
   const receiveProgress =
     totalQty > 0
-      ? Math.min(
-          100,
-          Math.round(
+      ? isPurchase
+        ? Math.round(
             (totalReceivedQty /
               totalQty) *
               100
           )
-        )
+        : Math.min(
+            100,
+            Math.round(
+              (totalReceivedQty /
+                totalQty) *
+                100
+            )
+          )
       : 0;
 
   // =====================================================
   // TRANSFER VALIDATION
   // =====================================================
 
-  // Validasi Qty Diterima berlaku untuk PURCHASE dan TRANSFER.
-  // Qty tidak boleh negatif dan tidak boleh melebihi Qty Kirim.
+  // PURCHASE:
+  // Qty Diterima boleh melebihi Qty Purchase Order.
+  //
+  // TRANSFER:
+  // Qty Diterima tetap tidak boleh melebihi Qty Kirim.
   const receiveQtyValid = useMemo(() => {
     return receivableItems.every((item) => {
       const qtyKirim = Number(item.qty || 0);
       const qtyDiterima = Number(receivedQty[item.id] ?? 0);
 
-      return (
-        Number.isFinite(qtyDiterima) &&
-        qtyDiterima >= 0 &&
-        qtyDiterima <= qtyKirim
-      );
+      if (!Number.isFinite(qtyDiterima) || qtyDiterima < 0) {
+        return false;
+      }
+
+      if (isPurchase) {
+        return true;
+      }
+
+      return qtyDiterima <= qtyKirim;
     });
-  }, [receivableItems, receivedQty]);
+  }, [receivableItems, receivedQty, isPurchase]);
 
   const totalInputReceived = useMemo(
     () =>
@@ -1697,14 +1727,18 @@ export default function OutletBarangMasukDetailPage() {
       qty = 0;
     }
 
-    const maxQty = Number(
-      item.qty || 0
-    );
+    // PURCHASE boleh menerima lebih dari Qty PO.
+    // TRANSFER tetap dibatasi maksimal Qty Kirim.
+    if (isTransfer) {
+      const maxQty = Number(item.qty || 0);
 
-    qty = Math.max(
-      0,
-      Math.min(qty, maxQty)
-    );
+      qty = Math.min(
+        qty,
+        maxQty
+      );
+    }
+
+    qty = Math.max(0, qty);
 
     setReceivedQty(
       (prev) => ({
@@ -1777,7 +1811,9 @@ export default function OutletBarangMasukDetailPage() {
       showFeedback(
         "error",
         "Qty Tidak Valid",
-        "Qty Diterima tidak valid. Pastikan nilainya tidak negatif dan tidak melebihi Qty Kirim."
+        isPurchase
+          ? "Qty Diterima tidak valid. Pastikan nilainya tidak negatif."
+          : "Qty Diterima tidak valid. Untuk transfer, Qty Diterima tidak boleh melebihi Qty Kirim."
       );
       return false;
     }
@@ -3631,7 +3667,9 @@ export default function OutletBarangMasukDetailPage() {
                                       type="number"
                                       min={0}
                                       max={
-                                        qtyKirim
+                                        isTransfer
+                                          ? qtyKirim
+                                          : undefined
                                       }
                                       step="any"
                                       value={
@@ -3657,16 +3695,20 @@ export default function OutletBarangMasukDetailPage() {
                                   </div>
 
                                   <div className="mt-1.5 text-[10px] font-medium text-gray-400">
-                                    Maks.{" "}
+                                    {isPurchase
+                                      ? "Purchase Order: "
+                                      : "Maks. "}
                                     {formatNumber(
                                       qtyKirim
                                     )}
+                                    {isPurchase && " · Boleh lebih"}
                                   </div>
 
                                   {qtyDiterima >
                                     0 &&
                                     qtyDiterima <
-                                      qtyKirim && (
+                                      qtyKirim &&
+                                    isTransfer && (
                                       <div className="mt-1 rounded-md bg-orange-50 px-2 py-1 text-[10px] font-bold text-orange-600">
                                         Sisa{" "}
                                         {formatNumber(

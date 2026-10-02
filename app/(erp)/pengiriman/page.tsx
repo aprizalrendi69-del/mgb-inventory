@@ -70,12 +70,64 @@ type DeliveryOrder = {
 };
 
 export default function PengirimanPage() {
-  const [delivery, setDelivery] = useState<DeliveryOrder[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const now = new Date();
 
-  const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  // =========================================================
+  // CURRENT MONTH / YEAR
+  // =========================================================
+
+  const CURRENT_YEAR = now.getFullYear();
+  const CURRENT_MONTH = now.getMonth() + 1;
+
+  const CURRENT_MONTH_KEY =
+    `${CURRENT_YEAR}-${String(CURRENT_MONTH).padStart(2, "0")}`;
+
+  // =========================================================
+  // DATA
+  // =========================================================
+
+  const [delivery, setDelivery] =
+    useState<DeliveryOrder[]>([]);
+
+  const [customers, setCustomers] =
+    useState<Customer[]>([]);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  // =========================================================
+  // BASIC FILTER
+  // =========================================================
+
+  const [search, setSearch] =
+    useState("");
+
+  const [statusFilter, setStatusFilter] =
+    useState("");
+
+  // =========================================================
+  // PERIOD FILTER
+  //
+  // Default:
+  // Oktober 2026 / bulan berjalan
+  //
+  // monthFilter:
+  // ""      = Custom
+  // YYYY-MM = bulan tertentu
+  // =========================================================
+
+  const [monthFilter, setMonthFilter] =
+    useState(CURRENT_MONTH_KEY);
+
+  const [customStartDate, setCustomStartDate] =
+    useState("");
+
+  const [customEndDate, setCustomEndDate] =
+    useState("");
+
+  // =========================================================
+  // PROCESSING
+  // =========================================================
 
   const [processingId, setProcessingId] =
     useState<number | null>(null);
@@ -90,6 +142,110 @@ export default function PengirimanPage() {
   const [releaseTarget, setReleaseTarget] =
     useState<DeliveryOrder | null>(null);
 
+  // =========================================================
+  // MONTH OPTIONS
+  // =========================================================
+
+  const monthOptions = useMemo(() => {
+    return Array.from(
+      { length: 12 },
+      (_, index) => {
+        const month = index + 1;
+
+        const value =
+          `${CURRENT_YEAR}-${String(month).padStart(2, "0")}`;
+
+        const label = new Date(
+          CURRENT_YEAR,
+          index,
+          1
+        ).toLocaleDateString("id-ID", {
+          month: "long",
+          year: "numeric",
+        });
+
+        return {
+          value,
+          label,
+        };
+      }
+    );
+  }, [CURRENT_YEAR]);
+
+  // =========================================================
+  // MONTH RANGE
+  // =========================================================
+
+  const getMonthRange = (monthKey: string) => {
+    if (!monthKey) {
+      return {
+        start: "",
+        end: "",
+      };
+    }
+
+    const parts = monthKey.split("-");
+
+    if (parts.length !== 2) {
+      return {
+        start: "",
+        end: "",
+      };
+    }
+
+    const year = Number(parts[0]);
+    const month = Number(parts[1]);
+
+    if (
+      !Number.isFinite(year) ||
+      !Number.isFinite(month) ||
+      month < 1 ||
+      month > 12
+    ) {
+      return {
+        start: "",
+        end: "",
+      };
+    }
+
+    const start =
+      `${year}-${String(month).padStart(2, "0")}-01`;
+
+    const lastDay =
+      new Date(year, month, 0).getDate();
+
+    const end =
+      `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+    return {
+      start,
+      end,
+    };
+  };
+
+  // =========================================================
+  // ACTIVE DATE RANGE
+  // =========================================================
+
+  const activeDateRange = useMemo(() => {
+    if (monthFilter) {
+      return getMonthRange(monthFilter);
+    }
+
+    return {
+      start: customStartDate,
+      end: customEndDate,
+    };
+  }, [
+    monthFilter,
+    customStartDate,
+    customEndDate,
+  ]);
+
+  // =========================================================
+  // LOAD
+  // =========================================================
+
   useEffect(() => {
     loadData();
   }, []);
@@ -102,16 +258,18 @@ export default function PengirimanPage() {
     try {
       setLoading(true);
 
-      const [deliveryRes, customerRes] =
-        await Promise.all([
-          fetch("/api/delivery-order", {
-            cache: "no-store",
-          }),
+      const [
+        deliveryRes,
+        customerRes,
+      ] = await Promise.all([
+        fetch("/api/delivery-order", {
+          cache: "no-store",
+        }),
 
-          fetch("/api/master/customer", {
-            cache: "no-store",
-          }),
-        ]);
+        fetch("/api/master/customer", {
+          cache: "no-store",
+        }),
+      ]);
 
       // =======================================================
       // DELIVERY
@@ -196,24 +354,11 @@ export default function PengirimanPage() {
   // =========================================================
   // CUSTOMER RESOLVER
   // =========================================================
-  //
-  // Prioritas:
-  //
-  // 1. delivery.customer
-  // 2. delivery.deliveryRequest.customer
-  // 3. delivery.customerId -> master customer
-  // 4. delivery.deliveryRequest.customerId -> master customer
-  //
-  // =========================================================
 
   function getCustomer(
     item: DeliveryOrder | null | undefined
   ): Customer | null {
     if (!item) return null;
-
-    // ---------------------------------------------------------
-    // PRIORITY 1
-    // ---------------------------------------------------------
 
     if (
       item.customer &&
@@ -226,10 +371,6 @@ export default function PengirimanPage() {
       return item.customer;
     }
 
-    // ---------------------------------------------------------
-    // PRIORITY 2
-    // ---------------------------------------------------------
-
     if (
       item.deliveryRequest?.customer &&
       (
@@ -241,10 +382,6 @@ export default function PengirimanPage() {
       return item.deliveryRequest.customer;
     }
 
-    // ---------------------------------------------------------
-    // CUSTOMER ID
-    // ---------------------------------------------------------
-
     const customerId =
       item.customerId ??
       item.deliveryRequest?.customerId ??
@@ -253,10 +390,6 @@ export default function PengirimanPage() {
     if (!customerId) {
       return null;
     }
-
-    // ---------------------------------------------------------
-    // FIND MASTER CUSTOMER
-    // ---------------------------------------------------------
 
     const found = customers.find(
       (customer) =>
@@ -276,10 +409,7 @@ export default function PengirimanPage() {
   ) {
     const customer = getCustomer(item);
 
-    return (
-      customer?.name ||
-      "-"
-    );
+    return customer?.name || "-";
   }
 
   // =========================================================
@@ -309,6 +439,111 @@ export default function PengirimanPage() {
       getCustomer(item)?.id ??
       null
     );
+  }
+
+  // =========================================================
+  // DATE KEY
+  //
+  // Normalisasi deliveryDate menjadi YYYY-MM-DD
+  // agar filter periode tidak terpengaruh timezone.
+  // =========================================================
+
+  function getDateKey(value: any): string {
+    if (!value) return "";
+
+    const raw = String(value);
+
+    // Jika API sudah mengirim YYYY-MM-DD atau ISO
+    // yang diawali tanggal tersebut, gunakan langsung.
+    const directMatch =
+      raw.match(/^(\d{4}-\d{2}-\d{2})/);
+
+    if (directMatch?.[1]) {
+      return directMatch[1];
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    const year =
+      date.getFullYear();
+
+    const month =
+      String(
+        date.getMonth() + 1
+      ).padStart(2, "0");
+
+    const day =
+      String(
+        date.getDate()
+      ).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  // =========================================================
+  // RESET FILTER
+  //
+  // Kembali ke bulan berjalan.
+  // =========================================================
+
+  function resetFilters() {
+    setSearch("");
+    setStatusFilter("");
+
+    setMonthFilter(
+      CURRENT_MONTH_KEY
+    );
+
+    setCustomStartDate("");
+    setCustomEndDate("");
+  }
+
+  // =========================================================
+  // MONTH CHANGE
+  // =========================================================
+
+  function handleMonthChange(
+    value: string
+  ) {
+    if (value === "") {
+      // Periode Custom
+      setMonthFilter("");
+
+      return;
+    }
+
+    setMonthFilter(value);
+
+    // Saat pindah ke bulan tertentu,
+    // custom range tidak lagi digunakan.
+    setCustomStartDate("");
+    setCustomEndDate("");
+  }
+
+  // =========================================================
+  // CUSTOM START
+  // =========================================================
+
+  function handleCustomStartChange(
+    value: string
+  ) {
+    setMonthFilter("");
+    setCustomStartDate(value);
+  }
+
+  // =========================================================
+  // CUSTOM END
+  // =========================================================
+
+  function handleCustomEndChange(
+    value: string
+  ) {
+    setMonthFilter("");
+    setCustomEndDate(value);
   }
 
   // =========================================================
@@ -628,9 +863,17 @@ export default function PengirimanPage() {
 
   // =========================================================
   // FILTER
+  //
+  // Search + Status + deliveryDate
   // =========================================================
 
   const filteredDelivery = useMemo(() => {
+    const startDate =
+      activeDateRange.start;
+
+    const endDate =
+      activeDateRange.end;
+
     return delivery.filter((item) => {
       const keyword =
         search.trim().toLowerCase();
@@ -655,9 +898,33 @@ export default function PengirimanPage() {
         !statusFilter ||
         item.status === statusFilter;
 
+      // -------------------------------------------------------
+      // DATE FILTER
+      // -------------------------------------------------------
+
+      const deliveryDate =
+        getDateKey(
+          item.deliveryDate
+        );
+
+      let matchesDate = true;
+
+      if (startDate) {
+        matchesDate =
+          matchesDate &&
+          deliveryDate >= startDate;
+      }
+
+      if (endDate) {
+        matchesDate =
+          matchesDate &&
+          deliveryDate <= endDate;
+      }
+
       return (
         matchesSearch &&
-        matchesStatus
+        matchesStatus &&
+        matchesDate
       );
     });
   }, [
@@ -665,29 +932,33 @@ export default function PengirimanPage() {
     search,
     statusFilter,
     customers,
+    activeDateRange.start,
+    activeDateRange.end,
   ]);
 
   // =========================================================
   // SUMMARY
+  //
+  // Summary mengikuti filter aktif.
   // =========================================================
 
   const totalDelivery =
-    delivery.length;
+    filteredDelivery.length;
 
   const totalDraft =
-    delivery.filter(
+    filteredDelivery.filter(
       (item) =>
         item.status === "DRAFT"
     ).length;
 
   const totalReleased =
-    delivery.filter(
+    filteredDelivery.filter(
       (item) =>
         item.status === "RELEASED"
     ).length;
 
   const totalQty =
-    delivery.reduce(
+    filteredDelivery.reduce(
       (total, item) =>
         total +
         Number(
@@ -704,6 +975,45 @@ export default function PengirimanPage() {
             100
         )
       : 0;
+
+  // =========================================================
+  // PERIOD LABEL
+  // =========================================================
+
+  const periodLabel = useMemo(() => {
+    if (monthFilter) {
+      const found =
+        monthOptions.find(
+          (item) =>
+            item.value === monthFilter
+        );
+
+      return found?.label ||
+        "Bulan Berjalan";
+    }
+
+    if (
+      customStartDate &&
+      customEndDate
+    ) {
+      return "Periode Custom";
+    }
+
+    if (customStartDate) {
+      return "Custom • Mulai";
+    }
+
+    if (customEndDate) {
+      return "Custom • Sampai";
+    }
+
+    return "Periode Custom";
+  }, [
+    monthFilter,
+    monthOptions,
+    customStartDate,
+    customEndDate,
+  ]);
 
   // =========================================================
   // RENDER
@@ -821,6 +1131,21 @@ export default function PengirimanPage() {
                       Active
                     </span>
                   </div>
+
+                  <div className="inline-flex items-center gap-2 rounded-xl border border-[#DDE9E4] bg-white/90 px-3 py-2 shadow-sm">
+                    <CalendarDays
+                      size={13}
+                      className="text-[#497F70]"
+                    />
+
+                    <span className="text-[9px] font-bold uppercase tracking-wide text-[#73857E]">
+                      Periode
+                    </span>
+
+                    <span className="text-[10px] font-black text-[#315E50]">
+                      {periodLabel}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -905,13 +1230,16 @@ export default function PengirimanPage() {
                   <div
                     className="h-full rounded-full bg-[#497F70]"
                     style={{
-                      width: "100%",
+                      width:
+                        totalDelivery > 0
+                          ? "100%"
+                          : "0%",
                     }}
                   />
                 </div>
 
                 <span className="text-[9px] font-bold text-[#8B9B95]">
-                  All
+                  Filtered
                 </span>
               </div>
             </div>
@@ -1069,109 +1397,411 @@ export default function PengirimanPage() {
             </div>
           </div>
 
-          {/* FILTER */}
+          {/* =================================================
+              FILTER
+          ================================================= */}
 
           <div className="border-b border-[#E7EFEB] bg-[#FBFDFC] px-5 py-4 md:px-7">
-            <div className="flex flex-col gap-3 lg:flex-row">
-              <div className="relative flex-1">
-                <Search
-                  size={16}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9BA9A4]"
-                />
+            <div className="flex flex-col gap-3">
+              {/* TOP FILTER ROW */}
 
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) =>
-                    setSearch(
-                      e.target.value
-                    )
-                  }
-                  placeholder="Cari nomor DO, customer, atau kode customer..."
-                  className="
-                    h-11
-                    w-full
-                    rounded-xl
-                    border
-                    border-[#DCE7E2]
-                    bg-white
-                    pl-10
-                    pr-10
-                    text-[11px]
-                    font-medium
-                    text-[#35564C]
-                    outline-none
-                    transition
-                    placeholder:text-[#A5B0AC]
-                    focus:border-[#497F70]
-                    focus:ring-4
-                    focus:ring-[#497F70]/10
-                  "
-                />
+              <div className="flex flex-col gap-3 lg:flex-row">
+                {/* SEARCH */}
 
-                {search && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSearch("")
+                <div className="relative flex-1">
+                  <Search
+                    size={16}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9BA9A4]"
+                  />
+
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) =>
+                      setSearch(
+                        e.target.value
+                      )
                     }
-                    className="absolute right-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-[#9AA7A3] transition hover:bg-[#EEF4F1] hover:text-[#497F70]"
+                    placeholder="Cari nomor DO, customer, atau kode customer..."
+                    className="
+                      h-11
+                      w-full
+                      rounded-xl
+                      border
+                      border-[#DCE7E2]
+                      bg-white
+                      pl-10
+                      pr-10
+                      text-[11px]
+                      font-medium
+                      text-[#35564C]
+                      outline-none
+                      transition
+                      placeholder:text-[#A5B0AC]
+                      focus:border-[#497F70]
+                      focus:ring-4
+                      focus:ring-[#497F70]/10
+                    "
+                  />
+
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSearch("")
+                      }
+                      className="absolute right-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-[#9AA7A3] transition hover:bg-[#EEF4F1] hover:text-[#497F70]"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+
+                {/* STATUS */}
+
+                <div className="relative">
+                  <Filter
+                    size={14}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#82948C]"
+                  />
+
+                  <select
+                    value={statusFilter}
+                    onChange={(e) =>
+                      setStatusFilter(
+                        e.target.value
+                      )
+                    }
+                    className="
+                      h-11
+                      min-w-[185px]
+                      appearance-none
+                      rounded-xl
+                      border
+                      border-[#DCE7E2]
+                      bg-white
+                      pl-9
+                      pr-9
+                      text-[11px]
+                      font-bold
+                      text-[#50635C]
+                      outline-none
+                      transition
+                      focus:border-[#497F70]
+                      focus:ring-4
+                      focus:ring-[#497F70]/10
+                    "
                   >
-                    <X size={13} />
-                  </button>
-                )}
+                    <option value="">
+                      Semua Status
+                    </option>
+
+                    <option value="DRAFT">
+                      Draft
+                    </option>
+
+                    <option value="RELEASED">
+                      Released
+                    </option>
+                  </select>
+
+                  <ChevronRight
+                    size={13}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-[#879891]"
+                  />
+                </div>
               </div>
 
-              <div className="relative">
-                <Filter
-                  size={14}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#82948C]"
-                />
+              {/* PERIOD FILTER */}
 
-                <select
-                  value={statusFilter}
-                  onChange={(e) =>
-                    setStatusFilter(
-                      e.target.value
-                    )
-                  }
-                  className="
-                    h-11
-                    min-w-[185px]
-                    appearance-none
-                    rounded-xl
-                    border
-                    border-[#DCE7E2]
-                    bg-white
-                    pl-9
-                    pr-9
-                    text-[11px]
-                    font-bold
-                    text-[#50635C]
-                    outline-none
-                    transition
-                    focus:border-[#497F70]
-                    focus:ring-4
-                    focus:ring-[#497F70]/10
-                  "
-                >
-                  <option value="">
-                    Semua Status
-                  </option>
+              <div className="rounded-2xl border border-[#DDE9E4] bg-white p-3 shadow-sm">
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
+                  {/* MONTH */}
 
-                  <option value="DRAFT">
-                    Draft
-                  </option>
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <CalendarDays
+                        size={12}
+                        className="text-[#497F70]"
+                      />
 
-                  <option value="RELEASED">
-                    Released
-                  </option>
-                </select>
+                      <label className="text-[8px] font-black uppercase tracking-[0.16em] text-[#74877F]">
+                        Bulan Tahun Berjalan
+                      </label>
+                    </div>
 
-                <ChevronRight
-                  size={13}
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-[#879891]"
-                />
+                    <div className="relative">
+                      <select
+                        value={
+                          monthFilter
+                        }
+                        onChange={(e) =>
+                          handleMonthChange(
+                            e.target.value
+                          )
+                        }
+                        className="
+                          h-10
+                          w-full
+                          appearance-none
+                          rounded-xl
+                          border
+                          border-[#DCE7E2]
+                          bg-[#FBFDFC]
+                          px-3
+                          pr-9
+                          text-[10px]
+                          font-bold
+                          text-[#35564C]
+                          outline-none
+                          transition
+                          focus:border-[#497F70]
+                          focus:bg-white
+                          focus:ring-4
+                          focus:ring-[#497F70]/10
+                        "
+                      >
+                        {monthOptions.map(
+                          (month) => (
+                            <option
+                              key={
+                                month.value
+                              }
+                              value={
+                                month.value
+                              }
+                            >
+                              {month.label}
+                            </option>
+                          )
+                        )}
+
+                        <option value="">
+                          Periode Custom
+                        </option>
+                      </select>
+
+                      <ChevronRight
+                        size={13}
+                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-[#879891]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* START */}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <CalendarDays
+                        size={12}
+                        className="text-[#497F70]"
+                      />
+
+                      <label className="text-[8px] font-black uppercase tracking-[0.16em] text-[#74877F]">
+                        Tanggal Mulai
+                      </label>
+                    </div>
+
+                    <input
+                      type="date"
+                      value={
+                        monthFilter
+                          ? activeDateRange.start
+                          : customStartDate
+                      }
+                      disabled={
+                        Boolean(
+                          monthFilter
+                        )
+                      }
+                      onChange={(e) =>
+                        handleCustomStartChange(
+                          e.target.value
+                        )
+                      }
+                      className="
+                        h-10
+                        w-full
+                        rounded-xl
+                        border
+                        border-[#DCE7E2]
+                        bg-[#FBFDFC]
+                        px-3
+                        text-[10px]
+                        font-bold
+                        text-[#35564C]
+                        outline-none
+                        transition
+                        focus:border-[#497F70]
+                        focus:bg-white
+                        focus:ring-4
+                        focus:ring-[#497F70]/10
+                        disabled:cursor-not-allowed
+                        disabled:bg-[#F2F5F3]
+                        disabled:text-[#8C9B95]
+                      "
+                    />
+                  </div>
+
+                  {/* END */}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <CalendarDays
+                        size={12}
+                        className="text-[#497F70]"
+                      />
+
+                      <label className="text-[8px] font-black uppercase tracking-[0.16em] text-[#74877F]">
+                        Tanggal Akhir
+                      </label>
+                    </div>
+
+                    <input
+                      type="date"
+                      value={
+                        monthFilter
+                          ? activeDateRange.end
+                          : customEndDate
+                      }
+                      disabled={
+                        Boolean(
+                          monthFilter
+                        )
+                      }
+                      min={
+                        !monthFilter &&
+                        customStartDate
+                          ? customStartDate
+                          : undefined
+                      }
+                      onChange={(e) =>
+                        handleCustomEndChange(
+                          e.target.value
+                        )
+                      }
+                      className="
+                        h-10
+                        w-full
+                        rounded-xl
+                        border
+                        border-[#DCE7E2]
+                        bg-[#FBFDFC]
+                        px-3
+                        text-[10px]
+                        font-bold
+                        text-[#35564C]
+                        outline-none
+                        transition
+                        focus:border-[#497F70]
+                        focus:bg-white
+                        focus:ring-4
+                        focus:ring-[#497F70]/10
+                        disabled:cursor-not-allowed
+                        disabled:bg-[#F2F5F3]
+                        disabled:text-[#8C9B95]
+                      "
+                    />
+                  </div>
+
+                  {/* ACTIVE RANGE */}
+
+                  <div className="flex min-h-10 items-center justify-between gap-3 rounded-xl border border-[#DDE9E4] bg-[#F5F9F7] px-3 xl:min-w-[230px]">
+                    <div>
+                      <p className="text-[7px] font-black uppercase tracking-[0.14em] text-[#8A9B94]">
+                        Periode Aktif
+                      </p>
+
+                      <p className="mt-0.5 text-[9px] font-black text-[#3D6457]">
+                        {activeDateRange.start ||
+                          "—"}{" "}
+                        <span className="text-[#9AA7A3]">
+                          s/d
+                        </span>{" "}
+                        {activeDateRange.end ||
+                          "—"}
+                      </p>
+                    </div>
+
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
+                      <CalendarDays
+                        size={12}
+                      />
+                    </div>
+                  </div>
+
+                  {/* RESET */}
+
+                  <button
+                    type="button"
+                    onClick={
+                      resetFilters
+                    }
+                    className="
+                      inline-flex
+                      h-10
+                      items-center
+                      justify-center
+                      gap-2
+                      rounded-xl
+                      border
+                      border-[#DCE7E2]
+                      bg-white
+                      px-4
+                      text-[9px]
+                      font-black
+                      uppercase
+                      tracking-[0.08em]
+                      text-[#55776C]
+                      shadow-sm
+                      transition-all
+                      hover:-translate-y-0.5
+                      hover:border-[#AFCBC0]
+                      hover:bg-[#F1F7F4]
+                      hover:text-[#3F7161]
+                    "
+                  >
+                    <RefreshCw
+                      size={12}
+                    />
+
+                    Reset
+                  </button>
+                </div>
+
+                {/* FILTER INFO */}
+
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
+                  <span className="inline-flex items-center gap-1.5 text-[8px] font-bold text-[#8A9A94]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#497F70]" />
+
+                    Filter berdasarkan{" "}
+                    <span className="font-black text-[#527469]">
+                      deliveryDate
+                    </span>
+                  </span>
+
+                  <span className="inline-flex items-center gap-1.5 text-[8px] font-bold text-[#8A9A94]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#AFCBC0]" />
+
+                    {periodLabel}
+                  </span>
+
+                  {!monthFilter &&
+                    customStartDate &&
+                    customEndDate &&
+                    customStartDate >
+                      customEndDate && (
+                      <span className="inline-flex items-center gap-1.5 text-[8px] font-black text-red-500">
+                        <AlertTriangle
+                          size={10}
+                        />
+
+                        Tanggal mulai tidak boleh
+                        melebihi tanggal akhir.
+                      </span>
+                    )}
+                </div>
               </div>
             </div>
           </div>
@@ -1267,25 +1897,28 @@ export default function PengirimanPage() {
 
                           <p className="mt-1 max-w-sm text-[10px] leading-5 text-[#9AA7A3]">
                             Tidak ditemukan data yang
-                            sesuai dengan pencarian
-                            atau filter yang dipilih.
+                            sesuai dengan pencarian,
+                            status, atau periode
+                            deliveryDate yang dipilih.
                           </p>
 
                           {(search ||
-                            statusFilter) && (
+                            statusFilter ||
+                            monthFilter !==
+                              CURRENT_MONTH_KEY ||
+                            customStartDate ||
+                            customEndDate) && (
                             <button
                               type="button"
-                              onClick={() => {
-                                setSearch(
-                                  ""
-                                );
-
-                                setStatusFilter(
-                                  ""
-                                );
-                              }}
+                              onClick={
+                                resetFilters
+                              }
                               className="mt-4 inline-flex items-center gap-2 rounded-lg border border-[#DCE7E2] bg-white px-3 py-2 text-[10px] font-bold text-[#497F70] shadow-sm transition hover:bg-[#F3F8F5]"
                             >
+                              <RefreshCw
+                                size={11}
+                              />
+
                               Reset Filter
                             </button>
                           )}
@@ -1943,19 +2576,16 @@ export default function PengirimanPage() {
                         </p>
                       )}
 
-                      {!getCustomerName(
+                      {getCustomerName(
                         releaseTarget
-                      ) ||
-                        (getCustomerName(
-                          releaseTarget
-                        ) === "-" && (
-                          <p className="mt-0.5 text-[7px] text-red-400">
-                            Customer ID:{" "}
-                            {getCustomerId(
-                              releaseTarget
-                            ) ?? "-"}
-                          </p>
-                        ))}
+                      ) === "-" && (
+                        <p className="mt-0.5 text-[7px] text-red-400">
+                          Customer ID:{" "}
+                          {getCustomerId(
+                            releaseTarget
+                          ) ?? "-"}
+                        </p>
+                      )}
                     </div>
 
                     {/* DATE */}
