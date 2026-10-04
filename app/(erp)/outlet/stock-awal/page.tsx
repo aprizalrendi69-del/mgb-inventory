@@ -496,6 +496,11 @@ export default function StockAwalOutletPage() {
     setImportStockSnapshot,
   ] = useState<OutletStock[]>([]);
 
+  // ID stock yang benar-benar berasal dari proses IMPORT STOCK AWAL.
+  // Tabel utama hanya menampilkan ID yang tercatat di sini.
+  const [importedStockIds, setImportedStockIds] =
+    useState<number[]>([]);
+
   // ===================================================
   // FORM
   // ===================================================
@@ -639,6 +644,87 @@ export default function StockAwalOutletPage() {
   }
 
   // ===================================================
+  // IMPORTED STOCK IDS
+  // ===================================================
+
+  const IMPORTED_STOCK_IDS_KEY =
+    "MGB-STOCK-AWAL-IMPORTED-IDS";
+
+  function readImportedStockIds() {
+    try {
+      const raw =
+        window.localStorage.getItem(
+          IMPORTED_STOCK_IDS_KEY
+        );
+
+      if (!raw) return [];
+
+      const parsed = JSON.parse(raw);
+
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed
+        .map((id) => Number(id))
+        .filter(
+          (id) =>
+            Number.isInteger(id) &&
+            id > 0
+        );
+    } catch (error) {
+      console.error(
+        "READ IMPORTED STOCK IDS ERROR:",
+        error
+      );
+
+      return [];
+    }
+  }
+
+  function saveImportedStockIds(
+    ids: number[]
+  ) {
+    const normalized = Array.from(
+      new Set(
+        ids
+          .map((id) => Number(id))
+          .filter(
+            (id) =>
+              Number.isInteger(id) &&
+              id > 0
+          )
+      )
+    );
+
+    try {
+      window.localStorage.setItem(
+        IMPORTED_STOCK_IDS_KEY,
+        JSON.stringify(normalized)
+      );
+    } catch (error) {
+      console.error(
+        "SAVE IMPORTED STOCK IDS ERROR:",
+        error
+      );
+    }
+
+    setImportedStockIds(normalized);
+  }
+
+  function addImportedStockIds(
+    ids: number[]
+  ) {
+    // Selalu baca localStorage terbaru agar beberapa baris
+    // import dalam satu proses tidak saling menimpa ID sebelumnya.
+    const current =
+      readImportedStockIds();
+
+    saveImportedStockIds([
+      ...current,
+      ...ids,
+    ]);
+  }
+
+  // ===================================================
   // LOAD STOCK
   // ===================================================
 
@@ -665,10 +751,18 @@ export default function StockAwalOutletPage() {
         );
       }
 
-      setStocks(
+      const allData =
         Array.isArray(json.data)
           ? json.data
-          : []
+          : [];
+
+      const ids =
+        readImportedStockIds();
+
+      setStocks(
+        allData.filter((item: OutletStock) =>
+          ids.includes(Number(item.id))
+        )
       );
     } catch (error) {
       console.error(
@@ -729,6 +823,9 @@ export default function StockAwalOutletPage() {
   // ===================================================
 
   useEffect(() => {
+    const ids = readImportedStockIds();
+    setImportedStockIds(ids);
+
     loadOutlets();
     loadBarang();
     loadStock("");
@@ -977,6 +1074,12 @@ export default function StockAwalOutletPage() {
       ) {
         resetForm();
       }
+
+      saveImportedStockIds(
+        importedStockIds.filter(
+          (id) => id !== item.id
+        )
+      );
 
       await loadStock(outletId);
       await loadAllStockForImport();
@@ -1800,6 +1903,12 @@ export default function StockAwalOutletPage() {
             ) {
               berhasil++;
 
+              if (row.existingId) {
+                addImportedStockIds([
+                  row.existingId,
+                ]);
+              }
+
               setImportRows(
                 (prev) =>
                   prev.map(
@@ -1891,6 +2000,19 @@ export default function StockAwalOutletPage() {
           ) {
             berhasil++;
 
+            const createdId = Number(
+              postJson?.data?.id
+            );
+
+            if (
+              Number.isInteger(createdId) &&
+              createdId > 0
+            ) {
+              addImportedStockIds([
+                createdId,
+              ]);
+            }
+
             setImportRows(
               (prev) =>
                 prev.map(
@@ -1900,6 +2022,13 @@ export default function StockAwalOutletPage() {
                           ...item,
                           status:
                             "DONE",
+                          existingId:
+                            Number.isInteger(
+                              createdId
+                            ) &&
+                            createdId > 0
+                              ? createdId
+                              : undefined,
                           message:
                             "Stock baru berhasil dibuat",
                         }
@@ -1945,6 +2074,10 @@ export default function StockAwalOutletPage() {
                   .success
               ) {
                 berhasil++;
+
+                addImportedStockIds([
+                  existingId,
+                ]);
 
                 setImportRows(
                   (prev) =>
@@ -2800,11 +2933,11 @@ export default function StockAwalOutletPage() {
                       />
 
                       <p className="text-sm font-semibold text-gray-500">
-                        Belum ada stock outlet
+                        Belum ada hasil import stock awal
                       </p>
 
                       <p className="mt-1 text-xs text-gray-400">
-                        Tambahkan stock manual atau import dari Excel
+                        Data di tabel ini hanya menampilkan stock yang berasal dari proses import stock awal.
                       </p>
 
                     </td>

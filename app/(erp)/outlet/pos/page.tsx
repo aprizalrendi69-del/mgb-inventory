@@ -42,10 +42,15 @@ import {
   ChevronRight,
   WalletCards,
   ArrowDownToLine,
+  Download,
+  TrendingUp,
+  TrendingDown,
   Keyboard,
   MessageCircle,
   Copy,
 } from "lucide-react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 type Outlet = {
   id: number;
@@ -115,8 +120,11 @@ type Sale = {
   ayce?: boolean;
   tableName?: string | null;
   pax?: number | null;
+  packageKey?: string | null;
   packageName?: string | null;
   packagePrice?: number | null;
+  packageTotal?: number | null;
+  staffName?: string | null;
   durationMinutes?: number | null;
   startedAt?: string | null;
   expiresAt?: string | null;
@@ -184,6 +192,30 @@ type RefillRequest = {
 
 const AYCE_STORAGE_KEY = "mgb-pos-ayce-sessions-v1";
 
+// Metadata transaksi yang wajib tetap terbaca oleh history/report/PDF walaupun
+// endpoint POS lama belum menyimpan kolom AYCE/package/staff ke database.
+// Jika API sudah menyimpan field tersebut, nilai API tetap menjadi sumber utama.
+const SALE_META_STORAGE_KEY = "mgb-pos-sale-report-meta-v2";
+
+type SaleReportMeta = {
+  saleId?: number | null;
+  saleNumber: string;
+  cashierName: string;
+  staffName: string;
+  ayce: boolean;
+  tableName: string | null;
+  customerName: string | null;
+  pax: number;
+  packageKey: string | null;
+  packageName: string | null;
+  packagePrice: number;
+  packageTotal: number;
+  durationMinutes: number;
+  startedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+};
+
 const aycePackages: AycePackage[] = [
   { key: "AYCE_199K", name: "AYCE 199K", price: 199000, durationMinutes: 100 },
   { key: "AYCE_219K", name: "AYCE 219K", price: 219000, durationMinutes: 100 },
@@ -195,6 +227,7 @@ type HoldOrder = {
   createdAt: string;
   outletId: string;
   customerName: string;
+  staffName: string;
   discount: string;
   paymentMethod: string;
   note: string;
@@ -287,6 +320,58 @@ function paymentIcon(method: string) {
   return Banknote;
 }
 
+function readSaleReportMeta(): Record<string, SaleReportMeta> {
+  try {
+    const raw = localStorage.getItem(SALE_META_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeSaleReportMeta(meta: SaleReportMeta) {
+  try {
+    const current = readSaleReportMeta();
+    const key = meta.saleId != null ? `id:${meta.saleId}` : `no:${meta.saleNumber}`;
+    current[key] = meta;
+    // Keep enough history for the POS report without allowing localStorage to grow forever.
+    const entries = Object.entries(current)
+      .sort((a, b) => String(b[1]?.createdAt || "").localeCompare(String(a[1]?.createdAt || "")))
+      .slice(0, 5000);
+    localStorage.setItem(SALE_META_STORAGE_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch {
+    // Report metadata is an enhancement/fallback; a storage failure must not block checkout.
+  }
+}
+
+function enrichSalesWithReportMeta(input: Sale[]): Sale[] {
+  const meta = readSaleReportMeta();
+  return input.map((sale) => {
+    const local = meta[`id:${sale.id}`] || meta[`no:${sale.number}`];
+    if (!local) return sale;
+
+    return {
+      ...sale,
+      cashierName: sale.cashierName || local.cashierName || local.staffName || null,
+      staffName: sale.staffName || local.staffName || local.cashierName || null,
+      ayce: typeof sale.ayce === "boolean" ? sale.ayce : local.ayce,
+      tableName: sale.tableName || local.tableName || null,
+      customerName: sale.customerName || local.customerName || null,
+      pax: Number(sale.pax || local.pax || 0),
+      packageKey: sale.packageKey || local.packageKey || null,
+      packageName: sale.packageName || local.packageName || null,
+      packagePrice: Number(sale.packagePrice || local.packagePrice || 0),
+      packageTotal: Number(sale.packageTotal || local.packageTotal || 0),
+      durationMinutes: Number(sale.durationMinutes || local.durationMinutes || 0),
+      startedAt: sale.startedAt || local.startedAt || null,
+      expiresAt: sale.expiresAt || local.expiresAt || null,
+    };
+  });
+}
+
 export default function PosOutletPage() {
   const router = useRouter();
   // Render POS directly into document.body so parent/layout stacking contexts
@@ -299,6 +384,9 @@ export default function PosOutletPage() {
 
   const [role, setRole] = useState("");
   const [cashier, setCashier] = useState("");
+  // Nama staff yang benar-benar melakukan/mencatat transaksi.
+  // Dipisahkan dari akun cashier agar rekap staff tidak bergantung pada nama login.
+  const [transactionStaffName, setTransactionStaffName] = useState("");
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [outletId, setOutletId] = useState("");
   const [currentOutlet, setCurrentOutlet] = useState<Outlet | null>(null);
@@ -356,6 +444,7 @@ export default function PosOutletPage() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   });
   const [reportStockUsage, setReportStockUsage] = useState<PosStockUsage[]>([]);
+  const [reportPreviousStockUsage, setReportPreviousStockUsage] = useState<PosStockUsage[]>([]);
   const [reportStockLoading, setReportStockLoading] = useState(false);
   const [reportStockError, setReportStockError] = useState("");
   const [reportCopied, setReportCopied] = useState(false);
@@ -387,6 +476,7 @@ export default function PosOutletPage() {
     startedAt: "",
     expiresAt: "",
     cashierName: "",
+    staffName: "",
   });
 
   const searchRef = useRef<HTMLInputElement>(null);
@@ -939,17 +1029,23 @@ export default function PosOutletPage() {
 
       const cashierData = json.cashier;
 
-      setCashier(
+      const resolvedCashier =
         typeof cashierData === "string"
           ? cashierData
           : cashierData?.fullname ||
               cashierData?.username ||
-              "Kasir"
-      );
+              "Kasir";
+
+      setCashier(resolvedCashier);
+      setTransactionStaffName((current) => current.trim() ? current : resolvedCashier);
 
       setOutlets(Array.isArray(json.outlets) ? json.outlets : []);
       setMenus(Array.isArray(json.menus) ? json.menus : []);
-      setSales(Array.isArray(json.sales) ? json.sales : []);
+      setSales(
+        enrichSalesWithReportMeta(
+          Array.isArray(json.sales) ? json.sales : []
+        )
+      );
       setCurrentOutlet(json.currentOutlet || null);
 
       if (json.role === "OUTLET_ADMIN" && json.currentOutlet) {
@@ -1093,6 +1189,15 @@ export default function PosOutletPage() {
         ppn
     )
   );
+
+  // QRIS dan TRANSFER tidak memerlukan input uang tunai manual.
+  // Nilai paid otomatis mengikuti grand total agar checkout tidak tertahan
+  // karena kolom "Uang diterima" kosong.
+  useEffect(() => {
+    if (paymentMethod === "QRIS" || paymentMethod === "TRANSFER") {
+      setPaid(String(total));
+    }
+  }, [paymentMethod, total]);
 
   const paidN = roundMoney(
     Math.max(0, Number(paid || 0))
@@ -1306,6 +1411,7 @@ export default function PosOutletPage() {
     setDiscount("");
     setPaid("");
     setCustomerName("");
+    setTransactionStaffName("");
     setNote("");
     setSelectedPackage("");
   }
@@ -1363,6 +1469,7 @@ export default function PosOutletPage() {
         new Date().toISOString(),
       outletId,
       customerName,
+      staffName: transactionStaffName.trim(),
       discount,
       paymentMethod,
       note,
@@ -1415,6 +1522,9 @@ export default function PosOutletPage() {
     setCustomerName(
       found.customerName || ""
     );
+    setTransactionStaffName(
+      found.staffName || cashier || ""
+    );
     setDiscount(
       found.discount || ""
     );
@@ -1463,6 +1573,13 @@ export default function PosOutletPage() {
       );
     }
 
+    const normalizedTransactionStaff = transactionStaffName.trim();
+    if (!normalizedTransactionStaff) {
+      return alert(
+        "Nama staff yang melakukan transaksi wajib diisi."
+      );
+    }
+
     if (missingBomCount) {
       alert(
         `Transaksi belum bisa diproses karena ${missingBomCount} menu belum memiliki BOM/Recipe.`
@@ -1480,10 +1597,15 @@ export default function PosOutletPage() {
       );
     }
 
-    if (paidN < total) {
+    const effectivePaidAmount =
+      paymentMethod === "QRIS" || paymentMethod === "TRANSFER"
+        ? total
+        : paidN;
+
+    if (effectivePaidAmount < total) {
       return alert(
         `Pembayaran kurang ${money(
-          total - paidN
+          total - effectivePaidAmount
         )}.`
       );
     }
@@ -1510,8 +1632,13 @@ export default function PosOutletPage() {
             serviceCharge,
             ppn,
             total,
-            paidAmount: paidN,
-            paymentMethod,
+            paidAmount: effectivePaidAmount,
+            paymentMethod:
+              paymentMethod === "QRIS" || paymentMethod === "TRANSFER"
+                ? paymentMethod
+                : "CASH",
+            staffName: normalizedTransactionStaff,
+            cashierName: cashier || null,
             note:
               note.trim() ||
               null,
@@ -1540,7 +1667,29 @@ export default function PosOutletPage() {
                   total,
                 }
               : null,
-            cashierName: cashier || null,
+            // cashierName = akun kasir/login; staffName = nama staff yang
+            // diinput untuk rekap transaksi.
+            package: selectedPackage
+              ? {
+                  key: selectedPackage,
+                  name: gangnamPackages.find((pkg) => pkg.key === selectedPackage)?.label || selectedPackage,
+                  price: Number(
+                    menus.find((menu) => {
+                      const pkg = gangnamPackages.find((item) => item.key === selectedPackage);
+                      if (!pkg) return false;
+                      const name = normalize(menu.name);
+                      const label = normalize(pkg.label);
+                      const words = label.replace(/^paket\s+/, "").trim();
+                      return (
+                        name === label ||
+                        name.includes(label) ||
+                        label.includes(name) ||
+                        (words.length > 3 && name.includes(words))
+                      );
+                    })?.price || 0
+                  ),
+                }
+              : null,
 
             // Pricing dikirim lengkap agar API dan report menerima komponen
             // transaksi yang sama: subtotal, discount, service, PPN, total.
@@ -1586,8 +1735,77 @@ export default function PosOutletPage() {
         );
       }
 
-      const sale = json.data || null;
       const checkoutAyce = ayceSession;
+      const selectedQuickPackage = gangnamPackages.find(
+        (pkg) => pkg.key === selectedPackage
+      ) || null;
+      const linkedQuickPackageMenu = selectedQuickPackage
+        ? menus.find((menu) => {
+            const name = normalize(menu.name);
+            const label = normalize(selectedQuickPackage.label);
+            const words = label.replace(/^paket\s+/, "").trim();
+            return (
+              name === label ||
+              name.includes(label) ||
+              label.includes(name) ||
+              (words.length > 3 && name.includes(words))
+            );
+          })
+        : null;
+
+      const rawSale = json.data || null;
+      const localSaleMeta: SaleReportMeta | null = rawSale
+        ? {
+            saleId: Number(rawSale.id || 0) || null,
+            saleNumber: String(rawSale.number || ""),
+            cashierName: String(
+              rawSale.cashierName || cashier || "Kasir"
+            ),
+            staffName: String(
+              rawSale.staffName || normalizedTransactionStaff || cashier || "Staff tidak tercatat"
+            ),
+            ayce: Boolean(checkoutAyce),
+            tableName: checkoutAyce?.tableName || null,
+            customerName: customerName.trim() || null,
+            pax: Number(checkoutAyce?.pax || 0),
+            packageKey: checkoutAyce?.packageKey || selectedQuickPackage?.key || null,
+            packageName: checkoutAyce?.packageName || selectedQuickPackage?.label || null,
+            packagePrice: Number(
+              checkoutAyce?.packagePrice ||
+                linkedQuickPackageMenu?.price ||
+                0
+            ),
+            packageTotal: Number(
+              checkoutAyce ? aycePackageTotal : linkedQuickPackageMenu?.price || 0
+            ),
+            durationMinutes: Number(checkoutAyce?.durationMinutes || 0),
+            startedAt: checkoutAyce?.startedAt || null,
+            expiresAt: checkoutAyce?.expiresAt || null,
+            createdAt: new Date().toISOString(),
+          }
+        : null;
+
+      if (localSaleMeta?.saleNumber) {
+        writeSaleReportMeta(localSaleMeta);
+      }
+
+      const sale: Sale | null = rawSale
+        ? {
+            ...rawSale,
+            cashierName: rawSale.cashierName || localSaleMeta?.cashierName || cashier || null,
+            staffName: rawSale.staffName || localSaleMeta?.staffName || normalizedTransactionStaff || cashier || null,
+            ayce: typeof rawSale.ayce === "boolean" ? rawSale.ayce : Boolean(checkoutAyce),
+            tableName: rawSale.tableName || localSaleMeta?.tableName || null,
+            pax: Number(rawSale.pax || localSaleMeta?.pax || 0),
+            packageKey: rawSale.packageKey || localSaleMeta?.packageKey || null,
+            packageName: rawSale.packageName || localSaleMeta?.packageName || null,
+            packagePrice: Number(rawSale.packagePrice || localSaleMeta?.packagePrice || 0),
+            packageTotal: Number(rawSale.packageTotal || localSaleMeta?.packageTotal || 0),
+            durationMinutes: Number(rawSale.durationMinutes || localSaleMeta?.durationMinutes || 0),
+            startedAt: rawSale.startedAt || localSaleMeta?.startedAt || null,
+            expiresAt: rawSale.expiresAt || localSaleMeta?.expiresAt || null,
+          }
+        : null;
 
       setLastSale(sale);
       setReceiptSale(sale);
@@ -1601,6 +1819,7 @@ export default function PosOutletPage() {
         startedAt: checkoutAyce?.startedAt || "",
         expiresAt: checkoutAyce?.expiresAt || "",
         cashierName: cashier || "",
+        staffName: normalizedTransactionStaff,
       });
       setPayOpen(false);
 
@@ -1687,6 +1906,602 @@ export default function PosOutletPage() {
     window.setTimeout(() => window.print(), 50);
   }
 
+  async function downloadPdfReport() {
+    if (reportStockLoading) {
+      alert("Laporan bahan masih dimuat. Tunggu sampai selesai lalu download PDF.");
+      return;
+    }
+
+    try {
+      const outletName = selectedOutlet?.name || selectedOutlet?.code || currentOutlet?.name || "Outlet";
+      const outletCode = selectedOutlet?.code || currentOutlet?.code || "OUTLET";
+      const safeFilePart = (value: string) =>
+        String(value || "")
+          .trim()
+          .replace(/[^a-zA-Z0-9_-]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "REPORT";
+
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 9;
+      const contentWidth = pageWidth - margin * 2;
+
+      const C = {
+        dark: [24, 53, 45] as [number, number, number],
+        dark2: [38, 78, 66] as [number, number, number],
+        emerald: [73, 127, 112] as [number, number, number],
+        soft: [239, 246, 243] as [number, number, number],
+        soft2: [248, 251, 250] as [number, number, number],
+        line: [214, 226, 221] as [number, number, number],
+        text: [35, 45, 50] as [number, number, number],
+        muted: [100, 116, 139] as [number, number, number],
+        white: [255, 255, 255] as [number, number, number],
+        good: [29, 112, 80] as [number, number, number],
+        warn: [161, 108, 28] as [number, number, number],
+        bad: [160, 55, 55] as [number, number, number],
+      };
+
+      const fmtMoney = (value: number) => {
+        const amount = Number(value || 0);
+        return `Rp ${amount.toLocaleString("id-ID", {
+          minimumFractionDigits: Math.abs(amount % 1) > 0 ? 2 : 0,
+          maximumFractionDigits: 2,
+        })}`;
+      };
+      const fmtQty = (value: number) => Number(value || 0).toLocaleString("id-ID", { maximumFractionDigits: 4 });
+      const fmtPct = (value: number) => `${Number(value || 0).toFixed(2)}%`;
+      const fmtDateTime = (value: string | Date | null | undefined) => {
+        if (!value) return "-";
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return "-";
+        return d.toLocaleString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+      };
+      const dateKey = (value: string | Date | null | undefined) => {
+        if (!value) return "";
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return "";
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      };
+
+      const drawHeader = (title: string, subtitle = "") => {
+        doc.setFillColor(...C.dark);
+        doc.roundedRect(margin, 7, contentWidth, 18, 3, 3, "F");
+        doc.setTextColor(...C.white);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.text("MGB", margin + 5, 15.5);
+        doc.setFontSize(7.5);
+        doc.text("PT. MITRA GARAM BOGATAMA", margin + 24, 13.5);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6.2);
+        doc.setTextColor(207, 227, 220);
+        doc.text(`${outletCode} • ${outletName}`, margin + 24, 19.2);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9.5);
+        doc.setTextColor(...C.white);
+        doc.text(title, pageWidth - margin - 5, 14.5, { align: "right" });
+        if (subtitle) {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(6.1);
+          doc.setTextColor(207, 227, 220);
+          doc.text(subtitle, pageWidth - margin - 5, 19.7, { align: "right" });
+        }
+      };
+
+      const footer = () => {
+        const pages = doc.getNumberOfPages();
+        for (let page = 1; page <= pages; page += 1) {
+          doc.setPage(page);
+          doc.setDrawColor(...C.line);
+          doc.line(margin, pageHeight - 7, pageWidth - margin, pageHeight - 7);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(6);
+          doc.setTextColor(...C.muted);
+          doc.text("MGB POS • Daily Control Report • Generated by ERP", margin, pageHeight - 3.5);
+          doc.text(`Page ${page} / ${pages}`, pageWidth - margin, pageHeight - 3.5, { align: "right" });
+        }
+      };
+
+      const section = (title: string, subtitle = "", forcedY?: number) => {
+        const base = (doc as any).lastAutoTable?.finalY;
+        const y = forcedY ?? (base ? base + 4 : 31);
+        if (y > pageHeight - 27) {
+          doc.addPage();
+          drawHeader(title, subtitle);
+          return 31;
+        }
+        doc.setFillColor(...C.soft);
+        doc.roundedRect(margin, y, contentWidth, 7, 2, 2, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
+        doc.setTextColor(...C.dark);
+        doc.text(title.toUpperCase(), margin + 4, y + 4.8);
+        if (subtitle) {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(6);
+          doc.setTextColor(...C.muted);
+          doc.text(subtitle, pageWidth - margin - 4, y + 4.7, { align: "right" });
+        }
+        return y + 9;
+      };
+
+      // ============================================================
+      // PDF TABLE ENGINE
+      // - Always stays inside A4 landscape printable width.
+      // - Explicit column widths are automatically scaled down when
+      //   their sum is wider than the paper.
+      // - Tables flow naturally from page to page; no horizontal spill.
+      // - Wide tables get smaller typography/padding automatically.
+      // ============================================================
+      const table = (
+        startY: number,
+        head: string[][],
+        body: (string | number)[][],
+        options: Record<string, any> = {}
+      ) => {
+        const baseStyles = {
+          font: "helvetica",
+          fontSize: 6.1,
+          textColor: C.text,
+          cellPadding: 1.45,
+          lineColor: C.line,
+          lineWidth: 0.22,
+          overflow: "linebreak",
+          valign: "middle",
+          cellWidth: "auto",
+        };
+        const baseHeadStyles = {
+          fillColor: C.dark,
+          textColor: C.white,
+          fontStyle: "bold",
+          fontSize: 6.1,
+          cellPadding: 1.7,
+          overflow: "linebreak",
+          valign: "middle",
+        };
+
+        const columnStyles: Record<number, any> = {
+          ...(options.columnStyles || {}),
+        };
+
+        // Only explicit numeric widths participate in scaling.
+        const explicitWidths = Object.keys(columnStyles)
+          .map((key) => Number(key))
+          .filter((key) => Number.isFinite(key))
+          .map((key) => ({ key, width: Number(columnStyles[key]?.cellWidth) }))
+          .filter((item) => Number.isFinite(item.width) && item.width > 0);
+
+        const requestedTableWidth = Number(options.tableWidth);
+        const tableWidth = Number.isFinite(requestedTableWidth) && requestedTableWidth > 0
+          ? Math.min(requestedTableWidth, contentWidth)
+          : contentWidth;
+
+        const explicitTotal = explicitWidths.reduce((sum, item) => sum + item.width, 0);
+        const widthScale = explicitTotal > tableWidth
+          ? tableWidth / explicitTotal
+          : 1;
+
+        if (widthScale < 1) {
+          for (const item of explicitWidths) {
+            columnStyles[item.key] = {
+              ...columnStyles[item.key],
+              cellWidth: Math.max(9, Number((item.width * widthScale).toFixed(2))),
+            };
+          }
+        }
+
+        const columnCount = Math.max(
+          head?.[0]?.length || 0,
+          ...(body.slice(0, 20).map((row) => row.length))
+        );
+
+        // Automatically tighten dense tables while keeping readable text.
+        const densityFont =
+          columnCount >= 15 ? 4.35 :
+          columnCount >= 13 ? 4.65 :
+          columnCount >= 10 ? 5.05 :
+          columnCount >= 8 ? 5.45 :
+          6.1;
+        const densityPadding =
+          columnCount >= 15 ? 0.85 :
+          columnCount >= 13 ? 0.95 :
+          columnCount >= 10 ? 1.1 :
+          1.35;
+
+        const mergedStyles = {
+          ...baseStyles,
+          fontSize: Math.min(Number(baseStyles.fontSize), densityFont),
+          cellPadding: Math.min(Number(baseStyles.cellPadding), densityPadding),
+          ...(options.styles || {}),
+        };
+        const mergedHeadStyles = {
+          ...baseHeadStyles,
+          fontSize: Math.min(Number(baseHeadStyles.fontSize), Math.max(4.25, densityFont)),
+          cellPadding: Math.min(Number(baseHeadStyles.cellPadding), Math.max(1.05, densityPadding + 0.25)),
+          ...(options.headStyles || {}),
+        };
+
+        // If a caller supplied a larger font for a very wide table, still cap it.
+        if (columnCount >= 13) {
+          mergedStyles.fontSize = Math.min(Number(mergedStyles.fontSize) || 4.65, 5.0);
+          mergedHeadStyles.fontSize = Math.min(Number(mergedHeadStyles.fontSize) || 4.65, 5.0);
+        }
+
+        const safeStartY = Math.max(31, Math.min(startY, pageHeight - 22));
+
+        autoTable(doc, {
+          startY: safeStartY,
+          head,
+          body,
+          margin: { left: margin, right: margin, top: 30, bottom: 11 },
+          tableWidth,
+          theme: "grid",
+          styles: mergedStyles,
+          headStyles: mergedHeadStyles,
+          alternateRowStyles: { fillColor: C.soft2, ...(options.alternateRowStyles || {}) },
+          columnStyles,
+          pageBreak: options.pageBreak || "auto",
+          rowPageBreak: "auto",
+          showHead: "everyPage",
+          didDrawPage: (data: any) => {
+            if (data.pageNumber > 1) drawHeader("MGB POS • LANJUTAN", reportDateLabel);
+            if (typeof options.didDrawPage === "function") options.didDrawPage(data);
+          },
+        });
+
+        return (doc as any).lastAutoTable?.finalY || safeStartY + 10;
+      };
+
+      // Starts a new page only when the current page is actually full.
+      // This prevents the large blank gaps caused by forcing every section
+      // onto a fresh page.
+      const addPage = (title: string, subtitle = reportDateLabel) => {
+        const lastY = Number((doc as any).lastAutoTable?.finalY || 0);
+        if (lastY > pageHeight - 42) {
+          doc.addPage();
+          drawHeader(title, subtitle);
+          return 31;
+        }
+        return section(title, subtitle);
+      };
+
+      // ============================================================
+      // EXECUTIVE SUMMARY
+      // ============================================================
+      drawHeader("EXECUTIVE SUMMARY", reportDateLabel);
+      doc.setTextColor(...C.dark);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(17);
+      doc.text("DAILY POS CONTROL REPORT", margin, 36);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.2);
+      doc.setTextColor(...C.muted);
+      doc.text("Laporan menyeluruh penjualan, pembayaran, PAX, item, paket, pemakaian bahan, HPP, staff, dan rekonsiliasi kontrol.", margin, 42);
+
+      const avgTx = reportSales.length ? reportTotal / reportSales.length : 0;
+      const cards = [
+        ["GRAND TOTAL", fmtMoney(reportTotal)],
+        ["NET SALES", fmtMoney(reportNetSales)],
+        ["TRANSAKSI", String(reportSales.length)],
+        ["PAX", String(reportPax)],
+        ["TOTAL ITEM", fmtQty(reportItems)],
+        ["HPP BAHAN", fmtMoney(reportConsumptionHpp)],
+      ];
+      const gap = 2.7;
+      const cardW = (contentWidth - gap * 5) / 6;
+      cards.forEach(([label, value], i) => {
+        const x = margin + i * (cardW + gap);
+        doc.setFillColor(...C.soft);
+        doc.setDrawColor(...C.line);
+        doc.roundedRect(x, 47, cardW, 22, 2.5, 2.5, "FD");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(5.6);
+        doc.setTextColor(...C.muted);
+        doc.text(label, x + 3, 53.5);
+        doc.setFontSize(i < 2 ? 8.2 : 9);
+        doc.setTextColor(...C.dark);
+        doc.text(value, x + 3, 64);
+      });
+
+      let y = 76;
+      y = table(y, [["KOMPONEN", "NOMINAL"]], [
+        ["Gross Item Sales", fmtMoney(reportGrossItemSales)],
+        ["Discount", fmtMoney(reportDiscount)],
+        ["Net Sales", fmtMoney(reportNetSales)],
+        ["Service Charge", fmtMoney(reportService)],
+        ["PPN", fmtMoney(reportPpn)],
+        ["Grand Total", fmtMoney(reportTotal)],
+        ["Paid Amount", fmtMoney(reportPaid)],
+        ["Kembalian", fmtMoney(reportSales.reduce((s, x) => s + Number(x.changeAmount || 0), 0))],
+        ["Rata-rata / Transaksi", fmtMoney(avgTx)],
+        ["Rata-rata / PAX", fmtMoney(reportAvgPerPax)],
+      ], { columnStyles: { 0: { cellWidth: 95 }, 1: { cellWidth: 65, halign: "right" } }, tableWidth: 160 });
+
+      y = section("PEMBAYARAN", "Jumlah transaksi, nominal, dan persentase");
+      const paymentMap = new Map<string, { tx: number; amount: number; paid: number }>();
+      for (const sale of reportSales) {
+        const method = String(sale.paymentMethod || "LAINNYA").trim() || "LAINNYA";
+        const current = paymentMap.get(method) || { tx: 0, amount: 0, paid: 0 };
+        current.tx += 1;
+        current.amount += Number(sale.total || 0);
+        current.paid += Number(sale.paidAmount || 0);
+        paymentMap.set(method, current);
+      }
+      const paymentRows = Array.from(paymentMap.entries()).sort((a, b) => b[1].amount - a[1].amount).map(([method, v]) => [
+        method,
+        v.tx,
+        fmtMoney(v.amount),
+        fmtPct(reportSales.length ? (v.tx / reportSales.length) * 100 : 0),
+        fmtMoney(v.paid),
+        fmtPct(reportPaid ? (v.paid / reportPaid) * 100 : 0),
+      ]);
+      y = table(y, [["METODE", "TX", "NOMINAL TOTAL", "% TX", "PAID", "% PAID"]], paymentRows.length ? paymentRows : [["Tidak ada", 0, fmtMoney(0), "0.00%", fmtMoney(0), "0.00%"]], {
+        columnStyles: { 0: { cellWidth: 42 }, 1: { halign: "center", cellWidth: 20 }, 2: { halign: "right", cellWidth: 45 }, 3: { halign: "right", cellWidth: 25 }, 4: { halign: "right", cellWidth: 45 }, 5: { halign: "right", cellWidth: 25 } },
+      });
+
+      y = section("AYCE & REGULAR", "Jumlah transaksi, PAX, nilai paket, dan kontribusi penjualan");
+      const ayceRows = [
+        ["AYCE", reportAyceTransactions, reportSales.filter(s => s.ayce).reduce((n, s) => n + Number(s.pax || 0), 0), fmtMoney(reportSales.filter(s => s.ayce).reduce((n, s) => n + (Number(s.packagePrice || 0) * Math.max(1, Number(s.pax || 0))), 0)), fmtMoney(reportSales.filter(s => s.ayce).reduce((n, s) => n + Number(s.total || 0), 0))],
+        ["REGULAR", reportRegularTransactions, reportSales.filter(s => !s.ayce).reduce((n, s) => n + Number(s.pax || 0), 0), fmtMoney(reportSales.filter(s => !s.ayce).reduce((n, s) => n + Number(s.packagePrice || 0), 0)), fmtMoney(reportSales.filter(s => !s.ayce).reduce((n, s) => n + Number(s.total || 0), 0))],
+      ];
+      y = table(y, [["TIPE", "TX", "PAX", "NILAI PAKET", "GRAND TOTAL"]], ayceRows, { columnStyles: { 0: { cellWidth: 50 }, 1: { halign: "center", cellWidth: 25 }, 2: { halign: "center", cellWidth: 25 }, 3: { halign: "right", cellWidth: 60 }, 4: { halign: "right", cellWidth: 60 } } });
+
+      // ============================================================
+      // AYCE SESSION / PACKAGE DETAIL
+      // ============================================================
+      y = addPage("AYCE & PACKAGE DETAIL");
+      y = section("DETAIL SESI AYCE", "Meja, customer, PAX, paket, durasi, mulai, dan expire", y);
+      const ayceDetailRows = reportSales.filter(s => s.ayce).map(s => [
+        s.number,
+        fmtDateTime(s.saleDate),
+        s.tableName || "-",
+        s.customerName || "-",
+        String(s.pax || 0),
+        (s.packageName || s.packageKey || "-"),
+        fmtMoney(Number(s.packagePrice || 0)),
+        `${Number(s.durationMinutes || 0)} m`,
+        fmtDateTime(s.startedAt),
+        fmtDateTime(s.expiresAt),
+      ]);
+      y = table(y, [["TRANSAKSI", "WAKTU", "MEJA", "CUSTOMER", "PAX", "PAKET", "HARGA/PAX", "DURASI", "START", "EXPIRE"]], ayceDetailRows.length ? ayceDetailRows : [["-", "-", "-", "Tidak ada AYCE", "0", "-", fmtMoney(0), "-", "-", "-"]], {
+        styles: { fontSize: 5.4, cellPadding: 1.6 },
+        columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 27 }, 2: { cellWidth: 22 }, 3: { cellWidth: 36 }, 4: { halign: "center", cellWidth: 17 }, 5: { cellWidth: 42 }, 6: { halign: "right", cellWidth: 34 }, 7: { halign: "center", cellWidth: 25 }, 8: { cellWidth: 30 }, 9: { cellWidth: 30 } },
+      });
+
+      y = section("PAKET", "Rekap paket yang tercatat pada transaksi", y);
+      y = table(y, [["PAKET", "TX", "PAX", "NILAI PAKET", "TOTAL SALES"]], reportPackageSummary.length ? reportPackageSummary.map(x => [x.name, x.qty, x.pax, fmtMoney(x.value), fmtMoney(reportSales.filter(s => (s.packageName || "").trim().toLowerCase() === x.name.trim().toLowerCase()).reduce((n, s) => n + Number(s.total || 0), 0))]) : [["Tidak ada paket", 0, 0, fmtMoney(0), fmtMoney(0)]], {
+        columnStyles: { 0: { cellWidth: 85 }, 1: { halign: "center", cellWidth: 25 }, 2: { halign: "center", cellWidth: 25 }, 3: { halign: "right", cellWidth: 55 }, 4: { halign: "right", cellWidth: 60 } },
+      });
+
+      // ============================================================
+      // ITEM SALES
+      // ============================================================
+      y = addPage("ITEM SALES DETAIL");
+      y = section("SEMUA ITEM TERJUAL", "Nama item, qty, jumlah transaksi, qty AYCE, qty PAID, dan nilai penjualan", y);
+      y = table(y, [["ITEM", "QTY", "TX", "QTY AYCE", "QTY PAID", "NILAI PENJUALAN"]], reportItemSummary.length ? reportItemSummary.map(item => [item.name, fmtQty(item.qty), item.transactions, fmtQty(item.ayceQty), fmtQty(item.paidQty), fmtMoney(item.salesValue)]) : [["Tidak ada item", "0", "0", "0", "0", fmtMoney(0)]], {
+        columnStyles: { 0: { cellWidth: 90 }, 1: { halign: "right", cellWidth: 25 }, 2: { halign: "center", cellWidth: 25 }, 3: { halign: "right", cellWidth: 32 }, 4: { halign: "right", cellWidth: 32 }, 5: { halign: "right", cellWidth: 55 } },
+      });
+
+      // ============================================================
+      // ALL MATERIAL USAGE SUMMARY
+      // ============================================================
+      y = addPage("MATERIAL USAGE", "Semua bahan yang keluar dari stock usage");
+      y = section("SEMUA BAHAN YANG DIGUNAKAN", "Tidak dibatasi hanya daging; seluruh StockCard POS_OUT yang tersedia", y);
+      y = table(y, [["KODE", "NAMA BAHAN", "UNIT", "BASE UNIT", "KONVERSI", "QTY KELUAR", "QTY BASE", "HPP/UNIT", "TOTAL HPP", "SALDO AKHIR"]], reportStockSummary.length ? reportStockSummary.map(item => [item.code, item.name, item.unit, item.baseUnit, fmtQty(item.conversionRate), fmtQty(item.qty), fmtQty(item.qty * Number(item.conversionRate || 1)), fmtMoney(item.qty ? item.hpp / item.qty : 0), fmtMoney(item.hpp), fmtQty(item.endStock)]) : [["-", "Tidak ada bahan keluar", "-", "-", "-", "0", "0", fmtMoney(0), fmtMoney(0), "0"]], {
+        styles: { fontSize: 5.3, cellPadding: 1.55 },
+        columnStyles: { 0: { cellWidth: 25 }, 1: { cellWidth: 58 }, 2: { cellWidth: 22 }, 3: { cellWidth: 25 }, 4: { halign: "right", cellWidth: 25 }, 5: { halign: "right", cellWidth: 25 }, 6: { halign: "right", cellWidth: 30 }, 7: { halign: "right", cellWidth: 35 }, 8: { halign: "right", cellWidth: 38 }, 9: { halign: "right", cellWidth: 30 } },
+      });
+
+      // ============================================================
+      // MATERIAL USAGE TRANSACTION DETAIL
+      // ============================================================
+      y = addPage("MATERIAL USAGE DETAIL");
+      y = section("DETAIL SETIAP PEMAKAIAN BAHAN", "Tanggal/waktu, tipe transaksi, referensi, bahan, qty, HPP, saldo, keterangan", y);
+      const usageRows = [...reportStockUsage].sort((a, b) => new Date(a.trxDate).getTime() - new Date(b.trxDate).getTime()).map(row => [
+        fmtDateTime(row.trxDate),
+        row.trxType || "-",
+        row.trxNumber || (row.referenceId ? `REF-${row.referenceId}` : "-"),
+        row.barang?.code || "-",
+        row.barang?.name || "-",
+        row.barang?.unit || "-",
+        row.barang?.baseUnit || row.barang?.unit || "-",
+        fmtQty(row.barang?.conversionRate || 1),
+        fmtQty(row.qtyOut),
+        fmtQty(Number(row.qtyOut || 0) * Number(row.barang?.conversionRate || 1)),
+        fmtMoney(row.unitPrice),
+        fmtMoney(row.totalValue || Number(row.qtyOut || 0) * Number(row.unitPrice || 0)),
+        fmtQty(row.balance),
+        row.note || "-",
+      ]);
+      y = table(y, [["WAKTU", "TIPE", "NO/REF", "KODE", "BAHAN", "UNIT", "BASE", "KONV", "QTY KELUAR", "QTY BASE", "HPP/UNIT", "TOTAL HPP", "SALDO", "KETERANGAN"]], usageRows.length ? usageRows : [["-", "-", "-", "-", "Tidak ada pemakaian", "-", "-", "-", "0", "0", fmtMoney(0), fmtMoney(0), "0", "-"]], {
+        styles: { fontSize: 4.9, cellPadding: 1.4 },
+        headStyles: { fontSize: 5.1, cellPadding: 1.7 },
+        columnStyles: { 0: { cellWidth: 28 }, 1: { cellWidth: 24 }, 2: { cellWidth: 30 }, 3: { cellWidth: 23 }, 4: { cellWidth: 62 }, 5: { cellWidth: 20 }, 6: { cellWidth: 23 }, 7: { halign: "right", cellWidth: 22 }, 8: { halign: "right", cellWidth: 25 }, 9: { halign: "right", cellWidth: 25 }, 10: { halign: "right", cellWidth: 30 }, 11: { halign: "right", cellWidth: 35 }, 12: { halign: "right", cellWidth: 27 }, 13: { cellWidth: 45 } },
+      });
+
+      // ============================================================
+      // FOOD COST
+      // ============================================================
+      y = addPage("FOOD COST & HPP");
+      y = section("FOOD COST", "Setiap kategori: HPP, ratio aktif, ratio H-1, status naik/turun/stabil, dan delta percentage point", y);
+      y = table(y, [["KATEGORI", "QTY", "HPP", "% NET SALES", "H-1 HPP", "H-1 %", "TREND", "DELTA PP"]], reportCategorySummary.length ? reportCategorySummary.map(item => [
+        item.category,
+        fmtQty(item.qty),
+        fmtMoney(item.hpp),
+        fmtPct(item.ratio),
+        reportCategoryComparisonAvailable ? fmtMoney(item.previousHpp) : "-",
+        reportCategoryComparisonAvailable ? fmtPct(item.previousRatio) : "-",
+        reportCategoryComparisonAvailable
+          ? item.deltaRatio > 0.005
+            ? "NAIK"
+            : item.deltaRatio < -0.005
+              ? "TURUN"
+              : "STABIL"
+          : "NO COMP",
+        reportCategoryComparisonAvailable
+          ? `${item.deltaRatio >= 0 ? "+" : ""}${item.deltaRatio.toFixed(2)} pp`
+          : "-",
+      ]) : [["Tidak ada data", "0", fmtMoney(0), "0.00%", "-", "-", "-", "-"]], {
+        columnStyles: {
+          0: { cellWidth: 48 },
+          1: { halign: "right", cellWidth: 22 },
+          2: { halign: "right", cellWidth: 38 },
+          3: { halign: "right", cellWidth: 30 },
+          4: { halign: "right", cellWidth: 38 },
+          5: { halign: "right", cellWidth: 30 },
+          6: { halign: "center", cellWidth: 27 },
+          7: { halign: "right", cellWidth: 30 },
+        },
+      });
+
+      y = section("RINGKASAN HPP", "Food Cost keseluruhan dan HPP daging/protein");
+      y = table(y, [["METRIK", "NILAI", "% NET SALES"]], [
+        ["Total HPP Bahan", fmtMoney(reportConsumptionHpp), fmtPct(reportFoodCostRatio)],
+        ["HPP Daging / Protein", fmtMoney(reportMeatHpp), fmtPct(reportMeatFoodCostRatio)],
+        ["Net Sales", fmtMoney(reportNetSales), "100.00%"],
+      ], { columnStyles: { 0: { cellWidth: 95 }, 1: { halign: "right", cellWidth: 60 }, 2: { halign: "right", cellWidth: 50 } } });
+
+      // ============================================================
+      // MEAT CONTROL
+      // ============================================================
+      y = addPage("MEAT / PROTEIN CONTROL");
+      y = section("KONTROL BAHAN DAGING", "Saldo awal, pemakaian, saldo akhir, base unit, conversion rate, dan HPP", y);
+      y = table(y, [["KODE", "BAHAN", "UNIT", "SALDO AWAL", "PEMAKAIAN", "SALDO AKHIR", "BASE UNIT", "CONVERSION", "HPP"]], reportMeatStockSummary.length ? reportMeatStockSummary.map(item => [item.code, item.name, item.unit, fmtQty(item.startStock), fmtQty(item.qty), fmtQty(item.endStock), item.baseUnit, fmtQty(item.conversionRate), fmtMoney(item.hpp)]) : [["-", "Tidak ada bahan daging/protein", "-", "0", "0", "0", "-", "-", fmtMoney(0)]], {
+        styles: { fontSize: 5.8, cellPadding: 1.7 },
+        columnStyles: { 0: { cellWidth: 27 }, 1: { cellWidth: 72 }, 2: { cellWidth: 25 }, 3: { halign: "right", cellWidth: 30 }, 4: { halign: "right", cellWidth: 30 }, 5: { halign: "right", cellWidth: 30 }, 6: { cellWidth: 30 }, 7: { halign: "right", cellWidth: 32 }, 8: { halign: "right", cellWidth: 45 } },
+      });
+
+      // ============================================================
+      // STAFF / CASHIER
+      // ============================================================
+      y = addPage("STAFF / CASHIER CONTROL");
+      y = section("STAFF / KASIR TRANSAKSI", "Jumlah transaksi, total item, dan total penjualan per staff", y);
+      y = table(y, [["STAFF / KASIR", "TRANSAKSI", "TOTAL ITEM", "TOTAL PENJUALAN", "% SALES"]], reportStaffSummary.length ? reportStaffSummary.map(staff => [staff.staff, staff.transactions, fmtQty(staff.items), fmtMoney(staff.total), fmtPct(reportTotal ? (staff.total / reportTotal) * 100 : 0)]) : [["Tidak ada transaksi", 0, "0", fmtMoney(0), "0.00%"]], {
+        columnStyles: { 0: { cellWidth: 110 }, 1: { halign: "center", cellWidth: 30 }, 2: { halign: "right", cellWidth: 35 }, 3: { halign: "right", cellWidth: 60 }, 4: { halign: "right", cellWidth: 35 } },
+      });
+
+      // ============================================================
+      // FULL TRANSACTION DETAIL
+      // ============================================================
+      y = addPage("FULL TRANSACTION DETAIL", `${reportSales.length} transaksi`);
+      y = section("DETAIL SELURUH TRANSAKSI", "Nomor transaksi, waktu, kasir, meja, customer, tipe, paket, PAX, payment, diskon, service, PPN, total, paid, kembalian, catatan", y);
+      const txRows = reportSales.map(sale => [
+        sale.number,
+        fmtDateTime(sale.saleDate),
+        (sale.cashierName || sale.staffName || "-"),
+        sale.tableName || "-",
+        sale.customerName || "-",
+        sale.ayce ? "AYCE" : "REGULAR",
+        (sale.packageName || sale.packageKey || "-"),
+        String(sale.pax || 0),
+        sale.paymentMethod || "-",
+        fmtMoney(sale.discount || 0),
+        fmtMoney(sale.serviceCharge || 0),
+        fmtMoney(sale.ppn || 0),
+        fmtMoney(sale.total || 0),
+        fmtMoney(sale.paidAmount || 0),
+        fmtMoney(sale.changeAmount || 0),
+        sale.note || "-",
+      ]);
+      y = table(y, [["NO TRANSAKSI", "WAKTU", "KASIR", "MEJA", "CUSTOMER", "TIPE", "PAKET", "PAX", "PAYMENT", "DISKON", "SERVICE", "PPN", "TOTAL", "PAID", "KEMBALIAN", "CATATAN"]], txRows.length ? txRows : [["-", "-", "-", "-", "Tidak ada transaksi", "-", "-", "0", "-", fmtMoney(0), fmtMoney(0), fmtMoney(0), fmtMoney(0), fmtMoney(0), fmtMoney(0), "-"]], {
+        styles: { fontSize: 4.6, cellPadding: 1.25 },
+        headStyles: { fontSize: 4.8, cellPadding: 1.5 },
+        columnStyles: { 0: { cellWidth: 29 }, 1: { cellWidth: 28 }, 2: { cellWidth: 32 }, 3: { cellWidth: 20 }, 4: { cellWidth: 38 }, 5: { cellWidth: 25 }, 6: { cellWidth: 38 }, 7: { halign: "center", cellWidth: 16 }, 8: { cellWidth: 25 }, 9: { halign: "right", cellWidth: 28 }, 10: { halign: "right", cellWidth: 28 }, 11: { halign: "right", cellWidth: 25 }, 12: { halign: "right", cellWidth: 34 }, 13: { halign: "right", cellWidth: 34 }, 14: { halign: "right", cellWidth: 32 }, 15: { cellWidth: 48 } },
+      });
+
+      // ============================================================
+      // FULL ITEM DETAIL
+      // ============================================================
+      y = addPage("FULL ITEM DETAIL", `${reportItems} qty item`);
+      y = section("DETAIL SELURUH ITEM TRANSAKSI", "Transaksi, waktu, kasir, item, unit, qty, harga, subtotal, tipe AYCE/PAID", y);
+      const itemRows: (string | number)[][] = [];
+      for (const sale of reportSales) {
+        for (const item of sale.items || []) {
+          itemRows.push([
+            sale.number,
+            fmtDateTime(sale.saleDate),
+            sale.cashierName || sale.staffName || "-",
+            item.menu?.name || item.barang?.name || `Item #${item.id}`,
+            item.barang?.unit || "-",
+            fmtQty(item.qty),
+            fmtMoney(item.unitPrice),
+            fmtMoney(item.subtotal),
+            sale.ayce ? "AYCE" : "PAID",
+          ]);
+        }
+      }
+      y = table(y, [["TRANSAKSI", "WAKTU", "KASIR", "ITEM", "UNIT", "QTY", "HARGA", "SUBTOTAL", "TIPE"]], itemRows.length ? itemRows : [["-", "-", "-", "Tidak ada item", "-", "0", fmtMoney(0), fmtMoney(0), "-"]], {
+        styles: { fontSize: 5.5, cellPadding: 1.6 },
+        columnStyles: { 0: { cellWidth: 32 }, 1: { cellWidth: 29 }, 2: { cellWidth: 32 }, 3: { cellWidth: 100 }, 4: { cellWidth: 23 }, 5: { halign: "right", cellWidth: 25 }, 6: { halign: "right", cellWidth: 35 }, 7: { halign: "right", cellWidth: 38 }, 8: { halign: "center", cellWidth: 25 } },
+      });
+
+      // ============================================================
+      // RECONCILIATION / DATA COMPLETENESS
+      // ============================================================
+      y = addPage("RECONCILIATION & DATA CONTROL");
+      y = section("REKONSILIASI AKHIR", "Kontrol penjualan, pembayaran, pemakaian bahan, Food Cost, HPP daging, dan kelengkapan data", y);
+
+      const grossBySales = reportSales.reduce((n, s) => n + (s.items || []).reduce((m, i) => m + Number(i.subtotal || 0), 0), 0);
+      const expectedTotal = reportNetSales + reportService + reportPpn;
+      const paidGap = reportPaid - reportTotal;
+      const salesGap = reportGrossItemSales - grossBySales;
+      const completeness = {
+        sales: reportSales.length > 0,
+        payment: reportSales.every(s => Boolean(s.paymentMethod)),
+        cashier: reportSales.every(s => Boolean(s.cashierName)),
+        item: reportSales.every(s => Array.isArray(s.items) && s.items.length > 0),
+        stock: reportStockUsage.length > 0 || reportSales.length === 0,
+        hpp: reportStockUsage.every(r => Number.isFinite(Number(r.totalValue || Number(r.qtyOut || 0) * Number(r.unitPrice || 0)))),
+        ayce: reportSales.filter(s => s.ayce).every(s => Boolean(s.tableName && Number(s.pax || 0) > 0 && s.packageName)),
+      };
+      const ok = (v: boolean) => v ? "OK" : "PERLU CEK";
+
+      y = table(y, [["KONTROL", "NILAI SISTEM", "PEMBANDING", "SELISIH", "STATUS"]], [
+        ["Kontrol Penjualan", fmtMoney(reportGrossItemSales), fmtMoney(grossBySales), fmtMoney(salesGap), Math.abs(salesGap) < 0.01 ? "OK" : "PERLU CEK"],
+        ["Kontrol Grand Total", fmtMoney(reportTotal), fmtMoney(expectedTotal), fmtMoney(reportTotal - expectedTotal), Math.abs(reportTotal - expectedTotal) < 0.01 ? "OK" : "PERLU CEK"],
+        ["Kontrol Pembayaran", fmtMoney(reportPaid), fmtMoney(reportTotal), fmtMoney(paidGap), paidGap >= -0.01 ? "OK" : "PERLU CEK"],
+        ["Kontrol Pemakaian Bahan", fmtQty(reportConsumptionQty), String(reportStockUsage.length) + " baris", "-", completeness.stock ? "OK" : "PERLU CEK"],
+        ["Food Cost HPP", fmtMoney(reportConsumptionHpp), fmtPct(reportFoodCostRatio), "-", reportNetSales > 0 ? "OK" : "PERLU CEK"],
+        ["HPP Daging", fmtMoney(reportMeatHpp), fmtPct(reportMeatFoodCostRatio), "-", reportMeatStockSummary.length || reportSales.length === 0 ? "OK" : "PERLU CEK"],
+        ["Jumlah Jenis Bahan", String(reportStockSummary.length), "unik barang", "-", "OK"],
+        ["Jumlah Baris Pemakaian", String(reportStockUsage.length), "StockCard POS_OUT", "-", completeness.stock ? "OK" : "PERLU CEK"],
+      ], { columnStyles: { 0: { cellWidth: 75 }, 1: { halign: "right", cellWidth: 48 }, 2: { halign: "right", cellWidth: 48 }, 3: { halign: "right", cellWidth: 40 }, 4: { halign: "center", cellWidth: 35 } } });
+
+      y = section("STATUS KELENGKAPAN DATA", "Pengecekan field penting yang tersedia pada data laporan");
+      y = table(y, [["DATA", "JUMLAH / KONDISI", "STATUS"]], [
+        ["Transaksi", String(reportSales.length), ok(completeness.sales)],
+        ["Payment Method", `${reportSales.filter(s => Boolean(s.paymentMethod)).length}/${reportSales.length}`, ok(completeness.payment)],
+        ["Staff Transaksi", `${reportSales.filter(s => Boolean(s.staffName || s.cashierName)).length}/${reportSales.length}`, ok(completeness.cashier)],
+        ["Item transaksi", `${reportSales.filter(s => Array.isArray(s.items) && s.items.length > 0).length}/${reportSales.length}`, ok(completeness.item)],
+        ["Stock Usage / HPP", `${reportStockUsage.length} baris`, ok(completeness.stock && completeness.hpp)],
+        ["AYCE metadata", `${reportSales.filter(s => s.ayce).filter(s => Boolean(s.tableName && Number(s.pax || 0) > 0 && s.packageName)).length}/${reportSales.filter(s => s.ayce).length}`, ok(completeness.ayce)],
+      ], { columnStyles: { 0: { cellWidth: 90 }, 1: { cellWidth: 90 }, 2: { halign: "center", cellWidth: 45 } } });
+
+      y = section("CONTROL TOTAL", "Angka akhir yang harus menjadi referensi audit");
+      y = table(y, [["METRIK", "NILAI"]], [
+        ["Grand Total", fmtMoney(reportTotal)],
+        ["Net Sales", fmtMoney(reportNetSales)],
+        ["Paid Amount", fmtMoney(reportPaid)],
+        ["Total Item", fmtQty(reportItems)],
+        ["Total PAX", fmtQty(reportPax)],
+        ["Total Pemakaian Bahan", fmtQty(reportConsumptionQty)],
+        ["Total HPP Bahan", fmtMoney(reportConsumptionHpp)],
+        ["Food Cost", fmtPct(reportFoodCostRatio)],
+        ["HPP Daging", fmtMoney(reportMeatHpp)],
+        ["Jumlah Jenis Bahan", String(reportStockSummary.length)],
+        ["Jumlah Baris Pemakaian", String(reportStockUsage.length)],
+      ], { columnStyles: { 0: { cellWidth: 110 }, 1: { halign: "right", cellWidth: 80 } }, tableWidth: 190 });
+
+      footer();
+      const periodPart = reportRange === "ALL" ? "ALL" : reportDate;
+      const filename = `MGB_POS_FULL_CONTROL_REPORT_${safeFilePart(outletCode)}_${safeFilePart(periodPart)}.pdf`;
+      doc.save(filename);
+    } catch (error: any) {
+      console.error("DOWNLOAD POS PDF ERROR:", error);
+      alert(error?.message || "Gagal membuat PDF laporan POS.");
+    }
+  }
   const filteredSales =
     useMemo(() => {
       const q =
@@ -1702,7 +2517,9 @@ export default function PosOutletPage() {
               ""
             } ${
               sale.paymentMethod
-            } ${sale.tableName || ""}`
+            } ${sale.tableName || ""} ${
+              sale.cashierName || sale.staffName || ""
+            } ${sale.packageName || ""} ${sale.packageKey || ""}`
           ).includes(q);
         }
       );
@@ -1718,9 +2535,32 @@ export default function PosOutletPage() {
     });
   }, [sales, reportRange, reportDate]);
 
+  async function fetchReportStockByDate(date: string) {
+    const response = await fetch(
+      `/api/outlet/pos?outletId=${encodeURIComponent(String(outletId))}&date=${encodeURIComponent(date)}`,
+      { cache: "no-store" }
+    );
+
+    const json = await response.json().catch(() => ({}));
+
+    if (!response.ok || !json.success) {
+      throw new Error(json.message || "Gagal mengambil pemakaian bahan POS");
+    }
+
+    return Array.isArray(json.data) ? (json.data as PosStockUsage[]) : [];
+  }
+
+  function getPreviousReportDate(date: string) {
+    const current = new Date(`${date}T00:00:00`);
+    if (Number.isNaN(current.getTime())) return "";
+    current.setDate(current.getDate() - 1);
+    return `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`;
+  }
+
   async function loadDailyReportStock() {
-    if (!outletId || reportRange !== "TODAY") {
+    if (!outletId) {
       setReportStockUsage([]);
+      setReportPreviousStockUsage([]);
       setReportStockError("");
       return;
     }
@@ -1729,21 +2569,33 @@ export default function PosOutletPage() {
       setReportStockLoading(true);
       setReportStockError("");
 
-      const response = await fetch(
-        `/api/outlet/pos?outletId=${encodeURIComponent(String(outletId))}&date=${encodeURIComponent(reportDate)}`,
-        { cache: "no-store" }
-      );
+      if (reportRange === "TODAY") {
+        const [currentRows, previousRows] = await Promise.all([
+          fetchReportStockByDate(reportDate),
+          fetchReportStockByDate(getPreviousReportDate(reportDate)),
+        ]);
+        setReportStockUsage(currentRows);
+        setReportPreviousStockUsage(previousRows);
+      } else {
+        const uniqueDates = Array.from(new Set(
+          sales.map((sale) => {
+            const d = new Date(sale.saleDate);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          }).filter(Boolean)
+        ));
 
-      const json = await response.json().catch(() => ({}));
-
-      if (!response.ok || !json.success) {
-        throw new Error(json.message || "Gagal mengambil pemakaian bahan POS");
+        const chunks = await Promise.all(uniqueDates.map((date) => fetchReportStockByDate(date)));
+        const merged = new Map<number, PosStockUsage>();
+        for (const rows of chunks) {
+          for (const row of rows) merged.set(Number(row.id), row);
+        }
+        setReportStockUsage(Array.from(merged.values()).sort((a, b) => new Date(a.trxDate).getTime() - new Date(b.trxDate).getTime()));
+        setReportPreviousStockUsage([]);
       }
-
-      setReportStockUsage(Array.isArray(json.data) ? json.data : []);
     } catch (error: any) {
       console.error("LOAD DAILY POS STOCK REPORT ERROR:", error);
       setReportStockUsage([]);
+      setReportPreviousStockUsage([]);
       setReportStockError(error?.message || "Gagal mengambil pemakaian bahan POS");
     } finally {
       setReportStockLoading(false);
@@ -1909,6 +2761,206 @@ export default function PosOutletPage() {
         a.name.localeCompare(b.name)
     );
   }, [reportStockUsage]);
+  const reportIsMeat = (name: string, code = "") => {
+    const text = normalize(`${name} ${code}`);
+    return /pork|babi|samgyeop|samgyeopsal|galbi|daging|beef|sapi|sirloin|tenderloin|brisket|chicken|ayam|chikin|drumstick|thigh|breast|paha|dada/.test(text);
+  };
+
+  const reportMaterialCategory = (name: string, code = "") => {
+    const text = normalize(`${name} ${code}`);
+    if (/pork|babi|samgyeop|samgyeopsal|galbi/.test(text)) return "PORK";
+    if (/beef|sapi|sirloin|tenderloin|brisket/.test(text)) return "BEEF";
+    if (/chicken|ayam|chikin|drumstick|thigh|breast|paha|dada/.test(text)) return "CHICKEN";
+    if (/seafood|udang|shrimp|cumi|squid|fish|ikan|salmon|tuna/.test(text)) return "SEAFOOD";
+    if (/rice|beras|nasi|mie|noodle|tepung|flour|pasta/.test(text)) return "CARB";
+    if (/sayur|vegetable|lettuce|selada|sawi|kol|kubis|wortel|carrot|jamur|mushroom/.test(text)) return "VEGETABLE";
+    if (/sauce|saus|gochujang|soy|kecap|mayonnaise|mayo|seasoning|bumbu|garam|gula|sugar|oil|minyak/.test(text)) return "SAUCE & SEASONING";
+    if (/drink|coffee|tea|minum|sirup|syrup/.test(text)) return "BEVERAGE";
+    return "OTHER";
+  };
+
+  const reportMeatStockSummary = useMemo(
+    () => reportStockSummary.filter((item) => reportIsMeat(item.name, item.code)),
+    [reportStockSummary]
+  );
+
+  const reportNetSales = useMemo(
+    () => roundMoney(
+      reportSales.reduce(
+        (sum, sale) =>
+          sum +
+          Math.max(
+            0,
+            Number(sale.total || 0) -
+              Number(sale.serviceCharge || 0) -
+              Number(sale.ppn || 0)
+          ),
+        0
+      )
+    ),
+    [reportSales]
+  );
+
+
+  // ============================================================
+  // FOOD COST RATIO PER KATEGORI + PEMBANDING
+  // ------------------------------------------------------------
+  // Ratio = HPP kategori / Net Sales x 100.
+  //
+  // Mode TODAY:
+  //   - current  = tanggal laporan
+  //   - previous = H-1
+  //   - SEMUA kategori yang muncul di current ATAU H-1 tetap ditampilkan.
+  //     Jadi kategori yang hari ini 0 tetapi kemarin ada tetap terbaca TURUN.
+  //   - Jika kemarin tidak memakai bahan kategori tersebut, previousRatio = 0%.
+  //   - Trend dihitung dalam percentage point (pp), bukan persen relatif.
+  //
+  // Mode ALL:
+  //   - menampilkan ratio agregat seluruh periode.
+  //   - tidak mengarang pembanding karena tidak ada periode pembanding
+  //     yang ditentukan user.
+  // ============================================================
+  const reportCategorySummary = useMemo(() => {
+    type CategoryRatio = {
+      category: string;
+      hpp: number;
+      qty: number;
+      ratio: number;
+      previousHpp: number;
+      previousRatio: number;
+      deltaRatio: number;
+    };
+
+    const map = new Map<string, CategoryRatio>();
+
+    const addRows = (rows: PosStockUsage[], previous = false) => {
+      for (const row of rows) {
+        if (!row.barang) continue;
+
+        const category = reportMaterialCategory(
+          row.barang.name,
+          row.barang.code
+        );
+
+        const qty = Number(row.qtyOut || 0);
+        const hpp = Number(
+          row.totalValue || qty * Number(row.unitPrice || 0)
+        );
+
+        const current = map.get(category) || {
+          category,
+          hpp: 0,
+          qty: 0,
+          ratio: 0,
+          previousHpp: 0,
+          previousRatio: 0,
+          deltaRatio: 0,
+        };
+
+        if (previous) {
+          current.previousHpp += hpp;
+        } else {
+          current.hpp += hpp;
+          current.qty += qty;
+        }
+
+        map.set(category, current);
+      }
+    };
+
+    // Masukkan dua periode supaya kategori yang hanya ada di salah satu
+    // periode tetap muncul dan dapat dibandingkan.
+    addRows(reportStockUsage, false);
+    addRows(reportPreviousStockUsage, true);
+
+    const previousDay = getPreviousReportDate(reportDate);
+
+    const previousNetSales =
+      reportRange === "TODAY"
+        ? roundMoney(
+            sales.reduce((sum, sale) => {
+              const d = new Date(sale.saleDate);
+              const key = `${d.getFullYear()}-${String(
+                d.getMonth() + 1
+              ).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+              if (key !== previousDay) return sum;
+
+              return (
+                sum +
+                Math.max(
+                  0,
+                  Number(sale.total || 0) -
+                    Number(sale.serviceCharge || 0) -
+                    Number(sale.ppn || 0)
+                )
+              );
+            }, 0)
+          )
+        : 0;
+
+    return Array.from(map.values())
+      .map((item) => {
+        item.hpp = roundMoney(item.hpp);
+        item.previousHpp = roundMoney(item.previousHpp);
+        item.qty = Number(item.qty || 0);
+
+        item.ratio =
+          reportNetSales > 0
+            ? (item.hpp / reportNetSales) * 100
+            : 0;
+
+        item.previousRatio =
+          previousNetSales > 0
+            ? (item.previousHpp / previousNetSales) * 100
+            : 0;
+
+        // Selisih ratio dalam percentage point.
+        item.deltaRatio = item.ratio - item.previousRatio;
+
+        return item;
+      })
+      .sort(
+        (a, b) =>
+          Math.max(b.hpp, b.previousHpp) -
+            Math.max(a.hpp, a.previousHpp) ||
+          a.category.localeCompare(b.category)
+      );
+  }, [
+    reportStockUsage,
+    reportPreviousStockUsage,
+    reportNetSales,
+    reportRange,
+    reportDate,
+    sales,
+  ]);
+
+  const reportCategoryComparisonAvailable = useMemo(
+    () =>
+      reportRange === "TODAY" &&
+      Boolean(
+        reportPreviousStockUsage.length ||
+          sales.some((sale) => {
+            const d = new Date(sale.saleDate);
+            const previousDay = getPreviousReportDate(reportDate);
+            const key = `${d.getFullYear()}-${String(
+              d.getMonth() + 1
+            ).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            return key === previousDay;
+          })
+      ),
+    [reportRange, reportPreviousStockUsage.length, sales, reportDate]
+  );
+
+  const reportMeatHpp = useMemo(
+    () => roundMoney(reportMeatStockSummary.reduce((sum, item) => sum + item.hpp, 0)),
+    [reportMeatStockSummary]
+  );
+  const reportMeatFoodCostRatio = useMemo(
+    () => reportNetSales > 0 ? (reportMeatHpp / reportNetSales) * 100 : 0,
+    [reportMeatHpp, reportNetSales]
+  );
+
   const reportConsumptionQty = useMemo(
     () => reportStockUsage.reduce((sum, row) => sum + Number(row.qtyOut || 0), 0),
     [reportStockUsage]
@@ -1924,7 +2976,7 @@ export default function PosOutletPage() {
   const reportStaffSummary = useMemo(() => {
     const map = new Map<string, { staff: string; transactions: number; total: number; items: number }>();
     for (const sale of reportSales) {
-      const staff = (sale.cashierName || "Staff tidak tercatat").trim() || "Staff tidak tercatat";
+      const staff = (sale.staffName || sale.cashierName || "Staff tidak tercatat").trim() || "Staff tidak tercatat";
       const existing = map.get(staff);
       const qty = (sale.items || []).reduce((sum, item) => sum + Number(item.qty || 0), 0);
       if (existing) {
@@ -1979,23 +3031,6 @@ export default function PosOutletPage() {
     );
   }, [reportSales]);
 
-  const reportNetSales = useMemo(
-    () => roundMoney(
-      reportSales.reduce(
-        (sum, sale) =>
-          sum +
-          Math.max(
-            0,
-            Number(sale.total || 0) -
-              Number(sale.serviceCharge || 0) -
-              Number(sale.ppn || 0)
-          ),
-        0
-      )
-    ),
-    [reportSales]
-  );
-
   const reportFoodCostRatio = useMemo(
     () => reportNetSales > 0
       ? (reportConsumptionHpp / reportNetSales) * 100
@@ -2030,14 +3065,23 @@ export default function PosOutletPage() {
           .join("\n")
       : "• Tidak ada paket tercatat";
 
-    const stockLines = reportStockSummary.length
-      ? reportStockSummary
+    const stockLines = reportMeatStockSummary.length
+      ? reportMeatStockSummary
           .map(
             (item) =>
-              `• ${item.name} (${item.unit})\n  Awal: ${item.startStock.toLocaleString("id-ID", { maximumFractionDigits: 3 })} | Pakai: ${item.qty.toLocaleString("id-ID", { maximumFractionDigits: 3 })} | Akhir: ${item.endStock.toLocaleString("id-ID", { maximumFractionDigits: 3 })}\n  Base Unit: ${item.baseUnit} | Konversi: ${item.conversionRate.toLocaleString("id-ID", { maximumFractionDigits: 4 })}x`
+              `• ${item.name} (${item.unit})\n  Awal: ${item.startStock.toLocaleString("id-ID", { maximumFractionDigits: 3 })} | Pakai: ${item.qty.toLocaleString("id-ID", { maximumFractionDigits: 3 })} | Akhir: ${item.endStock.toLocaleString("id-ID", { maximumFractionDigits: 3 })}\n  Base Unit: ${item.baseUnit} | Konversi: ${item.conversionRate.toLocaleString("id-ID", { maximumFractionDigits: 4 })}x | HPP: ${money(item.hpp)}`
           )
           .join("\n")
-      : "• Tidak ada pemakaian bahan tercatat";
+      : "• Tidak ada pemakaian daging tercatat";
+
+    const categoryLines = reportCategorySummary.length
+      ? reportCategorySummary.map((item) => {
+          const trend = reportCategoryComparisonAvailable
+            ? `${item.deltaRatio > 0.005 ? "↗️ Naik" : item.deltaRatio < -0.005 ? "↘️ Turun" : "→ Stabil"} ${Math.abs(item.deltaRatio).toFixed(2)} pp (H-1 ${item.previousRatio.toFixed(2)}% → ${item.ratio.toFixed(2)}%)`
+            : "• Belum ada pembanding";
+          return `• ${item.category} — HPP ${money(item.hpp)} | Ratio ${item.ratio.toFixed(2)}% | ${trend}`;
+        }).join("\n")
+      : "• Belum ada data kategori bahan";
 
     const staffLines = reportStaffSummary.length
       ? reportStaffSummary
@@ -2061,6 +3105,13 @@ export default function PosOutletPage() {
       `• Discount : ${money(reportDiscount)}`,
       `• Grand Total : ${money(reportTotal)}`,
       "",
+      "💳 *PEMBAYARAN*",
+      `• Cash : ${money(reportCash)}`,
+      `• Transfer : ${money(reportTransfer)}`,
+      `• QRIS : ${money(reportQris)}`,
+      `• Subtotal Pembayaran : ${money(roundMoney(reportCash + reportTransfer + reportQris))}`,
+      `• Balance : ${money(roundMoney(reportTotal - (reportCash + reportTransfer + reportQris)))}`,
+      "",
       "🍽️ *PAKET KELUAR*",
       packageLines,
       "",
@@ -2071,9 +3122,10 @@ export default function PosOutletPage() {
       staffLines,
       "",
       "🍳 *FOOD COST*",
-      `• Total pemakaian bahan × cost : ${money(reportConsumptionHpp)}`,
-      `• Net Sales : ${money(reportNetSales)}`,
-      `• Food Cost Ratio : ${reportFoodCostRatio.toFixed(2)}%`,
+      `1. Food Cost keseluruhan : ${money(reportConsumptionHpp)} | Ratio ${reportFoodCostRatio.toFixed(2)}%`,
+      `2. Food Cost daging saja : ${money(reportMeatHpp)} | Ratio ${reportMeatFoodCostRatio.toFixed(2)}%`,
+      "3. Ratio per kategori bahan :",
+      categoryLines,
       "",
       "━━━━━━━━━━━━━━━━━━━━",
       `📊 ${reportSales.length} transaksi • ${reportPax} pax • ${reportItems} qty item`,
@@ -2083,7 +3135,8 @@ export default function PosOutletPage() {
     selectedOutlet,
     currentOutlet,
     reportPackageSummary,
-    reportStockSummary,
+    reportMeatStockSummary,
+    reportCategorySummary,
     reportStaffSummary,
     reportDateLabel,
     reportNetSales,
@@ -2091,8 +3144,14 @@ export default function PosOutletPage() {
     reportService,
     reportDiscount,
     reportTotal,
+    reportCash,
+    reportTransfer,
+    reportQris,
     reportConsumptionHpp,
     reportFoodCostRatio,
+    reportMeatHpp,
+    reportMeatFoodCostRatio,
+    reportCategoryComparisonAvailable,
     reportSales.length,
     reportPax,
     reportItems,
@@ -4784,11 +5843,16 @@ export default function PosOutletPage() {
                       <button
                         key={name}
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
+                          const method = String(name).toUpperCase();
                           setPaymentMethod(
-                            name
-                          )
-                        }
+                            method === "QRIS"
+                              ? "QRIS"
+                              : method === "TRANSFER"
+                              ? "TRANSFER"
+                              : "CASH"
+                          );
+                        }}
                         className={`rounded-xl border p-3 transition ${
                           paymentMethod ===
                           name
@@ -4817,22 +5881,51 @@ export default function PosOutletPage() {
                   Informasi Transaksi
                 </div>
 
-                <input
-                  value={
-                    customerName
-                  }
-                  onChange={(e) =>
-                    setCustomerName(
-                      e.target.value
-                    )
-                  }
-                  placeholder="Nama pelanggan / meja (opsional)"
-                  className={`w-full rounded-xl border px-4 py-3 text-xs outline-none transition ${
-                    isDark
-                      ? "border-white/[0.07] bg-white/[0.025] text-white placeholder:text-slate-600 focus:border-emerald-400/30"
-                      : "border-slate-200 bg-white placeholder:text-slate-400 focus:border-emerald-300"
-                  }`}
-                />
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  <div>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <label className="text-[7px] font-black uppercase tracking-[0.18em] text-emerald-500">
+                        Staff Transaksi *
+                      </label>
+                      <span className="text-[7px] text-slate-500">
+                        Untuk rekap staff
+                      </span>
+                    </div>
+                    <input
+                      value={transactionStaffName}
+                      onChange={(e) =>
+                        setTransactionStaffName(e.target.value)
+                      }
+                      placeholder="Nama staff yang melakukan transaksi"
+                      autoComplete="off"
+                      className={`w-full rounded-xl border px-4 py-3 text-xs font-semibold outline-none transition ${
+                        isDark
+                          ? "border-emerald-400/20 bg-emerald-400/[0.04] text-white placeholder:text-slate-600 focus:border-emerald-400/50"
+                          : "border-emerald-200 bg-emerald-50/40 text-slate-900 placeholder:text-slate-400 focus:border-emerald-400"
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="mb-1.5 text-[7px] font-black uppercase tracking-[0.18em] text-slate-500">
+                      Pelanggan / Meja
+                    </div>
+                    <input
+                      value={customerName}
+                      onChange={(e) =>
+                        setCustomerName(
+                          e.target.value
+                        )
+                      }
+                      placeholder="Nama pelanggan / meja (opsional)"
+                      className={`w-full rounded-xl border px-4 py-3 text-xs outline-none transition ${
+                        isDark
+                          ? "border-white/[0.07] bg-white/[0.025] text-white placeholder:text-slate-600 focus:border-emerald-400/30"
+                          : "border-slate-200 bg-white placeholder:text-slate-400 focus:border-emerald-300"
+                      }`}
+                    />
+                  </div>
+                </div>
 
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <input
@@ -4968,7 +6061,8 @@ export default function PosOutletPage() {
                   }
                   disabled={
                     saving ||
-                    paidN < total ||
+                    ((paymentMethod === "CASH" ? paidN : total) < total) ||
+                    !transactionStaffName.trim() ||
                     missingBomCount >
                       0
                   }
@@ -4999,7 +6093,7 @@ export default function PosOutletPage() {
       {reportOpen && (
         <div className="fixed inset-0 z-[145] flex items-center justify-center bg-black/85 p-3 backdrop-blur-md">
           <div className={`flex max-h-[95vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-[28px] border shadow-[0_30px_100px_rgba(0,0,0,0.6)] ${isDark ? "border-white/[0.08] bg-[#08100d] text-white" : "border-slate-200 bg-white text-slate-900"}`}>
-            <div className={`border-b px-5 py-4 ${isDark ? "border-white/[0.06] bg-gradient-to-r from-emerald-950/40 to-transparent" : "border-slate-100 bg-slate-50"}`}>
+            <div className={`report-no-print border-b px-5 py-4 ${isDark ? "border-white/[0.06] bg-gradient-to-r from-emerald-950/40 to-transparent" : "border-slate-100 bg-slate-50"}`}>
               <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                 <div>
                   <div className="text-[8px] font-bold uppercase tracking-[0.25em] text-emerald-400">MGB POS • Daily Control Report</div>
@@ -5028,9 +6122,9 @@ export default function PosOutletPage() {
                     <MessageCircle className="h-3.5 w-3.5" />
                     WhatsApp
                   </button>
-                  <button type="button" onClick={printSalesReport} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-[8px] font-black uppercase tracking-wider text-white hover:bg-emerald-400">
-                    <Printer className="h-3.5 w-3.5" />
-                    Print
+                  <button type="button" onClick={downloadPdfReport} className="inline-flex items-center gap-2 rounded-xl bg-[#18352D] px-3 py-2 text-[8px] font-black uppercase tracking-wider text-white shadow-lg shadow-emerald-950/20 hover:bg-[#23483e]">
+                    <Download className="h-3.5 w-3.5" />
+                    PDF
                   </button>
                   <button type="button" onClick={() => setReportOpen(false)} className={`flex h-9 w-9 items-center justify-center rounded-xl border ${isDark ? "border-white/[0.07] bg-white/[0.025] text-slate-400" : "border-slate-200 bg-white text-slate-500"}`}>
                     <X className="h-4 w-4" />
@@ -5117,12 +6211,12 @@ export default function PosOutletPage() {
                 <section className={`overflow-hidden rounded-2xl border ${isDark ? "border-white/[0.06]" : "border-slate-200"}`}>
                   <div className={`flex items-center justify-between border-b px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-slate-100"}`}>
                     <div>
-                      <div className="text-[9px] font-black uppercase">PEMAKAIAN BAHAN AKTUAL</div>
-                      <div className="text-[7px] text-slate-500">Sumber: StockCard.trxType = POS_OUT • HPP aktual transaksi</div>
+                      <div className="text-[9px] font-black uppercase">STOCK BAHAN — DAGING SAJA</div>
+                      <div className="text-[7px] text-slate-500">Sumber: StockCard.trxType = POS_OUT • hanya item daging</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-[8px] font-black text-emerald-400">{reportStockSummary.length} bahan</div>
-                      <div className="text-[7px] text-slate-500">{reportConsumptionQty} qty</div>
+                      <div className="text-[8px] font-black text-emerald-400">{reportMeatStockSummary.length} bahan daging</div>
+                      <div className="text-[7px] text-slate-500">{reportMeatStockSummary.reduce((sum, item) => sum + item.qty, 0).toLocaleString("id-ID", { maximumFractionDigits: 3 })} qty</div>
                     </div>
                   </div>
                   {reportStockError && (
@@ -5134,9 +6228,9 @@ export default function PosOutletPage() {
                       <tbody>
                         {reportStockLoading ? (
                           <tr><td colSpan={9} className="p-8 text-center text-slate-500">Mengambil StockCard POS_OUT...</td></tr>
-                        ) : reportStockSummary.length === 0 ? (
-                          <tr><td colSpan={9} className="p-8 text-center text-slate-500">Belum ada pemakaian bahan POS pada tanggal ini.</td></tr>
-                        ) : reportStockSummary.map((item, index) => (
+                        ) : reportMeatStockSummary.length === 0 ? (
+                          <tr><td colSpan={9} className="p-8 text-center text-slate-500">Belum ada pemakaian daging POS pada tanggal ini.</td></tr>
+                        ) : reportMeatStockSummary.map((item, index) => (
                           <tr key={item.barangId} className={`border-t ${isDark ? "border-white/[0.05]" : "border-slate-100"}`}>
                             <td className="p-3 text-slate-500">{index + 1}</td>
                             <td className="p-3"><div className="font-black">{item.name}</div><div className="text-[7px] text-slate-500">{item.code}</div></td>
@@ -5158,7 +6252,7 @@ export default function PosOutletPage() {
                 </section>
 
                 <section className={`overflow-hidden rounded-2xl border ${isDark ? "border-white/[0.06]" : "border-slate-200"}`}>
-                  <div className={`border-b px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-slate-100"}`}><div className="text-[9px] font-black uppercase">REKAP STAFF</div><div className="text-[7px] text-slate-500">Kasir yang mencatat transaksi pada laporan</div></div>
+                  <div className={`border-b px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-slate-100"}`}><div className="text-[9px] font-black uppercase">REKAP STAFF</div><div className="text-[7px] text-slate-500">Staff yang melakukan / mencatat transaksi pada laporan</div></div>
                   <div className="max-h-[330px] overflow-auto">
                     <table className="w-full text-[9px]">
                       <thead className="sticky top-0 z-10 bg-slate-100/95 text-slate-500 dark:bg-[#101a16]/95"><tr><th className="p-3 text-left">Staff</th><th className="p-3 text-right">Tx</th><th className="p-3 text-right">Qty</th><th className="p-3 text-right">Omzet</th></tr></thead>
@@ -5171,22 +6265,173 @@ export default function PosOutletPage() {
               </div>
 
               <section className={`mt-5 overflow-hidden rounded-2xl border ${isDark ? "border-white/[0.06]" : "border-slate-200"}`}>
-                <div className={`border-b px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-slate-100"}`}>
+                <div className={`border-b px-4 py-3 ${isDark ? "border-white/[0.06] bg-gradient-to-r from-emerald-950/30 to-transparent" : "border-slate-50"}`}>
                   <div className="text-[9px] font-black uppercase">FOOD COST CONTROL</div>
-                  <div className="text-[7px] text-slate-500">Perbandingan pemakaian bahan aktual terhadap Net Sales</div>
+                  <div className="text-[7px] text-slate-500">3 indikator utama: keseluruhan, daging, dan perubahan ratio per kategori bahan</div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-4">
                   <div className={`rounded-2xl border p-4 ${isDark ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-100 bg-slate-50"}`}>
-                    <div className="text-[7px] font-black uppercase text-slate-500">Total Pemakaian Bahan × Cost</div>
+                    <div className="text-[7px] font-black uppercase text-slate-500">1 · FOOD COST KESELURUHAN</div>
                     <div className="mt-2 text-lg font-black text-emerald-400">{money(reportConsumptionHpp)}</div>
+                    <div className="mt-1 text-[8px] text-slate-500">Ratio {reportFoodCostRatio.toFixed(2)}% terhadap Net Sales</div>
                   </div>
-                  <div className={`rounded-2xl border p-4 ${isDark ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-100 bg-slate-50"}`}>
-                    <div className="text-[7px] font-black uppercase text-slate-500">Net Sales</div>
+                  <div className={`rounded-2xl border p-4 ${isDark ? "border-amber-400/10 bg-amber-400/[0.04]" : "border-amber-100 bg-amber-50"}`}>
+                    <div className="text-[7px] font-black uppercase text-slate-500">2 · FOOD COST DAGING</div>
+                    <div className="mt-2 text-lg font-black text-amber-400">{money(reportMeatHpp)}</div>
+                    <div className="mt-1 text-[8px] text-slate-500">Ratio {reportMeatFoodCostRatio.toFixed(2)}% terhadap Net Sales</div>
+                  </div>
+                  <div className={`rounded-2xl border p-4 ${isDark ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-100 bg-white"}`}>
+                    <div className="text-[7px] font-black uppercase text-slate-500">NET SALES</div>
                     <div className="mt-2 text-lg font-black">{money(reportNetSales)}</div>
+                    <div className="mt-1 text-[8px] text-slate-500">{reportSales.length} transaksi</div>
                   </div>
                   <div className={`rounded-2xl border p-4 ${isDark ? "border-emerald-400/15 bg-emerald-400/[0.05]" : "border-emerald-100 bg-emerald-50"}`}>
-                    <div className="text-[7px] font-black uppercase text-slate-500">Food Cost Ratio</div>
-                    <div className="mt-2 text-lg font-black text-emerald-400">{reportFoodCostRatio.toFixed(2)}%</div>
+                    <div className="text-[7px] font-black uppercase text-slate-500">MEAT SHARE OF FOOD COST</div>
+                    <div className="mt-2 text-lg font-black text-emerald-400">{reportConsumptionHpp > 0 ? ((reportMeatHpp / reportConsumptionHpp) * 100).toFixed(2) : "0.00"}%</div>
+                    <div className="mt-1 text-[8px] text-slate-500">Porsi HPP daging dari total HPP bahan</div>
+                  </div>
+                </div>
+                <div className={`border-t px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-slate-100"}`}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <div>
+                      <div className="text-[8px] font-black uppercase">3 · RATIO PER KATEGORI BAHAN</div>
+                      <div className="text-[7px] text-slate-500">Setiap kategori menampilkan ratio aktif, ratio H-1, selisih pp, dan status Naik / Turun / Stabil. Kategori yang H-1 = 0% tetap dibandingkan.</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
+                    {reportCategorySummary.length ? reportCategorySummary.map((item) => {
+                      const comparisonAvailable = reportCategoryComparisonAvailable;
+                      const tolerance = 0.005;
+                      const up = item.deltaRatio > tolerance;
+                      const down = item.deltaRatio < -tolerance;
+                      const stable = !up && !down;
+
+                      return (
+                        <div
+                          key={item.category}
+                          className={`rounded-2xl border p-3.5 ${isDark ? "border-white/[0.05] bg-white/[0.018]" : "border-slate-100 bg-white"}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="truncate text-[8px] font-black tracking-wide">
+                                {item.category}
+                              </div>
+                              <div className="mt-0.5 text-[6px] font-bold uppercase tracking-wider text-slate-500">
+                                Ratio Food Cost
+                              </div>
+                            </div>
+
+                            {comparisonAvailable ? (
+                              <span
+                                className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[6px] font-black uppercase tracking-wider ${
+                                  up
+                                    ? "border-red-400/20 bg-red-500/10 text-red-400"
+                                    : down
+                                    ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-400"
+                                    : "border-slate-400/15 bg-slate-400/10 text-slate-400"
+                                }`}
+                              >
+                                {up ? (
+                                  <TrendingUp className="h-3 w-3" />
+                                ) : down ? (
+                                  <TrendingDown className="h-3 w-3" />
+                                ) : (
+                                  <Minus className="h-3 w-3" />
+                                )}
+                                {up ? "Naik" : down ? "Turun" : "Stabil"}
+                              </span>
+                            ) : (
+                              <span className="shrink-0 rounded-full border border-slate-400/10 bg-slate-400/5 px-2 py-1 text-[6px] font-black uppercase tracking-wider text-slate-500">
+                                Tanpa pembanding
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mt-3 flex items-end justify-between gap-3">
+                            <div>
+                              <div className="text-base font-black tabular-nums">
+                                {item.ratio.toFixed(2)}%
+                              </div>
+                              <div className="mt-0.5 text-[6px] font-bold uppercase tracking-wider text-slate-500">
+                                Hari ini / periode aktif
+                              </div>
+                            </div>
+
+                            {comparisonAvailable && (
+                              <div className="text-right">
+                                <div
+                                  className={`text-sm font-black tabular-nums ${
+                                    up
+                                      ? "text-red-400"
+                                      : down
+                                      ? "text-emerald-400"
+                                      : "text-slate-400"
+                                  }`}
+                                >
+                                  {up ? "+" : ""}
+                                  {item.deltaRatio.toFixed(2)} pp
+                                </div>
+                                <div className="text-[6px] font-bold uppercase tracking-wider text-slate-500">
+                                  vs H-1
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className={`mt-3 grid grid-cols-2 gap-2 border-t pt-2.5 ${isDark ? "border-white/[0.05]" : "border-slate-100"}`}>
+                            <div>
+                              <div className="text-[6px] font-bold uppercase tracking-wider text-slate-500">
+                                HPP Aktif
+                              </div>
+                              <div className="mt-0.5 text-[8px] font-black">
+                                {money(item.hpp)}
+                              </div>
+                            </div>
+
+                            <div className="text-right">
+                              <div className="text-[6px] font-bold uppercase tracking-wider text-slate-500">
+                                Ratio H-1
+                              </div>
+                              <div className="mt-0.5 text-[8px] font-black">
+                                {comparisonAvailable
+                                  ? `${item.previousRatio.toFixed(2)}%`
+                                  : "—"}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-1 text-[7px] text-slate-500">
+                            Qty aktif {item.qty.toLocaleString("id-ID", {
+                              maximumFractionDigits: 3,
+                            })}
+                            {" · "}
+                            HPP H-1 {comparisonAvailable ? money(item.previousHpp) : "—"}
+                          </div>
+
+                          {comparisonAvailable && (
+                            <div
+                              className={`mt-2 rounded-lg px-2 py-1.5 text-[6px] font-bold ${
+                                stable
+                                  ? isDark
+                                    ? "bg-slate-400/[0.06] text-slate-400"
+                                    : "bg-slate-50 text-slate-500"
+                                  : up
+                                  ? isDark
+                                    ? "bg-red-500/[0.07] text-red-300"
+                                    : "bg-red-50 text-red-600"
+                                  : isDark
+                                  ? "bg-emerald-500/[0.07] text-emerald-300"
+                                  : "bg-emerald-50 text-emerald-600"
+                              }`}
+                            >
+                              {stable
+                                ? `Stabil · H-1 ${item.previousRatio.toFixed(2)}% → ${item.ratio.toFixed(2)}%`
+                                : `${up ? "Naik" : "Turun"} · H-1 ${item.previousRatio.toFixed(2)}% → ${item.ratio.toFixed(2)}%`}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }) : <div className="col-span-full p-5 text-center text-[8px] text-slate-500">Belum ada data kategori bahan.</div>}
                   </div>
                 </div>
               </section>
@@ -5200,12 +6445,12 @@ export default function PosOutletPage() {
                   <table className="w-full min-w-[1200px] text-[9px]">
                     <thead className="bg-slate-100 text-slate-500 dark:bg-[#101a16]"><tr><th className="p-3 text-left">Tanggal</th><th className="p-3 text-left">No. Transaksi</th><th className="p-3 text-left">Staff</th><th className="p-3 text-left">Tipe</th><th className="p-3 text-left">Meja / Pax</th><th className="p-3 text-left">Item</th><th className="p-3 text-left">Metode</th><th className="p-3 text-right">Diskon</th><th className="p-3 text-right">Service</th><th className="p-3 text-right">PPN</th><th className="p-3 text-right">Total</th></tr></thead>
                     <tbody>{reportSales.map((sale) => {
-                      const itemsText = (sale.items || []).map((item) => `${item.menu?.name || item.barang?.name || `Item #${item.id}`} ×${item.qty}`).join(", ") || (sale.ayce ? `Paket AYCE${sale.packageName ? ` — ${sale.packageName}` : ""}` : "Tidak ada item");
+                      const itemsText = (sale.items || []).map((item) => `${item.menu?.name || item.barang?.name || `Item #${item.id}`} ×${item.qty}`).join(", ") || (sale.ayce ? `Paket AYCE${sale.packageName ? ` — ${sale.packageName}` : sale.packageKey ? ` — ${sale.packageKey}` : ""}` : "Tidak ada item");
                       return (
                         <tr key={sale.id} className={`border-t align-top ${isDark ? "border-white/[0.05]" : "border-slate-100"}`}>
                           <td className="p-3 text-slate-500">{new Date(sale.saleDate).toLocaleString("id-ID")}</td>
                           <td className="p-3 font-black">{sale.number}</td>
-                          <td className="p-3 font-bold">{sale.cashierName || "Staff tidak tercatat"}</td>
+                          <td className="p-3 font-bold">{sale.staffName || sale.cashierName || "Staff tidak tercatat"}</td>
                           <td className="p-3"><span className={`rounded-full px-2 py-1 text-[7px] font-black ${sale.ayce ? "bg-red-500/10 text-red-400" : "bg-emerald-500/10 text-emerald-400"}`}>{sale.ayce ? "AYCE" : "REGULAR"}</span></td>
                           <td className="p-3">{sale.tableName || "-"}{sale.pax ? ` / ${sale.pax} pax` : ""}</td>
                           <td className="max-w-[360px] p-3 leading-5">{itemsText}</td>
@@ -5223,13 +6468,13 @@ export default function PosOutletPage() {
 
               <section className={`mt-5 overflow-hidden rounded-2xl border ${isDark ? "border-white/[0.06]" : "border-slate-200"}`}>
                 <div className={`border-b px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-slate-100"}`}>
-                  <div className="text-[9px] font-black uppercase">DETAIL PEMAKAIAN BAHAN</div>
-                  <div className="text-[7px] text-slate-500">Setiap baris StockCard POS_OUT pada tanggal laporan</div>
+                  <div className="text-[9px] font-black uppercase">DETAIL PEMAKAIAN DAGING</div>
+                  <div className="text-[7px] text-slate-500">Hanya baris StockCard POS_OUT untuk bahan daging</div>
                 </div>
                 <div className="max-h-[360px] overflow-auto">
                   <table className="w-full min-w-[950px] text-[9px]">
                     <thead className="sticky top-0 z-10 bg-slate-100 text-slate-500 dark:bg-[#101a16]"><tr><th className="p-3 text-left">Waktu</th><th className="p-3 text-left">Referensi</th><th className="p-3 text-left">Bahan</th><th className="p-3 text-right">Qty Out</th><th className="p-3 text-left">Unit</th><th className="p-3 text-right">HPP / Unit</th><th className="p-3 text-right">Total HPP</th></tr></thead>
-                    <tbody>{reportStockUsage.map((row) => (
+                    <tbody>{reportStockUsage.filter((row) => row.barang && reportIsMeat(row.barang.name, row.barang.code)).map((row) => (
                       <tr key={row.id} className={`border-t ${isDark ? "border-white/[0.05]" : "border-slate-100"}`}>
                         <td className="p-3 text-slate-500">{new Date(row.trxDate).toLocaleString("id-ID")}</td>
                         <td className="p-3 font-black">{row.trxNumber || (row.referenceId ? `#${row.referenceId}` : "-")}</td>
@@ -6148,17 +7393,44 @@ export default function PosOutletPage() {
             display: none !important;
           }
 
+          @page {
+            size: A4 landscape;
+            margin: 8mm;
+          }
+
           #pos-sales-report {
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
             width: 100% !important;
             margin: 0 !important;
-            padding: 8mm !important;
+            padding: 0 !important;
             background: white !important;
-            color: black !important;
+            color: #111827 !important;
             overflow: visible !important;
             max-height: none !important;
+            font-size: 8px !important;
+          }
+
+          #pos-sales-report section,
+          #pos-sales-report .rounded-2xl,
+          #pos-sales-report .rounded-xl {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+
+          #pos-sales-report table {
+            break-inside: auto;
+            page-break-inside: auto;
+          }
+
+          #pos-sales-report tr {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+
+          .report-no-print {
+            display: none !important;
           }
         }
 

@@ -105,7 +105,8 @@ const initialForm: FormState = {
 function isOutletRole(role: string) {
   return (
     role === "OUTLET_ADMIN" ||
-    role === "KASIR"
+    role === "KASIR" ||
+    role === "STAFF_OUTLET"
   );
 }
 
@@ -683,11 +684,25 @@ export default function UserPage() {
       isOutletRole(form.role) &&
       !form.outletId
     ) {
-      alert(
-        form.role === "KASIR"
-          ? "Outlet wajib dipilih untuk KASIR"
-          : "Outlet wajib dipilih untuk OUTLET ADMIN"
-      );
+      let message =
+        "Outlet wajib dipilih";
+
+      if (form.role === "KASIR") {
+        message =
+          "Outlet wajib dipilih untuk KASIR";
+      }
+
+      if (form.role === "OUTLET_ADMIN") {
+        message =
+          "Outlet wajib dipilih untuk OUTLET ADMIN";
+      }
+
+      if (form.role === "STAFF_OUTLET") {
+        message =
+          "Outlet wajib dipilih untuk STAFF OUTLET";
+      }
+
+      alert(message);
 
       return;
     }
@@ -979,6 +994,14 @@ export default function UserPage() {
           className:
             "border-emerald-100 bg-emerald-50 text-emerald-700",
           icon: ShieldCheck,
+        };
+
+      case "STAFF_OUTLET":
+        return {
+          label: "STAFF OUTLET",
+          className:
+            "border-[#BFD4CA] bg-[#EDF5F1] text-[#497F70]",
+          icon: UserRound,
         };
 
       case "KASIR":
@@ -1883,6 +1906,10 @@ export default function UserPage() {
                     OUTLET ADMIN
                   </option>
 
+                  <option value="STAFF_OUTLET">
+                    STAFF OUTLET
+                  </option>
+
                   <option value="KASIR">
                     KASIR
                   </option>
@@ -1926,6 +1953,36 @@ export default function UserPage() {
                 </div>
               )}
 
+              {form.role === "STAFF_OUTLET" && (
+                <div className="mt-2 rounded-xl border border-[#DCE8E2] bg-[#F4F8F6] px-3 py-2.5">
+
+                  <div className="flex items-start gap-2">
+
+                    <UserRound
+                      size={14}
+                      className="mt-0.5 shrink-0 text-[#497F70]"
+                    />
+
+                    <div>
+
+                      <p className="text-[10px] font-bold text-[#497F70]">
+                        Staff Outlet
+                      </p>
+
+                      <p className="mt-0.5 text-[9px] leading-relaxed text-slate-500">
+                        User ini digunakan
+                        untuk operasional
+                        Manufacture dan wajib
+                        terikat ke satu outlet.
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+              )}
+
             </div>
 
             {/* OUTLET */}
@@ -1937,7 +1994,8 @@ export default function UserPage() {
                   border
                   p-3.5
                   ${
-                    form.role === "KASIR"
+                    form.role === "KASIR" ||
+                    form.role === "STAFF_OUTLET"
                       ? "border-[#BFD4CA] bg-[#F1F7F4]"
                       : "border-emerald-100 bg-emerald-50/50"
                   }
@@ -1953,7 +2011,8 @@ export default function UserPage() {
                     uppercase
                     tracking-[0.12em]
                     ${
-                      form.role === "KASIR"
+                      form.role === "KASIR" ||
+                      form.role === "STAFF_OUTLET"
                         ? "text-[#497F70]"
                         : "text-emerald-700"
                     }
@@ -1972,7 +2031,8 @@ export default function UserPage() {
                       top-1/2
                       -translate-y-1/2
                       ${
-                        form.role === "KASIR"
+                        form.role === "KASIR" ||
+                        form.role === "STAFF_OUTLET"
                           ? "text-[#497F70]"
                           : "text-emerald-600"
                       }
@@ -2003,7 +2063,8 @@ export default function UserPage() {
                       outline-none
                       transition
                       ${
-                        form.role === "KASIR"
+                        form.role === "KASIR" ||
+                        form.role === "STAFF_OUTLET"
                           ? "border-[#BFD4CA] focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/8"
                           : "border-emerald-100 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/8"
                       }
@@ -2039,6 +2100,14 @@ export default function UserPage() {
                     Kasir hanya dapat
                     bekerja pada outlet
                     yang dipilih.
+                  </p>
+                )}
+
+                {form.role === "STAFF_OUTLET" && (
+                  <p className="mt-2 text-[9px] font-medium text-[#497F70]">
+                    Staff Outlet hanya dapat
+                    mengakses Manufacture pada
+                    outlet yang dipilih.
                   </p>
                 )}
 
@@ -2698,7 +2767,9 @@ export default function UserPage() {
                                     rounded-lg
                                     ${
                                       user.role ===
-                                      "KASIR"
+                                        "KASIR" ||
+                                      user.role ===
+                                        "STAFF_OUTLET"
                                         ? "bg-[#EDF5F1] text-[#497F70]"
                                         : "bg-slate-50 text-slate-400"
                                     }
@@ -2719,6 +2790,13 @@ export default function UserPage() {
                                     "KASIR" && (
                                     <span className="text-[9px] font-medium text-[#497F70]">
                                       Outlet Kasir
+                                    </span>
+                                  )}
+
+                                  {user.role ===
+                                    "STAFF_OUTLET" && (
+                                    <span className="text-[9px] font-medium text-[#497F70]">
+                                      Outlet Staff
                                     </span>
                                   )}
 

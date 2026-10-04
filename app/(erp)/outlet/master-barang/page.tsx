@@ -56,46 +56,21 @@ type OutletStock = {
 };
 
 type OutletBarang = {
-  /**
-   * Bisa berupa:
-   * - OutletBarang.id jika mapping sudah ada
-   * - Barang.id jika row berasal langsung dari Central Catalog
-   */
   id: number;
-
-  /**
-   * ID mapping OutletBarang jika tersedia.
-   */
   outletBarangId?: number | null;
-
-  /**
-   * ID Barang Central.
-   */
   barangId?: number | null;
-
   harga: number | null;
   aktif: boolean;
-
-  /**
-   * Tidak semua response memiliki outlet.
-   * Central Barang yang belum mempunyai mapping
-   * memang tidak memiliki relasi outlet.
-   */
   outlet?: Outlet | null;
-
   barang: Barang;
-
   outletStock?: OutletStock | null;
-
   hargaTerakhir?: number | null;
   hargaDefault?: number | null;
-
   hargaSource?:
     | "OUTLET_PURCHASE_TERAKHIR"
     | "OUTLET_MASTER"
     | "CENTRAL_PURCHASE_PRICE"
     | "NONE";
-
   hargaTerakhirTanggal?: string | null;
   hargaTerakhirPurchase?: string | null;
   hargaTerakhirPurchaseId?: number | null;
@@ -108,7 +83,7 @@ type User = {
 
 type FormState = {
   outletId: string;
-  barangId: string;
+  barangIds: string[];
   harga: string;
 };
 
@@ -145,10 +120,6 @@ function normalizeBarang(raw: any): Barang | null {
     return null;
   }
 
-  /**
-   * Catalog ini hanya boleh membaca Barang Central.
-   * Barang legacy OUTLET tidak diikutkan.
-   */
   if (raw.source && raw.source !== "CENTRAL") {
     return null;
   }
@@ -207,29 +178,13 @@ function normalizeOutlet(raw: any): Outlet | null {
   };
 }
 
-function normalizeOutletBarang(row: any): OutletBarang | null {
+function normalizeOutletBarang(
+  row: any
+): OutletBarang | null {
   if (!row) {
     return null;
   }
 
-  /**
-   * Endpoint bisa mengembalikan:
-   *
-   * {
-   *   id,
-   *   barang: {...},
-   *   outlet: {...}
-   * }
-   *
-   * atau langsung:
-   *
-   * {
-   *   id,
-   *   code,
-   *   name,
-   *   ...
-   * }
-   */
   const rawBarang = row?.barang ?? row;
 
   const barang = normalizeBarang(rawBarang);
@@ -319,19 +274,22 @@ export default function OutletMasterBarangPage() {
 
   const [showForm, setShowForm] = useState(false);
 
-  const [centralBarang, setCentralBarang] = useState<Barang[]>([]);
-  const [loadingCentral, setLoadingCentral] = useState(false);
-  const [centralSearch, setCentralSearch] = useState("");
+  const [centralBarang, setCentralBarang] =
+    useState<Barang[]>([]);
+  const [loadingCentral, setLoadingCentral] =
+    useState(false);
+  const [centralSearch, setCentralSearch] =
+    useState("");
 
   const [form, setForm] = useState<FormState>({
     outletId: "",
-    barangId: "",
+    barangIds: [],
     harga: "",
   });
 
   useEffect(() => {
-    loadUser();
-    loadOutlets();
+    void loadUser();
+    void loadOutlets();
   }, []);
 
   useEffect(() => {
@@ -382,7 +340,10 @@ export default function OutletMasterBarangPage() {
         }));
       }
     } catch (error) {
-      console.error("Gagal mengambil user:", error);
+      console.error(
+        "Gagal mengambil user:",
+        error
+      );
     }
   }
 
@@ -398,16 +359,23 @@ export default function OutletMasterBarangPage() {
         setOutlets(
           Array.isArray(json.data)
             ? json.data
-                .map((item: any) => normalizeOutlet(item))
+                .map((item: any) =>
+                  normalizeOutlet(item)
+                )
                 .filter(
-                  (item: Outlet | null): item is Outlet =>
+                  (
+                    item: Outlet | null
+                  ): item is Outlet =>
                     Boolean(item)
                 )
             : []
         );
       }
     } catch (error) {
-      console.error("Gagal mengambil outlet:", error);
+      console.error(
+        "Gagal mengambil outlet:",
+        error
+      );
     }
   }
 
@@ -422,12 +390,12 @@ export default function OutletMasterBarangPage() {
       const params = new URLSearchParams();
 
       if (search.trim()) {
-        params.set("search", search.trim());
+        params.set(
+          "search",
+          search.trim()
+        );
       }
 
-      /**
-       * Outlet Admin hanya boleh membaca outlet miliknya.
-       */
       const effectiveOutletId =
         user.role === "OUTLET_ADMIN"
           ? user.outletId
@@ -467,39 +435,71 @@ export default function OutletMasterBarangPage() {
       const normalized: OutletBarang[] = [];
 
       for (const row of rows) {
-        const item = normalizeOutletBarang(row);
+        const hasOutletMaster =
+          effectiveOutletId != null
+            ? Number(row?.outletBarangId) > 0 ||
+              row?.terdaftarDiOutlet === true
+            : (Array.isArray(
+                  row?.outletMappings
+                ) &&
+                  row.outletMappings.length >
+                    0) ||
+              Number(row?.outletBarangId) > 0 ||
+              row?.terdaftarDiOutlet === true;
 
-        if (item) {
-          normalized.push(item);
+        if (!hasOutletMaster) {
+          continue;
         }
+
+        const item =
+          normalizeOutletBarang(row);
+
+        if (!item) {
+          continue;
+        }
+
+        if (
+          !item.outlet &&
+          effectiveOutletId != null
+        ) {
+          const selectedOutlet =
+            outlets.find(
+              (outlet) =>
+                Number(outlet.id) ===
+                Number(effectiveOutletId)
+            ) ?? null;
+
+          if (selectedOutlet) {
+            item.outlet =
+              selectedOutlet;
+          }
+        }
+
+        if (
+          user.role === "OUTLET_ADMIN" &&
+          user.outletId != null &&
+          effectiveOutletId != null &&
+          Number(effectiveOutletId) !==
+            Number(user.outletId)
+        ) {
+          continue;
+        }
+
+        normalized.push(item);
       }
 
-      /**
-       * Hindari duplicate barang pada hasil API
-       * apabila endpoint mengembalikan row mapping
-       * dan row central secara bersamaan.
-       *
-       * Jika mapping outlet tersedia, mapping tersebut
-       * diprioritaskan dibanding Central Catalog.
-       */
       const unique = new Map<
         string,
         OutletBarang
       >();
 
       for (const item of normalized) {
-        const key = `${item.barang.id}-${
-          item.outlet?.id ?? "central"
-        }`;
+        const key =
+          effectiveOutletId != null
+            ? `${item.barang.id}-${effectiveOutletId}`
+            : `${item.barang.id}-mapped`;
 
-        const existing = unique.get(key);
-
-        if (!existing) {
-          unique.set(key, item);
-          continue;
-        }
-
-        if (!existing.outlet && item.outlet) {
+        if (!unique.has(key)) {
           unique.set(key, item);
         }
       }
@@ -519,11 +519,6 @@ export default function OutletMasterBarangPage() {
     }
   }
 
-  /**
-   * =========================================================
-   * MASTER BARANG CENTRAL
-   * =========================================================
-   */
   async function loadCentralBarang(
     searchValue = "",
     selectedOutletOverride?: string
@@ -533,11 +528,19 @@ export default function OutletMasterBarangPage() {
     try {
       const params = new URLSearchParams();
 
+      params.set(
+        "mode",
+        "central"
+      );
+
       const cleanSearch =
         searchValue.trim();
 
       if (cleanSearch) {
-        params.set("search", cleanSearch);
+        params.set(
+          "search",
+          cleanSearch
+        );
       }
 
       const selectedOutlet =
@@ -725,7 +728,7 @@ export default function OutletMasterBarangPage() {
 
     setForm({
       outletId: selectedOutlet,
-      barangId: "",
+      barangIds: [],
       harga: "",
     });
 
@@ -737,17 +740,70 @@ export default function OutletMasterBarangPage() {
     setShowForm(true);
   }
 
+  function toggleCentralBarang(
+    barangId: number
+  ) {
+    const id = String(barangId);
+
+    setForm((prev) => {
+      const exists =
+        prev.barangIds.includes(id);
+
+      return {
+        ...prev,
+        barangIds: exists
+          ? prev.barangIds.filter(
+              (selectedId) =>
+                selectedId !== id
+            )
+          : [
+              ...prev.barangIds,
+              id,
+            ],
+      };
+    });
+  }
+
+  function selectAllFilteredCentral() {
+    const visibleIds =
+      filteredCentralBarang.map(
+        (item) => String(item.id)
+      );
+
+    setForm((prev) => ({
+      ...prev,
+      barangIds: Array.from(
+        new Set([
+          ...prev.barangIds,
+          ...visibleIds,
+        ])
+      ),
+    }));
+  }
+
+  function clearSelectedCentral() {
+    setForm((prev) => ({
+      ...prev,
+      barangIds: [],
+    }));
+  }
+
   function getSelectedCentralBarang() {
-    if (!form.barangId) {
-      return null;
+    if (
+      form.barangIds.length === 0
+    ) {
+      return [];
     }
 
-    return (
-      centralBarang.find(
-        (item) =>
-          String(item.id) ===
-          String(form.barangId)
-      ) || null
+    const selectedIds = new Set(
+      form.barangIds.map(String)
+    );
+
+    return centralBarang.filter(
+      (item) =>
+        selectedIds.has(
+          String(item.id)
+        )
     );
   }
 
@@ -768,23 +824,21 @@ export default function OutletMasterBarangPage() {
       return;
     }
 
-    if (!form.barangId) {
-      alert(
-        "Pilih Master Barang Central terlebih dahulu."
-      );
-      return;
-    }
-
-    const barangId = Number(
-      form.barangId
+    const barangIds = Array.from(
+      new Set(
+        form.barangIds
+          .map(Number)
+          .filter(
+            (id) =>
+              Number.isInteger(id) &&
+              id > 0
+          )
+      )
     );
 
-    if (
-      !Number.isInteger(barangId) ||
-      barangId <= 0
-    ) {
+    if (barangIds.length === 0) {
       alert(
-        "Master Barang Central tidak valid."
+        "Pilih minimal satu Master Barang Central."
       );
       return;
     }
@@ -805,9 +859,33 @@ export default function OutletMasterBarangPage() {
     const selectedBarang =
       getSelectedCentralBarang();
 
-    if (!selectedBarang) {
+    const selectedMap = new Map(
+      selectedBarang.map(
+        (item) => [
+          Number(item.id),
+          item,
+        ]
+      )
+    );
+
+    const validBarang =
+      barangIds
+        .map((id) =>
+          selectedMap.get(id)
+        )
+        .filter(
+          (
+            item
+          ): item is Barang =>
+            Boolean(item)
+        );
+
+    if (
+      validBarang.length !==
+      barangIds.length
+    ) {
       alert(
-        "Master Barang Central tidak ditemukan."
+        "Sebagian Master Barang Central tidak ditemukan. Silakan pilih ulang."
       );
       return;
     }
@@ -816,56 +894,126 @@ export default function OutletMasterBarangPage() {
 
     try {
       /**
-       * HANYA membuat mapping:
+       * MULTI CONNECT
        *
-       * Barang Central
-       *        ↓
-       * OutletBarang
+       * Semua barang terpilih dikirim
+       * satu per satu ke endpoint existing.
        *
        * Tidak membuat Barang baru.
-       * Tidak membuat source=OUTLET.
+       * Semua tetap menggunakan Barang Central.
        */
-      const payload = {
-        outletId: String(
-          selectedOutlet
-        ),
-        barangId,
-        harga,
-        aktif: true,
-      };
+      const results: Array<{
+        barang: Barang;
+        success: boolean;
+        message: string;
+      }> = [];
 
-      const res = await fetch(
-        "/api/outlet/master-barang",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify(
-            payload
-          ),
+      for (const item of validBarang) {
+        try {
+          const payload = {
+            outletId: String(
+              selectedOutlet
+            ),
+            barangId: item.id,
+            harga,
+            aktif: true,
+          };
+
+          const res = await fetch(
+            "/api/outlet/master-barang",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify(
+                payload
+              ),
+            }
+          );
+
+          const json =
+            await res.json();
+
+          if (
+            !res.ok ||
+            !json.success
+          ) {
+            results.push({
+              barang: item,
+              success: false,
+              message:
+                json.message ||
+                "Gagal menghubungkan.",
+            });
+
+            continue;
+          }
+
+          results.push({
+            barang: item,
+            success: true,
+            message:
+              json.message ||
+              "Berhasil dihubungkan.",
+          });
+        } catch (error) {
+          console.error(
+            `Gagal menghubungkan barang ${item.id}:`,
+            error
+          );
+
+          results.push({
+            barang: item,
+            success: false,
+            message:
+              "Terjadi kesalahan saat menyimpan.",
+          });
         }
-      );
+      }
 
-      const json =
-        await res.json();
+      const berhasil =
+        results.filter(
+          (item) => item.success
+        );
+
+      const gagal =
+        results.filter(
+          (item) => !item.success
+        );
 
       if (
-        !res.ok ||
-        !json.success
+        berhasil.length === 0
       ) {
         alert(
-          json.message ||
-            "Gagal menghubungkan Master Barang Central ke outlet."
+          `Tidak ada barang yang berhasil dihubungkan.\n\n` +
+            gagal
+              .map(
+                (item) =>
+                  `• ${item.barang.name}: ${item.message}`
+              )
+              .join("\n")
         );
+
         return;
       }
 
-      alert(
-        json.message ||
-          `${selectedBarang.name} berhasil diaktifkan untuk outlet.`
-      );
+      let message =
+        `${berhasil.length} barang berhasil dihubungkan ke outlet.`;
+
+      if (gagal.length > 0) {
+        message +=
+          `\n${gagal.length} barang gagal dihubungkan.\n\n` +
+          gagal
+            .map(
+              (item) =>
+                `• ${item.barang.name}: ${item.message}`
+            )
+            .join("\n");
+      }
+
+      alert(message);
 
       setShowForm(false);
       resetForm();
@@ -884,10 +1032,6 @@ export default function OutletMasterBarangPage() {
       setSaving(false);
     }
   }
-
-  // =========================================================
-  // IMPORT EXCEL
-  // =========================================================
 
   async function handleImport(
     e: React.ChangeEvent<HTMLInputElement>
@@ -910,6 +1054,20 @@ export default function OutletMasterBarangPage() {
         "Pilih outlet terlebih dahulu."
       );
 
+      e.target.value = "";
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        "Import Excel akan mengganti seluruh Master Barang Outlet untuk outlet yang dipilih.\n\n" +
+          "Barang yang ADA di Excel akan menjadi Master Barang Outlet yang baru.\n" +
+          "Barang yang TIDAK ADA di Excel akan dihapus dari Master Barang Outlet.\n\n" +
+          "Data Barang Central dan stock outlet tidak akan dihapus/reset.\n\n" +
+          "Lanjutkan?"
+      );
+
+    if (!confirmed) {
       e.target.value = "";
       return;
     }
@@ -948,29 +1106,49 @@ export default function OutletMasterBarangPage() {
       ) {
         alert(
           json.message ||
-            "Import barang outlet gagal."
+            "Import barang outlet gagal.\n\nMaster Barang Outlet tidak diubah."
         );
+
         return;
       }
 
       const summary =
         json.summary || {};
 
+      const total =
+        Number(summary.total) || 0;
+
+      const berhasil =
+        Number(summary.berhasil) || 0;
+
+      const dilewati =
+        Number(summary.dilewati) || 0;
+
+      const gagal =
+        Number(summary.gagal) || 0;
+
+      let message =
+        "Import Master Barang Outlet berhasil.\n\n" +
+        `Total data Excel: ${total}\n` +
+        `Master Barang Outlet baru: ${berhasil}\n`;
+
+      if (dilewati > 0) {
+        message +=
+          `Dilewati: ${dilewati}\n`;
+      }
+
+      if (gagal > 0) {
+        message +=
+          `Gagal: ${gagal}\n`;
+      }
+
+      message +=
+        "\nMaster Barang Outlet sekarang mengikuti isi Excel.\n" +
+        "Barang yang tidak ada di Excel sudah dihapus dari Master Barang Outlet.";
+
       alert(
         json.message ||
-          `Import selesai.\n\n` +
-            `Total: ${
-              summary.total || 0
-            }\n` +
-            `Berhasil: ${
-              summary.berhasil || 0
-            }\n` +
-            `Dilewati: ${
-              summary.dilewati || 0
-            }\n` +
-            `Gagal: ${
-              summary.gagal || 0
-            }`
+          message
       );
 
       await loadData();
@@ -981,7 +1159,7 @@ export default function OutletMasterBarangPage() {
       );
 
       alert(
-        "Terjadi kesalahan saat import Excel."
+        "Terjadi kesalahan saat import Excel.\n\nMaster Barang Outlet tidak diubah jika proses API gagal."
       );
     } finally {
       setLoading(false);
@@ -1060,8 +1238,6 @@ export default function OutletMasterBarangPage() {
       <div className="h-1.5 bg-gradient-to-r from-[#29483A] via-[#527A6B] to-[#A8C7B8]" />
 
       <div className="p-5 md:p-7 lg:p-8">
-        {/* HEADER */}
-
         <div className="mb-7">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -1083,25 +1259,15 @@ export default function OutletMasterBarangPage() {
                 Kelola barang yang
                 tersedia di outlet
                 dengan sumber Master
-                Barang Central. Outlet
-                tidak membuat master
-                barang baru.
+                Barang Central. Import
+                Excel akan mengganti
+                seluruh isi Master Barang
+                Outlet sesuai isi Excel.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <label
-                className="
-                  group flex cursor-pointer
-                  items-center gap-2 rounded-xl
-                  border border-[#C9D9D1]
-                  bg-white px-4 py-2.5
-                  text-sm font-semibold
-                  text-[#29483A] shadow-sm
-                  transition hover:border-[#527A6B]
-                  hover:bg-[#F4F8F5]
-                "
-              >
+              <label className="group flex cursor-pointer items-center gap-2 rounded-xl border border-[#C9D9D1] bg-white px-4 py-2.5 text-sm font-semibold text-[#29483A] shadow-sm transition hover:border-[#527A6B] hover:bg-[#F4F8F5]">
                 <Upload
                   size={17}
                   className="transition-transform group-hover:-translate-y-0.5"
@@ -1127,16 +1293,7 @@ export default function OutletMasterBarangPage() {
                 onClick={
                   openAddForm
                 }
-                className="
-                  flex items-center gap-2
-                  rounded-xl bg-[#29483A]
-                  px-4 py-2.5 text-sm
-                  font-semibold text-white
-                  shadow-sm transition
-                  hover:bg-[#1F382D]
-                  hover:shadow-md
-                  active:scale-[0.98]
-                "
+                className="flex items-center gap-2 rounded-xl bg-[#29483A] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1F382D] hover:shadow-md active:scale-[0.98]"
               >
                 <Plus size={17} />
                 Hubungkan Barang Central
@@ -1144,8 +1301,6 @@ export default function OutletMasterBarangPage() {
             </div>
           </div>
         </div>
-
-        {/* ARCHITECTURE INFO */}
 
         <div className="mb-6 overflow-hidden rounded-2xl border border-[#D8E6DF] bg-white shadow-sm">
           <div className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
@@ -1171,8 +1326,9 @@ export default function OutletMasterBarangPage() {
                   dan konversi berasal
                   dari Master Barang
                   Central. Outlet hanya
-                  mengaktifkan barang
-                  untuk outletnya.
+                  menggunakan mapping
+                  barang Central yang
+                  dipilih untuk outlet.
                 </p>
               </div>
             </div>
@@ -1192,8 +1348,6 @@ export default function OutletMasterBarangPage() {
             </div>
           </div>
         </div>
-
-        {/* STATISTICS */}
 
         <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
@@ -1227,8 +1381,6 @@ export default function OutletMasterBarangPage() {
             tone="blue"
           />
         </div>
-
-        {/* FILTER */}
 
         <div className="mb-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center gap-2">
@@ -1265,21 +1417,12 @@ export default function OutletMasterBarangPage() {
                         ...prev,
                         outletId:
                           value,
-                        barangId:
-                          "",
+                        barangIds:
+                          [],
                       })
                     );
                   }}
-                  className="
-                    w-full appearance-none
-                    rounded-xl border
-                    border-gray-300 bg-white
-                    py-2.5 pl-10 pr-10
-                    text-sm font-medium
-                    text-gray-700 outline-none
-                    transition focus:border-[#527A6B]
-                    focus:ring-4 focus:ring-[#527A6B]/10
-                  "
+                  className="w-full appearance-none rounded-xl border border-gray-300 bg-white py-2.5 pl-10 pr-10 text-sm font-medium text-gray-700 outline-none transition focus:border-[#527A6B] focus:ring-4 focus:ring-[#527A6B]/10"
                 >
                   <option value="">
                     Semua Outlet
@@ -1323,15 +1466,7 @@ export default function OutletMasterBarangPage() {
                   )
                 }
                 placeholder="Cari kode, barcode, nama, kategori..."
-                className="
-                  w-full rounded-xl border
-                  border-gray-300 bg-white
-                  py-2.5 pl-10 pr-4
-                  text-sm outline-none transition
-                  placeholder:text-gray-400
-                  focus:border-[#527A6B]
-                  focus:ring-4 focus:ring-[#527A6B]/10
-                "
+                className="w-full rounded-xl border border-gray-300 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#527A6B] focus:ring-4 focus:ring-[#527A6B]/10"
               />
             </div>
 
@@ -1341,17 +1476,7 @@ export default function OutletMasterBarangPage() {
                 void loadData()
               }
               disabled={loading}
-              className="
-                flex items-center justify-center
-                gap-2 rounded-xl border
-                border-gray-300 bg-white
-                px-4 py-2.5 text-sm
-                font-semibold text-gray-700
-                transition hover:border-[#527A6B]
-                hover:bg-[#F7FAF8]
-                disabled:cursor-not-allowed
-                disabled:opacity-50
-              "
+              className="flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-[#527A6B] hover:bg-[#F7FAF8] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RefreshCw
                 size={16}
@@ -1367,8 +1492,6 @@ export default function OutletMasterBarangPage() {
           </div>
         </div>
 
-        {/* TABLE */}
-
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -1377,8 +1500,9 @@ export default function OutletMasterBarangPage() {
               </h2>
 
               <p className="mt-0.5 text-xs text-gray-400">
-                Master barang Central
-                yang tersedia untuk
+                Isi Master Barang Outlet
+                mengikuti mapping barang
+                Central yang aktif untuk
                 outlet.
               </p>
             </div>
@@ -1398,43 +1522,33 @@ export default function OutletMasterBarangPage() {
                   <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-wide text-gray-500">
                     No
                   </th>
-
                   <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-wide text-gray-500">
                     Outlet
                   </th>
-
                   <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-wide text-gray-500">
                     Barang Central
                   </th>
-
                   <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-wide text-gray-500">
                     Barcode
                   </th>
-
                   <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-wide text-gray-500">
                     Kategori
                   </th>
-
                   <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-wide text-gray-500">
                     Purchase Unit
                   </th>
-
                   <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-wide text-gray-500">
                     Base Unit
                   </th>
-
                   <th className="px-4 py-3.5 text-center text-[11px] font-bold uppercase tracking-wide text-gray-500">
                     Konversi
                   </th>
-
                   <th className="px-4 py-3.5 text-right text-[11px] font-bold uppercase tracking-wide text-gray-500">
                     Minimum
                   </th>
-
                   <th className="px-4 py-3.5 text-right text-[11px] font-bold uppercase tracking-wide text-gray-500">
                     Harga
                   </th>
-
                   <th className="px-4 py-3.5 text-center text-[11px] font-bold uppercase tracking-wide text-gray-500">
                     Status
                   </th>
@@ -1488,9 +1602,10 @@ export default function OutletMasterBarangPage() {
                         sini. Gunakan
                         tombol
                         Hubungkan Barang
-                        Central untuk
-                        mengaktifkan
-                        mapping outlet.
+                        Central atau
+                        Import Excel untuk
+                        mengatur Master
+                        Barang Outlet.
                       </p>
                     </td>
                   </tr>
@@ -1543,12 +1658,6 @@ export default function OutletMasterBarangPage() {
                         item.outlet ??
                         null;
 
-                      /**
-                       * Jika mapping belum ada tetapi
-                       * filter outlet sedang dipilih,
-                       * outlet filter hanya digunakan
-                       * sebagai konteks tampilan.
-                       */
                       const selectedOutlet =
                         outletId
                           ? outlets.find(
@@ -1574,11 +1683,6 @@ export default function OutletMasterBarangPage() {
                           mappedOutlet
                         );
 
-                      /**
-                       * FIX:
-                       * Jangan campur ?? dengan || tanpa
-                       * parentheses.
-                       */
                       const rowScope =
                         mappedOutlet?.id ??
                         (outletId
@@ -1588,10 +1692,7 @@ export default function OutletMasterBarangPage() {
                       return (
                         <tr
                           key={`${item.barang.id}-${rowScope}`}
-                          className="
-                            border-b border-gray-50
-                            transition hover:bg-[#FAFCFB]
-                          "
+                          className="border-b border-gray-50 transition hover:bg-[#FAFCFB]"
                         >
                           <td className="px-4 py-4 text-xs font-medium text-gray-400">
                             {String(
@@ -1883,27 +1984,18 @@ export default function OutletMasterBarangPage() {
 
                           <td className="px-4 py-4 text-center">
                             <span
-                              className={`
-                                inline-flex items-center
-                                gap-1.5 rounded-full
-                                px-3 py-1.5 text-[11px]
-                                font-bold
-                                ${
-                                  item.aktif
-                                    ? "bg-emerald-50 text-emerald-700"
-                                    : "bg-gray-100 text-gray-500"
-                                }
-                              `}
+                              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold ${
+                                item.aktif
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "bg-gray-100 text-gray-500"
+                              }`}
                             >
                               <span
-                                className={`
-                                  h-1.5 w-1.5 rounded-full
-                                  ${
-                                    item.aktif
-                                      ? "bg-emerald-500"
-                                      : "bg-gray-400"
-                                  }
-                                `}
+                                className={`h-1.5 w-1.5 rounded-full ${
+                                  item.aktif
+                                    ? "bg-emerald-500"
+                                    : "bg-gray-400"
+                                }`}
                               />
 
                               {item.aktif
@@ -1922,29 +2014,9 @@ export default function OutletMasterBarangPage() {
         </div>
       </div>
 
-      {/* =====================================================
-          ADD / CONNECT CENTRAL BARANG MODAL
-      ===================================================== */}
-
       {showForm && (
-        <div
-          className="
-            fixed inset-0 z-50
-            flex items-center justify-center
-            bg-[#102019]/55 p-4
-            backdrop-blur-sm
-          "
-        >
-          <div
-            className="
-              flex max-h-[92vh] w-full max-w-4xl
-              flex-col overflow-hidden rounded-3xl
-              border border-white/60 bg-white
-              shadow-[0_30px_80px_rgba(25,55,43,0.22)]
-            "
-          >
-            {/* MODAL HEADER */}
-
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#102019]/55 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-white/60 bg-white shadow-[0_30px_80px_rgba(25,55,43,0.22)]">
             <div className="relative overflow-hidden border-b border-gray-100 bg-gradient-to-br from-[#F4F8F5] via-white to-[#EDF5F1] px-6 py-5">
               <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-[#DCEBE3]/60 blur-2xl" />
 
@@ -1961,18 +2033,16 @@ export default function OutletMasterBarangPage() {
                       </h2>
 
                       <span className="rounded-full bg-[#E1F0E8] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#527A6B]">
-                        Central
+                        Multi Select
                       </span>
                     </div>
 
                     <p className="mt-1 max-w-xl text-xs leading-5 text-gray-500">
-                      Pilih barang yang
-                      sudah terdaftar di
-                      Master Barang
-                      Central. Data master
-                      tidak dibuat ulang
-                      dan tidak diduplikasi
-                      untuk outlet.
+                      Pilih satu atau
+                      beberapa barang dari
+                      Master Barang Central
+                      untuk dihubungkan
+                      sekaligus ke outlet.
                     </p>
                   </div>
                 </div>
@@ -1982,18 +2052,12 @@ export default function OutletMasterBarangPage() {
                   onClick={() =>
                     setShowForm(false)
                   }
-                  className="
-                    rounded-xl p-2 text-gray-400
-                    transition hover:bg-white
-                    hover:text-gray-700
-                  "
+                  className="rounded-xl p-2 text-gray-400 transition hover:bg-white hover:text-gray-700"
                 >
                   <X size={19} />
                 </button>
               </div>
             </div>
-
-            {/* MODAL BODY */}
 
             <form
               onSubmit={
@@ -2002,8 +2066,6 @@ export default function OutletMasterBarangPage() {
               className="flex min-h-0 flex-1 flex-col"
             >
               <div className="min-h-0 flex-1 overflow-y-auto p-6">
-                {/* OUTLET */}
-
                 {user?.role !==
                   "OUTLET_ADMIN" && (
                   <div className="mb-5">
@@ -2036,8 +2098,8 @@ export default function OutletMasterBarangPage() {
                               ...prev,
                               outletId:
                                 value,
-                              barangId:
-                                "",
+                              barangIds:
+                                [],
                             })
                           );
 
@@ -2046,17 +2108,7 @@ export default function OutletMasterBarangPage() {
                             value
                           );
                         }}
-                        className="
-                          w-full appearance-none
-                          rounded-xl border
-                          border-gray-300 bg-white
-                          py-3 pl-11 pr-10
-                          text-sm font-medium
-                          outline-none transition
-                          focus:border-[#527A6B]
-                          focus:ring-4
-                          focus:ring-[#527A6B]/10
-                        "
+                        className="w-full appearance-none rounded-xl border border-gray-300 bg-white py-3 pl-11 pr-10 text-sm font-medium outline-none transition focus:border-[#527A6B] focus:ring-4 focus:ring-[#527A6B]/10"
                       >
                         <option value="">
                           Pilih outlet
@@ -2094,8 +2146,6 @@ export default function OutletMasterBarangPage() {
                   </div>
                 )}
 
-                {/* SELECT CENTRAL BARANG */}
-
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <label className="block text-xs font-bold uppercase tracking-wide text-gray-500">
@@ -2103,7 +2153,7 @@ export default function OutletMasterBarangPage() {
                     </label>
 
                     <span className="text-[10px] font-medium text-[#527A6B]">
-                      Wajib pilih dari Central
+                      Multi-select aktif
                     </span>
                   </div>
 
@@ -2136,22 +2186,64 @@ export default function OutletMasterBarangPage() {
                             void loadCentralBarang(
                               value
                             );
+                          } else if (
+                            value.length ===
+                            0
+                          ) {
+                            void loadCentralBarang(
+                              ""
+                            );
                           }
                         }}
                         placeholder="Cari kode, barcode, nama atau kategori..."
-                        className="
-                          w-full rounded-xl border
-                          border-gray-200 bg-white
-                          py-3 pl-10 pr-4
-                          text-sm outline-none
-                          transition
-                          focus:border-[#527A6B]
-                          focus:ring-4 focus:ring-[#527A6B]/10
-                        "
+                        className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-sm outline-none transition focus:border-[#527A6B] focus:ring-4 focus:ring-[#527A6B]/10"
                       />
                     </div>
 
-                    <div className="mt-3 max-h-64 overflow-y-auto">
+                    <div className="mt-3 flex flex-col gap-2 rounded-xl border border-[#DDEAE3] bg-white px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-[#E9F3EE] px-2.5 py-1 text-[10px] font-bold text-[#527A6B]">
+                          {form.barangIds.length} barang dipilih
+                        </span>
+
+                        <span className="text-[10px] text-gray-400">
+                          Bisa memilih banyak
+                          barang sekaligus
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={
+                            selectAllFilteredCentral
+                          }
+                          disabled={
+                            filteredCentralBarang.length ===
+                            0
+                          }
+                          className="rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-[#527A6B] transition hover:bg-[#EEF6F1] disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Pilih Semua
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={
+                            clearSelectedCentral
+                          }
+                          disabled={
+                            form.barangIds.length ===
+                            0
+                          }
+                          className="rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-gray-500 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Hapus Pilihan
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 max-h-72 overflow-y-auto">
                       {loadingCentral ? (
                         <div className="flex flex-col items-center justify-center py-10 text-center">
                           <RefreshCw
@@ -2192,11 +2284,8 @@ export default function OutletMasterBarangPage() {
                               item
                             ) => {
                               const selected =
-                                String(
-                                  item.id
-                                ) ===
-                                String(
-                                  form.barangId
+                                form.barangIds.includes(
+                                  String(item.id)
                                 );
 
                               const rate =
@@ -2215,41 +2304,23 @@ export default function OutletMasterBarangPage() {
                                   }
                                   type="button"
                                   onClick={() =>
-                                    setForm(
-                                      (
-                                        prev
-                                      ) => ({
-                                        ...prev,
-                                        barangId:
-                                          String(
-                                            item.id
-                                          ),
-                                      })
+                                    toggleCentralBarang(
+                                      item.id
                                     )
                                   }
-                                  className={`
-                                    w-full rounded-xl
-                                    border p-3 text-left
-                                    transition
-                                    ${
-                                      selected
-                                        ? "border-[#527A6B] bg-[#EEF6F1] ring-2 ring-[#527A6B]/10"
-                                        : "border-gray-200 bg-white hover:border-[#BFD4C9] hover:bg-[#F8FBF9]"
-                                    }
-                                  `}
+                                  className={`w-full rounded-xl border p-3 text-left transition ${
+                                    selected
+                                      ? "border-[#527A6B] bg-[#EEF6F1] ring-2 ring-[#527A6B]/10"
+                                      : "border-gray-200 bg-white hover:border-[#BFD4C9] hover:bg-[#F8FBF9]"
+                                  }`}
                                 >
                                   <div className="flex items-center gap-3">
                                     <div
-                                      className={`
-                                        flex h-10 w-10
-                                        shrink-0 items-center
-                                        justify-center rounded-xl
-                                        ${
-                                          selected
-                                            ? "bg-[#29483A] text-white"
-                                            : "bg-[#F0F5F2] text-[#527A6B]"
-                                        }
-                                      `}
+                                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                                        selected
+                                          ? "bg-[#29483A] text-white"
+                                          : "bg-[#F0F5F2] text-[#527A6B]"
+                                      }`}
                                     >
                                       {selected ? (
                                         <Check
@@ -2279,6 +2350,12 @@ export default function OutletMasterBarangPage() {
                                             item.code
                                           }
                                         </span>
+
+                                        {selected && (
+                                          <span className="rounded-full bg-[#29483A] px-2 py-0.5 text-[9px] font-bold text-white">
+                                            Dipilih
+                                          </span>
+                                        )}
                                       </div>
 
                                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-gray-400">
@@ -2341,16 +2418,19 @@ export default function OutletMasterBarangPage() {
                                       </div>
                                     </div>
 
-                                    <ChevronDown
-                                      size={
-                                        17
-                                      }
-                                      className={`shrink-0 -rotate-90 ${
+                                    <div
+                                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border ${
                                         selected
-                                          ? "text-[#29483A]"
-                                          : "text-gray-300"
+                                          ? "border-[#29483A] bg-[#29483A] text-white"
+                                          : "border-gray-300 bg-white text-transparent"
                                       }`}
-                                    />
+                                    >
+                                      <Check
+                                        size={
+                                          14
+                                        }
+                                      />
+                                    </div>
                                   </div>
                                 </button>
                               );
@@ -2362,92 +2442,135 @@ export default function OutletMasterBarangPage() {
                   </div>
                 </div>
 
-                {/* SELECTED PREVIEW */}
-
-                {selectedCentralBarang && (
+                {selectedCentralBarang.length >
+                  0 && (
                   <div className="mt-5 overflow-hidden rounded-2xl border border-[#CFE0D7] bg-gradient-to-br from-[#F4F8F5] to-white">
                     <div className="border-b border-[#DDEAE3] px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Check
-                          size={15}
-                          className="text-[#527A6B]"
-                        />
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <Check
+                            size={15}
+                            className="text-[#527A6B]"
+                          />
 
-                        <span className="text-xs font-bold text-[#29483A]">
-                          Barang Central
-                          terpilih
+                          <span className="text-xs font-bold text-[#29483A]">
+                            {
+                              selectedCentralBarang.length
+                            }{" "}
+                            Barang Central
+                            terpilih
+                          </span>
+                        </div>
+
+                        <span className="rounded-full bg-[#E9F3EE] px-2.5 py-1 text-[10px] font-bold text-[#527A6B]">
+                          Akan dihubungkan
+                          sekaligus
                         </span>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
-                      <InfoMini
-                        label="Kode"
-                        value={
-                          selectedCentralBarang.code
-                        }
-                      />
+                    <div className="max-h-56 overflow-y-auto p-3">
+                      <div className="space-y-2">
+                        {selectedCentralBarang.map(
+                          (
+                            item
+                          ) => (
+                            <div
+                              key={
+                                item.id
+                              }
+                              className="flex items-center gap-3 rounded-xl border border-[#DDEAE3] bg-white px-3 py-2.5"
+                            >
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#EEF5F1] text-[#29483A]">
+                                <Package
+                                  size={
+                                    16
+                                  }
+                                />
+                              </div>
 
-                      <InfoMini
-                        label="Nama"
-                        value={
-                          selectedCentralBarang.name
-                        }
-                      />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="truncate text-xs font-bold text-[#29483A]">
+                                    {
+                                      item.name
+                                    }
+                                  </span>
 
-                      <InfoMini
-                        label="Purchase Unit"
-                        value={
-                          selectedCentralBarang.unit
-                        }
-                      />
+                                  <span className="rounded-md bg-gray-100 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-gray-600">
+                                    {
+                                      item.code
+                                    }
+                                  </span>
+                                </div>
 
-                      <InfoMini
-                        label="Base Unit"
-                        value={
-                          selectedCentralBarang.baseUnit ||
-                          "-"
-                        }
-                      />
+                                <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-gray-400">
+                                  <span>
+                                    Purchase:{" "}
+                                    <b className="text-gray-500">
+                                      {
+                                        item.unit
+                                      }
+                                    </b>
+                                  </span>
 
-                      <InfoMini
-                        label="Konversi"
-                        value={
-                          selectedCentralBarang.baseUnit
-                            ? `1 ${selectedCentralBarang.unit} = ${formatNumber(
-                                selectedCentralBarang.conversionRate
-                              )} ${selectedCentralBarang.baseUnit}`
-                            : "Belum diset"
-                        }
-                      />
+                                  <span>
+                                    •
+                                  </span>
 
-                      <InfoMini
-                        label="Minimum Stock"
-                        value={`${formatNumber(
-                          selectedCentralBarang.minimumStock
-                        )} ${
-                          selectedCentralBarang.baseUnit ||
-                          selectedCentralBarang.unit
-                        }`}
-                      />
+                                  <span>
+                                    Base:{" "}
+                                    <b className="text-[#527A6B]">
+                                      {item.baseUnit ||
+                                        "-"}
+                                    </b>
+                                  </span>
 
-                      <InfoMini
-                        label="Purchase Price Central"
-                        value={formatCurrency(
-                          selectedCentralBarang.purchasePrice
+                                  {item.baseUnit && (
+                                    <>
+                                      <span>
+                                        •
+                                      </span>
+
+                                      <span>
+                                        1{" "}
+                                        {
+                                          item.unit
+                                        }{" "}
+                                        ={" "}
+                                        {formatNumber(
+                                          item.conversionRate
+                                        )}{" "}
+                                        {
+                                          item.baseUnit
+                                        }
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  toggleCentralBarang(
+                                    item.id
+                                  )
+                                }
+                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-50 hover:text-red-500"
+                                title="Hapus dari pilihan"
+                              >
+                                <X
+                                  size={15}
+                                />
+                              </button>
+                            </div>
+                          )
                         )}
-                      />
-
-                      <InfoMini
-                        label="Source"
-                        value="CENTRAL"
-                        accent
-                      />
+                      </div>
                     </div>
                   </div>
                 )}
-
-                {/* HARGA OUTLET */}
 
                 <div className="mt-5">
                   <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">
@@ -2481,16 +2604,7 @@ export default function OutletMasterBarangPage() {
                           })
                         )
                       }
-                      className="
-                        w-full rounded-xl border
-                        border-gray-300 bg-white
-                        py-3 pl-10 pr-4
-                        text-sm font-semibold
-                        outline-none transition
-                        focus:border-[#527A6B]
-                        focus:ring-4
-                        focus:ring-[#527A6B]/10
-                      "
+                      className="w-full rounded-xl border border-gray-300 bg-white py-3 pl-10 pr-4 text-sm font-semibold outline-none transition focus:border-[#527A6B] focus:ring-4 focus:ring-[#527A6B]/10"
                       placeholder="0"
                     />
                   </div>
@@ -2506,8 +2620,6 @@ export default function OutletMasterBarangPage() {
                   </p>
                 </div>
 
-                {/* SAFETY INFO */}
-
                 <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
                   <div className="flex items-start gap-3">
                     <AlertCircle
@@ -2517,18 +2629,18 @@ export default function OutletMasterBarangPage() {
 
                     <div>
                       <p className="text-xs font-bold text-amber-800">
-                        Data master tetap
-                        terpusat
+                        Multi-connect
+                        aman
                       </p>
 
                       <p className="mt-1 text-[11px] leading-5 text-amber-700">
-                        Proses ini tidak
-                        membuat Barang
-                        baru, tidak
-                        menggandakan kode,
-                        dan tidak mengubah
-                        satuan atau konversi
-                        Master Barang
+                        Semua barang yang
+                        dipilih tetap
+                        menggunakan Barang
+                        Central yang sama.
+                        Sistem tidak membuat
+                        Barang baru dan tidak
+                        menggandakan master
                         Central.
                       </p>
                     </div>
@@ -2536,16 +2648,16 @@ export default function OutletMasterBarangPage() {
                 </div>
               </div>
 
-              {/* MODAL FOOTER */}
-
               <div className="flex shrink-0 items-center justify-between gap-3 border-t border-gray-100 bg-[#FBFCFB] px-6 py-4">
                 <div className="hidden items-center gap-2 text-[10px] text-gray-400 sm:flex">
                   <Database
                     size={13}
                   />
 
-                  Master data berasal
-                  dari Central
+                  {form.barangIds.length >
+                  0
+                    ? `${form.barangIds.length} barang siap dihubungkan`
+                    : "Pilih barang dari Central"}
                 </div>
 
                 <div className="ml-auto flex gap-2">
@@ -2556,13 +2668,7 @@ export default function OutletMasterBarangPage() {
                         false
                       )
                     }
-                    className="
-                      rounded-xl border
-                      border-gray-300 bg-white
-                      px-5 py-2.5 text-sm
-                      font-semibold text-gray-700
-                      transition hover:bg-gray-50
-                    "
+                    className="rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
                   >
                     Batal
                   </button>
@@ -2571,19 +2677,12 @@ export default function OutletMasterBarangPage() {
                     type="submit"
                     disabled={
                       saving ||
-                      !form.barangId ||
+                      form.barangIds
+                        .length ===
+                        0 ||
                       !form.outletId
                     }
-                    className="
-                      flex items-center gap-2
-                      rounded-xl bg-[#29483A]
-                      px-5 py-2.5 text-sm
-                      font-semibold text-white
-                      shadow-sm transition
-                      hover:bg-[#1F382D]
-                      disabled:cursor-not-allowed
-                      disabled:opacity-50
-                    "
+                    className="flex items-center gap-2 rounded-xl bg-[#29483A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1F382D] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {saving ? (
                       <>
@@ -2592,7 +2691,13 @@ export default function OutletMasterBarangPage() {
                           className="animate-spin"
                         />
 
-                        Menyimpan...
+                        Menghubungkan{" "}
+                        {
+                          form
+                            .barangIds
+                            .length
+                        }{" "}
+                        Barang...
                       </>
                     ) : (
                       <>
@@ -2600,7 +2705,12 @@ export default function OutletMasterBarangPage() {
                           size={16}
                         />
 
-                        Hubungkan Barang
+                        Hubungkan{" "}
+                        {form.barangIds
+                          .length >
+                        0
+                          ? `${form.barangIds.length} Barang`
+                          : "Barang"}
                       </>
                     )}
                   </button>

@@ -138,6 +138,30 @@ function fail(
 }
 
 // =====================================================
+// OUTLET SCOPED ROLE
+// =====================================================
+//
+// STAFF_OUTLET:
+// - hanya boleh melihat Manufacture outlet sendiri
+//
+// OUTLET_ADMIN:
+// - hanya boleh melihat Manufacture outlet sendiri
+//
+// GUDANG:
+// - tetap sesuai behavior sebelumnya, boleh masuk
+//   halaman Manufacture
+// =====================================================
+
+function isOutletScopedRole(
+  role: string
+) {
+  return (
+    role === "OUTLET_ADMIN" ||
+    role === "STAFF_OUTLET"
+  );
+}
+
+// =====================================================
 // GET DETAIL ORDER
 // =====================================================
 
@@ -167,11 +191,20 @@ export async function GET(
         .trim()
         .toUpperCase();
 
+    // =================================================
+    // ACCESS ROLE
+    // =================================================
+    //
+    // STAFF_OUTLET ditambahkan sebagai role Manufacture.
+    // =================================================
+
     if (
       ![
         "ADMIN",
         "MANAGER",
         "GUDANG",
+        "OUTLET_ADMIN",
+        "STAFF_OUTLET",
       ].includes(role)
     ) {
       return fail(
@@ -194,6 +227,10 @@ export async function GET(
         "ID order produksi tidak valid."
       );
     }
+
+    // =================================================
+    // LOAD ORDER
+    // =================================================
 
     const order =
       await prisma.manufactureOrder.findUnique(
@@ -231,6 +268,62 @@ export async function GET(
         "Order produksi tidak ditemukan.",
         404
       );
+    }
+
+    // =================================================
+    // SECURITY OUTLET
+    // =================================================
+    //
+    // ADMIN / MANAGER / GUDANG:
+    // - tetap dapat melihat sesuai behavior lama.
+    //
+    // OUTLET_ADMIN / STAFF_OUTLET:
+    // - hanya outlet miliknya sendiri.
+    //
+    // Penting:
+    // jangan hanya mengandalkan query dari frontend.
+    // Validasi dilakukan langsung terhadap database.
+    // =================================================
+
+    if (
+      isOutletScopedRole(role)
+    ) {
+      const userOutletId =
+        Number(
+          user.outletId ?? 0
+        );
+
+      if (
+        !Number.isInteger(
+          userOutletId
+        ) ||
+        userOutletId <= 0
+      ) {
+        if (
+          role === "STAFF_OUTLET"
+        ) {
+          return fail(
+            "User Staff Outlet belum terhubung dengan outlet.",
+            403
+          );
+        }
+
+        return fail(
+          "User Outlet Admin belum terhubung dengan outlet.",
+          403
+        );
+      }
+
+      if (
+        !order.outletId ||
+        Number(order.outletId) !==
+          userOutletId
+      ) {
+        return fail(
+          "Anda tidak memiliki akses ke Manufacture outlet ini.",
+          403
+        );
+      }
     }
 
     return NextResponse.json({

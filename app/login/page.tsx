@@ -67,6 +67,16 @@ export default function LoginPage() {
       }
 
       // =========================================================
+      // STAFF OUTLET
+      // Langsung masuk ke halaman Manufacture
+      // =========================================================
+      if (role === "STAFF_OUTLET") {
+        router.replace("/manufacture");
+        router.refresh();
+        return;
+      }
+
+      // =========================================================
       // ADMIN OUTLET
       // =========================================================
       if (
@@ -286,7 +296,7 @@ export default function LoginPage() {
                       >
                         <path d="m3 3 18 18" />
                         <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
-                        <path d="M9.9 4.2A9.9 9.9 0 0 1 12 4c6.5 0 10 8 10 8a18.5 18.5 0 0 1-3.1 4.4" />
+                        <path d="M9.9 4.2A9.9 9.9 0 0 1 12 4c6.5 0 10 8 10 8a18.5 18.5 0 0 1 3.1 4.4" />
                         <path d="M6.6 6.6C3.8 8.4 2 12 2 12s3.5 8 10 8a9.8 9.8 0 0 0 3.3-.6" />
                       </svg>
                     )}

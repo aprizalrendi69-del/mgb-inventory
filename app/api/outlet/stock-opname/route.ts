@@ -162,9 +162,20 @@ function parseOpnameDate(value: unknown): Date | null {
 // -> hanya outlet sendiri
 //
 // PENTING:
-// -> barang.category ikut dikirim
-// -> barang.baseUnit ikut dikirim
-// -> barang.conversionRate ikut dikirim
+// -> HANYA BARANG YANG ADA DI MASTER BARANG OUTLET
+//    (OutletBarang) YANG DIAMBIL.
+//
+// -> OutletStock menjadi sumber qty stock.
+//
+// -> OutletStock TIDAK mempunyai relation outletBarang,
+//    sehingga pengecekan Master Barang dilakukan melalui
+//    query terpisah ke tabel OutletBarang.
+//
+// -> Barang Central yang tidak terdaftar pada
+//    OutletBarang aktif tidak akan ditampilkan.
+//
+// -> OutletStock yang tidak memiliki mapping
+//    OutletBarang aktif tidak akan ditampilkan.
 // =====================================================
 
 export async function GET(req: NextRequest) {
@@ -217,7 +228,84 @@ export async function GET(req: NextRequest) {
     }
 
     // =================================================
+    // AMBIL MASTER BARANG OUTLET
+    //
+    // OutletBarang adalah tabel mapping:
+    //
+    // outletId
+    // +
+    // barangId
+    //
+    // Hanya mapping aktif yang dianggap sebagai
+    // Master Barang Outlet yang sedang berlaku.
+    // =================================================
+
+    const masterWhere: any = {
+      aktif: true,
+    };
+
+    // Jika user adalah Admin Outlet,
+    // hanya ambil Master Barang milik outlet sendiri.
+    if (
+      role === "ADMIN_OUTLET" ||
+      role === "OUTLET_ADMIN"
+    ) {
+      masterWhere.outletId = Number(
+        user.outletId
+      );
+    }
+
+    // Jika Admin Pusat memilih outlet tertentu,
+    // hanya ambil Master Barang outlet tersebut.
+    if (
+      role === "ADMIN" &&
+      requestedOutletId > 0
+    ) {
+      masterWhere.outletId =
+        requestedOutletId;
+    }
+
+    const masterBarang =
+      await prisma.outletBarang.findMany({
+        where: masterWhere,
+
+        select: {
+          outletId: true,
+          barangId: true,
+        },
+      });
+
+    // =================================================
+    // BUAT SET MAPPING
+    //
+    // Format:
+    //
+    // outletId:barangId
+    //
+    // Contoh:
+    // 5:120
+    //
+    // Artinya Barang ID 120 memang merupakan Master
+    // Barang Outlet untuk Outlet ID 5.
+    // =================================================
+
+    const masterBarangSet =
+      new Set(
+        masterBarang.map(
+          (item) =>
+            `${Number(item.outletId)}:${Number(
+              item.barangId
+            )}`
+        )
+      );
+
+    // =================================================
     // GET STOCK
+    //
+    // OutletStock tetap menjadi sumber qty.
+    // Tidak menggunakan relation outletBarang karena
+    // relation tersebut memang tidak tersedia di schema
+    // OutletStock.
     // =================================================
 
     const stocks =
@@ -248,17 +336,6 @@ export async function GET(req: NextRequest) {
               // =================================================
               // UNIT & CONVERSION
               // =================================================
-              // Digunakan oleh frontend dan PDF Stock Opname.
-              //
-              // unit:
-              // Satuan transaksi / stok outlet.
-              //
-              // baseUnit:
-              // Satuan dasar barang.
-              //
-              // conversionRate:
-              // Nilai konversi dari unit ke baseUnit.
-              // =================================================
 
               unit: true,
               baseUnit: true,
@@ -283,6 +360,28 @@ export async function GET(req: NextRequest) {
           },
         ],
       });
+
+    // =================================================
+    // FILTER STOCK BERDASARKAN MASTER BARANG OUTLET
+    //
+    // Stock hanya boleh tampil apabila:
+    //
+    // OutletStock.outletId
+    // +
+    // OutletStock.barangId
+    //
+    // mempunyai pasangan yang sama pada OutletBarang
+    // aktif.
+    // =================================================
+
+    const filteredStocks =
+      stocks.filter((stock) =>
+        masterBarangSet.has(
+          `${Number(stock.outletId)}:${Number(
+            stock.barangId
+          )}`
+        )
+      );
 
     let activeOutlet = null;
 
@@ -329,7 +428,16 @@ export async function GET(req: NextRequest) {
     // Jika opnameId dikirim, ambil opname tersebut.
     // Jika tidak, ambil opname MONTHLY COUNTING terbaru
     // untuk outlet yang sedang ditampilkan.
-    // =================================================
+    //
+    // PENTING:
+    // Historical opname TIDAK difilter dengan
+    // OutletBarang saat ini.
+    //
+    // Alasannya:
+    // opname adalah snapshot historis. Jika barang
+    // kemudian dihapus dari Master Barang Outlet,
+    // data opname lama tetap harus dapat dibaca.
+    // =====================================================
 
     const requestedOpnameId = Number(
       searchParams.get("opnameId") ?? 0
@@ -401,7 +509,8 @@ export async function GET(req: NextRequest) {
 
       outlet: activeOutlet,
 
-      data: stocks,
+      // HANYA STOCK DARI MASTER BARANG OUTLET AKTIF
+      data: filteredStocks,
 
       // Data opname disimpan permanen di database.
       // Frontend dapat memakai field ini untuk mengembalikan
@@ -441,6 +550,10 @@ export async function GET(req: NextRequest) {
 // -> COUNTING
 // -> menunggu approval
 // -> tidak mengubah stock sebelum approval
+//
+// PENTING:
+// -> Hanya barang yang terdapat di Master Barang Outlet
+//    aktif yang boleh dimasukkan ke opname baru.
 // =====================================================
 
 export async function POST(req: NextRequest) {
@@ -784,6 +897,14 @@ export async function POST(req: NextRequest) {
 
     // =================================================
     // AMBIL STOCK
+    //
+    // OutletStock hanya difilter berdasarkan:
+    //
+    // 1. stock ID
+    // 2. outlet ID
+    //
+    // Pengecekan Master Barang dilakukan setelah ini
+    // melalui tabel OutletBarang.
     // =================================================
 
     const stocks =
@@ -824,6 +945,10 @@ export async function POST(req: NextRequest) {
         },
       });
 
+    // =================================================
+    // VALIDASI STOCK
+    // =================================================
+
     if (
       stocks.length !==
       stockIds.length
@@ -832,7 +957,7 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           message:
-            "Ada barang yang bukan milik outlet tersebut atau stock tidak ditemukan",
+            "Ada stock yang tidak ditemukan atau bukan milik outlet tersebut",
         },
         {
           status: 403,
@@ -864,6 +989,74 @@ export async function POST(req: NextRequest) {
         },
         {
           status: 400,
+        }
+      );
+    }
+
+    // =================================================
+    // VALIDASI MASTER BARANG OUTLET
+    //
+    // Karena OutletStock tidak mempunyai relation
+    // outletBarang, cek langsung ke tabel OutletBarang.
+    //
+    // HANYA mapping:
+    //
+    // outletId
+    // +
+    // barangId
+    // +
+    // aktif = true
+    //
+    // yang dianggap valid.
+    // =================================================
+
+    const masterBarang =
+      await prisma.outletBarang.findMany({
+        where: {
+          outletId,
+
+          aktif: true,
+
+          barangId: {
+            in: barangIds,
+          },
+        },
+
+        select: {
+          outletId: true,
+          barangId: true,
+        },
+      });
+
+    const masterBarangIdSet =
+      new Set(
+        masterBarang.map(
+          (item) =>
+            Number(item.barangId)
+        )
+      );
+
+    // =================================================
+    // CARI BARANG YANG TIDAK ADA DI MASTER
+    // =================================================
+
+    const invalidMasterStock =
+      stocks.find(
+        (stock) =>
+          !masterBarangIdSet.has(
+            Number(stock.barangId)
+          )
+      );
+
+    if (invalidMasterStock) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            `Barang "${invalidMasterStock.barang?.name ?? invalidMasterStock.barangId}" belum terdaftar sebagai Master Barang Outlet aktif. Barang tersebut tidak dapat dimasukkan ke Stock Opname.`,
+        },
+        {
+          status: 403,
         }
       );
     }
@@ -976,11 +1169,18 @@ export async function POST(req: NextRequest) {
     //
     // Stock tetap merupakan system stock.
     // Opname hanya menyimpan snapshot fisik.
+    //
+    // Barang yang dibuat menjadi item opname
+    // sudah dipastikan merupakan Master Barang Outlet.
     // =================================================
 
     const result =
       await prisma.$transaction(
         async (tx) => {
+          // =================================================
+          // RE-CHECK STOCK DI DALAM TRANSACTION
+          // =================================================
+
           const currentStocks =
             await tx.outletStock.findMany({
               where: {
@@ -1004,7 +1204,60 @@ export async function POST(req: NextRequest) {
             stockIds.length
           ) {
             throw new Error(
-              "Data stock berubah atau tidak lagi tersedia"
+              "Ada barang yang sudah tidak ditemukan atau bukan milik outlet tersebut"
+            );
+          }
+
+          // =================================================
+          // RE-CHECK MASTER BARANG OUTLET
+          //
+          // Dilakukan lagi di dalam transaction untuk
+          // mencegah mapping Master Barang berubah antara
+          // validasi awal dan proses create opname.
+          // =================================================
+
+          const currentBarangIds =
+            currentStocks.map(
+              (stock) =>
+                Number(stock.barangId)
+            );
+
+          const currentMasterBarang =
+            await tx.outletBarang.findMany({
+              where: {
+                outletId,
+
+                aktif: true,
+
+                barangId: {
+                  in: currentBarangIds,
+                },
+              },
+
+              select: {
+                barangId: true,
+              },
+            });
+
+          const currentMasterBarangIdSet =
+            new Set(
+              currentMasterBarang.map(
+                (item) =>
+                  Number(item.barangId)
+              )
+            );
+
+          const invalidCurrentStock =
+            currentStocks.find(
+              (stock) =>
+                !currentMasterBarangIdSet.has(
+                  Number(stock.barangId)
+                )
+            );
+
+          if (invalidCurrentStock) {
+            throw new Error(
+              "Ada barang yang sudah tidak terdaftar sebagai Master Barang Outlet aktif"
             );
           }
 
@@ -1126,9 +1379,6 @@ export async function POST(req: NextRequest) {
                         // =================================================
                         // UNIT & CONVERSION
                         // =================================================
-                        // Disertakan juga pada hasil POST agar
-                        // response stock opname lengkap.
-                        // =================================================
 
                         unit: true,
                         baseUnit: true,
@@ -1173,6 +1423,8 @@ export async function POST(req: NextRequest) {
           stockChanged: false,
 
           snapshotOnly: true,
+
+          masterBarangOutletOnly: true,
         },
       },
       {
@@ -1215,6 +1467,20 @@ export async function POST(req: NextRequest) {
 //   boleh diedit sebelum approval.
 // - outletStock.stock TIDAK diubah.
 // - systemQty tetap memakai snapshot saat opname dibuat.
+//
+// CATATAN:
+// PUT TIDAK memeriksa ulang Master Barang Outlet.
+//
+// Alasannya:
+// Opname adalah snapshot historis.
+//
+// Contoh:
+// Hari ini barang A masuk Master Barang Outlet.
+// Besok opname dibuat.
+// Lusa barang A dihapus dari Master Barang Outlet.
+//
+// Opname yang dibuat sebelumnya tetap harus bisa diedit
+// selama statusnya masih COUNTING.
 // =====================================================
 
 export async function PUT(req: NextRequest) {
@@ -1278,7 +1544,8 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Tidak ada perubahan qty fisik yang dikirim",
+          message:
+            "Tidak ada perubahan qty fisik yang dikirim",
         },
         {
           status: 400,
@@ -1378,7 +1645,10 @@ export async function PUT(req: NextRequest) {
     // OPNAME HANYA BOLEH DIUBAH SAAT COUNTING
     // =================================================
 
-    if (String(opname.status).toUpperCase() !== "COUNTING") {
+    if (
+      String(opname.status).toUpperCase() !==
+      "COUNTING"
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -1391,7 +1661,10 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    if (String(opname.type).toUpperCase() !== "MONTHLY") {
+    if (
+      String(opname.type).toUpperCase() !==
+      "MONTHLY"
+    ) {
       return NextResponse.json(
         {
           success: false,

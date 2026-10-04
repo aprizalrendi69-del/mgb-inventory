@@ -2,19 +2,95 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 
-/*
- * =========================================================
- * CURRENT USER
- * =========================================================
+/**
+ * ============================================================
+ * /api/inventory
+ * ============================================================
+ *
+ * LAPORAN STOCK PUSAT / CENTRAL
+ *
+ * KONTRAK PERHITUNGAN:
+ *
+ * 1. Default periode = bulan berjalan.
+ *
+ * 2. Stock Awal bulan:
+ *    = physicalQty dari StockOpname APPROVED
+ *      bulan kalender sebelumnya.
+ *
+ *    BUKAN:
+ *    - Barang.stock
+ *    - Inventory.stock
+ *    - systemQty opname
+ *
+ * 3. Barang Masuk:
+ *    = StockCard.qtyIn pada bulan yang dipilih
+ *      dan warehouse MAIN.
+ *
+ * 4. Barang Keluar:
+ *    = StockCard.qtyOut pada bulan yang dipilih
+ *      dan warehouse MAIN.
+ *
+ * 5. Ending bulan:
+ *
+ *    BULAN BERJALAN:
+ *      = Inventory.stock live.
+ *
+ *    BULAN LAMPAU:
+ *      = Stock Awal + Masuk - Keluar
+ *
+ * 6. Stock Opname pada bulan yang sedang dilihat
+ *    TIDAK dipakai sebagai ending stock bulan tersebut.
+ *
+ *    Contoh:
+ *
+ *    September:
+ *      opening = opname APPROVED Agustus
+ *      masuk   = StockCard September
+ *      keluar  = StockCard September
+ *      ending  = opening + masuk - keluar
+ *
+ *    Oktober:
+ *      opening = opname APPROVED September
+ *      masuk   = StockCard Oktober
+ *      keluar  = StockCard Oktober
+ *      ending  = Inventory.stock live
+ *
+ * 7. Tidak ada mutation database.
+ * 8. Tidak ada reset database.
+ * 9. Tidak ada delete/update data.
+ * 10. Hanya CENTRAL + active Barang.
+ *
+ * ============================================================
  */
 
-async function getCurrentUser() {
+type CurrentUser = {
+  id: number;
+  username: string;
+  fullname: string;
+  role: string;
+  outletId?: number | null;
+};
+
+const ALLOWED_ROLES = new Set([
+  "ADMIN",
+  "MANAGER",
+  "PURCHASING",
+  "GUDANG",
+]);
+
+const EPSILON = 0.0000001;
+
+/**
+ * ============================================================
+ * CURRENT USER
+ * ============================================================
+ */
+async function getCurrentUser(): Promise<CurrentUser | null> {
   try {
     const cookieStore = await cookies();
-
     const session = cookieStore.get("erp-session");
 
-    if (!session) {
+    if (!session?.value) {
       return null;
     }
 
@@ -26,594 +102,402 @@ async function getCurrentUser() {
       return null;
     }
 
-    if (!sessionData?.id) {
+    if (!sessionData) {
+      return null;
+    }
+
+    const userId = Number(
+      sessionData.userId ??
+        sessionData.id ??
+        sessionData.user?.id ??
+        0,
+    );
+
+    if (!Number.isFinite(userId) || userId <= 0) {
       return null;
     }
 
     const user = await prisma.user.findUnique({
       where: {
-        id: Number(sessionData.id),
+        id: userId,
       },
-      include: {
-        outlet: true,
+      select: {
+        id: true,
+        username: true,
+        fullname: true,
+        role: true,
+        outletId: true,
+        active: true,
       },
     });
 
-    return user;
-  } catch (error) {
-    console.error("GET CURRENT USER ERROR:", error);
+    if (!user || !user.active) {
+      return null;
+    }
 
+    return user;
+  } catch {
     return null;
   }
 }
 
-/*
- * =========================================================
- * GET INVENTORY
+/**
+ * ============================================================
+ * DATE HELPERS
+ * ============================================================
  *
- * ATURAN UTAMA:
+ * Kita sengaja menggunakan local calendar date untuk laporan
+ * karena bisnis berada pada timezone Asia/Jakarta.
  *
- * 1. Inventory pusat hanya menampilkan Barang CENTRAL.
- * 2. Barang CENTRAL yang belum memiliki transaksi tidak
- *    ditampilkan.
- * 3. Transaksi yang tersedia secara eksplisit pada schema
- *    file ini adalah purchaseItems.
- * 4. Tidak membuat endpoint baru.
- * 5. Source OUTLET tetap dipertahankan untuk kompatibilitas
- *    API, tetapi halaman Inventory Pusat dapat menggunakan
- *    source=CENTRAL.
+ * Query DateTime Prisma kemudian memakai batas:
  *
- * CENTRAL
- * -> Barang
- * -> Inventory
- * -> PurchaseItem sebagai indikator transaksi
+ * >= start
+ * < end
  *
- * OUTLET
- * -> OutletStock
- *
- * PENTING:
- *
- * Barang.stock TIDAK PERNAH digunakan sebagai
- * stock outlet.
- * =========================================================
+ * sehingga tidak bergantung pada jam 23:59:59.999.
+ * ============================================================
  */
 
-export async function GET(req: NextRequest) {
+function getJakartaParts(date: Date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  const parts = formatter.formatToParts(date);
+
+  const year = Number(
+    parts.find((part) => part.type === "year")?.value ?? 0,
+  );
+
+  const month = Number(
+    parts.find((part) => part.type === "month")?.value ?? 0,
+  );
+
+  const day = Number(
+    parts.find((part) => part.type === "day")?.value ?? 0,
+  );
+
+  return {
+    year,
+    month,
+    day,
+  };
+}
+
+/**
+ * Membuat Date UTC yang mewakili awal hari Jakarta.
+ *
+ * Contoh:
+ * 2026-10-01 00:00 Jakarta
+ * menjadi 2026-09-30T17:00:00.000Z
+ */
+function jakartaDate(
+  year: number,
+  month: number,
+  day: number,
+): Date {
+  return new Date(
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+      -7,
+      0,
+      0,
+      0,
+    ),
+  );
+}
+
+function getMonthRange(
+  year: number,
+  month: number,
+) {
+  const start = jakartaDate(year, month, 1);
+
+  let nextYear = year;
+  let nextMonth = month + 1;
+
+  if (nextMonth > 12) {
+    nextMonth = 1;
+    nextYear += 1;
+  }
+
+  const end = jakartaDate(nextYear, nextMonth, 1);
+
+  return {
+    start,
+    end,
+  };
+}
+
+function getPreviousMonth(
+  year: number,
+  month: number,
+) {
+  if (month === 1) {
+    return {
+      year: year - 1,
+      month: 12,
+    };
+  }
+
+  return {
+    year,
+    month: month - 1,
+  };
+}
+
+function getMonthLabel(
+  year: number,
+  month: number,
+) {
+  return new Intl.DateTimeFormat("id-ID", {
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Jakarta",
+  }).format(
+    jakartaDate(year, month, 1),
+  );
+}
+
+function roundNumber(
+  value: number,
+  digits = 4,
+) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  const factor = Math.pow(10, digits);
+
+  return Math.round(
+    (value + Number.EPSILON) * factor,
+  ) / factor;
+}
+
+/**
+ * ============================================================
+ * STOCK STATUS
+ * ============================================================
+ */
+function getStockStatus(
+  stock: number,
+  minimumStock: number,
+) {
+  if (stock <= EPSILON) {
+    return {
+      code: "HABIS",
+      label: "HABIS",
+    };
+  }
+
+  if (
+    minimumStock > 0 &&
+    stock <= minimumStock
+  ) {
+    return {
+      code: "MENIPIS",
+      label: "MENIPIS",
+    };
+  }
+
+  return {
+    code: "AMAN",
+    label: "AMAN",
+  };
+}
+
+/**
+ * ============================================================
+ * COST HELPERS
+ * ============================================================
+ *
+ * Cost utama:
+ *   Inventory.averageCost
+ *
+ * Bila tidak tersedia / 0:
+ *   MasterHarga.average informasi tidak tersedia,
+ *   sehingga fallback ke:
+ *      Barang.purchasePrice
+ *
+ * MasterHarga bukan snapshot stok, jadi tidak dipakai
+ * untuk menghitung quantity.
+ * ============================================================
+ */
+
+function safeCost(
+  averageCost: number,
+  purchasePrice: number,
+) {
+  if (
+    Number.isFinite(averageCost) &&
+    averageCost > EPSILON
+  ) {
+    return averageCost;
+  }
+
+  if (
+    Number.isFinite(purchasePrice) &&
+    purchasePrice > EPSILON
+  ) {
+    return purchasePrice;
+  }
+
+  return 0;
+}
+
+/**
+ * ============================================================
+ * MAIN GET
+ * ============================================================
+ */
+export async function GET(
+  request: NextRequest,
+) {
   try {
-    const { searchParams } = new URL(req.url);
-
-    /*
-     * =====================================================
-     * PARAMETER
-     * =====================================================
+    /**
+     * --------------------------------------------------------
+     * AUTH
+     * --------------------------------------------------------
      */
-
-    const search =
-      searchParams.get("search")?.trim() || "";
-
-    const category =
-      searchParams.get("category")?.trim() || "";
-
-    const source = (
-      searchParams.get("source") || "CENTRAL"
-    ).toUpperCase();
-
-    const queryOutletId = Number(
-      searchParams.get("outletId") || 0
-    );
-
-    /*
-     * =====================================================
-     * VALIDASI SOURCE
-     * =====================================================
-     */
-
-    if (
-      source !== "CENTRAL" &&
-      source !== "OUTLET"
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Source inventory tidak valid",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /*
-     * =====================================================
-     * CURRENT USER
-     * =====================================================
-     */
-
     const user = await getCurrentUser();
 
-    /*
-     * =====================================================
-     * TENTUKAN OUTLET
-     *
-     * OUTLET_ADMIN
-     * -> selalu outlet miliknya
-     *
-     * ADMIN / MANAGER / GUDANG / PURCHASING
-     * -> bisa memilih outlet
-     * =====================================================
-     */
-
-    let outletId: number | null = null;
-
-    if (user?.role === "OUTLET_ADMIN") {
-      outletId = user.outletId ?? null;
-    } else if (queryOutletId > 0) {
-      outletId = queryOutletId;
-    }
-
-    /*
-     * =====================================================
-     * VALIDASI OUTLET UNTUK SOURCE OUTLET
-     * =====================================================
-     */
-
-    if (
-      source === "OUTLET" &&
-      user?.role === "OUTLET_ADMIN" &&
-      !outletId
-    ) {
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "User outlet belum memiliki outlet",
+          message: "Unauthorized",
         },
         {
-          status: 400,
-        }
+          status: 401,
+        },
       );
     }
 
-    /*
-     * =====================================================
-     * SOURCE CENTRAL
-     *
-     * HANYA AMBIL:
-     *
-     * - Barang source CENTRAL
-     * - Barang yang memiliki transaksi
-     *
-     * TRANSAKSI:
-     * purchaseItems
-     *
-     * Dengan `some: {}`, barang tanpa satupun
-     * PurchaseItem tidak akan ikut masuk.
-     * =====================================================
-     */
-
-    if (source === "CENTRAL") {
-      const barangWhere: any = {
-        /*
-         * HANYA BARANG PUSAT
-         */
-        source: "CENTRAL",
-
-        /*
-         * =================================================
-         * WAJIB MEMILIKI TRANSAKSI
-         *
-         * Barang master yang belum pernah digunakan
-         * dalam Purchase/PO tidak ditampilkan.
-         * =================================================
-         */
-        purchaseItems: {
-          some: {},
+    if (!ALLOWED_ROLES.has(user.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Anda tidak memiliki akses ke laporan inventory pusat.",
         },
-      };
-
-      /*
-       * ===================================================
-       * SEARCH
-       * ===================================================
-       */
-
-      if (search) {
-        barangWhere.OR = [
-          {
-            code: {
-              contains: search,
-            },
-          },
-          {
-            name: {
-              contains: search,
-            },
-          },
-          {
-            barcode: {
-              contains: search,
-            },
-          },
-        ];
-      }
-
-      /*
-       * ===================================================
-       * CATEGORY
-       * ===================================================
-       */
-
-      if (category) {
-        barangWhere.category = category;
-      }
-
-      /*
-       * ===================================================
-       * GET BARANG CENTRAL
-       *
-       * HANYA BARANG DENGAN TRANSAKSI
-       * ===================================================
-       */
-
-      const barang =
-        await prisma.barang.findMany({
-          where: barangWhere,
-
-          include: {
-            inventory: true,
-
-            priceSummary: true,
-
-            /*
-             * Ambil transaksi Purchase terakhir
-             * untuk informasi supplier dan transaksi.
-             */
-            purchaseItems: {
-              orderBy: {
-                purchase: {
-                  purchaseDate: "desc",
-                },
-              },
-
-              take: 1,
-
-              include: {
-                purchase: {
-                  include: {
-                    supplier: true,
-                  },
-                },
-              },
-            },
-          },
-
-          orderBy: {
-            name: "asc",
-          },
-        });
-
-      /*
-       * ===================================================
-       * FORMAT CENTRAL
-       * ===================================================
-       */
-
-      const data = barang.map((item) => {
-        const inventory = item.inventory;
-
-        const stock = Number(
-          inventory?.stock ??
-            item.stock ??
-            0
-        );
-
-        const availableStock = Number(
-          inventory?.availableStock ??
-            stock
-        );
-
-        const reservedStock = Number(
-          inventory?.reservedStock ?? 0
-        );
-
-        const minimumStock = Number(
-          inventory?.minimumStock ??
-            item.minimumStock ??
-            0
-        );
-
-        const maximumStock = Number(
-          inventory?.maximumStock ?? 0
-        );
-
-        const averageCost = Number(
-          inventory?.averageCost ??
-            item.priceSummary
-              ?.averagePrice ??
-            item.purchasePrice ??
-            0
-        );
-
-        const lastPurchase = Number(
-          inventory?.lastPurchase ??
-            item.purchasePrice ??
-            0
-        );
-
-        /*
-         * =================================================
-         * STOCK STATUS
-         * =================================================
-         */
-
-        let stockStatus = "AMAN";
-
-        if (stock <= 0) {
-          stockStatus = "HABIS";
-        } else if (stock <= minimumStock) {
-          stockStatus = "MENIPIS";
-        }
-
-        /*
-         * =================================================
-         * TRANSAKSI TERAKHIR
-         * =================================================
-         */
-
-        const lastPurchaseItem =
-          item.purchaseItems?.[0] ?? null;
-
-        const lastPurchaseTransaction =
-          lastPurchaseItem?.purchase ?? null;
-
-        /*
-         * =================================================
-         * SUPPLIER TERAKHIR
-         * =================================================
-         */
-
-        const supplier =
-          lastPurchaseTransaction?.supplier ?? null;
-
-        /*
-         * =================================================
-         * RETURN CENTRAL
-         * =================================================
-         */
-
-        return {
-          id: item.id,
-
-          code: item.code,
-
-          barcode: item.barcode,
-
-          name: item.name,
-
-          category: item.category,
-
-          brand: item.brand,
-
-          unit: item.unit,
-
-          /*
-           * =================================================
-           * SOURCE
-           * =================================================
-           */
-
-          source: "CENTRAL",
-
-          /*
-           * =================================================
-           * STOCK
-           * =================================================
-           */
-
-          stock,
-
-          centralStock: stock,
-
-          availableStock,
-
-          reservedStock,
-
-          /*
-           * =================================================
-           * MIN / MAX
-           * =================================================
-           */
-
-          minimumStock,
-
-          maximumStock,
-
-          /*
-           * =================================================
-           * COST
-           * =================================================
-           */
-
-          averageCost,
-
-          lastPurchase,
-
-          purchasePrice:
-            item.purchasePrice,
-
-          sellingPrice:
-            item.sellingPrice,
-
-          /*
-           * =================================================
-           * WAREHOUSE
-           * =================================================
-           */
-
-          warehouse:
-            inventory?.warehouse ??
-            "MAIN",
-
-          /*
-           * =================================================
-           * STATUS
-           * =================================================
-           */
-
-          stockStatus,
-
-          /*
-           * =================================================
-           * ACTIVE
-           * =================================================
-           */
-
-          active: item.active,
-
-          /*
-           * =================================================
-           * SUPPLIER
-           * =================================================
-           */
-
-          supplier: supplier
-            ? {
-                id: supplier.id,
-                code: supplier.code,
-                name: supplier.name,
-              }
-            : null,
-
-          /*
-           * =================================================
-           * TRANSACTION
-           *
-           * Informasi ini berasal dari purchaseItems
-           * yang memang sudah ada pada query.
-           * =================================================
-           */
-
-          transaction: lastPurchaseTransaction
-            ? {
-                id: lastPurchaseTransaction.id,
-                purchaseDate:
-                  lastPurchaseTransaction.purchaseDate,
-              }
-            : null,
-
-          /*
-           * =================================================
-           * TRANSACTION FLAG
-           * =================================================
-           *
-           * Berguna untuk frontend jika ingin memastikan
-           * item memang memiliki transaksi.
-           */
-
-          hasTransaction:
-            item.purchaseItems.length > 0,
-
-          /*
-           * =================================================
-           * OUTLET
-           *
-           * CENTRAL tidak mempunyai OutletStock.
-           * =================================================
-           */
-
-          outlet: null,
-
-          outletId: null,
-
-          /*
-           * =================================================
-           * TIMESTAMP
-           * =================================================
-           */
-
-          createdAt:
-            item.createdAt,
-
-          updatedAt:
-            inventory?.updatedAt ??
-            item.updatedAt,
-        };
-      });
-
-      /*
-       * ===================================================
-       * RESPONSE CENTRAL
-       * ===================================================
-       */
-
-      return NextResponse.json({
-        success: true,
-
-        source: "CENTRAL",
-
-        outletId: null,
-
-        /*
-         * Total sekarang hanya menghitung
-         * barang pusat yang mempunyai transaksi.
-         */
-
-        total: data.length,
-
-        data,
-      });
+        {
+          status: 403,
+        },
+      );
     }
 
-    /*
-     * =====================================================
-     * SOURCE OUTLET
+    /**
+     * --------------------------------------------------------
+     * QUERY PARAMS
      *
-     * BAGIAN INI DIPERTAHANKAN
-     * =====================================================
-     */
-
-    const outletStockWhere: any = {};
-
-    /*
-     * OUTLET ADMIN
+     * month:
+     *   1 - 12
      *
-     * WAJIB outlet sendiri.
+     * year:
+     *   YYYY
+     *
+     * search:
+     *   nama / kode / barcode
+     *
+     * category:
+     *   category Barang
+     * --------------------------------------------------------
      */
+    const searchParams = request.nextUrl.searchParams;
 
-    if (user?.role === "OUTLET_ADMIN") {
-      outletStockWhere.outletId =
-        user.outletId;
+    const nowParts = getJakartaParts();
+
+    const requestedYear = Number(
+      searchParams.get("year") ?? nowParts.year,
+    );
+
+    const requestedMonth = Number(
+      searchParams.get("month") ?? nowParts.month,
+    );
+
+    const year =
+      Number.isFinite(requestedYear) &&
+      requestedYear >= 2000 &&
+      requestedYear <= 2100
+        ? requestedYear
+        : nowParts.year;
+
+    const month =
+      Number.isFinite(requestedMonth) &&
+      requestedMonth >= 1 &&
+      requestedMonth <= 12
+        ? requestedMonth
+        : nowParts.month;
+
+    const search =
+      (
+        searchParams.get("search") ??
+        ""
+      ).trim();
+
+    const category =
+      (
+        searchParams.get("category") ??
+        ""
+      ).trim();
+
+    /**
+     * --------------------------------------------------------
+     * PERIOD
+     * --------------------------------------------------------
+     */
+    const currentMonth =
+      year === nowParts.year &&
+      month === nowParts.month;
+
+    const monthRange =
+      getMonthRange(
+        year,
+        month,
+      );
+
+    const previous =
+      getPreviousMonth(
+        year,
+        month,
+      );
+
+    const previousMonthRange =
+      getMonthRange(
+        previous.year,
+        previous.month,
+      );
+
+    /**
+     * --------------------------------------------------------
+     * 1. BARANG CENTRAL
+     *
+     * Jangan mengambil Barang OUTLET.
+     * Jangan mengambil inactive.
+     * --------------------------------------------------------
+     */
+    const barangWhere: any = {
+      source: "CENTRAL",
+      active: true,
+    };
+
+    if (category) {
+      barangWhere.category = category;
     }
-
-    /*
-     * ADMIN / MANAGER / GUDANG / PURCHASING
-     *
-     * Jika outlet dipilih,
-     * filter outlet tersebut.
-     */
-
-    else if (outletId) {
-      outletStockWhere.outletId =
-        outletId;
-    }
-
-    /*
-     * ===================================================
-     * BARANG FILTER
-     * ===================================================
-     */
-
-    const barangWhere: any = {};
 
     if (search) {
       barangWhere.OR = [
         {
-          code: {
+          name: {
             contains: search,
           },
         },
         {
-          name: {
+          code: {
             contains: search,
           },
         },
@@ -625,293 +509,965 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    if (category) {
-      barangWhere.category = category;
-    }
-
-    /*
-     * ===================================================
-     * GET OUTLET STOCK
-     * ===================================================
-     */
-
-    const outletStocks =
-      await prisma.outletStock.findMany({
-        where: {
-          ...outletStockWhere,
-
-          barang: barangWhere,
-        },
-
-        include: {
-          outlet: true,
-
-          barang: {
-            include: {
-              priceSummary: true,
-
-              outletBarang: true,
-            },
+    const barangs =
+      await prisma.barang.findMany({
+        where: barangWhere,
+        orderBy: [
+          {
+            category: "asc",
           },
-        },
-
-        orderBy: {
-          barang: {
+          {
             name: "asc",
+          },
+        ],
+        select: {
+          id: true,
+          code: true,
+          barcode: true,
+          name: true,
+          category: true,
+          brand: true,
+          unit: true,
+          baseUnit: true,
+          conversionRate: true,
+          minimumStock: true,
+          stock: true,
+          purchasePrice: true,
+          active: true,
+
+          inventory: {
+            select: {
+              stock: true,
+              reservedStock: true,
+              availableStock: true,
+              minimumStock: true,
+              maximumStock: true,
+              lastPurchase: true,
+              averageCost: true,
+              updatedAt: true,
+            },
           },
         },
       });
 
-    /*
-     * ===================================================
-     * FORMAT OUTLET
-     * ===================================================
+    /**
+     * --------------------------------------------------------
+     * 2. STOCK OPNAME APPROVED BULAN SEBELUMNYA
+     *
+     * PENTING:
+     *
+     * Kita hanya mengambil:
+     *
+     *   outletId = null
+     *   status = APPROVED
+     *   date >= awal bulan sebelumnya
+     *   date <  awal bulan berjalan
+     *
+     * Karena laporan ini khusus CENTRAL.
+     *
+     * Jika ada beberapa opname APPROVED dalam bulan tersebut,
+     * kita menggunakan opname TERAKHIR berdasarkan date.
+     *
+     * BUKAN systemQty.
+     * Yang menjadi opening adalah physicalQty.
+     * --------------------------------------------------------
+     */
+    const previousApprovedOpname =
+      await prisma.stockOpname.findFirst({
+        where: {
+          outletId: null,
+          status: "APPROVED",
+          date: {
+            gte: previousMonthRange.start,
+            lt: monthRange.start,
+          },
+        },
+        orderBy: [
+          {
+            date: "desc",
+          },
+          {
+            id: "desc",
+          },
+        ],
+        select: {
+          id: true,
+          code: true,
+          date: true,
+          status: true,
+          type: true,
+          items: {
+            select: {
+              barangId: true,
+              physicalQty: true,
+            },
+          },
+        },
+      });
+
+    /**
+     * Map:
+     * barangId -> physicalQty
+     */
+    const openingByBarang =
+      new Map<number, number>();
+
+    if (previousApprovedOpname) {
+      for (
+        const item of previousApprovedOpname.items
+      ) {
+        openingByBarang.set(
+          item.barangId,
+          Number(item.physicalQty) || 0,
+        );
+      }
+    }
+
+    /**
+     * --------------------------------------------------------
+     * 3. STOCK CARD BULAN TERPILIH
+     *
+     * Hanya warehouse MAIN.
+     *
+     * StockCard adalah ledger movement pusat:
+     *
+     *   qtyIn  = barang masuk
+     *   qtyOut = barang keluar
+     *
+     * Kita TIDAK menggunakan balance StockCard sebagai
+     * stock awal/ending karena kontrak laporan ini memakai
+     * Stock Opname sebagai snapshot opening.
+     * --------------------------------------------------------
+     */
+    const stockCards =
+      await prisma.stockCard.findMany({
+        where: {
+          warehouse: "MAIN",
+          trxDate: {
+            gte: monthRange.start,
+            lt: monthRange.end,
+          },
+        },
+        select: {
+          id: true,
+          barangId: true,
+          trxDate: true,
+          trxType: true,
+          trxNumber: true,
+          referenceId: true,
+          qtyIn: true,
+          qtyOut: true,
+          balance: true,
+          unitPrice: true,
+          totalValue: true,
+          note: true,
+        },
+        orderBy: [
+          {
+            trxDate: "asc",
+          },
+          {
+            id: "asc",
+          },
+        ],
+      });
+
+    /**
+     * --------------------------------------------------------
+     * 4. AGGREGASI MUTASI BULAN
+     * --------------------------------------------------------
+     */
+    const movementByBarang =
+      new Map<
+        number,
+        {
+          qtyIn: number;
+          qtyOut: number;
+          valueIn: number;
+          valueOut: number;
+          transactionCount: number;
+          firstDate: Date | null;
+          lastDate: Date | null;
+        }
+      >();
+
+    for (
+      const card of stockCards
+    ) {
+      const barangId =
+        Number(card.barangId);
+
+      if (!movementByBarang.has(barangId)) {
+        movementByBarang.set(
+          barangId,
+          {
+            qtyIn: 0,
+            qtyOut: 0,
+            valueIn: 0,
+            valueOut: 0,
+            transactionCount: 0,
+            firstDate: null,
+            lastDate: null,
+          },
+        );
+      }
+
+      const aggregate =
+        movementByBarang.get(
+          barangId,
+        )!;
+
+      const qtyIn =
+        Number(card.qtyIn) || 0;
+
+      const qtyOut =
+        Number(card.qtyOut) || 0;
+
+      const totalValue =
+        Number(card.totalValue) || 0;
+
+      aggregate.qtyIn += qtyIn;
+      aggregate.qtyOut += qtyOut;
+
+      /**
+       * Untuk cost movement:
+       *
+       * qtyIn  -> totalValue positif
+       * qtyOut -> totalValue sebagai nilai keluar
+       *
+       * Karena StockCard tidak memiliki dua field value,
+       * kita menggunakan totalValue dan unitPrice.
+       */
+      if (qtyIn > EPSILON) {
+        aggregate.valueIn +=
+          Math.abs(totalValue);
+      }
+
+      if (qtyOut > EPSILON) {
+        const qtyForValue =
+          qtyOut > EPSILON
+            ? qtyOut
+            : 0;
+
+        const unitPrice =
+          Number(card.unitPrice) || 0;
+
+        aggregate.valueOut +=
+          unitPrice > EPSILON
+            ? Math.abs(
+                unitPrice * qtyForValue,
+              )
+            : 0;
+      }
+
+      aggregate.transactionCount += 1;
+
+      if (
+        !aggregate.firstDate ||
+        card.trxDate <
+          aggregate.firstDate
+      ) {
+        aggregate.firstDate =
+          card.trxDate;
+      }
+
+      if (
+        !aggregate.lastDate ||
+        card.trxDate >
+          aggregate.lastDate
+      ) {
+        aggregate.lastDate =
+          card.trxDate;
+      }
+    }
+
+    /**
+     * --------------------------------------------------------
+     * 5. CURRENT LIVE INVENTORY
+     *
+     * Hanya diperlukan untuk ending bulan berjalan.
+     *
+     * Ini sengaja TIDAK digunakan untuk opening.
+     * --------------------------------------------------------
      */
 
-    const data = outletStocks.map(
-      (outletStock) => {
-        const barang =
-          outletStock.barang;
+    /**
+     * --------------------------------------------------------
+     * 6. HASIL
+     * --------------------------------------------------------
+     */
+    const rows = barangs.map(
+      (barang) => {
+        const movement =
+          movementByBarang.get(
+            barang.id,
+          );
 
-        const stock = Number(
-          outletStock.stock ?? 0
-        );
+        const qtyIn =
+          movement?.qtyIn ?? 0;
 
-        const minimumStock = Number(
-          outletStock.minimumStock ?? 0
-        );
+        const qtyOut =
+          movement?.qtyOut ?? 0;
 
-        const averageCost = Number(
-          outletStock.averageCost ??
-            barang.priceSummary
-              ?.averagePrice ??
-            barang.purchasePrice ??
-            0
-        );
-
-        /*
-         * =================================================
-         * STOCK STATUS
-         * =================================================
+        /**
+         * ----------------------------------------------------
+         * STOCK AWAL
+         *
+         * SELALU dari opname APPROVED bulan sebelumnya.
+         *
+         * Jika item tidak ada dalam opname sebelumnya:
+         * opening = 0
+         *
+         * Tidak pernah:
+         *   Barang.stock
+         *   Inventory.stock
+         * ----------------------------------------------------
          */
+        const stockAwal =
+          openingByBarang.get(
+            barang.id,
+          ) ?? 0;
 
-        let stockStatus = "AMAN";
-
-        if (stock <= 0) {
-          stockStatus = "HABIS";
-        } else if (stock <= minimumStock) {
-          stockStatus = "MENIPIS";
-        }
-
-        /*
-         * =================================================
-         * OUTLET BARANG
-         * =================================================
+        /**
+         * ----------------------------------------------------
+         * ENDING CALCULATION
+         * ----------------------------------------------------
          */
+        const calculatedEnding =
+          stockAwal +
+          qtyIn -
+          qtyOut;
 
-        const outletBarang =
-          barang.outletBarang.find(
-            (item) =>
-              item.outletId ===
-              outletStock.outletId
-          ) ?? null;
-
-        /*
-         * =================================================
-         * RETURN
-         * =================================================
+        /**
+         * Untuk bulan berjalan:
+         *
+         * ending = live Inventory.stock
+         *
+         * Inventory.stock hanya dipakai di sini.
          */
+        const liveInventoryStock =
+          Number(
+            barang.inventory?.stock ??
+              barang.stock ??
+              0,
+          );
+
+        const endingStock =
+          currentMonth
+            ? liveInventoryStock
+            : calculatedEnding;
+
+        /**
+         * ----------------------------------------------------
+         * COST
+         * ----------------------------------------------------
+         */
+        const averageCost =
+          safeCost(
+            Number(
+              barang.inventory
+                ?.averageCost ?? 0,
+            ),
+            Number(
+              barang.purchasePrice ?? 0,
+            ),
+          );
+
+        const openingValue =
+          stockAwal *
+          averageCost;
+
+        const endingValue =
+          endingStock *
+          averageCost;
+
+        /**
+         * Cost barang masuk:
+         *
+         * Prioritas dari StockCard valueIn.
+         * Jika tidak tersedia, gunakan average cost.
+         */
+        const calculatedInValue =
+          movement?.valueIn ?? 0;
+
+        const masukCost =
+          calculatedInValue > EPSILON
+            ? calculatedInValue
+            : qtyIn * averageCost;
+
+        /**
+         * Cost barang keluar:
+         *
+         * Prioritas StockCard unitPrice.
+         * Jika tidak tersedia, gunakan average cost.
+         */
+        const calculatedOutValue =
+          movement?.valueOut ?? 0;
+
+        const keluarCost =
+          calculatedOutValue > EPSILON
+            ? calculatedOutValue
+            : qtyOut * averageCost;
+
+        /**
+         * ----------------------------------------------------
+         * COST PERIOD
+         *
+         * Cost bersih berdasarkan movement:
+         *
+         * masuk cost - keluar cost
+         *
+         * Ini bukan HPP penjualan.
+         * Ini adalah nilai mutasi inventory.
+         * ----------------------------------------------------
+         */
+        const netCost =
+          masukCost -
+          keluarCost;
+
+        /**
+         * ----------------------------------------------------
+         * STATUS
+         * ----------------------------------------------------
+         */
+        const minimumStock =
+          Number(
+            barang.inventory
+              ?.minimumStock ??
+              barang.minimumStock ??
+              0,
+          );
+
+        const status =
+          getStockStatus(
+            endingStock,
+            minimumStock,
+          );
+
+        /**
+         * ----------------------------------------------------
+         * PERCENTASE COST
+         *
+         * Persentase cost bulan ini dibanding opening value.
+         *
+         * Jika opening value 0:
+         *   0
+         *
+         * Agar tidak menghasilkan Infinity / NaN.
+         * ----------------------------------------------------
+         */
+        const costPercentage =
+          Math.abs(openingValue) >
+          EPSILON
+            ? (
+                (netCost /
+                  Math.abs(
+                    openingValue,
+                  )) *
+                100
+              )
+            : 0;
 
         return {
           id: barang.id,
 
           code: barang.code,
 
-          barcode: barang.barcode,
+          barcode:
+            barang.barcode ?? null,
 
           name: barang.name,
 
-          category: barang.category,
+          category:
+            barang.category ?? "-",
 
-          brand: barang.brand,
+          brand:
+            barang.brand ?? "-",
 
-          unit: barang.unit,
+          unit:
+            barang.baseUnit ??
+            barang.unit ??
+            "-",
 
-          /*
-           * SOURCE
+          purchaseUnit:
+            barang.unit ?? "-",
+
+          baseUnit:
+            barang.baseUnit ??
+            barang.unit ??
+            "-",
+
+          conversionRate:
+            Number(
+              barang.conversionRate ?? 1,
+            ),
+
+          /**
+           * ----------------------------------------------
+           * STOCK
+           * ----------------------------------------------
            */
-
-          source: "OUTLET",
-
-          /*
-           * STOCK UTAMA
-           *
-           * PENTING:
-           * ini OutletStock.stock
-           */
-
-          stock,
-
-          /*
-           * STOCK PUSAT
-           *
-           * Tidak digunakan sebagai
-           * stock outlet.
-           */
-
-          centralStock: Number(
-            barang.stock ?? 0
+          stockAwal: roundNumber(
+            stockAwal,
           ),
 
-          /*
-           * OUTLET STOCK
+          barangMasuk: roundNumber(
+            qtyIn,
+          ),
+
+          barangKeluar: roundNumber(
+            qtyOut,
+          ),
+
+          endingStock: roundNumber(
+            endingStock,
+          ),
+
+          /**
+           * Nilai kalkulasi berdasarkan
+           * opening + movement.
+           *
+           * Untuk current month, ini tetap dikembalikan
+           * agar frontend dapat melihat rekonsiliasi.
            */
+          calculatedEndingStock:
+            roundNumber(
+              calculatedEnding,
+            ),
 
-          availableStock: stock,
-
-          reservedStock: 0,
-
-          /*
-           * MINIMUM STOCK
+          /**
+           * Selisih antara ending live dan
+           * hasil opening + movement.
+           *
+           * Ini berguna untuk menemukan data yang
+           * tidak masuk StockCard.
            */
+          stockDifference:
+            currentMonth
+              ? roundNumber(
+                  liveInventoryStock -
+                    calculatedEnding,
+                )
+              : 0,
 
-          minimumStock,
-
-          maximumStock: 0,
-
-          /*
+          /**
+           * ----------------------------------------------
            * COST
+           * ----------------------------------------------
            */
-
-          averageCost,
-
-          lastPurchase:
+          averageCost: roundNumber(
             averageCost,
+            2,
+          ),
 
-          purchasePrice:
-            barang.purchasePrice,
+          openingValue: roundNumber(
+            openingValue,
+            2,
+          ),
 
-          sellingPrice:
-            barang.sellingPrice,
+          masukCost: roundNumber(
+            masukCost,
+            2,
+          ),
 
-          /*
-           * WAREHOUSE
-           */
+          keluarCost: roundNumber(
+            keluarCost,
+            2,
+          ),
 
-          warehouse:
-            `OUTLET-${outletStock.outlet.code}`,
+          netCost: roundNumber(
+            netCost,
+            2,
+          ),
 
-          /*
-           * OUTLET
-           */
+          endingValue: roundNumber(
+            endingValue,
+            2,
+          ),
 
-          outlet: {
-            id: outletStock.outlet.id,
+          costPercentage:
+            roundNumber(
+              costPercentage,
+              2,
+            ),
 
-            code:
-              outletStock.outlet.code,
-
-            name:
-              outletStock.outlet.name,
-          },
-
-          outletId:
-            outletStock.outletId,
-
-          /*
-           * OUTLET BARANG
-           */
-
-          outletBarang:
-            outletBarang
-              ? {
-                  id:
-                    outletBarang.id,
-
-                  outletId:
-                    outletBarang.outletId,
-
-                  harga:
-                    outletBarang.harga,
-
-                  aktif:
-                    outletBarang.aktif,
-
-                  createdAt:
-                    outletBarang.createdAt,
-
-                  updatedAt:
-                    outletBarang.updatedAt,
-                }
-              : null,
-
-          /*
+          /**
+           * ----------------------------------------------
            * STATUS
+           * ----------------------------------------------
            */
+          minimumStock:
+            roundNumber(
+              minimumStock,
+            ),
 
-          stockStatus,
+          status: status.code,
 
-          /*
-           * ACTIVE
+          statusLabel:
+            status.label,
+
+          /**
+           * ----------------------------------------------
+           * LIVE INVENTORY INFO
+           * ----------------------------------------------
            */
+          liveStock:
+            roundNumber(
+              liveInventoryStock,
+            ),
 
-          active:
-            barang.active,
+          reservedStock:
+            roundNumber(
+              Number(
+                barang.inventory
+                  ?.reservedStock ?? 0,
+              ),
+            ),
 
-          /*
-           * TIMESTAMP
+          availableStock:
+            roundNumber(
+              Number(
+                barang.inventory
+                  ?.availableStock ??
+                  liveInventoryStock,
+              ),
+            ),
+
+          /**
+           * ----------------------------------------------
+           * MOVEMENT INFO
+           * ----------------------------------------------
            */
+          transactionCount:
+            movement?.transactionCount ??
+            0,
 
-          createdAt:
-            barang.createdAt,
+          firstTransactionDate:
+            movement?.firstDate ??
+            null,
 
-          updatedAt:
-            outletStock.updatedAt,
+          lastTransactionDate:
+            movement?.lastDate ??
+            null,
         };
-      }
+      },
     );
 
-    /*
-     * =====================================================
-     * RESPONSE OUTLET
-     * =====================================================
+    /**
+     * --------------------------------------------------------
+     * 7. MONTH SUMMARY
+     * --------------------------------------------------------
      */
+    const summary = rows.reduce(
+      (
+        accumulator,
+        row,
+      ) => {
+        accumulator.totalItems += 1;
 
+        accumulator.stockAwal +=
+          row.stockAwal;
+
+        accumulator.barangMasuk +=
+          row.barangMasuk;
+
+        accumulator.barangKeluar +=
+          row.barangKeluar;
+
+        accumulator.endingStock +=
+          row.endingStock;
+
+        accumulator.openingValue +=
+          row.openingValue;
+
+        accumulator.masukCost +=
+          row.masukCost;
+
+        accumulator.keluarCost +=
+          row.keluarCost;
+
+        accumulator.netCost +=
+          row.netCost;
+
+        accumulator.endingValue +=
+          row.endingValue;
+
+        if (
+          row.status === "HABIS"
+        ) {
+          accumulator.habis += 1;
+        }
+
+        if (
+          row.status === "MENIPIS"
+        ) {
+          accumulator.menipis += 1;
+        }
+
+        if (
+          row.status === "AMAN"
+        ) {
+          accumulator.aman += 1;
+        }
+
+        return accumulator;
+      },
+      {
+        totalItems: 0,
+
+        stockAwal: 0,
+        barangMasuk: 0,
+        barangKeluar: 0,
+        endingStock: 0,
+
+        openingValue: 0,
+        masukCost: 0,
+        keluarCost: 0,
+        netCost: 0,
+        endingValue: 0,
+
+        habis: 0,
+        menipis: 0,
+        aman: 0,
+      },
+    );
+
+    /**
+     * --------------------------------------------------------
+     * 8. SUMMARY COST PERCENTAGE
+     * --------------------------------------------------------
+     */
+    const summaryCostPercentage =
+      Math.abs(
+        summary.openingValue,
+      ) > EPSILON
+        ? (
+            (summary.netCost /
+              Math.abs(
+                summary.openingValue,
+              )) *
+            100
+          )
+        : 0;
+
+    /**
+     * --------------------------------------------------------
+     * 9. CATEGORY LIST
+     *
+     * Dipakai frontend untuk dropdown filter.
+     * --------------------------------------------------------
+     */
+    const categoryRows =
+      await prisma.barang.findMany({
+        where: {
+          source: "CENTRAL",
+          active: true,
+          category: {
+            not: null,
+          },
+        },
+        select: {
+          category: true,
+        },
+        distinct: [
+          "category",
+        ],
+        orderBy: {
+          category: "asc",
+        },
+      });
+
+    const categories =
+      categoryRows
+        .map(
+          (row) =>
+            row.category?.trim() ?? "",
+        )
+        .filter(Boolean);
+
+    /**
+     * --------------------------------------------------------
+     * 10. RESPONSE
+     * --------------------------------------------------------
+     */
     return NextResponse.json({
       success: true,
 
-      source: "OUTLET",
+      data: rows,
 
-      outletId,
+      rows,
 
-      total: data.length,
+      summary: {
+        ...summary,
 
-      data,
+        stockAwal:
+          roundNumber(
+            summary.stockAwal,
+          ),
+
+        barangMasuk:
+          roundNumber(
+            summary.barangMasuk,
+          ),
+
+        barangKeluar:
+          roundNumber(
+            summary.barangKeluar,
+          ),
+
+        endingStock:
+          roundNumber(
+            summary.endingStock,
+          ),
+
+        openingValue:
+          roundNumber(
+            summary.openingValue,
+            2,
+          ),
+
+        masukCost:
+          roundNumber(
+            summary.masukCost,
+            2,
+          ),
+
+        keluarCost:
+          roundNumber(
+            summary.keluarCost,
+            2,
+          ),
+
+        netCost:
+          roundNumber(
+            summary.netCost,
+            2,
+          ),
+
+        endingValue:
+          roundNumber(
+            summary.endingValue,
+            2,
+          ),
+
+        costPercentage:
+          roundNumber(
+            summaryCostPercentage,
+            2,
+          ),
+      },
+
+      period: {
+        year,
+        month,
+
+        label:
+          getMonthLabel(
+            year,
+            month,
+          ),
+
+        start:
+          monthRange.start,
+
+        end:
+          monthRange.end,
+
+        currentMonth,
+
+        isHistorical:
+          !currentMonth,
+      },
+
+      opening: {
+        source:
+          previousApprovedOpname
+            ? "STOCK_OPNAME_APPROVED"
+            : "NONE",
+
+        opnameId:
+          previousApprovedOpname
+            ?.id ?? null,
+
+        opnameCode:
+          previousApprovedOpname
+            ?.code ?? null,
+
+        opnameDate:
+          previousApprovedOpname
+            ?.date ?? null,
+
+        status:
+          previousApprovedOpname
+            ?.status ?? null,
+
+        sourceMonth:
+          getMonthLabel(
+            previous.year,
+            previous.month,
+          ),
+
+        itemCount:
+          previousApprovedOpname
+            ?.items.length ?? 0,
+      },
+
+      ending: {
+        source: currentMonth
+          ? "INVENTORY_LIVE"
+          : "OPENING_PLUS_MONTH_MOVEMENT",
+
+        formula: currentMonth
+          ? "Inventory.stock"
+          : "StockOpname.previousApproved.physicalQty + StockCard.qtyIn - StockCard.qtyOut",
+      },
+
+      movement: {
+        source: "StockCard",
+
+        warehouse: "MAIN",
+
+        transactionCount:
+          stockCards.length,
+
+        dateFrom:
+          monthRange.start,
+
+        dateTo:
+          monthRange.end,
+      },
+
+      filters: {
+        year,
+        month,
+        search,
+        category,
+      },
+
+      categories,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error(
-      "INVENTORY API ERROR:",
-      error
+      "[/api/inventory] GET ERROR:",
+      error,
     );
 
     return NextResponse.json(
       {
         success: false,
-
-        source: null,
-
-        outletId: null,
-
-        total: 0,
-
-        data: [],
-
         message:
-          "Gagal mengambil data inventory",
+          "Gagal mengambil data inventory pusat.",
+        error:
+          process.env.NODE_ENV === "development"
+            ? String(
+                error?.message ??
+                  error,
+              )
+            : undefined,
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }

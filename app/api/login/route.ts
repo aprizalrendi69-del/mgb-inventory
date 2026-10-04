@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
     const outletRoles = [
       "OUTLET_ADMIN",
       "KASIR",
-      "OUTLET_MANUFACTURE",
+      "STAFF_OUTLET",
     ];
 
     if (outletRoles.includes(user.role)) {

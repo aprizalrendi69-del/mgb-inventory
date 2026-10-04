@@ -13,7 +13,7 @@ import { cookies } from "next/headers";
  * -> bisa melihat semua outlet
  * -> bisa filter outletId
  *
- * OUTLET_ADMIN / ADMIN_OUTLET
+ * OUTLET_ADMIN / ADMIN_OUTLET / STAFF_OUTLET
  * -> hanya bisa melihat outlet miliknya
  * -> outletId dari URL TIDAK dipercaya
  * -> outletId selalu berasal dari user.outletId
@@ -22,7 +22,7 @@ import { cookies } from "next/headers";
  * SECURITY
  * =========================================================
  *
- * Authority outlet untuk outlet admin:
+ * Authority outlet untuk outlet user:
  *
  *     user.outletId
  *
@@ -210,6 +210,35 @@ function isOutletAdminRole(
   return (
     normalizedRole === "OUTLET_ADMIN" ||
     normalizedRole === "ADMIN_OUTLET"
+  );
+}
+
+/*
+ * =========================================================
+ * OUTLET USER ROLE
+ * =========================================================
+ *
+ * Role yang hanya boleh melihat outlet miliknya.
+ *
+ * Authority outlet tetap:
+ *
+ *     user.outletId
+ *
+ * Bukan:
+ *
+ *     query ?outletId=
+ */
+
+function isOutletScopedRole(
+  role: unknown
+): boolean {
+  const normalizedRole =
+    normalizeRole(role);
+
+  return (
+    normalizedRole === "OUTLET_ADMIN" ||
+    normalizedRole === "ADMIN_OUTLET" ||
+    normalizedRole === "STAFF_OUTLET"
   );
 }
 
@@ -511,6 +540,16 @@ export async function GET(
         user.role
       );
 
+    /*
+     * OUTLET_ADMIN / ADMIN_OUTLET / STAFF_OUTLET
+     * semuanya menggunakan outlet dari session/user.
+     */
+
+    const outletScopedRole =
+      isOutletScopedRole(
+        role
+      );
+
     const outletAdmin =
       isOutletAdminRole(
         role
@@ -526,6 +565,7 @@ export async function GET(
       "MANAGER",
       "OUTLET_ADMIN",
       "ADMIN_OUTLET",
+      "STAFF_OUTLET",
     ];
 
     if (
@@ -576,13 +616,15 @@ export async function GET(
 
     /*
      * =====================================================
-     * OUTLET ADMIN
+     * OUTLET-SCOPED ROLE
      * =====================================================
+     *
+     * OUTLET_ADMIN / ADMIN_OUTLET / STAFF_OUTLET
      *
      * outletId dari URL DIABAIKAN.
      */
 
-    if (outletAdmin) {
+    if (outletScopedRole) {
       outletLocked = true;
 
       /*
@@ -726,12 +768,12 @@ export async function GET(
       /*
        * ===================================================
        * SECURITY:
-       * OUTLET ADMIN TIDAK BOLEH PINDAH OUTLET
+       * OUTLET-SCOPED USER TIDAK BOLEH PINDAH OUTLET
        * ===================================================
        */
 
       if (
-        outletAdmin &&
+        outletScopedRole &&
         selectedOutlet.id !==
           user.outletId
       ) {
@@ -755,7 +797,7 @@ export async function GET(
        */
 
       if (
-        outletAdmin &&
+        outletScopedRole &&
         (
           !user.outlet ||
           user.outlet.id !==
@@ -782,7 +824,7 @@ export async function GET(
        */
 
       if (
-        outletAdmin &&
+        outletScopedRole &&
         user.outlet &&
         !user.outlet.active
       ) {
@@ -917,18 +959,6 @@ export async function GET(
      * =====================================================
      * 12. GET LAST RECEIPT PRICE
      * =====================================================
-     *
-     * Harga terakhir berasal dari:
-     *
-     * ReceiptItem.price
-     *
-     * Urutan:
-     *
-     * Receipt.receiptDate DESC
-     * ReceiptItem.id DESC
-     *
-     * Data receipt dikumpulkan satu kali kemudian
-     * dipetakan berdasarkan barangId.
      */
 
     const latestReceiptItems =
@@ -1001,11 +1031,6 @@ export async function GET(
     for (
       const item of latestReceiptItems
     ) {
-      /*
-       * Karena sudah DESC,
-       * transaksi pertama adalah transaksi terakhir.
-       */
-
       if (
         latestPriceByBarang.has(
           item.barangId
@@ -1589,9 +1614,6 @@ export async function GET(
              * =================================================
              * CATEGORY
              * =================================================
-             *
-             * Disediakan juga di level item agar frontend
-             * lebih mudah melakukan filter kategori.
              */
 
             category,
@@ -1807,11 +1829,6 @@ export async function GET(
      * =====================================================
      * 22. CATEGORY SUMMARY
      * =====================================================
-     *
-     * Daftar kategori unik dari data stock yang sedang
-     * dikembalikan.
-     *
-     * null / kosong tidak dimasukkan.
      */
 
     const categories =
@@ -1930,13 +1947,13 @@ export async function GET(
           centralRole,
 
         outletSource:
-          outletAdmin
+          outletScopedRole
             ? "user.outletId"
             : "query-or-all",
 
         /*
          * Tetap ditampilkan untuk debugging.
-         * Tidak menjadi authority outlet admin.
+         * Tidak menjadi authority outlet scoped user.
          */
 
         queryOutletId:
@@ -2167,8 +2184,6 @@ export async function GET(
          * =================================================
          * STOCK OPNAME
          * =================================================
-         *
-         * Endpoint ini tidak melakukan adjustment.
          */
 
         opnameIsInformational:
@@ -2224,6 +2239,9 @@ export async function GET(
 
           ADMIN_OUTLET:
             "Hanya bisa melihat outlet miliknya. outletId dari URL diabaikan.",
+
+          STAFF_OUTLET:
+            "Hanya bisa melihat outlet miliknya. outletId dari URL diabaikan.",
         },
 
         /*
@@ -2233,13 +2251,22 @@ export async function GET(
          */
 
         security: {
+          outletScopedAuthority:
+            "user.outletId",
+
           outletAdminAuthority:
+            "user.outletId",
+
+          staffOutletAuthority:
             "user.outletId",
 
           queryOutletIdTrusted:
             false,
 
           outletAdminCanOverrideOutletId:
+            false,
+
+          staffOutletCanOverrideOutletId:
             false,
 
           endpointReadOnly:
@@ -2252,6 +2279,9 @@ export async function GET(
             true,
 
           outletAdminOutletMustBeActive:
+            true,
+
+          staffOutletOutletMustBeActive:
             true,
         },
       },

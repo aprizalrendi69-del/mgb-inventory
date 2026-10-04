@@ -174,7 +174,7 @@ export default function ERPLayout({
   // =====================================================
 
   return (
-    <div className="relative min-h-screen bg-slate-100">
+    <div className="relative min-h-screen bg-background text-foreground">
 
       {/* =================================================
           SIDEBAR
@@ -209,7 +209,7 @@ export default function ERPLayout({
           MAIN APPLICATION
       ================================================= */}
 
-      <main className="relative z-0 min-h-screen w-full bg-slate-100">
+      <main className="relative z-0 min-h-screen w-full bg-background text-foreground">
 
         <div className="w-full p-6">
 

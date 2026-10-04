@@ -165,6 +165,7 @@ const ALLOWED_ROLES = [
   "MANAGER",
   "GUDANG",
   "OUTLET_ADMIN",
+  "STAFF_OUTLET",
 ] as const;
 
 type AllowedRole = (typeof ALLOWED_ROLES)[number];
@@ -497,7 +498,7 @@ async function getUser(): Promise<SessionUser | null> {
  * ADMIN / MANAGER
  *   → boleh semua outlet.
  *
- * OUTLET_ADMIN / GUDANG
+ * OUTLET_ADMIN / STAFF_OUTLET / GUDANG
  *   → hanya outlet sendiri.
  *
  * ============================================================
@@ -522,12 +523,13 @@ function validateOrderOutletAccess(
   }
 
   /*
-   * OUTLET_ADMIN dan GUDANG harus
-   * memiliki outlet sendiri.
+   * OUTLET_ADMIN, STAFF_OUTLET dan GUDANG
+   * harus memiliki outlet sendiri.
    */
 
   if (
     role === "OUTLET_ADMIN" ||
+    role === "STAFF_OUTLET" ||
     role === "GUDANG"
   ) {
     const userOutletId =
@@ -541,6 +543,12 @@ function validateOrderOutletAccess(
       ) ||
       userOutletId <= 0
     ) {
+      if (
+        role === "STAFF_OUTLET"
+      ) {
+        return "User Staff Outlet belum memiliki outlet.";
+      }
+
       return "User belum memiliki outlet.";
     }
 

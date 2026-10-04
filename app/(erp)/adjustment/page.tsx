@@ -2160,358 +2160,292 @@ export default function AdjustmentPage() {
       )}
 
       {/* ===================================================
-          DETAIL DRAWER
+          DETAIL MODAL — CENTERED / PREMIUM
       =================================================== */}
 
       {selected && (
-        <div className="fixed inset-0 z-[110] bg-slate-950/45 backdrop-blur-sm">
-          <div className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col bg-white shadow-2xl">
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-md sm:p-5"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setSelected(null);
+            }
+          }}
+        >
+          <div className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[30px] border border-white/10 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.35)] dark:border-white/10 dark:bg-slate-900">
 
-            {/* DRAWER HEADER */}
+            {/* PREMIUM TOP ACCENT */}
+            <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#18352D] via-[#497F70] to-[#79a99b]" />
 
-            <div className="border-b border-slate-200 bg-white px-5 py-5 sm:px-6">
+            {/* HEADER */}
+            <div className="relative shrink-0 border-b border-slate-200/80 bg-white/95 px-5 pb-5 pt-6 backdrop-blur-xl dark:border-slate-700/80 dark:bg-slate-900/95 sm:px-7">
               <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#497F70]/10 text-[#497F70]">
-                    <ClipboardCheck
-                      size={21}
-                    />
+                <div className="flex min-w-0 items-start gap-4">
+                  <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#497F70] to-[#18352D] text-white shadow-lg shadow-[#497F70]/20">
+                    <ClipboardCheck size={24} />
+                    <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-white text-[#497F70] dark:border-slate-900 dark:bg-slate-900">
+                      <Eye size={10} />
+                    </span>
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-lg font-black text-slate-800">
-                        {selected.number}
-                      </h2>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#497F70]">
+                        Stock Adjustment
+                      </p>
 
-                      <StatusBadge
-                        status={
-                          selected.status
-                        }
-                      />
+                      <StatusBadge status={selected.status} />
                     </div>
 
-                    <p className="mt-1 text-xs text-slate-400">
-                      Dibuat{" "}
-                      {formatDateTime(
-                        selected.createdAt
-                      )}
+                    <h2 className="mt-1 truncate text-xl font-black tracking-tight text-slate-900 dark:text-white sm:text-2xl">
+                      {selected.number}
+                    </h2>
+
+                    <p className="mt-1 text-xs font-medium text-slate-400">
+                      Dibuat {formatDateTime(selected.createdAt)}
                     </p>
                   </div>
                 </div>
 
                 <button
-                  onClick={() =>
-                    setSelected(null)
-                  }
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                  onClick={() => setSelected(null)}
+                  aria-label="Tutup detail"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:hover:text-white"
                 >
-                  <X size={20} />
+                  <X size={19} />
                 </button>
               </div>
-            </div>
 
-            {/* DRAWER BODY */}
-
-            <div className="flex-1 overflow-y-auto p-5 sm:p-6">
-              <div className="space-y-5">
-
-                {/* INFO */}
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      Tanggal
+              {/* QUICK SUMMARY */}
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3.5 dark:border-slate-700 dark:bg-slate-800/70">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    Tanggal
+                  </p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <CalendarDays size={15} className="text-[#497F70]" />
+                    <p className="truncate text-xs font-black text-slate-700 dark:text-slate-200">
+                      {formatDate(selected.adjustmentDate)}
                     </p>
-
-                    <div className="mt-2 flex items-center gap-2">
-                      <CalendarDays
-                        size={16}
-                        className="text-[#497F70]"
-                      />
-
-                      <p className="text-sm font-black text-slate-700">
-                        {formatDate(
-                          selected.adjustmentDate
-                        )}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      Warehouse
-                    </p>
-
-                    <div className="mt-2 flex items-center gap-2">
-                      <Warehouse
-                        size={16}
-                        className="text-[#497F70]"
-                      />
-
-                      <p className="text-sm font-black text-slate-700">
-                        {
-                          selected.warehouse
-                        }
-                      </p>
-                    </div>
                   </div>
                 </div>
 
-                {/* REASON */}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3.5 dark:border-slate-700 dark:bg-slate-800/70">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    Warehouse
+                  </p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Warehouse size={15} className="text-[#497F70]" />
+                    <p className="truncate text-xs font-black text-slate-700 dark:text-slate-200">
+                      {selected.warehouse}
+                    </p>
+                  </div>
+                </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                        Adjustment
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3.5 dark:border-slate-700 dark:bg-slate-800/70">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    Tipe
+                  </p>
+                  <div className="mt-2">
+                    <TypeBadge type={selected.type} />
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-[#497F70]/15 bg-[#497F70]/[0.045] p-3.5 dark:border-[#497F70]/25 dark:bg-[#497F70]/10">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-[#497F70]">
+                    Total Nilai
+                  </p>
+                  <p className="mt-1 truncate text-sm font-black text-[#18352D] dark:text-[#9bc7ba]">
+                    {money.format(selectedTotal)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* BODY */}
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-4 dark:bg-slate-950/30 sm:p-6">
+              <div className="mx-auto max-w-4xl space-y-4">
+
+                {/* REASON / REMARKS */}
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                        Alasan Adjustment
                       </p>
-
-                      <div className="mt-2">
-                        <TypeBadge
-                          type={
-                            selected.type
-                          }
-                        />
-                      </div>
+                      <p className="mt-2 text-sm font-bold leading-6 text-slate-800 dark:text-slate-100">
+                        {selected.reason || "Tidak ada alasan yang dicatat."}
+                      </p>
                     </div>
 
-                    <div className="text-right">
+                    <div className="shrink-0 rounded-2xl bg-slate-50 px-4 py-3 text-left dark:bg-slate-800 sm:text-right">
                       <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                        Total Nilai
+                        {selected.items.length} Item
                       </p>
-
-                      <p className="mt-1 text-lg font-black text-[#18352D]">
-                        {money.format(
-                          selectedTotal
-                        )}
+                      <p className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-300">
+                        Detail transaksi
                       </p>
                     </div>
                   </div>
 
-                  <div className="mt-4 border-t border-slate-100 pt-4">
-                    <p className="text-xs font-bold text-slate-400">
-                      Alasan
-                    </p>
-
-                    <p className="mt-1 text-sm font-semibold text-slate-700">
-                      {selected.reason ||
-                        "-"}
-                    </p>
-
-                    {selected.remarks && (
-                      <div className="mt-3">
-                        <p className="text-xs font-bold text-slate-400">
-                          Remarks
-                        </p>
-
-                        <p className="mt-1 text-sm text-slate-600">
-                          {
-                            selected.remarks
-                          }
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                  {selected.remarks && (
+                    <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-700">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                        Remarks
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                        {selected.remarks}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* ITEMS */}
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                  <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+                    <div>
+                      <p className="text-sm font-black text-slate-900 dark:text-white">
+                        Detail Barang
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        Rincian item yang tercatat pada adjustment ini.
+                      </p>
+                    </div>
 
-                <div className="overflow-hidden rounded-2xl border border-slate-200">
-                  <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
-                    <p className="text-sm font-black text-slate-800">
-                      Detail Barang
-                    </p>
-
-                    <p className="mt-0.5 text-xs text-slate-400">
-                      {selected.items.length} item
-                    </p>
+                    <div className="flex h-9 min-w-9 items-center justify-center rounded-xl bg-[#497F70]/10 px-2 text-xs font-black text-[#497F70]">
+                      {selected.items.length}
+                    </div>
                   </div>
 
-                  <div className="divide-y divide-slate-100">
-                    {selected.items.map(
-                      (item) => {
-                        const qty =
-                          Number(
-                            item.qty ||
-                              0
-                          );
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {selected.items.map((item) => {
+                      const qty = Number(item.qty || 0);
+                      const price = Number(item.price || 0);
+                      const lineTotal = qty * price;
 
-                        const price =
-                          Number(
-                            item.price ||
-                              0
-                          );
-
-                        const lineTotal =
-                          qty *
-                          price;
-
-                        return (
-                          <div
-                            key={
-                              item.id
-                            }
-                            className="p-4"
-                          >
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex min-w-0 items-start gap-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#497F70]/10 text-[#497F70]">
-                                  <Package
-                                    size={
-                                      17
-                                    }
-                                  />
-                                </div>
-
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-black text-slate-800">
-                                    {
-                                      item
-                                        .barang
-                                        .name
-                                    }
-                                  </p>
-
-                                  <p className="mt-0.5 text-xs text-slate-400">
-                                    {
-                                      item
-                                        .barang
-                                        .code
-                                    }
-
-                                    {item
-                                      .barang
-                                      .unit
-                                      ? ` • ${item.barang.unit}`
-                                      : ""}
-                                  </p>
-                                </div>
+                      return (
+                        <div key={item.id} className="p-4 sm:p-5">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#497F70]/10 text-[#497F70]">
+                                <Package size={18} />
                               </div>
 
-                              <p className="shrink-0 text-sm font-black text-[#18352D]">
-                                {money.format(
-                                  lineTotal
-                                )}
+                              <div className="min-w-0 pt-0.5">
+                                <p className="truncate text-sm font-black text-slate-900 dark:text-white">
+                                  {item.barang.name}
+                                </p>
+                                <p className="mt-1 truncate text-xs font-medium text-slate-400">
+                                  {item.barang.code}
+                                  {item.barang.unit
+                                    ? ` • ${item.barang.unit}`
+                                    : ""}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 text-right">
+                              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                Total
+                              </p>
+                              <p className="mt-1 text-sm font-black text-[#18352D] dark:text-[#9bc7ba]">
+                                {money.format(lineTotal)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/70">
+                              <p className="text-[10px] font-bold text-slate-400">
+                                Qty
+                              </p>
+                              <p className="mt-1 text-sm font-black text-slate-800 dark:text-slate-100">
+                                {formatQty(qty)}
                               </p>
                             </div>
 
-                            <div className="mt-4 grid grid-cols-3 gap-2">
-                              <div className="rounded-xl bg-slate-50 p-3">
-                                <p className="text-[10px] font-bold text-slate-400">
-                                  Qty
-                                </p>
+                            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/70">
+                              <p className="text-[10px] font-bold text-slate-400">
+                                Harga Satuan
+                              </p>
+                              <p className="mt-1 text-sm font-black text-slate-800 dark:text-slate-100">
+                                {money.format(price)}
+                              </p>
+                            </div>
 
-                                <p className="mt-1 text-sm font-black text-slate-700">
-                                  {formatQty(
-                                    qty
-                                  )}
-                                </p>
-                              </div>
-
-                              <div className="rounded-xl bg-slate-50 p-3">
-                                <p className="text-[10px] font-bold text-slate-400">
-                                  Harga
-                                </p>
-
-                                <p className="mt-1 text-sm font-black text-slate-700">
-                                  {money.format(
-                                    price
-                                  )}
-                                </p>
-                              </div>
-
-                              <div className="rounded-xl bg-[#497F70]/5 p-3">
-                                <p className="text-[10px] font-bold text-[#497F70]">
-                                  Total
-                                </p>
-
-                                <p className="mt-1 text-sm font-black text-[#18352D]">
-                                  {money.format(
-                                    lineTotal
-                                  )}
-                                </p>
-                              </div>
+                            <div className="rounded-xl border border-[#497F70]/15 bg-[#497F70]/[0.045] p-3 dark:border-[#497F70]/25 dark:bg-[#497F70]/10">
+                              <p className="text-[10px] font-bold text-[#497F70]">
+                                Nilai Item
+                              </p>
+                              <p className="mt-1 text-sm font-black text-[#18352D] dark:text-[#9bc7ba]">
+                                {money.format(lineTotal)}
+                              </p>
                             </div>
                           </div>
-                        );
-                      }
-                    )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* TOTAL BAR */}
+                  <div className="border-t border-slate-200 bg-slate-50/80 px-5 py-4 dark:border-slate-700 dark:bg-slate-800/70">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                          Grand Total
+                        </p>
+                        <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                          Total nilai seluruh item adjustment
+                        </p>
+                      </div>
+                      <p className="text-lg font-black text-[#18352D] dark:text-[#9bc7ba]">
+                        {money.format(selectedTotal)}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* DRAWER FOOTER */}
-
-            <div className="border-t border-slate-200 bg-slate-50/80 p-4 sm:p-5">
-              {selected.status ===
-                "DRAFT" ? (
-                <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+            {/* FOOTER */}
+            <div className="shrink-0 border-t border-slate-200 bg-white/95 p-4 backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95 sm:px-6">
+              {selected.status === "DRAFT" ? (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <button
-                    onClick={() =>
-                      deleteAdjustment(
-                        selected.id
-                      )
-                    }
-                    disabled={
-                      deletingId ===
-                      selected.id
-                    }
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-bold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+                    onClick={() => deleteAdjustment(selected.id)}
+                    disabled={deletingId === selected.id}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-bold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
                   >
-                    {deletingId ===
-                    selected.id ? (
-                      <Loader2
-                        size={16}
-                        className="animate-spin"
-                      />
+                    {deletingId === selected.id ? (
+                      <Loader2 size={16} className="animate-spin" />
                     ) : (
-                      <Trash2
-                        size={16}
-                      />
+                      <Trash2 size={16} />
                     )}
-
                     Hapus Draft
                   </button>
 
                   <div className="flex gap-3">
                     <button
-                      onClick={() =>
-                        setSelected(null)
-                      }
-                      className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-600 transition hover:bg-slate-100"
+                      onClick={() => setSelected(null)}
+                      className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                     >
                       Tutup
                     </button>
 
                     <button
-                      onClick={() =>
-                        approveAdjustment(
-                          selected.id
-                        )
-                      }
-                      disabled={
-                        approvingId ===
-                        selected.id
-                      }
-                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#497F70] px-5 text-sm font-black text-white shadow-lg shadow-[#497F70]/20 transition hover:bg-[#3f6f62] disabled:opacity-50"
+                      onClick={() => approveAdjustment(selected.id)}
+                      disabled={approvingId === selected.id}
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#497F70] to-[#3f6f62] px-5 text-sm font-black text-white shadow-lg shadow-[#497F70]/20 transition hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {approvingId ===
-                      selected.id ? (
+                      {approvingId === selected.id ? (
                         <>
-                          <Loader2
-                            size={16}
-                            className="animate-spin"
-                          />
+                          <Loader2 size={16} className="animate-spin" />
                           Memproses...
                         </>
                       ) : (
                         <>
-                          <CheckCircle2
-                            size={16}
-                          />
-                          Approve
+                          <CheckCircle2 size={16} />
+                          Approve Adjustment
                         </>
                       )}
                     </button>
@@ -2520,10 +2454,8 @@ export default function AdjustmentPage() {
               ) : (
                 <div className="flex justify-end">
                   <button
-                    onClick={() =>
-                      setSelected(null)
-                    }
-                    className="h-11 rounded-xl bg-[#18352D] px-6 text-sm font-black text-white transition hover:bg-[#244d41]"
+                    onClick={() => setSelected(null)}
+                    className="h-11 rounded-xl bg-gradient-to-r from-[#18352D] to-[#497F70] px-6 text-sm font-black text-white shadow-lg shadow-[#18352D]/15 transition hover:-translate-y-0.5 hover:shadow-xl"
                   >
                     Tutup
                   </button>

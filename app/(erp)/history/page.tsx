@@ -7,8 +7,6 @@ import {
   ArrowUpFromLine,
   CalendarDays,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   ChevronsUpDown,
   Eye,
   FileText,
@@ -68,68 +66,268 @@ type SortKey =
 
 type SortDirection = "asc" | "desc";
 
-const PAGE_SIZE = 10;
+/* =========================================================
+ * DATE HELPERS
+ * ========================================================= */
+
+function getCurrentMonthValue() {
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = String(
+    now.getMonth() + 1
+  ).padStart(2, "0");
+
+  return `${year}-${month}`;
+}
+
+function getMonthRange(monthValue: string) {
+  const [yearString, monthString] =
+    monthValue.split("-");
+
+  const year = Number(yearString);
+  const month = Number(monthString);
+
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    month < 1 ||
+    month > 12
+  ) {
+    const current = getCurrentMonthValue();
+
+    return {
+      dateFrom: `${current}-01`,
+      dateTo: getLastDayOfMonth(
+        current
+      ),
+    };
+  }
+
+  const normalizedMonth = String(
+    month
+  ).padStart(2, "0");
+
+  const dateFrom =
+    `${year}-${normalizedMonth}-01`;
+
+  const dateTo =
+    getLastDayOfMonth(
+      `${year}-${normalizedMonth}`
+    );
+
+  return {
+    dateFrom,
+    dateTo,
+  };
+}
+
+function getLastDayOfMonth(
+  monthValue: string
+) {
+  const [yearString, monthString] =
+    monthValue.split("-");
+
+  const year = Number(yearString);
+  const month = Number(monthString);
+
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month)
+  ) {
+    const now = new Date();
+
+    return `${now.getFullYear()}-${String(
+      now.getMonth() + 1
+    ).padStart(2, "0")}-${String(
+      new Date(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        0
+      ).getDate()
+    ).padStart(2, "0")}`;
+  }
+
+  const lastDay = new Date(
+    year,
+    month,
+    0
+  ).getDate();
+
+  return `${year}-${String(month).padStart(
+    2,
+    "0"
+  )}-${String(lastDay).padStart(2, "0")}`;
+}
+
+function getMonthLabel(
+  monthValue: string
+) {
+  const [yearString, monthString] =
+    monthValue.split("-");
+
+  const year = Number(yearString);
+  const month = Number(monthString);
+
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    month < 1 ||
+    month > 12
+  ) {
+    return monthValue;
+  }
+
+  const date = new Date(
+    year,
+    month - 1,
+    1
+  );
+
+  return date.toLocaleDateString(
+    "id-ID",
+    {
+      month: "long",
+      year: "numeric",
+    }
+  );
+}
+
+function getDateRangeLabel(
+  dateFrom: string,
+  dateTo: string
+) {
+  if (!dateFrom && !dateTo) {
+    return "Semua Periode";
+  }
+
+  if (dateFrom && dateTo && dateFrom === dateTo) {
+    return formatDate(dateFrom);
+  }
+
+  if (dateFrom && dateTo) {
+    return `${formatDate(dateFrom)} — ${formatDate(dateTo)}`;
+  }
+
+  if (dateFrom) {
+    return `Mulai ${formatDate(dateFrom)}`;
+  }
+
+  return `Sampai ${formatDate(dateTo)}`;
+}
+
+/* =========================================================
+ * FORMAT HELPERS
+ * ========================================================= */
 
 function num(value: unknown) {
   const n = Number(value ?? 0);
-  return Number.isFinite(n) ? n : 0;
+
+  return Number.isFinite(n)
+    ? n
+    : 0;
 }
 
 function formatQty(value: unknown) {
-  return num(value).toLocaleString("id-ID", {
-    maximumFractionDigits: 4,
-  });
+  return num(value).toLocaleString(
+    "id-ID",
+    {
+      maximumFractionDigits: 4,
+    }
+  );
 }
 
 function formatMoney(value: unknown) {
-  return `Rp ${num(value).toLocaleString("id-ID", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  })}`;
+  return `Rp ${num(value).toLocaleString(
+    "id-ID",
+    {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }
+  )}`;
 }
 
 function formatDate(value: unknown) {
   if (!value) return "-";
 
-  const date = new Date(String(value));
+  const date = new Date(
+    String(value)
+  );
 
-  if (Number.isNaN(date.getTime())) return "-";
+  if (
+    Number.isNaN(date.getTime())
+  ) {
+    return "-";
+  }
 
-  return date.toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return date.toLocaleDateString(
+    "id-ID",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }
+  );
 }
 
 function formatDateTime(value: unknown) {
   if (!value) return "-";
 
-  const date = new Date(String(value));
+  const date = new Date(
+    String(value)
+  );
 
-  if (Number.isNaN(date.getTime())) return "-";
+  if (
+    Number.isNaN(date.getTime())
+  ) {
+    return "-";
+  }
 
-  return date.toLocaleString("id-ID", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return date.toLocaleString(
+    "id-ID",
+    {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }
+  );
 }
 
-function getDirection(item: HistoryItem): Direction {
+/* =========================================================
+ * TRANSACTION HELPERS
+ * ========================================================= */
+
+function getDirection(
+  item: HistoryItem
+): Direction {
   const qtyIn = num(item.qtyIn);
   const qtyOut = num(item.qtyOut);
 
-  if (qtyIn > 0 && qtyOut <= 0) return "IN";
-  if (qtyOut > 0 && qtyIn <= 0) return "OUT";
+  if (
+    qtyIn > 0 &&
+    qtyOut <= 0
+  ) {
+    return "IN";
+  }
+
+  if (
+    qtyOut > 0 &&
+    qtyIn <= 0
+  ) {
+    return "OUT";
+  }
 
   return "OTHER";
 }
 
-function getTypeStyle(item: HistoryItem) {
-  const direction = getDirection(item);
+function getTypeStyle(
+  item: HistoryItem
+) {
+  const direction =
+    getDirection(item);
+
   const type =
     item.transactionType ||
     item.trxType ||
@@ -141,7 +339,8 @@ function getTypeStyle(item: HistoryItem) {
       label: type,
       className:
         "border-emerald-200 bg-emerald-50 text-emerald-700",
-      iconClass: "bg-emerald-100 text-emerald-700",
+      iconClass:
+        "bg-emerald-100 text-emerald-700",
       icon: ArrowDownToLine,
     };
   }
@@ -149,77 +348,186 @@ function getTypeStyle(item: HistoryItem) {
   if (direction === "OUT") {
     return {
       label: type,
-      className: "border-red-200 bg-red-50 text-red-700",
-      iconClass: "bg-red-100 text-red-700",
+      className:
+        "border-red-200 bg-red-50 text-red-700",
+      iconClass:
+        "bg-red-100 text-red-700",
       icon: ArrowUpFromLine,
     };
   }
 
   return {
     label: type,
-    className: "border-slate-200 bg-slate-100 text-slate-600",
-    iconClass: "bg-slate-200 text-slate-600",
+    className:
+      "border-slate-200 bg-slate-100 text-slate-600",
+    iconClass:
+      "bg-slate-200 text-slate-600",
     icon: FileText,
   };
 }
 
+/* =========================================================
+ * COMPONENT
+ * ========================================================= */
+
 export default function HistoryPage() {
-  const [data, setData] = useState<HistoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [data, setData] =
+    useState<HistoryItem[]>([]);
 
-  const [search, setSearch] = useState("");
-  const [transactionFilter, setTransactionFilter] = useState("ALL");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [loading, setLoading] =
+    useState(true);
 
-  const [sortKey, setSortKey] = useState<SortKey>("trxDate");
-  const [sortDirection, setSortDirection] =
+  const [errorMessage, setErrorMessage] =
+    useState("");
+
+  /*
+   * Default periode selalu seluruh bulan berjalan.
+   * Tanggal From/To dapat diubah untuk menampilkan
+   * periode custom.
+   */
+  const currentMonthRange = useMemo(
+    () =>
+      getMonthRange(
+        getCurrentMonthValue()
+      ),
+    []
+  );
+
+  const [selectedMonth, setSelectedMonth] =
+    useState(
+      getCurrentMonthValue()
+    );
+
+  const [dateFrom, setDateFrom] =
+    useState(
+      currentMonthRange.dateFrom
+    );
+
+  const [dateTo, setDateTo] =
+    useState(
+      currentMonthRange.dateTo
+    );
+
+  const [search, setSearch] =
+    useState("");
+
+  const [
+    transactionFilter,
+    setTransactionFilter,
+  ] = useState("ALL");
+
+  const [sortKey, setSortKey] =
+    useState<SortKey>("trxDate");
+
+  const [
+    sortDirection,
+    setSortDirection,
+  ] =
     useState<SortDirection>("desc");
-  const [page, setPage] = useState(1);
 
-  const [selectedItem, setSelectedItem] =
+  const [
+    selectedItem,
+    setSelectedItem,
+  ] =
     useState<HistoryItem | null>(null);
 
-  async function loadData() {
+  const periodLabel = useMemo(
+    () =>
+      getDateRangeLabel(
+        dateFrom,
+        dateTo
+      ),
+    [dateFrom, dateTo]
+  );
+
+
+  /* =======================================================
+   * LOAD DATA
+   * ======================================================= */
+
+  async function loadData(
+    from = dateFrom,
+    to = dateTo
+  ) {
     try {
       setLoading(true);
       setErrorMessage("");
 
-      const params = new URLSearchParams();
+      const params =
+        new URLSearchParams();
 
-      if (search.trim()) {
-        params.set("search", search.trim());
-      }
-
-      if (transactionFilter !== "ALL") {
-        params.set("trxType", transactionFilter);
-      }
-
-      if (dateFrom) params.set("dateFrom", dateFrom);
-      if (dateTo) params.set("dateTo", dateTo);
-
-      const query = params.toString();
-
-      const response = await fetch(
-        `/api/history${query ? `?${query}` : ""}`,
-        {
-          cache: "no-store",
-        }
+      /*
+       * History mengambil transaksi sesuai
+       * periode tanggal yang dipilih.
+       * Default-nya adalah seluruh bulan berjalan.
+       */
+      params.set(
+        "dateFrom",
+        from
       );
 
-      const result = await response.json();
+      params.set(
+        "dateTo",
+        to
+      );
 
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message || "Gagal mengambil history transaksi"
+      if (search.trim()) {
+        params.set(
+          "search",
+          search.trim()
         );
       }
 
-      setData(Array.isArray(result.data) ? result.data : []);
-      setPage(1);
+      if (
+        transactionFilter !== "ALL"
+      ) {
+        params.set(
+          "trxType",
+          transactionFilter
+        );
+      }
+
+      const query =
+        params.toString();
+
+      const response =
+        await fetch(
+          `/api/history${
+            query
+              ? `?${query}`
+              : ""
+          }`,
+          {
+            cache: "no-store",
+          }
+        );
+
+      const result =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !result.success
+      ) {
+        throw new Error(
+          result.message ||
+            "Gagal mengambil history transaksi"
+        );
+      }
+
+      setData(
+        Array.isArray(
+          result.data
+        )
+          ? result.data
+          : []
+      );
+
     } catch (error) {
-      console.error("LOAD HISTORY ERROR:", error);
+      console.error(
+        "LOAD HISTORY ERROR:",
+        error
+      );
 
       setData([]);
 
@@ -233,316 +541,439 @@ export default function HistoryPage() {
     }
   }
 
+  /*
+   * Saat pertama kali halaman dibuka,
+   * langsung mengambil bulan berjalan.
+   *
+   * Saat halaman pertama dibuka,
+   * otomatis mengambil seluruh bulan berjalan.
+   * Perubahan preset bulan langsung diterapkan
+   * melalui handleMonthChange.
+   */
   useEffect(() => {
     loadData();
+    // Initial load: seluruh bulan berjalan.
+    // Filter berikutnya dijalankan melalui tombol Terapkan.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const transactionTypes = useMemo(() => {
-    const types = new Set<string>();
+  /* =======================================================
+   * TRANSACTION TYPES
+   * ======================================================= */
 
-    data.forEach((item) => {
-      const type = String(
-        item.transactionType ||
-          item.trxType ||
-          item.tipe ||
-          ""
-      ).trim();
+  const transactionTypes =
+    useMemo(() => {
+      const types =
+        new Set<string>();
 
-      if (type) types.add(type);
-    });
+      data.forEach((item) => {
+        const type =
+          String(
+            item.transactionType ||
+              item.trxType ||
+              item.tipe ||
+              ""
+          ).trim();
 
-    return Array.from(types).sort((a, b) =>
-      a.localeCompare(b)
-    );
-  }, [data]);
+        if (type) {
+          types.add(type);
+        }
+      });
 
-  const filteredData = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    return data.filter((item) => {
-      const type = String(
-        item.transactionType ||
-          item.trxType ||
-          item.tipe ||
-          ""
-      ).toLowerCase();
-
-      const reference = String(
-        item.reference ||
-          item.trxNumber ||
-          item.nomor ||
-          ""
-      ).toLowerCase();
-
-      const code = String(
-        item.kodeBarang || item.code || ""
-      ).toLowerCase();
-
-      const name = String(
-        item.barang || item.namaBarang || ""
-      ).toLowerCase();
-
-      const barcode = String(
-        item.barcode || ""
-      ).toLowerCase();
-
-      const description = String(
-        item.description || item.note || ""
-      ).toLowerCase();
-
-      const matchesSearch =
-        !keyword ||
-        type.includes(keyword) ||
-        reference.includes(keyword) ||
-        code.includes(keyword) ||
-        name.includes(keyword) ||
-        barcode.includes(keyword) ||
-        description.includes(keyword);
-
-      const actualType = String(
-        item.transactionType ||
-          item.trxType ||
-          item.tipe ||
-          ""
+      return Array.from(
+        types
+      ).sort((a, b) =>
+        a.localeCompare(b)
       );
+    }, [data]);
 
-      const matchesType =
-        transactionFilter === "ALL" ||
-        actualType === transactionFilter;
+  /* =======================================================
+   * LOCAL FILTER
+   * ======================================================= */
 
-      const rawDate =
-        item.trxDate ||
-        item.tanggal ||
-        item.createdAt;
+  const filteredData =
+    useMemo(() => {
+      const keyword =
+        search
+          .trim()
+          .toLowerCase();
 
-      const date = rawDate
-        ? new Date(String(rawDate))
-        : null;
+      return data.filter(
+        (item) => {
+          const type =
+            String(
+              item.transactionType ||
+                item.trxType ||
+                item.tipe ||
+                ""
+            ).toLowerCase();
 
-      let matchesDate = true;
+          const reference =
+            String(
+              item.reference ||
+                item.trxNumber ||
+                item.nomor ||
+                ""
+            ).toLowerCase();
 
-      if (dateFrom || dateTo) {
-        if (!date || Number.isNaN(date.getTime())) {
-          matchesDate = false;
-        } else {
-          const current = date.toISOString().slice(0, 10);
+          const code =
+            String(
+              item.kodeBarang ||
+                item.code ||
+                ""
+            ).toLowerCase();
 
-          if (dateFrom && current < dateFrom) {
-            matchesDate = false;
+          const name =
+            String(
+              item.barang ||
+                item.namaBarang ||
+                ""
+            ).toLowerCase();
+
+          const barcode =
+            String(
+              item.barcode || ""
+            ).toLowerCase();
+
+          const description =
+            String(
+              item.description ||
+                item.note ||
+                ""
+            ).toLowerCase();
+
+          const matchesSearch =
+            !keyword ||
+            type.includes(keyword) ||
+            reference.includes(
+              keyword
+            ) ||
+            code.includes(keyword) ||
+            name.includes(keyword) ||
+            barcode.includes(
+              keyword
+            ) ||
+            description.includes(
+              keyword
+            );
+
+          const actualType =
+            String(
+              item.transactionType ||
+                item.trxType ||
+                item.tipe ||
+                ""
+            );
+
+          const matchesType =
+            transactionFilter ===
+              "ALL" ||
+            actualType ===
+              transactionFilter;
+
+          return (
+            matchesSearch &&
+            matchesType
+          );
+        }
+      );
+    }, [
+      data,
+      search,
+      transactionFilter,
+    ]);
+
+  /* =======================================================
+   * SORTING
+   * ======================================================= */
+
+  const sortedData =
+    useMemo(() => {
+      const result = [
+        ...filteredData,
+      ];
+
+      result.sort((a, b) => {
+        let comparison = 0;
+
+        switch (sortKey) {
+          case "trxDate": {
+            const first =
+              new Date(
+                String(
+                  a.trxDate ||
+                    a.tanggal ||
+                    a.createdAt ||
+                    ""
+                )
+              ).getTime();
+
+            const second =
+              new Date(
+                String(
+                  b.trxDate ||
+                    b.tanggal ||
+                    b.createdAt ||
+                    ""
+                )
+              ).getTime();
+
+            comparison =
+              first - second;
+
+            break;
           }
 
-          if (dateTo && current > dateTo) {
-            matchesDate = false;
-          }
+          case "trxType":
+            comparison =
+              String(
+                a.transactionType ||
+                  a.trxType ||
+                  ""
+              ).localeCompare(
+                String(
+                  b.transactionType ||
+                    b.trxType ||
+                    ""
+                ),
+                "id",
+                {
+                  sensitivity:
+                    "base",
+                }
+              );
+
+            break;
+
+          case "reference":
+            comparison =
+              String(
+                a.reference ||
+                  a.trxNumber ||
+                  ""
+              ).localeCompare(
+                String(
+                  b.reference ||
+                    b.trxNumber ||
+                    ""
+                ),
+                "id",
+                {
+                  numeric: true,
+                  sensitivity:
+                    "base",
+                }
+              );
+
+            break;
+
+          case "barang":
+            comparison =
+              String(
+                a.barang ||
+                  a.namaBarang ||
+                  ""
+              ).localeCompare(
+                String(
+                  b.barang ||
+                    b.namaBarang ||
+                    ""
+                ),
+                "id",
+                {
+                  sensitivity:
+                    "base",
+                }
+              );
+
+            break;
+
+          case "qtyIn":
+            comparison =
+              num(a.qtyIn) -
+              num(b.qtyIn);
+
+            break;
+
+          case "qtyOut":
+            comparison =
+              num(a.qtyOut) -
+              num(b.qtyOut);
+
+            break;
+
+          case "balance":
+            comparison =
+              num(a.balance) -
+              num(b.balance);
+
+            break;
+
+          case "totalValue":
+            comparison =
+              num(a.totalValue) -
+              num(b.totalValue);
+
+            break;
         }
-      }
 
-      return (
-        matchesSearch &&
-        matchesType &&
-        matchesDate
-      );
-    });
-  }, [
-    data,
-    search,
-    transactionFilter,
-    dateFrom,
-    dateTo,
-  ]);
+        return sortDirection ===
+          "asc"
+          ? comparison
+          : -comparison;
+      });
 
-  const sortedData = useMemo(() => {
-    const result = [...filteredData];
+      return result;
+    }, [
+      filteredData,
+      sortKey,
+      sortDirection,
+    ]);
 
-    result.sort((a, b) => {
-      let comparison = 0;
+  /* =======================================================
+   * TABLE DATA
+   * ======================================================= */
 
-      switch (sortKey) {
-        case "trxDate": {
-          const first = new Date(
-            String(
-              a.trxDate ||
-                a.tanggal ||
-                a.createdAt ||
-                ""
-            )
-          ).getTime();
+  // Semua transaksi pada periode/filter yang dipilih
+  // ditampilkan langsung tanpa pagination.
+  /* =======================================================
+   * SUMMARY
+   * ======================================================= */
 
-          const second = new Date(
-            String(
-              b.trxDate ||
-                b.tanggal ||
-                b.createdAt ||
-                ""
-            )
-          ).getTime();
-
-          comparison = first - second;
-          break;
-        }
-
-        case "trxType":
-          comparison = String(
-            a.transactionType ||
-              a.trxType ||
-              ""
-          ).localeCompare(
-            String(
-              b.transactionType ||
-                b.trxType ||
-                ""
-            ),
-            "id",
-            {
-              sensitivity: "base",
-            }
-          );
-          break;
-
-        case "reference":
-          comparison = String(
-            a.reference ||
-              a.trxNumber ||
-              ""
-          ).localeCompare(
-            String(
-              b.reference ||
-                b.trxNumber ||
-                ""
-            ),
-            "id",
-            {
-              numeric: true,
-              sensitivity: "base",
-            }
-          );
-          break;
-
-        case "barang":
-          comparison = String(
-            a.barang ||
-              a.namaBarang ||
-              ""
-          ).localeCompare(
-            String(
-              b.barang ||
-                b.namaBarang ||
-                ""
-            ),
-            "id",
-            {
-              sensitivity: "base",
-            }
-          );
-          break;
-
-        case "qtyIn":
-          comparison =
-            num(a.qtyIn) - num(b.qtyIn);
-          break;
-
-        case "qtyOut":
-          comparison =
-            num(a.qtyOut) - num(b.qtyOut);
-          break;
-
-        case "balance":
-          comparison =
-            num(a.balance) - num(b.balance);
-          break;
-
-        case "totalValue":
-          comparison =
-            num(a.totalValue) -
-            num(b.totalValue);
-          break;
-      }
-
-      return sortDirection === "asc"
-        ? comparison
-        : -comparison;
-    });
-
-    return result;
-  }, [
-    filteredData,
-    sortKey,
-    sortDirection,
-  ]);
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(sortedData.length / PAGE_SIZE)
-  );
-
-  const paginatedData = useMemo(() => {
-    const start =
-      (page - 1) * PAGE_SIZE;
-
-    return sortedData.slice(
-      start,
-      start + PAGE_SIZE
+  const totalQtyIn =
+    data.reduce(
+      (sum, item) =>
+        sum +
+        num(item.qtyIn),
+      0
     );
-  }, [sortedData, page]);
 
-  useEffect(() => {
-    if (page > totalPages) {
-      setPage(totalPages);
-    }
-  }, [page, totalPages]);
+  const totalQtyOut =
+    data.reduce(
+      (sum, item) =>
+        sum +
+        num(item.qtyOut),
+      0
+    );
 
-  const totalQtyIn = data.reduce(
-    (sum, item) => sum + num(item.qtyIn),
-    0
-  );
+  const totalIn =
+    data.filter(
+      (item) =>
+        getDirection(item) ===
+        "IN"
+    ).length;
 
-  const totalQtyOut = data.reduce(
-    (sum, item) => sum + num(item.qtyOut),
-    0
-  );
-
-  const totalIn = data.filter(
-    (item) => getDirection(item) === "IN"
-  ).length;
-
-  const totalOut = data.filter(
-    (item) => getDirection(item) === "OUT"
-  ).length;
+  const totalOut =
+    data.filter(
+      (item) =>
+        getDirection(item) ===
+        "OUT"
+    ).length;
 
   const totalOther =
-    data.length - totalIn - totalOut;
+    data.length -
+    totalIn -
+    totalOut;
+
+  const defaultMonth = getCurrentMonthValue();
+  const defaultRange = getMonthRange(
+    defaultMonth
+  );
 
   const hasFilter =
     Boolean(search.trim()) ||
-    transactionFilter !== "ALL" ||
-    Boolean(dateFrom) ||
-    Boolean(dateTo);
+    transactionFilter !==
+      "ALL" ||
+    dateFrom !== defaultRange.dateFrom ||
+    dateTo !== defaultRange.dateTo;
+
+  /* =======================================================
+   * ACTIONS
+   * ======================================================= */
 
   function resetFilters() {
+    const defaultMonth =
+      getCurrentMonthValue();
+    const defaultRange =
+      getMonthRange(defaultMonth);
+
+    setSelectedMonth(
+      defaultMonth
+    );
+    setDateFrom(
+      defaultRange.dateFrom
+    );
+    setDateTo(
+      defaultRange.dateTo
+    );
     setSearch("");
-    setTransactionFilter("ALL");
-    setDateFrom("");
-    setDateTo("");
-    setPage(1);
-    loadData();
+    setTransactionFilter(
+      "ALL"
+    );
+
+    loadData(
+      defaultRange.dateFrom,
+      defaultRange.dateTo
+    );
   }
 
   function handleApplyFilter() {
-    setPage(1);
-    loadData();
-  }
-
-  function handleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDirection((current) =>
-        current === "asc" ? "desc" : "asc"
+    if (
+      dateFrom &&
+      dateTo &&
+      dateFrom > dateTo
+    ) {
+      setErrorMessage(
+        "Tanggal Dari tidak boleh lebih besar dari Tanggal Sampai."
       );
       return;
     }
 
+    loadData();
+  }
+
+  function handleMonthChange(
+    value: string
+  ) {
+    if (!value) return;
+
+    const range =
+      getMonthRange(value);
+
+    setSelectedMonth(value);
+    setDateFrom(
+      range.dateFrom
+    );
+    setDateTo(
+      range.dateTo
+    );
+
+    loadData(
+      range.dateFrom,
+      range.dateTo
+    );
+  }
+
+  function handleSort(
+    key: SortKey
+  ) {
+    if (sortKey === key) {
+      setSortDirection(
+        (current) =>
+          current === "asc"
+            ? "desc"
+            : "asc"
+      );
+
+      return;
+    }
+
     setSortKey(key);
+
     setSortDirection(
-      key === "trxDate" ? "desc" : "asc"
+      key === "trxDate"
+        ? "desc"
+        : "asc"
     );
   }
 
@@ -551,7 +982,9 @@ export default function HistoryPage() {
   }: {
     column: SortKey;
   }) {
-    if (sortKey !== column) {
+    if (
+      sortKey !== column
+    ) {
       return (
         <ChevronsUpDown
           size={14}
@@ -560,7 +993,8 @@ export default function HistoryPage() {
       );
     }
 
-    return sortDirection === "asc" ? (
+    return sortDirection ===
+      "asc" ? (
       <ArrowUp
         size={14}
         className="text-emerald-600"
@@ -573,53 +1007,133 @@ export default function HistoryPage() {
     );
   }
 
+  /* =======================================================
+   * RENDER
+   * ======================================================= */
+
   return (
     <div className="min-h-full space-y-6 pb-8">
+      {/* =====================================================
+       * HERO
+       * ===================================================== */}
+
       <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-emerald-50 blur-2xl" />
 
-        <div className="relative flex flex-col gap-5 p-6 md:flex-row md:items-center md:justify-between">
+        <div className="relative flex flex-col gap-5 p-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-4">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#E8F3EC] text-[#29483A]">
               <History size={27} />
             </div>
 
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold tracking-tight text-slate-800">
                   History Stock Pusat
                 </h1>
 
-                <span className="hidden rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700 sm:inline-flex">
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
                   MAIN
+                </span>
+
+                <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-700">
+                  {periodLabel}
                 </span>
               </div>
 
               <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500">
-                Riwayat pergerakan stock pusat berdasarkan
-                StockCard. Setiap transaksi menampilkan
-                barang, referensi, qty masuk, qty keluar,
-                balance, dan nilai transaksi.
+                Riwayat pergerakan stock
+                pusat berdasarkan
+                StockCard pada bulan
+                yang dipilih. Setiap
+                transaksi menampilkan
+                barang, referensi,
+                qty masuk, qty keluar,
+                balance, dan nilai
+                transaksi.
               </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={loadData}
-            disabled={loading}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <RefreshCw
-              size={17}
-              className={
-                loading ? "animate-spin" : ""
-              }
-            />
-            Refresh
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            {/* =================================================
+             * MONTH SELECTOR
+             * ================================================= */}
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <div className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <CalendarDays size={12} />
+                Preset Bulan
+              </div>
+
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(event) =>
+                  handleMonthChange(
+                    event.target.value
+                  )
+                }
+                className="h-8 min-w-[150px] border-0 bg-transparent p-0 text-sm font-semibold text-slate-700 outline-none focus:ring-0"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={loadData}
+              disabled={loading}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw
+                size={17}
+                className={
+                  loading
+                    ? "animate-spin"
+                    : ""
+                }
+              />
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {/* =====================================================
+         * PERIOD BAR
+         * ===================================================== */}
+
+        <div className="relative border-t border-slate-100 bg-slate-50/60 px-6 py-3">
+          <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <CalendarDays
+                size={14}
+                className="text-emerald-600"
+              />
+
+              <span>
+                Periode aktif:
+              </span>
+
+              <strong className="text-slate-700">
+                {periodLabel}
+              </strong>
+            </div>
+
+            <div className="text-[11px] text-slate-400">
+              {formatDate(
+                dateFrom
+              )}{" "}
+              —{" "}
+              {formatDate(
+                dateTo
+              )}
+            </div>
+          </div>
         </div>
       </section>
+
+      {/* =====================================================
+       * ERROR
+       * ===================================================== */}
 
       {errorMessage && (
         <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -631,6 +1145,7 @@ export default function HistoryPage() {
             <p className="font-semibold">
               Gagal memuat history
             </p>
+
             <p className="mt-1 text-xs text-red-600">
               {errorMessage}
             </p>
@@ -646,11 +1161,15 @@ export default function HistoryPage() {
         </div>
       )}
 
+      {/* =====================================================
+       * SUMMARY
+       * ===================================================== */}
+
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           label="Total Transaksi"
           value={data.length}
-          description="Seluruh StockCard MAIN"
+          description={`StockCard ${periodLabel}`}
           icon={History}
           iconClass="bg-blue-50 text-blue-600"
           valueClass="text-slate-800"
@@ -688,6 +1207,10 @@ export default function HistoryPage() {
         />
       </section>
 
+      {/* =====================================================
+       * FILTER
+       * ===================================================== */}
+
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-2.5">
@@ -699,8 +1222,9 @@ export default function HistoryPage() {
               <p className="text-sm font-bold text-slate-700">
                 Filter & Pencarian
               </p>
+
               <p className="text-[11px] text-slate-400">
-                Filter langsung terhadap data history StockCard
+                History menampilkan seluruh transaksi pada periode tanggal yang dipilih.
               </p>
             </div>
           </div>
@@ -709,7 +1233,9 @@ export default function HistoryPage() {
             {hasFilter && (
               <button
                 type="button"
-                onClick={resetFilters}
+                onClick={
+                  resetFilters
+                }
                 className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700"
               >
                 <X size={14} />
@@ -719,7 +1245,9 @@ export default function HistoryPage() {
 
             <button
               type="button"
-              onClick={handleApplyFilter}
+              onClick={
+                handleApplyFilter
+              }
               disabled={loading}
               className="inline-flex items-center gap-2 rounded-lg bg-[#29483A] px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#20392F] disabled:opacity-50"
             >
@@ -730,7 +1258,51 @@ export default function HistoryPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-3 p-5 md:grid-cols-2 xl:grid-cols-12">
-          <div className="relative xl:col-span-5">
+          {/* DATE FROM */}
+
+          <div className="xl:col-span-3">
+            <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <CalendarDays size={12} />
+              Tanggal Dari
+            </label>
+
+            <input
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={(event) =>
+                setDateFrom(
+                  event.target.value
+                )
+              }
+              className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-50"
+            />
+          </div>
+
+          {/* DATE TO */}
+
+          <div className="xl:col-span-3">
+            <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <CalendarDays size={12} />
+              Tanggal Sampai
+            </label>
+
+            <input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(event) =>
+                setDateTo(
+                  event.target.value
+                )
+              }
+              className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-50"
+            />
+          </div>
+
+          {/* SEARCH */}
+
+          <div className="relative xl:col-span-4">
             <Search
               size={18}
               className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -740,10 +1312,15 @@ export default function HistoryPage() {
               type="text"
               value={search}
               onChange={(event) =>
-                setSearch(event.target.value)
+                setSearch(
+                  event.target.value
+                )
               }
               onKeyDown={(event) => {
-                if (event.key === "Enter") {
+                if (
+                  event.key ===
+                  "Enter"
+                ) {
                   handleApplyFilter();
                 }
               }}
@@ -754,7 +1331,9 @@ export default function HistoryPage() {
             {search && (
               <button
                 type="button"
-                onClick={() => setSearch("")}
+                onClick={() =>
+                  setSearch("")
+                }
                 className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                 title="Hapus pencarian"
               >
@@ -763,11 +1342,17 @@ export default function HistoryPage() {
             )}
           </div>
 
-          <div className="md:col-span-1 xl:col-span-3">
+          {/* TRANSACTION TYPE */}
+
+          <div className="md:col-span-1 xl:col-span-2">
             <select
-              value={transactionFilter}
+              value={
+                transactionFilter
+              }
               onChange={(event) =>
-                setTransactionFilter(event.target.value)
+                setTransactionFilter(
+                  event.target.value
+                )
               }
               className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-50"
             >
@@ -775,45 +1360,17 @@ export default function HistoryPage() {
                 Semua Jenis Transaksi
               </option>
 
-              {transactionTypes.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
+              {transactionTypes.map(
+                (type) => (
+                  <option
+                    key={type}
+                    value={type}
+                  >
+                    {type}
+                  </option>
+                )
+              )}
             </select>
-          </div>
-
-          <div className="relative md:col-span-1 xl:col-span-2">
-            <CalendarDays
-              size={16}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(event) =>
-                setDateFrom(event.target.value)
-              }
-              className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-50"
-            />
-          </div>
-
-          <div className="relative md:col-span-1 xl:col-span-2">
-            <CalendarDays
-              size={16}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-
-            <input
-              type="date"
-              value={dateTo}
-              min={dateFrom || undefined}
-              onChange={(event) =>
-                setDateTo(event.target.value)
-              }
-              className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-50"
-            />
           </div>
         </div>
 
@@ -827,23 +1384,28 @@ export default function HistoryPage() {
             </strong>{" "}
             dari{" "}
             <strong className="text-slate-700">
-              {data.length.toLocaleString("id-ID")}
+              {data.length.toLocaleString(
+                "id-ID"
+              )}
             </strong>{" "}
-            transaksi
+            transaksi pada{" "}
+            <strong className="text-slate-700">
+              {periodLabel}
+            </strong>
           </span>
 
           <span>
-            Halaman{" "}
+            Periode{" "}
             <strong className="text-slate-700">
-              {page}
-            </strong>{" "}
-            dari{" "}
-            <strong className="text-slate-700">
-              {totalPages}
+              {periodLabel}
             </strong>
           </span>
         </div>
       </section>
+
+      {/* =====================================================
+       * TABLE
+       * ===================================================== */}
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -851,8 +1413,13 @@ export default function HistoryPage() {
             <h2 className="text-sm font-bold text-slate-800">
               Daftar Pergerakan Stock
             </h2>
+
             <p className="mt-0.5 text-xs text-slate-400">
-              Sumber data: StockCard warehouse MAIN
+              Sumber data: StockCard
+              warehouse MAIN ·{" "}
+              <span>
+                {periodLabel}
+              </span>
             </p>
           </div>
 
@@ -870,64 +1437,120 @@ export default function HistoryPage() {
 
                 <SortableHeader
                   label="Tanggal"
-                  onClick={() => handleSort("trxDate")}
-                  icon={<SortIcon column="trxDate" />}
+                  onClick={() =>
+                    handleSort(
+                      "trxDate"
+                    )
+                  }
+                  icon={
+                    <SortIcon column="trxDate" />
+                  }
                 />
 
                 <SortableHeader
                   label="Jenis"
-                  onClick={() => handleSort("trxType")}
-                  icon={<SortIcon column="trxType" />}
+                  onClick={() =>
+                    handleSort(
+                      "trxType"
+                    )
+                  }
+                  icon={
+                    <SortIcon column="trxType" />
+                  }
                 />
 
                 <SortableHeader
                   label="Referensi"
-                  onClick={() => handleSort("reference")}
-                  icon={<SortIcon column="reference" />}
+                  onClick={() =>
+                    handleSort(
+                      "reference"
+                    )
+                  }
+                  icon={
+                    <SortIcon column="reference" />
+                  }
                 />
 
                 <SortableHeader
                   label="Barang"
-                  onClick={() => handleSort("barang")}
-                  icon={<SortIcon column="barang" />}
+                  onClick={() =>
+                    handleSort(
+                      "barang"
+                    )
+                  }
+                  icon={
+                    <SortIcon column="barang" />
+                  }
                 />
 
                 <SortableHeader
                   label="Qty Masuk"
-                  onClick={() => handleSort("qtyIn")}
-                  icon={<SortIcon column="qtyIn" />}
+                  onClick={() =>
+                    handleSort(
+                      "qtyIn"
+                    )
+                  }
+                  icon={
+                    <SortIcon column="qtyIn" />
+                  }
                   align="right"
                 />
 
                 <SortableHeader
                   label="Qty Keluar"
-                  onClick={() => handleSort("qtyOut")}
-                  icon={<SortIcon column="qtyOut" />}
+                  onClick={() =>
+                    handleSort(
+                      "qtyOut"
+                    )
+                  }
+                  icon={
+                    <SortIcon column="qtyOut" />
+                  }
                   align="right"
                 />
 
                 <SortableHeader
                   label="Balance"
-                  onClick={() => handleSort("balance")}
-                  icon={<SortIcon column="balance" />}
+                  onClick={() =>
+                    handleSort(
+                      "balance"
+                    )
+                  }
+                  icon={
+                    <SortIcon column="balance" />
+                  }
                   align="right"
                 />
 
                 <SortableHeader
                   label="Harga"
-                  onClick={() => handleSort("totalValue")}
-                  icon={<SortIcon column="totalValue" />}
+                  onClick={() =>
+                    handleSort(
+                      "totalValue"
+                    )
+                  }
+                  icon={
+                    <SortIcon column="totalValue" />
+                  }
                   align="right"
                 />
 
                 <TableHeader label="Keterangan" />
-                <TableHeader label="Detail" align="center" />
+
+                <TableHeader
+                  label="Detail"
+                  align="center"
+                />
               </tr>
             </thead>
 
             <tbody>
+              {/* LOADING */}
+
               {loading &&
-                Array.from({ length: 6 }).map(
+                Array.from({
+                  length: 6,
+                }).map(
                   (_, index) => (
                     <tr
                       key={index}
@@ -943,8 +1566,11 @@ export default function HistoryPage() {
                   )
                 )}
 
+              {/* EMPTY */}
+
               {!loading &&
-                paginatedData.length === 0 && (
+                sortedData.length ===
+                  0 && (
                   <tr>
                     <td
                       colSpan={11}
@@ -952,7 +1578,9 @@ export default function HistoryPage() {
                     >
                       <div className="flex flex-col items-center justify-center">
                         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                          <History size={30} />
+                          <History
+                            size={30}
+                          />
                         </div>
 
                         <p className="mt-4 text-sm font-bold text-slate-700">
@@ -964,13 +1592,15 @@ export default function HistoryPage() {
                         <p className="mt-1 max-w-md text-center text-xs leading-5 text-slate-400">
                           {hasFilter
                             ? "Tidak ada StockCard yang sesuai dengan filter."
-                            : "Pergerakan stock pusat akan muncul setelah transaksi inventory tercatat."}
+                            : `Belum ada pergerakan stock pusat pada ${periodLabel}.`}
                         </p>
 
                         {hasFilter && (
                           <button
                             type="button"
-                            onClick={resetFilters}
+                            onClick={
+                              resetFilters
+                            }
                             className="mt-4 rounded-xl bg-[#29483A] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#20392F]"
                           >
                             Reset Filter
@@ -981,16 +1611,24 @@ export default function HistoryPage() {
                   </tr>
                 )}
 
+              {/* DATA */}
+
               {!loading &&
-                paginatedData.map(
-                  (item, index) => {
-                    const style = getTypeStyle(item);
-                    const Icon = style.icon;
+                sortedData.map(
+                  (
+                    item,
+                    index
+                  ) => {
+                    const style =
+                      getTypeStyle(
+                        item
+                      );
+
+                    const Icon =
+                      style.icon;
 
                     const actualIndex =
-                      (page - 1) * PAGE_SIZE +
-                      index +
-                      1;
+                      index + 1;
 
                     const date =
                       item.trxDate ||
@@ -1020,38 +1658,53 @@ export default function HistoryPage() {
 
                     return (
                       <tr
-                        key={String(item.id)}
+                        key={String(
+                          item.id
+                        )}
                         onClick={() =>
-                          setSelectedItem(item)
+                          setSelectedItem(
+                            item
+                          )
                         }
                         className="group cursor-pointer border-b border-slate-100 transition hover:bg-emerald-50/40"
                       >
                         <td className="px-4 py-4 text-center">
                           <span className="text-xs font-semibold text-slate-400">
-                            {actualIndex}
+                            {
+                              actualIndex
+                            }
                           </span>
                         </td>
 
                         <td className="whitespace-nowrap px-4 py-4">
                           <div className="flex items-center gap-2.5">
                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 group-hover:bg-white group-hover:text-emerald-600">
-                              <CalendarDays size={16} />
+                              <CalendarDays
+                                size={
+                                  16
+                                }
+                              />
                             </div>
 
                             <div>
                               <p className="font-semibold text-slate-700">
-                                {formatDate(date)}
+                                {formatDate(
+                                  date
+                                )}
                               </p>
 
                               <p className="mt-0.5 text-[11px] text-slate-400">
                                 {date
                                   ? new Date(
-                                      String(date)
+                                      String(
+                                        date
+                                      )
                                     ).toLocaleTimeString(
                                       "id-ID",
                                       {
                                         hour: "2-digit",
-                                        minute: "2-digit",
+                                        minute:
+                                          "2-digit",
                                       }
                                     )
                                   : "-"}
@@ -1067,21 +1720,32 @@ export default function HistoryPage() {
                             <span
                               className={`flex h-5 w-5 items-center justify-center rounded-full ${style.iconClass}`}
                             >
-                              <Icon size={11} />
+                              <Icon
+                                size={
+                                  11
+                                }
+                              />
                             </span>
-                            {style.label}
+
+                            {
+                              style.label
+                            }
                           </span>
                         </td>
 
                         <td className="whitespace-nowrap px-4 py-4">
                           <div className="flex items-center gap-2">
                             <Hash
-                              size={14}
+                              size={
+                                14
+                              }
                               className="text-slate-300"
                             />
 
                             <span className="font-semibold text-slate-700">
-                              {reference}
+                              {
+                                reference
+                              }
                             </span>
                           </div>
                         </td>
@@ -1101,12 +1765,17 @@ export default function HistoryPage() {
                         <td className="whitespace-nowrap px-4 py-4 text-right">
                           <span
                             className={
-                              num(item.qtyIn) > 0
+                              num(
+                                item.qtyIn
+                              ) >
+                              0
                                 ? "font-bold text-emerald-600"
                                 : "text-slate-300"
                             }
                           >
-                            {num(item.qtyIn) > 0
+                            {num(
+                              item.qtyIn
+                            ) > 0
                               ? `+${formatQty(
                                   item.qtyIn
                                 )}`
@@ -1117,12 +1786,17 @@ export default function HistoryPage() {
                         <td className="whitespace-nowrap px-4 py-4 text-right">
                           <span
                             className={
-                              num(item.qtyOut) > 0
+                              num(
+                                item.qtyOut
+                              ) >
+                              0
                                 ? "font-bold text-red-600"
                                 : "text-slate-300"
                             }
                           >
-                            {num(item.qtyOut) > 0
+                            {num(
+                              item.qtyOut
+                            ) > 0
                               ? `-${formatQty(
                                   item.qtyOut
                                 )}`
@@ -1132,17 +1806,24 @@ export default function HistoryPage() {
 
                         <td className="whitespace-nowrap px-4 py-4 text-right">
                           <span className="font-bold text-slate-700">
-                            {formatQty(item.balance)}
+                            {formatQty(
+                              item.balance
+                            )}
                           </span>
 
                           <span className="ml-1 text-[11px] text-slate-400">
-                            {item.satuan || ""}
+                            {
+                              item.satuan ||
+                              ""
+                            }
                           </span>
                         </td>
 
                         <td className="whitespace-nowrap px-4 py-4 text-right">
                           <p className="font-semibold text-slate-700">
-                            {formatMoney(item.unitPrice)}
+                            {formatMoney(
+                              item.unitPrice
+                            )}
                           </p>
 
                           <p className="mt-0.5 text-[10px] text-slate-400">
@@ -1156,12 +1837,16 @@ export default function HistoryPage() {
                         <td className="max-w-[280px] px-4 py-4">
                           <div className="flex items-start gap-2">
                             <MessageSquareText
-                              size={15}
+                              size={
+                                15
+                              }
                               className="mt-0.5 shrink-0 text-slate-300"
                             />
 
                             <span className="line-clamp-2 text-xs leading-5 text-slate-600">
-                              {description}
+                              {
+                                description
+                              }
                             </span>
                           </div>
                         </td>
@@ -1169,14 +1854,23 @@ export default function HistoryPage() {
                         <td className="px-4 py-4 text-center">
                           <button
                             type="button"
-                            onClick={(event) => {
+                            onClick={(
+                              event
+                            ) => {
                               event.stopPropagation();
-                              setSelectedItem(item);
+
+                              setSelectedItem(
+                                item
+                              );
                             }}
                             className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
                             title="Lihat detail"
                           >
-                            <Eye size={16} />
+                            <Eye
+                              size={
+                                16
+                              }
+                            />
                           </button>
                         </td>
                       </tr>
@@ -1187,107 +1881,38 @@ export default function HistoryPage() {
           </table>
         </div>
 
-        {!loading && sortedData.length > 0 && (
-          <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-xs text-slate-500">
-              Menampilkan{" "}
-              <strong className="text-slate-700">
-                {(page - 1) * PAGE_SIZE + 1}
-              </strong>{" "}
-              -{" "}
-              <strong className="text-slate-700">
-                {Math.min(
-                  page * PAGE_SIZE,
-                  sortedData.length
-                )}
-              </strong>{" "}
-              dari{" "}
-              <strong className="text-slate-700">
-                {sortedData.length}
-              </strong>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() =>
-                  setPage((current) =>
-                    Math.max(1, current - 1)
-                  )
-                }
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-emerald-50 disabled:opacity-40"
-              >
-                <ChevronLeft size={16} />
-              </button>
-
-              {Array.from({
-                length: totalPages,
-              })
-                .slice(
-                  Math.max(0, page - 3),
-                  Math.min(totalPages, page + 2)
-                )
-                .map((_, index) => {
-                  const pageNumber =
-                    Math.max(1, page - 2) +
-                    index;
-
-                  return (
-                    <button
-                      key={pageNumber}
-                      type="button"
-                      onClick={() =>
-                        setPage(pageNumber)
-                      }
-                      className={`inline-flex h-9 min-w-9 items-center justify-center rounded-lg px-2.5 text-xs font-semibold ${
-                        pageNumber === page
-                          ? "bg-[#29483A] text-white"
-                          : "border border-slate-200 bg-white text-slate-600 hover:bg-emerald-50"
-                      }`}
-                    >
-                      {pageNumber}
-                    </button>
-                  );
-                })}
-
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() =>
-                  setPage((current) =>
-                    Math.min(
-                      totalPages,
-                      current + 1
-                    )
-                  )
-                }
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-emerald-50 disabled:opacity-40"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-        )}
       </section>
+
+      {/* =====================================================
+       * DETAIL MODAL
+       * ===================================================== */}
 
       {selectedItem && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm"
-          onMouseDown={(event) => {
+          onMouseDown={(
+            event
+          ) => {
             if (
-              event.target === event.currentTarget
+              event.target ===
+              event.currentTarget
             ) {
-              setSelectedItem(null);
+              setSelectedItem(
+                null
+              );
             }
           }}
         >
           <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-white/50 bg-white shadow-2xl">
+            {/* HEADER */}
+
             <div className="relative border-b border-slate-100 bg-slate-50/80 px-6 py-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#29483A] text-white">
-                    <FileText size={20} />
+                    <FileText
+                      size={20}
+                    />
                   </div>
 
                   <div>
@@ -1306,7 +1931,9 @@ export default function HistoryPage() {
                 <button
                   type="button"
                   onClick={() =>
-                    setSelectedItem(null)
+                    setSelectedItem(
+                      null
+                    )
                   }
                   className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-400 shadow-sm ring-1 ring-slate-200 hover:bg-slate-100 hover:text-slate-700"
                   title="Tutup detail"
@@ -1316,17 +1943,35 @@ export default function HistoryPage() {
               </div>
             </div>
 
+            {/* BODY */}
+
             <div className="overflow-y-auto p-6">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <DetailItem
-                  icon={<Activity size={16} />}
+                  icon={
+                    <Activity
+                      size={
+                        16
+                      }
+                    />
+                  }
                   label="Jenis Transaksi"
                 >
-                  <TypeBadge item={selectedItem} />
+                  <TypeBadge
+                    item={
+                      selectedItem
+                    }
+                  />
                 </DetailItem>
 
                 <DetailItem
-                  icon={<Hash size={16} />}
+                  icon={
+                    <Hash
+                      size={
+                        16
+                      }
+                    />
+                  }
                   label="Referensi"
                 >
                   <span className="font-semibold text-slate-700">
@@ -1338,7 +1983,13 @@ export default function HistoryPage() {
                 </DetailItem>
 
                 <DetailItem
-                  icon={<CalendarDays size={16} />}
+                  icon={
+                    <CalendarDays
+                      size={
+                        16
+                      }
+                    />
+                  }
                   label="Tanggal Transaksi"
                 >
                   <span className="font-semibold text-slate-700">
@@ -1351,7 +2002,13 @@ export default function HistoryPage() {
                 </DetailItem>
 
                 <DetailItem
-                  icon={<Package size={16} />}
+                  icon={
+                    <Package
+                      size={
+                        16
+                      }
+                    />
+                  }
                   label="Barang"
                 >
                   <div>
@@ -1370,43 +2027,70 @@ export default function HistoryPage() {
                 </DetailItem>
 
                 <DetailItem
-                  icon={<ArrowDownToLine size={16} />}
+                  icon={
+                    <ArrowDownToLine
+                      size={
+                        16
+                      }
+                    />
+                  }
                   label="Qty Masuk"
                 >
                   <span className="font-bold text-emerald-600">
                     {formatQty(
                       selectedItem.qtyIn
                     )}{" "}
-                    {selectedItem.satuan || ""}
+                    {selectedItem.satuan ||
+                      ""}
                   </span>
                 </DetailItem>
 
                 <DetailItem
-                  icon={<ArrowUpFromLine size={16} />}
+                  icon={
+                    <ArrowUpFromLine
+                      size={
+                        16
+                      }
+                    />
+                  }
                   label="Qty Keluar"
                 >
                   <span className="font-bold text-red-600">
                     {formatQty(
                       selectedItem.qtyOut
                     )}{" "}
-                    {selectedItem.satuan || ""}
+                    {selectedItem.satuan ||
+                      ""}
                   </span>
                 </DetailItem>
 
                 <DetailItem
-                  icon={<Activity size={16} />}
+                  icon={
+                    <Activity
+                      size={
+                        16
+                      }
+                    />
+                  }
                   label="Balance Setelah Transaksi"
                 >
                   <span className="font-bold text-slate-700">
                     {formatQty(
                       selectedItem.balance
                     )}{" "}
-                    {selectedItem.satuan || ""}
+                    {selectedItem.satuan ||
+                      ""}
                   </span>
                 </DetailItem>
 
                 <DetailItem
-                  icon={<Package size={16} />}
+                  icon={
+                    <Package
+                      size={
+                        16
+                      }
+                    />
+                  }
                   label="Warehouse"
                 >
                   <span className="font-semibold text-slate-700">
@@ -1418,7 +2102,13 @@ export default function HistoryPage() {
 
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <DetailItem
-                  icon={<Activity size={16} />}
+                  icon={
+                    <Activity
+                      size={
+                        16
+                      }
+                    />
+                  }
                   label="Harga Satuan"
                 >
                   <span className="font-semibold text-slate-700">
@@ -1429,7 +2119,13 @@ export default function HistoryPage() {
                 </DetailItem>
 
                 <DetailItem
-                  icon={<Activity size={16} />}
+                  icon={
+                    <Activity
+                      size={
+                        16
+                      }
+                    />
+                  }
                   label="Total Nilai"
                 >
                   <span className="font-semibold text-slate-700">
@@ -1446,6 +2142,7 @@ export default function HistoryPage() {
                     size={15}
                     className="text-emerald-600"
                   />
+
                   Keterangan
                 </div>
 
@@ -1459,7 +2156,9 @@ export default function HistoryPage() {
               <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
-                    <CheckCircle2 size={17} />
+                    <CheckCircle2
+                      size={17}
+                    />
                   </div>
 
                   <div>
@@ -1468,10 +2167,14 @@ export default function HistoryPage() {
                     </p>
 
                     <p className="mt-1 text-xs leading-5 text-emerald-700/80">
-                      Data ini berasal dari riwayat
-                      pergerakan stock pusat warehouse
-                      MAIN dan tidak mengubah data ketika
-                      detail dibuka.
+                      Data ini berasal
+                      dari riwayat
+                      pergerakan stock
+                      pusat warehouse
+                      MAIN dan tidak
+                      mengubah data
+                      ketika detail
+                      dibuka.
                     </p>
                   </div>
                 </div>
@@ -1489,7 +2192,9 @@ export default function HistoryPage() {
                     </p>
 
                     <p className="mt-1 text-xs font-semibold text-slate-700">
-                      {String(selectedItem.id)}
+                      {String(
+                        selectedItem.id
+                      )}
                     </p>
                   </div>
 
@@ -1507,11 +2212,15 @@ export default function HistoryPage() {
               </div>
             </div>
 
+            {/* FOOTER */}
+
             <div className="flex justify-end border-t border-slate-100 bg-slate-50/70 px-6 py-4">
               <button
                 type="button"
                 onClick={() =>
-                  setSelectedItem(null)
+                  setSelectedItem(
+                    null
+                  )
                 }
                 className="inline-flex h-10 items-center justify-center rounded-xl bg-[#29483A] px-5 text-sm font-semibold text-white shadow-sm hover:bg-[#20392F]"
               >
@@ -1525,12 +2234,18 @@ export default function HistoryPage() {
   );
 }
 
+/* =========================================================
+ * TYPE BADGE
+ * ========================================================= */
+
 function TypeBadge({
   item,
 }: {
   item: HistoryItem;
 }) {
-  const style = getTypeStyle(item);
+  const style =
+    getTypeStyle(item);
+
   const Icon = style.icon;
 
   return (
@@ -1542,6 +2257,10 @@ function TypeBadge({
     </span>
   );
 }
+
+/* =========================================================
+ * SUMMARY CARD
+ * ========================================================= */
 
 function SummaryCard({
   label,
@@ -1569,9 +2288,12 @@ function SummaryCard({
           <p
             className={`mt-1 text-2xl font-bold tracking-tight ${valueClass}`}
           >
-            {value.toLocaleString("id-ID", {
-              maximumFractionDigits: 4,
-            })}
+            {value.toLocaleString(
+              "id-ID",
+              {
+                maximumFractionDigits: 4,
+              }
+            )}
           </p>
         </div>
 
@@ -1584,18 +2306,26 @@ function SummaryCard({
 
       <div className="mt-4 flex items-center gap-1.5 text-[11px] text-slate-400">
         <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+
         {description}
       </div>
     </div>
   );
 }
 
+/* =========================================================
+ * TABLE HEADER
+ * ========================================================= */
+
 function TableHeader({
   label,
   align = "left",
 }: {
   label: string;
-  align?: "left" | "center" | "right";
+  align?:
+    | "left"
+    | "center"
+    | "right";
 }) {
   const alignmentClass =
     align === "center"
@@ -1613,6 +2343,10 @@ function TableHeader({
   );
 }
 
+/* =========================================================
+ * SORTABLE HEADER
+ * ========================================================= */
+
 function SortableHeader({
   label,
   onClick,
@@ -1622,7 +2356,10 @@ function SortableHeader({
   label: string;
   onClick: () => void;
   icon: React.ReactNode;
-  align?: "left" | "center" | "right";
+  align?:
+    | "left"
+    | "center"
+    | "right";
 }) {
   const alignmentClass =
     align === "center"
@@ -1654,6 +2391,10 @@ function SortableHeader({
   );
 }
 
+/* =========================================================
+ * DETAIL ITEM
+ * ========================================================= */
+
 function DetailItem({
   icon,
   label,
@@ -1670,7 +2411,9 @@ function DetailItem({
         {label}
       </div>
 
-      <div className="mt-2">{children}</div>
+      <div className="mt-2">
+        {children}
+      </div>
     </div>
   );
 }

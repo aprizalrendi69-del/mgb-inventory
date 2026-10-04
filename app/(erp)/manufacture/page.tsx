@@ -166,7 +166,8 @@ function isOutletRole(role?: string | null) {
   return (
     normalized === "OUTLET_ADMIN" ||
     normalized === "ADMIN_OUTLET" ||
-    normalized === "STAFF_MANUFACTURE"
+    (normalized === "STAFF_MANUFACTURE" ||
+    normalized === "STAFF_OUTLET")
   );
 }
 
@@ -942,8 +943,95 @@ export default function ManufacturePage() {
     isOutletRole(user?.role);
 
   const isManufactureStaff =
-    normalizeRole(user?.role) ===
-    "STAFF_MANUFACTURE";
+    normalizeRole(user?.role) === "STAFF_MANUFACTURE" ||
+    normalizeRole(user?.role) === "STAFF_OUTLET";
+
+  /* =========================================================
+   * BROWSER BACK GUARD - STAFF OUTLET
+   *
+   * KHUSUS STAFF_OUTLET:
+   * /manufacture -> klik Back browser -> tetap /manufacture.
+   *
+   * Guard ini hanya bekerja pada browser history. Tidak ada
+   * perubahan pada API login, session, API manufacture, maupun
+   * logic manufacture lainnya.
+   *
+   * Polanya:
+   * 1. Tambahkan satu history entry tambahan dengan URL
+   *    /manufacture.
+   * 2. Saat Back ditekan, browser akan berpindah ke entry
+   *    sebelumnya yang masih berada di /manufacture.
+   * 3. Kembalikan pointer history ke entry guard menggunakan
+   *    history.forward(), sehingga dashboard outlet tidak
+   *    menjadi tujuan Back.
+   *
+   * Role selain STAFF_OUTLET tidak disentuh dan tetap memakai
+   * browser history normal.
+   * ========================================================= */
+  useEffect(() => {
+    if (
+      normalizeRole(user?.role) !==
+      "STAFF_OUTLET"
+    ) {
+      return;
+    }
+
+    const guardedUrl =
+      `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+    const guardState = {
+      ...(window.history.state ?? {}),
+      __mgbManufactureBackGuard: true,
+    };
+
+    /*
+     * Buat satu entry tambahan di posisi /manufacture.
+     * Entry sebelumnya juga /manufacture setelah user masuk
+     * ke halaman ini, sehingga tombol Back tidak langsung
+     * menuju /outlet/dashboard.
+     */
+    window.history.pushState(
+      guardState,
+      "",
+      guardedUrl
+    );
+
+    let restoringHistory = false;
+
+    const handlePopState = () => {
+      /*
+       * Back sudah diproses browser. Jangan pushState lagi
+       * karena itu akan terus menambah entry history.
+       *
+       * Kembalikan pointer ke entry guard yang tadi ditinggalkan.
+       * Dengan demikian URL tetap /manufacture dan halaman
+       * dashboard outlet tidak menjadi tujuan.
+       */
+      if (restoringHistory) {
+        return;
+      }
+
+      restoringHistory = true;
+
+      window.history.forward();
+
+      window.setTimeout(() => {
+        restoringHistory = false;
+      }, 0);
+    };
+
+    window.addEventListener(
+      "popstate",
+      handlePopState
+    );
+
+    return () => {
+      window.removeEventListener(
+        "popstate",
+        handlePopState
+      );
+    };
+  }, [user?.role]);
 
   const filteredOrders =
     useMemo(() => {

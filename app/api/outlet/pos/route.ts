@@ -22,8 +22,24 @@ const POS_ROLES = [
   "KASIR",
 ] as const;
 
+/*
+ * ============================================================
+ * PAYMENT METHODS
+ * ============================================================
+ *
+ * QRIS ditambahkan sebagai metode pembayaran resmi POS.
+ *
+ * CASH:
+ *   - boleh lebih besar dari grand total
+ *   - memiliki changeAmount
+ *
+ * QRIS / TRANSFER / dll:
+ *   - harus sama persis dengan grand total
+ *   - changeAmount selalu 0
+ */
 const PAYMENT_METHODS = [
   "CASH",
+  "QRIS",
   "TRANSFER",
   "TRANSFER_FINANCE",
   "TRANSFER_CREDIT_CARD",
@@ -354,7 +370,8 @@ function parseAyce(body: any) {
     )
   ) {
     for (
-      const id of raw.addOnMenuIds
+      const id of
+        raw.addOnMenuIds
     ) {
       const parsed = Number(id);
 
@@ -412,17 +429,6 @@ function parseAyce(body: any) {
  * ============================================================
  * GET POS + DAILY REPORT
  * ============================================================
- *
- * GET NORMAL:
- *
- *   /api/outlet/pos
- *
- * GET LAPORAN HARIAN:
- *
- *   /api/outlet/pos?date=YYYY-MM-DD&outletId=1
- *
- * Laporan memakai StockCard POS_OUT sebagai
- * sumber utama consumption / HPP.
  */
 export async function GET(
   req: NextRequest
@@ -468,9 +474,6 @@ export async function GET(
         );
       }
 
-      /*
-       * Laporan POS tidak dibuka untuk KASIR.
-       */
       if (
         role !== "ADMIN" &&
         role !== "MANAGER" &&
@@ -585,11 +588,6 @@ export async function GET(
         );
       }
 
-      /*
-       * ======================================================
-       * STOCK CARD POS OUT
-       * ======================================================
-       */
       const cards =
         await prisma.stockCard.findMany(
           {
@@ -699,11 +697,6 @@ export async function GET(
           })
         );
 
-      /*
-       * ======================================================
-       * SUMMARY LAPORAN
-       * ======================================================
-       */
       const totalTransactions =
         data.length;
 
@@ -733,9 +726,6 @@ export async function GET(
           0
         );
 
-      /*
-       * Group berdasarkan barang.
-       */
       const groupedMap =
         new Map<
           number,
@@ -836,14 +826,6 @@ export async function GET(
               )
           );
 
-      /*
-       * ======================================================
-       * SALES HARIAN
-       * ======================================================
-       *
-       * Ditambahkan agar endpoint yang sama dapat digunakan
-       * untuk laporan harian POS.
-       */
       const sales =
         await prisma.outletSale.findMany(
           {
@@ -954,6 +936,65 @@ export async function GET(
         totalServiceCharge -
         totalPpn;
 
+      /*
+       * Breakdown metode pembayaran.
+       * QRIS sekarang ikut terbaca di laporan.
+       */
+      const paymentMethodSummary =
+        new Map<
+          string,
+          {
+            method: string;
+            transactionCount: number;
+            amount: number;
+          }
+        >();
+
+      for (
+        const sale of sales
+      ) {
+        const method =
+          String(
+            sale.paymentMethod ||
+              "UNKNOWN"
+          ).toUpperCase();
+
+        const existing =
+          paymentMethodSummary.get(
+            method
+          );
+
+        const amount =
+          Number(
+            sale.total || 0
+          );
+
+        if (existing) {
+          existing.transactionCount +=
+            1;
+
+          existing.amount +=
+            amount;
+        } else {
+          paymentMethodSummary.set(
+            method,
+            {
+              method,
+              transactionCount: 1,
+              amount,
+            }
+          );
+        }
+      }
+
+      const paymentMethods =
+        [
+          ...paymentMethodSummary.values(),
+        ].sort(
+          (a, b) =>
+            b.amount - a.amount
+        );
+
       return NextResponse.json({
         success: true,
 
@@ -1003,6 +1044,8 @@ export async function GET(
 
           netSales:
             totalNetSales,
+
+          paymentMethods,
         },
 
         data,
@@ -1036,9 +1079,6 @@ export async function GET(
         requestedRaw || 0
       );
 
-    /*
-     * Ambil outlet aktif satu kali.
-     */
     const outletRows =
       await prisma.outlet.findMany(
         {
@@ -1058,10 +1098,6 @@ export async function GET(
         }
       );
 
-    /*
-     * OUTLET_ADMIN / KASIR hanya boleh melihat
-     * outlet miliknya.
-     */
     const outlets =
       role === "OUTLET_ADMIN" ||
       role === "KASIR"
@@ -1080,11 +1116,6 @@ export async function GET(
         requestedOutletId
       );
 
-    /*
-     * ADMIN / MANAGER:
-     * jika belum memilih outlet,
-     * gunakan outlet aktif pertama.
-     */
     if (
       role !== "OUTLET_ADMIN" &&
       role !== "KASIR" &&
@@ -1094,9 +1125,6 @@ export async function GET(
         outlets[0]?.id || 0;
     }
 
-    /*
-     * User yang terikat outlet harus mempunyai outlet.
-     */
     if (
       (
         role === "OUTLET_ADMIN" ||
@@ -1112,9 +1140,6 @@ export async function GET(
       );
     }
 
-    /*
-     * Tidak ada outlet aktif.
-     */
     if (!outletId) {
       return NextResponse.json({
         success: true,
@@ -1147,10 +1172,6 @@ export async function GET(
       });
     }
 
-    /*
-     * OUTLET_ADMIN / KASIR tidak boleh memanipulasi
-     * outletId melalui browser.
-     */
     if (
       (
         role === "OUTLET_ADMIN" ||
@@ -1165,10 +1186,6 @@ export async function GET(
       );
     }
 
-    /*
-     * Untuk ADMIN / MANAGER, outletId wajib
-     * berasal dari outlet aktif.
-     */
     const selectedOutlet =
       outlets.find(
         (outlet) =>
@@ -1188,11 +1205,6 @@ export async function GET(
       active: true,
     };
 
-    /*
-     * ========================================================
-     * MENU + SALES PARALEL
-     * ========================================================
-     */
     const [
       menuRows,
       sales,
@@ -1284,11 +1296,6 @@ export async function GET(
       }),
     ]);
 
-    /*
-     * ========================================================
-     * KUMPULKAN SEMUA BARANG BOM
-     * ========================================================
-     */
     const bomBarangIds =
       new Set<number>();
 
@@ -1312,11 +1319,6 @@ export async function GET(
       }
     }
 
-    /*
-     * ========================================================
-     * AMBIL SEMUA OUTLET STOCK SEKALI
-     * ========================================================
-     */
     const outletStocks =
       bomBarangIds.size
         ? await prisma.outletStock.findMany(
@@ -1339,9 +1341,6 @@ export async function GET(
           )
         : [];
 
-    /*
-     * Map supaya lookup O(1).
-     */
     const stockMap =
       new Map<
         number,
@@ -1362,11 +1361,6 @@ export async function GET(
       );
     }
 
-    /*
-     * ========================================================
-     * HITUNG STOCK MENU
-     * ========================================================
-     */
     const menuItems =
       menuRows.map(
         (menu) => {
@@ -1613,9 +1607,6 @@ export async function POST(
       );
     }
 
-    /*
-     * OUTLET_ADMIN / KASIR terkunci ke session outlet.
-     */
     if (
       (
         role === "OUTLET_ADMIN" ||
@@ -1639,6 +1630,8 @@ export async function POST(
      * ========================================================
      * PAYMENT METHOD
      * ========================================================
+     *
+     * QRIS sekarang valid.
      */
     const paymentMethodRaw =
       String(
@@ -1791,11 +1784,6 @@ export async function POST(
     const result =
       await prisma.$transaction(
         async (tx) => {
-          /*
-           * ==================================================
-           * VALIDASI OUTLET
-           * ==================================================
-           */
           const outlet =
             await tx.outlet.findUnique({
               where: {
@@ -1824,7 +1812,7 @@ export async function POST(
 
           /*
            * ==================================================
-           * GABUNGKAN MENU YANG SAMA
+           * GABUNGKAN MENU
            * ==================================================
            */
           const menuQty =
@@ -1888,7 +1876,7 @@ export async function POST(
 
           /*
            * ==================================================
-           * AMBIL SEMUA MENU + BOM
+           * MENU + BOM
            * ==================================================
            */
           const menus =
@@ -2013,11 +2001,6 @@ export async function POST(
           let ayceAddOnSubtotal =
             0;
 
-          /*
-           * ==================================================
-           * HITUNG MENU + BOM
-           * ==================================================
-           */
           for (
             const menuId of
               menuIds
@@ -2140,10 +2123,6 @@ export async function POST(
                 );
               }
 
-              /*
-               * Selalu konversi kebutuhan BOM
-               * menjadi BASE UNIT.
-               */
               const qtyBasePerMenu =
                 toBaseQty(
                   recipeQty,
@@ -2243,9 +2222,6 @@ export async function POST(
               packageTotal +
               ayceAddOnSubtotal;
 
-            /*
-             * Virtual package item.
-             */
             saleItems.unshift({
               menuId: null,
 
@@ -2280,7 +2256,7 @@ export async function POST(
 
           /*
            * ==================================================
-           * VALIDASI DISKON
+           * DISCOUNT
            * ==================================================
            */
           if (
@@ -2306,18 +2282,6 @@ export async function POST(
            * ==================================================
            * TAX / SERVICE
            * ==================================================
-           *
-           * SUBTOTAL
-           *     ↓
-           * DISCOUNT
-           *     ↓
-           * TAXABLE
-           *     ↓
-           * SERVICE 5%
-           *     ↓
-           * PPN 10% dari taxable + service
-           *     ↓
-           * GRAND TOTAL
            */
           const taxable =
             Math.max(
@@ -2387,7 +2351,7 @@ export async function POST(
 
           /*
            * ==================================================
-           * PEMBAYARAN
+           * PAYMENT
            * ==================================================
            */
           const paidAmount =
@@ -2407,14 +2371,24 @@ export async function POST(
             );
           }
 
+          /*
+           * Hanya CASH yang boleh memiliki
+           * nominal lebih besar dan menerima kembalian.
+           *
+           * QRIS termasuk non-cash.
+           */
           const cashLikeMethods =
             new Set<PosPaymentMethod>(
               ["CASH"]
             );
 
           /*
-           * Semua metode selain CASH
-           * harus exact payment.
+           * QRIS harus exact:
+           *
+           * Grand Total 100.000
+           * QRIS 100.000 -> valid
+           * QRIS 100.001 -> ditolak
+           * QRIS 99.999  -> ditolak
            */
           if (
             !cashLikeMethods.has(
@@ -2443,7 +2417,7 @@ export async function POST(
 
           /*
            * ==================================================
-           * AMBIL SEMUA OUTLET STOCK SEKALI
+           * OUTLET STOCK
            * ==================================================
            */
           const requiredBarangIds =
@@ -2603,10 +2577,6 @@ export async function POST(
               );
             }
 
-            /*
-             * averageCost disimpan pada stock unit.
-             * Konversikan ke base cost.
-             */
             const averageCostMain =
               Number(
                 stock.averageCost ||
@@ -2631,7 +2601,9 @@ export async function POST(
             new Date();
 
           /*
-           * Nomor transaksi.
+           * ==================================================
+           * NOMOR TRANSAKSI
+           * ==================================================
            */
           const number =
             `POS-${outlet.code}-${now
@@ -2657,6 +2629,13 @@ export async function POST(
            * ==================================================
            * CREATE SALE
            * ==================================================
+           *
+           * paymentMethod otomatis menyimpan:
+           *
+           * CASH
+           * QRIS
+           * TRANSFER
+           * dst.
            */
           const sale =
             await tx.outletSale.create(
@@ -2677,18 +2656,10 @@ export async function POST(
 
                   discount,
 
-                  /*
-                   * Taxable tidak perlu disimpan.
-                   * Dihitung ulang dari subtotal - discount.
-                   */
-
                   serviceCharge,
 
                   ppn,
 
-                  /*
-                   * total = GRAND TOTAL
-                   */
                   total,
 
                   paidAmount,
@@ -2754,8 +2725,6 @@ export async function POST(
            * ==================================================
            * POTONG STOCK BOM
            * ==================================================
-           *
-           * deltaBaseQty SELALU BASE UNIT.
            */
           for (
             const [
@@ -2817,11 +2786,6 @@ export async function POST(
                       0
                   );
 
-            /*
-             * ==================================================
-             * STOCK CARD
-             * ==================================================
-             */
             await tx.stockCard.create(
               {
                 data: {
@@ -2874,6 +2838,8 @@ export async function POST(
               ? [
                   `POS ${outlet.name} ${sale.number} berhasil.`,
 
+                  `METODE ${paymentMethod}.`,
+
                   `AYCE SESSION ${ayce.sessionId}.`,
 
                   `MEJA ${ayce.tableName}.`,
@@ -2906,6 +2872,10 @@ export async function POST(
 
                   `GRAND TOTAL ${total}.`,
 
+                  `PAID ${paidAmount}.`,
+
+                  `CHANGE ${changeAmount}.`,
+
                   `ADD-ON ${ayceAddOnSubtotal}.`,
 
                   `STOCK BOM otomatis terpakai sebagai consumption.`,
@@ -2921,6 +2891,8 @@ export async function POST(
               : [
                   `POS ${outlet.name} ${sale.number} berhasil.`,
 
+                  `METODE ${paymentMethod}.`,
+
                   `SUBTOTAL ${subtotal}.`,
 
                   `DISCOUNT ${discount}.`,
@@ -2930,6 +2902,10 @@ export async function POST(
                   `PPN ${ppn}.`,
 
                   `GRAND TOTAL ${total}.`,
+
+                  `PAID ${paidAmount}.`,
+
+                  `CHANGE ${changeAmount}.`,
 
                   `Stock BOM otomatis terpakai.`,
 
@@ -2963,12 +2939,6 @@ export async function POST(
           return {
             ...sale,
 
-            /*
-             * Komponen pricing dikembalikan
-             * secara eksplisit supaya frontend
-             * dapat langsung menggunakan hasil
-             * server.
-             */
             pricing: {
               subtotal,
 
@@ -2990,6 +2960,32 @@ export async function POST(
 
               grandTotal:
                 total,
+
+              paidAmount,
+
+              changeAmount,
+            },
+
+            /*
+             * Kembalikan metode pembayaran
+             * secara eksplisit supaya frontend
+             * langsung mengetahui QRIS.
+             */
+            payment: {
+              method:
+                paymentMethod,
+
+              isCash:
+                paymentMethod ===
+                "CASH",
+
+              isQris:
+                paymentMethod ===
+                "QRIS",
+
+              isNonCash:
+                paymentMethod !==
+                "CASH",
 
               paidAmount,
 

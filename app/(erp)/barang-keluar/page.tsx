@@ -2842,7 +2842,7 @@ export default function BarangKeluarPage() {
 
   return (
     <div
-      className="min-h-full bg-[#F3F7F4]"
+      className="min-h-full bg-[#F3F7F4] dark:bg-[#18241F]"
       style={{
         backgroundImage:
           "radial-gradient(circle at 8% 0%, rgba(111,128,108,0.07), transparent 26%), radial-gradient(circle at 92% 18%, rgba(183,154,99,0.055), transparent 22%)",
@@ -2852,19 +2852,19 @@ export default function BarangKeluarPage() {
           PAGE HEADER
       ===================================================== */}
 
-      <div className="border-b border-[#DDE8E1] bg-[#F8FBF9]">
+      <div className="border-b border-[#DDE8E1] bg-[#F8FBF9] dark:border-[#2E4038] dark:bg-[#13211C] dark:border-[#34453D] dark:bg-[#18241F]">
         <div className="mx-auto max-w-[1600px] px-5 py-6 md:px-8 md:py-7">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex items-start gap-4">
               <div className="relative">
-                <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-[#173A2F] text-white shadow-[0_12px_28px_rgba(28,40,34,0.12)]">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-[#173A2F] text-white shadow-[0_12px_28px_rgba(28,40,34,0.12)] dark:bg-[#356B58]">
                   <PackageMinus
                     size={25}
                     strokeWidth={2}
                   />
                 </div>
 
-                <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[#5F8A72]">
+                <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[#5F8A72] dark:bg-[#4F8F73] dark:border-[#34453D]">
                   <ArrowRight
                     size={10}
                     className="text-white"
@@ -2874,24 +2874,24 @@ export default function BarangKeluarPage() {
 
               <div>
                 <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-[#EEF1EA] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[#5F8A72]">
+                  <span className="rounded-full bg-[#EEF1EA] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                     Inventory
                   </span>
 
-                  <span className="text-xs font-medium text-gray-400">
+                  <span className="text-xs font-medium text-gray-400 dark:text-[#788C83]">
                     •
                   </span>
 
-                  <span className="text-xs font-medium text-gray-400">
+                  <span className="text-xs font-medium text-gray-400 dark:text-[#788C83]">
                     Gudang
                   </span>
                 </div>
 
-                <h1 className="text-2xl font-semibold tracking-[-0.025em] text-[#173A2F] md:text-3xl">
+                <h1 className="text-2xl font-semibold tracking-[-0.025em] text-[#173A2F] md:text-3xl dark:text-[#E5F1EB]">
                   Barang Keluar
                 </h1>
 
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-[#93A69D]">
                   Kelola barang keluar pusat, termasuk
                   Delivery Request dari outlet yang akan
                   diproses menjadi Delivery Order.
@@ -2900,26 +2900,26 @@ export default function BarangKeluarPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="hidden items-center gap-3 rounded-[22px] border border-[#DDE8E1] bg-[#FAF9F6] px-4 py-3 sm:flex">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72]">
+              <div className="hidden items-center gap-3 rounded-[22px] border border-[#DDE8E1] bg-[#FAF9F6] px-4 py-3 sm:flex dark:border-[#2E4038] dark:bg-[#111B17] dark:border-[#34453D] dark:bg-[#18241F]">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                   <ShoppingCart size={17} />
                 </div>
 
                 <div>
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
+                  <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-[#788C83]">
                     Keranjang
                   </p>
 
-                  <p className="text-sm font-bold text-[#173A2F]">
+                  <p className="text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                     {cart.length} jenis barang
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 rounded-[22px] border border-[#DDE8E1] bg-white px-4 py-3 shadow-[0_8px_30px_rgba(23,58,47,0.055)]">
-                <div className="h-2 w-2 rounded-full bg-[#5F8A72]" />
+              <div className="flex items-center gap-2 rounded-[22px] border border-[#DDE8E1] bg-white px-4 py-3 shadow-[0_8px_30px_rgba(23,58,47,0.055)] dark:border-[#2E4038] dark:bg-[#101A16] dark:border-[#34453D]">
+                <div className="h-2 w-2 rounded-full bg-[#5F8A72] dark:bg-[#4F8F73]" />
 
-                <span className="text-xs font-semibold text-[#44564A]">
+                <span className="text-xs font-semibold text-[#44564A] dark:text-[#B8CAC1]">
                   Gudang Pusat
                 </span>
               </div>
@@ -2933,20 +2933,20 @@ export default function BarangKeluarPage() {
             DELIVERY REQUEST OUTLET
         ===================================================== */}
 
-        <section className="overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white/95 shadow-[0_8px_30px_rgba(23,58,47,0.055)]">
-          <div className="border-b border-[#E7E3DB] px-5 py-5 md:px-6">
+        <section className="overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white/95 shadow-[0_8px_30px_rgba(23,58,47,0.055)] dark:border-[#2E4038] dark:border-[#34453D] dark:bg-[#101A16]/95">
+          <div className="border-b border-[#E7E3DB] px-5 py-5 md:px-6 dark:border-[#2C3933] dark:border-[#34453D]">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#173A2F] text-white">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#173A2F] text-white dark:bg-[#356B58]">
                   <ClipboardList size={20} />
                 </div>
 
                 <div>
-                  <h2 className="text-sm font-bold text-[#173A2F]">
+                  <h2 className="text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                     Request Pengiriman Outlet
                   </h2>
 
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-[#93A69D]">
                     Request dari outlet masuk ke sini sebelum
                     diproses menjadi Delivery Order.
                   </p>
@@ -2959,7 +2959,7 @@ export default function BarangKeluarPage() {
                   onChange={(e) =>
                     setRequestStatusFilter(e.target.value)
                   }
-                  className="h-10 rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] px-3 text-xs font-semibold text-[#44564A] outline-none transition focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
+                  className="h-10 rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] px-3 text-xs font-semibold text-[#44564A] outline-none transition focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10 dark:border-[#3A4A43] dark:bg-[#111B17] dark:text-[#B8CAC1] dark:focus:bg-[#16231E] dark:border-[#34453D] dark:bg-[#18241F]"
                 >
                   <option value="ALL">
                     Semua Status
@@ -2994,7 +2994,7 @@ export default function BarangKeluarPage() {
                   type="button"
                   onClick={loadDeliveryRequests}
                   disabled={loadingRequests}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[#DDE8E1] bg-white px-4 text-xs font-bold text-[#44564A] transition hover:bg-[#F3F7F4] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[#DDE8E1] bg-white px-4 text-xs font-bold text-[#44564A] transition hover:bg-[#F3F7F4] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#2E4038] dark:bg-[#101A16] dark:text-[#B8CAC1] dark:border-[#34453D]"
                 >
                   <RefreshCw
                     size={14}
@@ -3012,7 +3012,7 @@ export default function BarangKeluarPage() {
                   type="button"
                   onClick={openWhatsAppAllDeliveryRequests}
                   disabled={loadingRequests}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-xs font-bold text-emerald-700 shadow-[0_8px_20px_rgba(16,185,129,0.08)] transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-xs font-bold text-emerald-700 shadow-[0_8px_20px_rgba(16,185,129,0.08)] transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#245B47] dark:bg-[#123128] dark:text-[#6FE0B0] dark:hover:bg-[#1C4B3D]"
                   title="Kirim seluruh Delivery Request dari semua outlet ke WhatsApp Web"
                 >
                   <MessageCircle size={14} />
@@ -3023,7 +3023,7 @@ export default function BarangKeluarPage() {
                   type="button"
                   onClick={downloadDraftDeliveryRequestsPDF}
                   disabled={loadingRequests}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#173A2F] px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(23,58,47,0.12)] transition hover:bg-[#285744] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#173A2F] px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(23,58,47,0.12)] transition hover:bg-[#285744] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#356B58] dark:hover:bg-[#43806A]"
                   title="Download semua Delivery Request yang masih Draft / Pending dari seluruh outlet yang dapat diakses"
                 >
                   <Download size={14} />
@@ -3036,26 +3036,26 @@ export default function BarangKeluarPage() {
           <div className="p-5 md:p-6">
             {loadingRequests ? (
               <div className="flex min-h-[180px] items-center justify-center">
-                <div className="flex items-center gap-2 text-sm text-gray-500">
+                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-[#93A69D]">
                   <RefreshCw
                     size={17}
-                    className="animate-spin text-[#5F8A72]"
+                    className="animate-spin text-[#5F8A72] dark:text-[#73B99A]"
                   />
 
                   Memuat Delivery Request...
                 </div>
               </div>
             ) : deliveryRequests.length === 0 ? (
-              <div className="rounded-[20px] border border-dashed border-[#DDE8E1] bg-[#F8FAF8] px-6 py-12 text-center">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EEF1EA] text-[#5F8A72]">
+              <div className="rounded-[20px] border border-dashed border-[#DDE8E1] bg-[#F8FAF8] px-6 py-12 text-center dark:border-[#2E4038] dark:border-[#34453D] dark:bg-[#18241F] dark:bg-[#17241F]">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EEF1EA] text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                   <ClipboardList size={24} />
                 </div>
 
-                <p className="text-sm font-bold text-[#173A2F]">
+                <p className="text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                   Belum ada Delivery Request
                 </p>
 
-                <p className="mt-1 text-xs text-gray-400">
+                <p className="mt-1 text-xs text-gray-400 dark:text-[#788C83]">
                   Request pengiriman yang dibuat oleh outlet
                   akan muncul di sini.
                 </p>
@@ -3089,17 +3089,17 @@ export default function BarangKeluarPage() {
                   return (
                     <div
                       key={request.id}
-                      className="overflow-hidden rounded-[20px] border border-[#E1E7E3] bg-white transition hover:border-[#BFD1C5] hover:shadow-sm"
+                      className="overflow-hidden rounded-[20px] border border-[#E1E7E3] bg-white transition hover:border-[#BFD1C5] hover:shadow-sm dark:bg-[#101A16] dark:border-[#34453D]"
                     >
                       <div className="flex flex-col gap-4 p-4 md:p-5 xl:flex-row xl:items-center">
                         <div className="flex min-w-0 flex-1 items-start gap-3">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72]">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                             <Truck size={19} />
                           </div>
 
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-sm font-bold text-[#173A2F]">
+                              <p className="text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                                 {getRequestNumber(
                                   request
                                 )}
@@ -3116,7 +3116,7 @@ export default function BarangKeluarPage() {
                               </span>
 
                               {hasEmptyStock && (
-                                <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-bold text-red-600">
+                                <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-bold text-red-600 dark:border-[#71353A] dark:bg-[#351A1C] dark:text-[#FF7E86]">
                                   <PackageX size={11} />
                                   ADA STOCK KOSONG
                                 </span>
@@ -3124,7 +3124,7 @@ export default function BarangKeluarPage() {
 
                               {!hasEmptyStock &&
                                 hasInsufficientStock && (
-                                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700">
+                                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700 dark:border-[#66511E] dark:bg-[#332A16] dark:text-[#F5C96B]">
                                     <AlertTriangle
                                       size={11}
                                     />
@@ -3133,7 +3133,7 @@ export default function BarangKeluarPage() {
                                 )}
                             </div>
 
-                            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500">
+                            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-[#93A69D]">
                               <span className="inline-flex items-center gap-1.5">
                                 <Store size={12} />
                                 {getRequestOutlet(
@@ -3167,7 +3167,7 @@ export default function BarangKeluarPage() {
                             </div>
 
                             {request.delivery?.number && (
-                              <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-violet-50 px-2.5 py-1 text-[10px] font-bold text-violet-700">
+                              <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-violet-50 px-2.5 py-1 text-[10px] font-bold text-violet-700 dark:bg-[#261D38] dark:text-[#C6A5FF]">
                                 <Truck size={12} />
                                 Delivery:{" "}
                                 {
@@ -3193,7 +3193,7 @@ export default function BarangKeluarPage() {
                                 );
                               }
                             }}
-                            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#DDE8E1] bg-white px-3 text-xs font-bold text-[#44564A] transition hover:bg-[#F3F7F4]"
+                            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#DDE8E1] bg-white px-3 text-xs font-bold text-[#44564A] transition hover:bg-[#F3F7F4] dark:border-[#2E4038] dark:bg-[#101A16] dark:text-[#B8CAC1] dark:border-[#34453D]"
                           >
                             {isExpanded ? (
                               <ChevronUp size={14} />
@@ -3212,7 +3212,7 @@ export default function BarangKeluarPage() {
                                )
                              }
                              title="Kirim detail Delivery Request ke WhatsApp Web"
-                             className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+                             className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 dark:border-[#245B47] dark:bg-[#123128] dark:text-[#6FE0B0] dark:hover:bg-[#1C4B3D]"
                            >
                              <MessageCircle size={14} />
                              WhatsApp
@@ -3225,7 +3225,7 @@ export default function BarangKeluarPage() {
                                 request
                               )
                             }
-                            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#DDE8E1] bg-[#F7F9F7] px-3 text-xs font-bold text-[#44564A] transition hover:bg-[#EEF1EA]"
+                            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#DDE8E1] bg-[#F7F9F7] px-3 text-xs font-bold text-[#44564A] transition hover:bg-[#EEF1EA] dark:border-[#2E4038] dark:bg-[#15231E] dark:text-[#B8CAC1] dark:border-[#34453D] dark:bg-[#18241F]"
                           >
                             <Eye size={14} />
                             Detail
@@ -3241,7 +3241,7 @@ export default function BarangKeluarPage() {
                                 )
                               }
                               disabled={busy}
-                              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#173A2F] px-4 text-xs font-bold text-white transition hover:bg-[#285744] disabled:cursor-not-allowed disabled:opacity-50"
+                              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#173A2F] px-4 text-xs font-bold text-white transition hover:bg-[#285744] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#356B58] dark:hover:bg-[#43806A]"
                             >
                               {busy ? (
                                 <RefreshCw
@@ -3266,7 +3266,7 @@ export default function BarangKeluarPage() {
                                 )
                               }
                               disabled={busy}
-                              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#5F8A72] px-4 text-xs font-bold text-white transition hover:bg-[#285744] disabled:cursor-not-allowed disabled:opacity-50"
+                              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#5F8A72] px-4 text-xs font-bold text-white transition hover:bg-[#285744] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#4F8F73] dark:hover:bg-[#43806A]"
                             >
                               {busy ? (
                                 <RefreshCw
@@ -3289,7 +3289,7 @@ export default function BarangKeluarPage() {
                                   request.deliveryId
                                 )
                               }
-                              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#BFD1C5] bg-[#EEF1EA] px-4 text-xs font-bold text-[#285744] transition hover:bg-[#DCEAE1]"
+                              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#BFD1C5] bg-[#EEF1EA] px-4 text-xs font-bold text-[#285744] transition hover:bg-[#DCEAE1] dark:bg-[#1B2B24] dark:border-[#34453D] dark:bg-[#18241F]"
                             >
                               <ArrowRight
                                 size={14}
@@ -3301,32 +3301,32 @@ export default function BarangKeluarPage() {
                       </div>
 
                       {isExpanded && (
-                        <div className="border-t border-[#E7E3DB] bg-[#FAFBFA] px-4 py-4 md:px-5">
-                          <div className="overflow-x-auto rounded-xl border border-[#E3E9E5] bg-white">
+                        <div className="border-t border-[#E7E3DB] bg-[#FAFBFA] px-4 py-4 md:px-5 dark:border-[#2C3933] dark:border-[#34453D] dark:bg-[#18241F]">
+                          <div className="overflow-x-auto rounded-xl border border-[#E3E9E5] bg-white dark:bg-[#101A16] dark:border-[#34453D]">
                             <table className="min-w-[980px] w-full text-xs">
-                              <thead className="bg-[#F4F6F3]">
+                              <thead className="bg-[#F4F6F3] dark:bg-[#18241F]">
                                 <tr>
-                                  <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-gray-400">
+                                  <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-gray-400 dark:text-[#788C83]">
                                     Barang
                                   </th>
 
-                                  <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-gray-400">
+                                  <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-gray-400 dark:text-[#788C83]">
                                     Kode
                                   </th>
 
-                                  <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-gray-400">
+                                  <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-gray-400 dark:text-[#788C83]">
                                     Request
                                   </th>
 
-                                  <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-gray-400">
+                                  <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-gray-400 dark:text-[#788C83]">
                                     Stock Pusat
                                   </th>
 
-                                  <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-gray-400">
+                                  <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-gray-400 dark:text-[#788C83]">
                                     Satuan
                                   </th>
 
-                                  <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-gray-400">
+                                  <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-gray-400 dark:text-[#788C83]">
                                     Status Stock
                                   </th>
                                 </tr>
@@ -3353,22 +3353,22 @@ export default function BarangKeluarPage() {
                                         key={
                                           item.id
                                         }
-                                        className="border-t border-[#EDF1EE]"
+                                        className="border-t border-[#EDF1EE] dark:border-[#34453D]"
                                       >
-                                        <td className="px-4 py-3 font-bold text-[#173A2F]">
+                                        <td className="px-4 py-3 font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                                           {item.barang
                                             ?.name ||
                                             `Barang #${item.barangId}`}
                                         </td>
 
-                                        <td className="px-4 py-3 text-gray-500">
+                                        <td className="px-4 py-3 text-gray-500 dark:text-[#93A69D]">
                                           {item.barang
                                             ?.code ||
                                             "-"}
                                         </td>
 
                                         <td className="px-4 py-3 text-center">
-                                          <span className="inline-flex min-w-[60px] justify-center rounded-lg bg-[#EEF1EA] px-2.5 py-1.5 font-bold text-[#5F8A72]">
+                                          <span className="inline-flex min-w-[60px] justify-center rounded-lg bg-[#EEF1EA] px-2.5 py-1.5 font-bold text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                                             {formatNumber(
                                               item.qty
                                             )}
@@ -3397,7 +3397,7 @@ export default function BarangKeluarPage() {
                                         </td>
 
                                         <td className="px-4 py-3">
-                                          <span className="inline-flex min-w-[60px] justify-center rounded-lg bg-[#F5F4F0] px-2.5 py-1.5 font-semibold text-[#44564A]">
+                                          <span className="inline-flex min-w-[60px] justify-center rounded-lg bg-[#F5F4F0] px-2.5 py-1.5 font-semibold text-[#44564A] dark:bg-[#1B2420] dark:text-[#B8CAC1] dark:bg-[#18241F]">
                                             {getRequestItemUnit(
                                               item
                                             )}
@@ -3428,7 +3428,7 @@ export default function BarangKeluarPage() {
                           </div>
 
                           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                            <div className="flex items-center gap-2 text-[11px] text-gray-400">
+                            <div className="flex items-center gap-2 text-[11px] text-gray-400 dark:text-[#788C83]">
                               <Clock3 size={13} />
 
                               <span>
@@ -3440,8 +3440,8 @@ export default function BarangKeluarPage() {
                             </div>
 
                             {request.remarks && (
-                              <div className="rounded-xl border border-[#E4E9E5] bg-white px-3 py-2 text-[11px] text-gray-500">
-                                <b className="text-[#44564A]">
+                              <div className="rounded-xl border border-[#E4E9E5] bg-white px-3 py-2 text-[11px] text-gray-500 dark:bg-[#101A16] dark:text-[#93A69D] dark:border-[#34453D]">
+                                <b className="text-[#44564A] dark:text-[#B8CAC1]">
                                   Keterangan:
                                 </b>{" "}
                                 {request.remarks}
@@ -3471,10 +3471,10 @@ export default function BarangKeluarPage() {
               }
             }}
           >
-            <div className="w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/70 bg-[#F8FAF8] shadow-[0_35px_100px_rgba(15,45,35,0.28)]">
-              <div className="relative overflow-hidden bg-[#173A2F] px-6 py-6 text-white md:px-7">
+            <div className="w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/70 bg-[#F8FAF8] shadow-[0_35px_100px_rgba(15,45,35,0.28)] dark:bg-[#18241F] dark:bg-[#17241F]">
+              <div className="relative overflow-hidden bg-[#173A2F] px-6 py-6 text-white md:px-7 dark:bg-[#356B58]">
                 <div className="absolute -right-12 -top-16 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
-                <div className="absolute -bottom-20 left-20 h-36 w-36 rounded-full bg-[#A9C6B5]/15 blur-3xl" />
+                <div className="absolute -bottom-20 left-20 h-36 w-36 rounded-full bg-[#A9C6B5]/15 blur-3xl dark:bg-[#18241F]/15" />
 
                 <div className="relative flex items-start justify-between gap-4">
                   <div className="flex min-w-0 items-center gap-4">
@@ -3483,7 +3483,7 @@ export default function BarangKeluarPage() {
                     </div>
 
                     <div className="min-w-0">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#C8DCCF]">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#C8DCCF] dark:text-[#D8E6DF]">
                         MGB • ERP
                       </p>
 
@@ -3538,7 +3538,7 @@ export default function BarangKeluarPage() {
                     <p className="text-[9px] font-bold uppercase tracking-wider text-white/50">
                       Stock Kosong
                     </p>
-                    <p className="mt-1 text-sm font-black text-[#F6B6B6]">
+                    <p className="mt-1 text-sm font-black text-[#F6B6B6] dark:text-[#D8E6DF]">
                       {loadingWhatsAppRequests
                         ? "…"
                         : getUnfulfilledItems(whatsAppRequests).length}
@@ -3549,23 +3549,23 @@ export default function BarangKeluarPage() {
 
               <div className="p-5 md:p-6">
                 {loadingWhatsAppRequests ? (
-                  <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#DDE8E1] bg-white">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EEF4F0] text-[#5F8A72]">
+                  <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#DDE8E1] bg-white dark:border-[#2E4038] dark:bg-[#101A16] dark:border-[#34453D]">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EEF4F0] text-[#5F8A72] dark:text-[#73B99A] dark:bg-[#18241F]">
                       <RefreshCw size={23} className="animate-spin" />
                     </div>
 
-                    <p className="mt-4 text-sm font-black text-[#173A2F]">
+                    <p className="mt-4 text-sm font-black text-[#173A2F] dark:text-[#E5F1EB]">
                       Menyiapkan pesan WhatsApp...
                     </p>
 
-                    <p className="mt-1 text-xs text-gray-400">
+                    <p className="mt-1 text-xs text-gray-400 dark:text-[#788C83]">
                       Mengambil request DRAFT / PENDING dan memeriksa stock pusat.
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div className="group relative overflow-hidden rounded-[24px] border border-[#D8E7DD] bg-white p-3 shadow-[0_12px_40px_rgba(23,58,47,0.065)] transition hover:-translate-y-0.5 hover:border-[#A8C5B2] hover:shadow-[0_20px_55px_rgba(23,58,47,0.10)]">
-                      <div className="absolute -right-12 -top-12 h-28 w-28 rounded-full bg-[#EAF7EF] blur-2xl" />
+                    <div className="group relative overflow-hidden rounded-[24px] border border-[#D8E7DD] bg-white p-3 shadow-[0_12px_40px_rgba(23,58,47,0.065)] transition hover:-translate-y-0.5 hover:border-[#A8C5B2] hover:shadow-[0_20px_55px_rgba(23,58,47,0.10)] dark:bg-[#101A16] dark:border-[#34453D]">
+                      <div className="absolute -right-12 -top-12 h-28 w-28 rounded-full bg-[#EAF7EF] blur-2xl dark:bg-[#18241F]" />
 
                       <div className="relative flex items-center gap-3">
                         <button
@@ -3574,22 +3574,22 @@ export default function BarangKeluarPage() {
                           className="min-w-0 flex-1 rounded-[19px] p-2 text-left transition hover:bg-[#F7FBF8]"
                         >
                           <div className="flex items-center gap-4">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#EAF7EF] text-[#159447] shadow-sm transition group-hover:scale-105">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#EAF7EF] text-[#159447] shadow-sm transition group-hover:scale-105 dark:bg-[#18241F]">
                               <MessageCircle size={22} />
                             </div>
 
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
-                                <h4 className="text-sm font-black text-[#173A2F]">
+                                <h4 className="text-sm font-black text-[#173A2F] dark:text-[#E5F1EB]">
                                   WhatsApp Request
                                 </h4>
 
-                                <span className="rounded-full bg-[#EEF4F0] px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-[#5F8A72]">
+                                <span className="rounded-full bg-[#EEF4F0] px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-[#5F8A72] dark:text-[#73B99A] dark:bg-[#18241F]">
                                   Semua Request
                                 </span>
                               </div>
 
-                              <p className="mt-1 text-xs leading-5 text-gray-500">
+                              <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-[#93A69D]">
                                 Kirim seluruh pesan request DRAFT / PENDING dengan
                                 format WhatsApp existing.
                               </p>
@@ -3597,17 +3597,17 @@ export default function BarangKeluarPage() {
 
                             <ArrowRight
                               size={18}
-                              className="shrink-0 text-[#A2B3A9] transition group-hover:translate-x-1 group-hover:text-[#5F8A72]"
+                              className="shrink-0 text-[#A2B3A9] transition group-hover:translate-x-1 group-hover:text-[#5F8A72] dark:text-[#82988E] dark:text-[#D8E6DF]"
                             />
                           </div>
                         </button>
 
-                        <div className="h-11 w-px shrink-0 bg-[#E7EEE9]" />
+                        <div className="h-11 w-px shrink-0 bg-[#E7EEE9] dark:bg-[#18241F]" />
 
                         <button
                           type="button"
                           onClick={() => copyWhatsAppMessage("all")}
-                          className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-[16px] border border-[#DCE9E0] bg-[#F7FBF8] px-3.5 text-[11px] font-black text-[#386A52] shadow-sm transition hover:border-[#AFCBB8] hover:bg-[#EDF7F0] active:scale-[0.98] md:px-4"
+                          className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-[16px] border border-[#DCE9E0] bg-[#F7FBF8] px-3.5 text-[11px] font-black text-[#386A52] shadow-sm transition hover:border-[#AFCBB8] hover:bg-[#EDF7F0] active:scale-[0.98] md:px-4 dark:border-[#2B4A3C] dark:bg-[#14231D] dark:text-[#78C8A5] dark:hover:border-[#46775F] dark:hover:bg-[#1B392E] dark:border-[#34453D] dark:bg-[#18241F]"
                           title="Salin pesan WhatsApp Request"
                           aria-label="Salin pesan WhatsApp Request"
                         >
@@ -3623,8 +3623,8 @@ export default function BarangKeluarPage() {
                       </div>
                     </div>
 
-                    <div className="group relative overflow-hidden rounded-[24px] border border-red-100 bg-gradient-to-br from-white to-[#FFF8F8] p-3 shadow-[0_12px_40px_rgba(154,49,49,0.05)] transition hover:-translate-y-0.5 hover:border-red-200 hover:shadow-[0_20px_55px_rgba(154,49,49,0.09)]">
-                      <div className="absolute -right-12 -top-12 h-28 w-28 rounded-full bg-red-50 blur-2xl" />
+                    <div className="group relative overflow-hidden rounded-[24px] border border-red-100 bg-gradient-to-br from-white to-[#FFF8F8] p-3 shadow-[0_12px_40px_rgba(154,49,49,0.05)] transition hover:-translate-y-0.5 hover:border-red-200 hover:shadow-[0_20px_55px_rgba(154,49,49,0.09)] dark:border-[#5A2B2F]">
+                      <div className="absolute -right-12 -top-12 h-28 w-28 rounded-full bg-red-50 blur-2xl dark:bg-[#351A1C]" />
 
                       <div className="relative flex items-center gap-3">
                         <button
@@ -3633,22 +3633,22 @@ export default function BarangKeluarPage() {
                           className="min-w-0 flex-1 rounded-[19px] p-2 text-left transition hover:bg-[#FFFDFD]"
                         >
                           <div className="flex items-center gap-4">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-500 shadow-sm transition group-hover:scale-105">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-500 shadow-sm transition group-hover:scale-105 dark:bg-[#351A1C]">
                               <PackageX size={22} />
                             </div>
 
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
-                                <h4 className="text-sm font-black text-[#173A2F]">
+                                <h4 className="text-sm font-black text-[#173A2F] dark:text-[#E5F1EB]">
                                   WhatsApp Tidak Fulfill
                                 </h4>
 
-                                <span className="rounded-full bg-red-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-red-600">
+                                <span className="rounded-full bg-red-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-red-600 dark:bg-[#351A1C] dark:text-[#FF7E86]">
                                   Stock Kosong
                                 </span>
                               </div>
 
-                              <p className="mt-1 text-xs leading-5 text-gray-500">
+                              <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-[#93A69D]">
                                 Hanya pesan item dengan stock pusat <b>0</b>,
                                 lengkap dengan DR, qty, satuan, dan max-price.
                               </p>
@@ -3656,17 +3656,17 @@ export default function BarangKeluarPage() {
 
                             <ArrowRight
                               size={18}
-                              className="shrink-0 text-[#C7A7A7] transition group-hover:translate-x-1 group-hover:text-red-500"
+                              className="shrink-0 text-[#C7A7A7] transition group-hover:translate-x-1 group-hover:text-red-500 dark:text-[#D8E6DF]"
                             />
                           </div>
                         </button>
 
-                        <div className="h-11 w-px shrink-0 bg-red-100" />
+                        <div className="h-11 w-px shrink-0 bg-red-100 dark:bg-[#482023]" />
 
                         <button
                           type="button"
                           onClick={() => copyWhatsAppMessage("unfulfilled")}
-                          className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-[16px] border border-red-100 bg-white/80 px-3.5 text-[11px] font-black text-red-600 shadow-sm transition hover:border-red-200 hover:bg-red-50 active:scale-[0.98] md:px-4"
+                          className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-[16px] border border-red-100 bg-white/80 px-3.5 text-[11px] font-black text-red-600 shadow-sm transition hover:border-red-200 hover:bg-red-50 active:scale-[0.98] md:px-4 dark:border-[#5A2B2F] dark:text-[#FF7E86] dark:bg-[#101A16]/80"
                           title="Salin pesan WhatsApp Tidak Fulfill"
                           aria-label="Salin pesan WhatsApp Tidak Fulfill"
                         >
@@ -3684,18 +3684,18 @@ export default function BarangKeluarPage() {
                       </div>
                     </div>
 
-                    <div className="mt-4 rounded-2xl border border-[#E4E9E5] bg-[#F5F8F5] px-4 py-3.5">
+                    <div className="mt-4 rounded-2xl border border-[#E4E9E5] bg-[#F5F8F5] px-4 py-3.5 dark:border-[#34453D] dark:bg-[#18241F]">
                       <div className="flex items-start gap-3">
-                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[#5F8A72] shadow-sm">
+                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[#5F8A72] shadow-sm dark:bg-[#101A16] dark:text-[#73B99A]">
                           <ShieldCheck size={15} />
                         </div>
 
                         <div>
-                          <p className="text-[11px] font-black text-[#44564A]">
+                          <p className="text-[11px] font-black text-[#44564A] dark:text-[#B8CAC1]">
                             Preview pesan
                           </p>
 
-                          <p className="mt-0.5 text-[11px] leading-5 text-gray-500">
+                          <p className="mt-0.5 text-[11px] leading-5 text-gray-500 dark:text-[#93A69D]">
                             WhatsApp Request mempertahankan format pesan existing.
                             WhatsApp Tidak Fulfill membuat laporan khusus item stock
                             kosong dengan penanda <b className="text-red-500">❌</b>.
@@ -3707,7 +3707,7 @@ export default function BarangKeluarPage() {
                     <button
                       type="button"
                       onClick={closeWhatsAppCenter}
-                      className="mt-1 w-full rounded-xl border border-[#DDD8CE] bg-white px-4 py-3 text-xs font-bold text-gray-500 transition hover:bg-[#F5F3EE] hover:text-[#44564A]"
+                      className="mt-1 w-full rounded-xl border border-[#DDD8CE] bg-white px-4 py-3 text-xs font-bold text-gray-500 transition hover:bg-[#F5F3EE] hover:text-[#44564A] dark:border-[#3A4A43] dark:bg-[#101A16] dark:text-[#93A69D] dark:border-[#34453D]"
                     >
                       Tutup
                     </button>
@@ -3722,50 +3722,50 @@ export default function BarangKeluarPage() {
             TRANSACTION FLOW
         ===================================================== */}
 
-        <div className="grid grid-cols-1 overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white/95 shadow-[0_8px_30px_rgba(23,58,47,0.055)] backdrop-blur-[2px] md:grid-cols-3">
-          <div className="relative flex items-center gap-4 border-b border-[#ECE8E0] p-4 md:border-b-0 md:border-r md:p-5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#173A2F] text-sm font-bold text-white">
+        <div className="grid grid-cols-1 overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white/95 shadow-[0_8px_30px_rgba(23,58,47,0.055)] backdrop-blur-[2px] md:grid-cols-3 dark:border-[#2E4038] dark:border-[#34453D] dark:bg-[#101A16]/95">
+          <div className="relative flex items-center gap-4 border-b border-[#ECE8E0] p-4 md:border-b-0 md:border-r md:p-5 dark:border-[#303D37] dark:border-[#34453D]">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#173A2F] text-sm font-bold text-white dark:bg-[#356B58]">
               01
             </div>
 
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#5F8A72]">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#5F8A72] dark:text-[#73B99A]">
                 Informasi
               </p>
 
-              <p className="mt-0.5 text-sm font-semibold text-[#173A2F]">
+              <p className="mt-0.5 text-sm font-semibold text-[#173A2F] dark:text-[#E5F1EB]">
                 Tentukan tujuan transaksi
               </p>
             </div>
           </div>
 
-          <div className="relative flex items-center gap-4 border-b border-[#ECE8E0] p-4 md:border-b-0 md:border-r md:p-5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EEF1EA] text-sm font-bold text-[#5F8A72]">
+          <div className="relative flex items-center gap-4 border-b border-[#ECE8E0] p-4 md:border-b-0 md:border-r md:p-5 dark:border-[#303D37] dark:border-[#34453D]">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EEF1EA] text-sm font-bold text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
               02
             </div>
 
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#5F8A72]">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#5F8A72] dark:text-[#73B99A]">
                 Barang
               </p>
 
-              <p className="mt-0.5 text-sm font-semibold text-[#173A2F]">
+              <p className="mt-0.5 text-sm font-semibold text-[#173A2F] dark:text-[#E5F1EB]">
                 Tambahkan item keluar
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-4 p-4 md:p-5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EEF1EA] text-sm font-bold text-[#5F8A72]">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EEF1EA] text-sm font-bold text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
               03
             </div>
 
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#5F8A72]">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#5F8A72] dark:text-[#73B99A]">
                 Finalisasi
               </p>
 
-              <p className="mt-0.5 text-sm font-semibold text-[#173A2F]">
+              <p className="mt-0.5 text-sm font-semibold text-[#173A2F] dark:text-[#E5F1EB]">
                 Simpan sebagai draft
               </p>
             </div>
@@ -3776,19 +3776,19 @@ export default function BarangKeluarPage() {
             INFORMASI TRANSAKSI
         ===================================================== */}
 
-        <section className="overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white/95 shadow-[0_8px_30px_rgba(23,58,47,0.055)] backdrop-blur-[2px]">
-          <div className="border-b border-[#E7E3DB] px-5 py-5 md:px-6">
+        <section className="overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white/95 shadow-[0_8px_30px_rgba(23,58,47,0.055)] backdrop-blur-[2px] dark:border-[#2E4038] dark:border-[#34453D] dark:bg-[#101A16]/95">
+          <div className="border-b border-[#E7E3DB] px-5 py-5 md:px-6 dark:border-[#2C3933] dark:border-[#34453D]">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72]">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                 <User size={19} />
               </div>
 
               <div>
-                <h2 className="text-sm font-bold text-[#173A2F]">
+                <h2 className="text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                   Informasi Pengeluaran
                 </h2>
 
-                <p className="mt-0.5 text-xs text-gray-500">
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-[#93A69D]">
                   Tentukan tanggal, customer, outlet tujuan
                   dan keterangan transaksi.
                 </p>
@@ -3799,7 +3799,7 @@ export default function BarangKeluarPage() {
           <div className="p-5 md:p-6">
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A]">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A] dark:text-[#B8CAC1]">
                   Tanggal Barang Keluar
                   <span className="ml-1 text-red-500">
                     *
@@ -3809,7 +3809,7 @@ export default function BarangKeluarPage() {
                 <div className="relative">
                   <CalendarDays
                     size={17}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#788C83]"
                   />
 
                   <input
@@ -3818,18 +3818,18 @@ export default function BarangKeluarPage() {
                     onChange={(e) =>
                       setDeliveryDate(e.target.value)
                     }
-                    className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] py-3 pl-11 pr-4 text-sm font-medium text-gray-700 outline-none transition placeholder:text-gray-400 hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
+                    className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] py-3 pl-11 pr-4 text-sm font-medium text-gray-700 outline-none transition placeholder:text-gray-400 hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10 dark:border-[#3A4A43] dark:bg-[#111B17] dark:text-[#D4E1DB] dark:placeholder:text-[#70847A] dark:focus:bg-[#16231E] dark:border-[#34453D] dark:bg-[#18241F]"
                   />
                 </div>
 
-                <p className="mt-2 text-[11px] leading-5 text-gray-400">
+                <p className="mt-2 text-[11px] leading-5 text-gray-400 dark:text-[#788C83]">
                   Tanggal transaksi dapat berbeda dengan
                   tanggal dibuat.
                 </p>
               </div>
 
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A]">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A] dark:text-[#B8CAC1]">
                   Customer
                   <span className="ml-1 text-red-500">
                     *
@@ -3839,11 +3839,11 @@ export default function BarangKeluarPage() {
                 <div className="relative">
                   <User
                     size={17}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#788C83]"
                   />
 
                   <select
-                    className="h-12 w-full appearance-none rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] px-4 pl-11 pr-10 text-sm font-medium text-gray-700 outline-none transition hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
+                    className="h-12 w-full appearance-none rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] px-4 pl-11 pr-10 text-sm font-medium text-gray-700 outline-none transition hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10 dark:border-[#3A4A43] dark:bg-[#111B17] dark:text-[#D4E1DB] dark:focus:bg-[#16231E] dark:border-[#34453D] dark:bg-[#18241F]"
                     value={customer}
                     onChange={(e) =>
                       setCustomer(e.target.value)
@@ -3870,7 +3870,7 @@ export default function BarangKeluarPage() {
                 </div>
 
                 {selectedCustomer && (
-                  <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-[#5F8A72]">
+                  <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-[#5F8A72] dark:text-[#73B99A]">
                     <CircleCheck size={12} />
                     Customer terpilih
                   </div>
@@ -3878,7 +3878,7 @@ export default function BarangKeluarPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A]">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A] dark:text-[#B8CAC1]">
                   Outlet Tujuan
                   <span className="ml-1 text-red-500">
                     *
@@ -3888,11 +3888,11 @@ export default function BarangKeluarPage() {
                 <div className="relative">
                   <Store
                     size={17}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#788C83]"
                   />
 
                   <select
-                    className="h-12 w-full appearance-none rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] px-4 pl-11 pr-10 text-sm font-medium text-gray-700 outline-none transition hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
+                    className="h-12 w-full appearance-none rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] px-4 pl-11 pr-10 text-sm font-medium text-gray-700 outline-none transition hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10 dark:border-[#3A4A43] dark:bg-[#111B17] dark:text-[#D4E1DB] dark:focus:bg-[#16231E] dark:border-[#34453D] dark:bg-[#18241F]"
                     value={outlet}
                     onChange={(e) =>
                       setOutlet(e.target.value)
@@ -3923,7 +3923,7 @@ export default function BarangKeluarPage() {
                 </div>
 
                 {selectedOutlet && (
-                  <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-[#5F8A72]">
+                  <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-[#5F8A72] dark:text-[#73B99A]">
                     <CircleCheck size={12} />
                     Outlet tujuan terpilih
                   </div>
@@ -3931,18 +3931,18 @@ export default function BarangKeluarPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A]">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A] dark:text-[#B8CAC1]">
                   Keterangan
                 </label>
 
                 <div className="relative">
                   <FileText
                     size={17}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#788C83]"
                   />
 
                   <input
-                    className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] py-3 pl-11 pr-4 text-sm font-medium text-gray-700 outline-none transition placeholder:text-gray-400 hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
+                    className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] py-3 pl-11 pr-4 text-sm font-medium text-gray-700 outline-none transition placeholder:text-gray-400 hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10 dark:border-[#3A4A43] dark:bg-[#111B17] dark:text-[#D4E1DB] dark:placeholder:text-[#70847A] dark:focus:bg-[#16231E] dark:border-[#34453D] dark:bg-[#18241F]"
                     placeholder="Contoh: Pengiriman ke outlet..."
                     value={note}
                     onChange={(e) =>
@@ -3951,7 +3951,7 @@ export default function BarangKeluarPage() {
                   />
                 </div>
 
-                <p className="mt-2 text-[11px] text-gray-400">
+                <p className="mt-2 text-[11px] text-gray-400 dark:text-[#788C83]">
                   Opsional untuk referensi transaksi.
                 </p>
               </div>
@@ -3963,27 +3963,27 @@ export default function BarangKeluarPage() {
             SCANNER
         ===================================================== */}
 
-        <section className="overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white/95 shadow-[0_8px_30px_rgba(23,58,47,0.055)] backdrop-blur-[2px]">
-          <div className="border-b border-[#E7E3DB] px-5 py-5 md:px-6">
+        <section className="overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white/95 shadow-[0_8px_30px_rgba(23,58,47,0.055)] backdrop-blur-[2px] dark:border-[#2E4038] dark:border-[#34453D] dark:bg-[#101A16]/95">
+          <div className="border-b border-[#E7E3DB] px-5 py-5 md:px-6 dark:border-[#2C3933] dark:border-[#34453D]">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                   <ScanLine size={19} />
                 </div>
 
                 <div>
-                  <h2 className="text-sm font-bold text-[#173A2F]">
+                  <h2 className="text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                     Scan Barcode
                   </h2>
 
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-[#93A69D]">
                     Gunakan scanner barcode atau kamera untuk
                     menambahkan barang.
                   </p>
                 </div>
               </div>
 
-              <div className="rounded-full border border-[#DED5C3] bg-[#F8F3E8] px-3 py-1.5 text-[11px] font-semibold text-[#756A55]">
+              <div className="rounded-full border border-[#DED5C3] bg-[#F8F3E8] px-3 py-1.5 text-[11px] font-semibold text-[#756A55] dark:border-[#34453D] dark:bg-[#18241F]">
                 Fast Entry
               </div>
             </div>
@@ -4002,20 +4002,20 @@ export default function BarangKeluarPage() {
                 onClick={() =>
                   setOpenCamera(true)
                 }
-                className="group inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-[#86A995] bg-[#E8F1EB] px-6 text-sm font-bold text-[#254D3D] shadow-[0_6px_18px_rgba(82,70,45,0.08)] transition duration-200 hover:border-[#9E8C69] hover:bg-[#DCEAE1] hover:shadow-[0_10px_24px_rgba(82,70,45,0.12)] active:scale-[0.99]"
+                className="group inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-[#86A995] bg-[#E8F1EB] px-6 text-sm font-bold text-[#254D3D] shadow-[0_6px_18px_rgba(82,70,45,0.08)] transition duration-200 hover:border-[#9E8C69] hover:bg-[#DCEAE1] hover:shadow-[0_10px_24px_rgba(82,70,45,0.12)] active:scale-[0.99] dark:border-[#34453D] dark:bg-[#18241F]"
               >
                 <Camera size={18} />
                 Scan dengan Kamera
               </button>
             </div>
 
-            <div className="mt-4 flex items-start gap-3 rounded-xl border border-[#E5E1D8] bg-[#F5F4F0] p-3.5">
+            <div className="mt-4 flex items-start gap-3 rounded-xl border border-[#E5E1D8] bg-[#F5F4F0] p-3.5 dark:border-[#35433D] dark:bg-[#1B2420] dark:border-[#34453D] dark:bg-[#18241F]">
               <ScanLine
                 size={16}
-                className="mt-0.5 shrink-0 text-[#5F8A72]"
+                className="mt-0.5 shrink-0 text-[#5F8A72] dark:text-[#73B99A]"
               />
 
-              <p className="text-xs leading-5 text-gray-500">
+              <p className="text-xs leading-5 text-gray-500 dark:text-[#93A69D]">
                 Barcode akan dicari langsung ke master
                 barang. Setelah ditemukan, Anda dapat
                 menentukan qty sebelum memasukkannya ke
@@ -4080,19 +4080,19 @@ export default function BarangKeluarPage() {
             TAMBAH BARANG
         ===================================================== */}
 
-        <section className="overflow-visible rounded-[22px] border border-[#DDE8E1] bg-white shadow-[0_8px_30px_rgba(23,58,47,0.055)]">
-          <div className="border-b border-[#E7E3DB] px-5 py-5 md:px-6">
+        <section className="overflow-visible rounded-[22px] border border-[#DDE8E1] bg-white shadow-[0_8px_30px_rgba(23,58,47,0.055)] dark:border-[#2E4038] dark:bg-[#101A16] dark:border-[#34453D]">
+          <div className="border-b border-[#E7E3DB] px-5 py-5 md:px-6 dark:border-[#2C3933] dark:border-[#34453D]">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72]">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                 <Boxes size={19} />
               </div>
 
               <div>
-                <h2 className="text-sm font-bold text-[#173A2F]">
+                <h2 className="text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                   Tambah Barang
                 </h2>
 
-                <p className="mt-0.5 text-xs text-gray-500">
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-[#93A69D]">
                   Cari berdasarkan kode, nama, atau barcode.
                 </p>
               </div>
@@ -4102,18 +4102,18 @@ export default function BarangKeluarPage() {
           <div className="p-5 md:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
               <div className="relative min-w-0 flex-1">
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A]">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A] dark:text-[#B8CAC1]">
                   Cari Barang
                 </label>
 
                 <div className="relative">
                   <Search
                     size={18}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#788C83]"
                   />
 
                   <input
-                    className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] py-3 pl-11 pr-10 text-sm font-medium outline-none transition placeholder:text-gray-400 hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
+                    className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] py-3 pl-11 pr-10 text-sm font-medium outline-none transition placeholder:text-gray-400 hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10 dark:border-[#3A4A43] dark:bg-[#111B17] dark:placeholder:text-[#70847A] dark:focus:bg-[#16231E] dark:border-[#34453D] dark:bg-[#18241F]"
                     placeholder="Ketik kode, nama, atau barcode..."
                     value={searchBarang}
                     onFocus={() =>
@@ -4136,7 +4136,7 @@ export default function BarangKeluarPage() {
                         setSelectedBarang(null);
                         setShowBarang(false);
                       }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:text-[#788C83] dark:hover:bg-[#24332D]"
                     >
                       <X size={15} />
                     </button>
@@ -4144,14 +4144,14 @@ export default function BarangKeluarPage() {
                 </div>
 
                 {showBarang && searchBarang && (
-                  <div className="absolute left-0 right-0 z-40 mt-2 max-h-80 overflow-y-auto rounded-[22px] border border-[#DDE8E1] bg-white shadow-2xl shadow-black/5">
-                    <div className="sticky top-0 border-b border-[#ECE8E0] bg-white px-4 py-3">
+                  <div className="absolute left-0 right-0 z-40 mt-2 max-h-80 overflow-y-auto rounded-[22px] border border-[#DDE8E1] bg-white shadow-2xl shadow-black/5 dark:border-[#2E4038] dark:bg-[#101A16] dark:border-[#34453D]">
+                    <div className="sticky top-0 border-b border-[#ECE8E0] bg-white px-4 py-3 dark:border-[#303D37] dark:bg-[#101A16] dark:border-[#34453D]">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#788C83]">
                           Hasil Pencarian
                         </span>
 
-                        <span className="rounded-full bg-[#EEF1EA] px-2 py-1 text-[10px] font-bold text-[#5F8A72]">
+                        <span className="rounded-full bg-[#EEF1EA] px-2 py-1 text-[10px] font-bold text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                           {
                             filteredBarang.length
                           }{" "}
@@ -4161,25 +4161,25 @@ export default function BarangKeluarPage() {
                     </div>
 
                     {loadingBarang ? (
-                      <div className="flex items-center justify-center gap-2 p-7 text-sm text-gray-500">
+                      <div className="flex items-center justify-center gap-2 p-7 text-sm text-gray-500 dark:text-[#93A69D]">
                         <RefreshCw
                           size={16}
-                          className="animate-spin text-[#5F8A72]"
+                          className="animate-spin text-[#5F8A72] dark:text-[#73B99A]"
                         />
                         Memuat barang...
                       </div>
                     ) : filteredBarang.length ===
                       0 ? (
                       <div className="p-8 text-center">
-                        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F1EB] text-gray-300">
+                        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F1EB] text-gray-300 dark:bg-[#202C27] dark:bg-[#18241F]">
                           <PackageMinus size={23} />
                         </div>
 
-                        <p className="text-sm font-bold text-gray-600">
+                        <p className="text-sm font-bold text-gray-600 dark:text-[#B7C7BF]">
                           Barang tidak ditemukan
                         </p>
 
-                        <p className="mt-1 text-xs text-gray-400">
+                        <p className="mt-1 text-xs text-gray-400 dark:text-[#788C83]">
                           Coba gunakan kode, nama, atau
                           barcode lain.
                         </p>
@@ -4201,23 +4201,23 @@ export default function BarangKeluarPage() {
                             onClick={() =>
                               pilihBarang(b)
                             }
-                            className="group w-full border-b border-[#EEEAE2] p-4 text-left transition last:border-0 hover:bg-[#F5F4F0]"
+                            className="group w-full border-b border-[#EEEAE2] p-4 text-left transition last:border-0 hover:bg-[#F5F4F0] dark:border-[#34453D]"
                           >
                             <div className="flex items-start gap-3">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F0EEE7] text-[#5F8A72] transition group-hover:bg-[#EEF1EA]">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F0EEE7] text-[#5F8A72] transition group-hover:bg-[#EEF1EA] dark:text-[#73B99A] dark:bg-[#18241F]">
                                 <PackageMinus size={17} />
                               </div>
 
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0">
-                                    <p className="truncate text-sm font-bold text-[#173A2F]">
+                                    <p className="truncate text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                                       {b.code} -{" "}
                                       {b.name}
                                     </p>
 
                                     {b.barcode && (
-                                      <p className="mt-1 truncate text-[11px] text-gray-400">
+                                      <p className="mt-1 truncate text-[11px] text-gray-400 dark:text-[#788C83]">
                                         Barcode:{" "}
                                         {
                                           b.barcode
@@ -4241,10 +4241,10 @@ export default function BarangKeluarPage() {
                                   </span>
                                 </div>
 
-                                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500">
+                                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-[#93A69D]">
                                   <span>
                                     Satuan:{" "}
-                                    <b className="text-[#44564A]">
+                                    <b className="text-[#44564A] dark:text-[#B8CAC1]">
                                       {b.unit ||
                                         "-"}
                                     </b>
@@ -4252,7 +4252,7 @@ export default function BarangKeluarPage() {
 
                                   <span>
                                     Harga:{" "}
-                                    <b className="text-[#44564A]">
+                                    <b className="text-[#44564A] dark:text-[#B8CAC1]">
                                       Rp{" "}
                                       {formatNumber(
                                         b.purchasePrice
@@ -4271,14 +4271,14 @@ export default function BarangKeluarPage() {
               </div>
 
               <div className="w-full lg:w-36">
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A]">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A] dark:text-[#B8CAC1]">
                   Qty
                 </label>
 
                 <input
                   type="number"
                   min="1"
-                  className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] px-4 text-sm font-semibold outline-none transition placeholder:text-gray-400 hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
+                  className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] px-4 text-sm font-semibold outline-none transition placeholder:text-gray-400 hover:border-[#9DB9A8] focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10 dark:border-[#3A4A43] dark:bg-[#111B17] dark:placeholder:text-[#70847A] dark:focus:bg-[#16231E] dark:border-[#34453D] dark:bg-[#18241F]"
                   placeholder="0"
                   value={qty}
                   onChange={(e) =>
@@ -4290,7 +4290,7 @@ export default function BarangKeluarPage() {
               <button
                 type="button"
                 onClick={tambahManual}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#173A2F] px-7 text-sm font-bold text-white shadow-[0_8px_30px_rgba(23,58,47,0.055)] transition hover:bg-[#285744] hover:shadow-md active:scale-[0.99]"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#173A2F] px-7 text-sm font-bold text-white shadow-[0_8px_30px_rgba(23,58,47,0.055)] transition hover:bg-[#285744] hover:shadow-md active:scale-[0.99] dark:bg-[#356B58] dark:hover:bg-[#43806A]"
               >
                 <Plus size={18} />
                 Tambah Barang
@@ -4303,31 +4303,31 @@ export default function BarangKeluarPage() {
             CART
         ===================================================== */}
 
-        <section className="overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white/95 shadow-[0_8px_30px_rgba(23,58,47,0.055)] backdrop-blur-[2px]">
-          <div className="border-b border-[#E7E3DB] px-5 py-5 md:px-6">
+        <section className="overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white/95 shadow-[0_8px_30px_rgba(23,58,47,0.055)] backdrop-blur-[2px] dark:border-[#2E4038] dark:border-[#34453D] dark:bg-[#101A16]/95">
+          <div className="border-b border-[#E7E3DB] px-5 py-5 md:px-6 dark:border-[#2C3933] dark:border-[#34453D]">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#173A2F] text-white">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#173A2F] text-white dark:bg-[#356B58]">
                   <ShoppingCart size={18} />
                 </div>
 
                 <div>
-                  <h2 className="text-sm font-bold text-[#173A2F]">
+                  <h2 className="text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                     Daftar Barang Keluar
                   </h2>
 
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-[#93A69D]">
                     Review item sebelum transaksi disimpan.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="rounded-full border border-[#DED5C3] bg-[#F8F3E8] px-3 py-1.5 text-[11px] font-semibold text-[#756A55]">
+                <div className="rounded-full border border-[#DED5C3] bg-[#F8F3E8] px-3 py-1.5 text-[11px] font-semibold text-[#756A55] dark:border-[#34453D] dark:bg-[#18241F]">
                   {formatNumber(totalQty)} Qty
                 </div>
 
-                <div className="rounded-full bg-[#EEF1EA] px-3 py-1.5 text-[11px] font-bold text-[#5F8A72]">
+                <div className="rounded-full bg-[#EEF1EA] px-3 py-1.5 text-[11px] font-bold text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                   {cart.length} Item
                 </div>
               </div>
@@ -4336,29 +4336,29 @@ export default function BarangKeluarPage() {
 
           <div className="overflow-x-auto">
             <table className="min-w-[900px] w-full text-sm">
-              <thead className="bg-[#F6F4EF]">
-                <tr className="border-b border-[#E7E3DB]">
-                  <th className="px-6 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-[#657167]">
+              <thead className="bg-[#F6F4EF] dark:bg-[#18241F]">
+                <tr className="border-b border-[#E7E3DB] dark:border-[#2C3933] dark:border-[#34453D]">
+                  <th className="px-6 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-[#657167] dark:text-[#9FB0A8]">
                     Barang
                   </th>
 
-                  <th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-[#657167]">
+                  <th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-[#657167] dark:text-[#9FB0A8]">
                     Stock
                   </th>
 
-                  <th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-[#657167]">
+                  <th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-[#657167] dark:text-[#9FB0A8]">
                     Qty
                   </th>
 
-                  <th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-[#657167]">
+                  <th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-[#657167] dark:text-[#9FB0A8]">
                     Harga
                   </th>
 
-                  <th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-[#657167]">
+                  <th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-[#657167] dark:text-[#9FB0A8]">
                     Total
                   </th>
 
-                  <th className="px-6 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-[#657167]">
+                  <th className="px-6 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-[#657167] dark:text-[#9FB0A8]">
                     Aksi
                   </th>
                 </tr>
@@ -4372,15 +4372,15 @@ export default function BarangKeluarPage() {
                       className="px-6 py-16 text-center"
                     >
                       <div className="mx-auto flex max-w-sm flex-col items-center">
-                        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EEF1EA] text-[#5F8A72]">
+                        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EEF1EA] text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                           <ShoppingCart size={27} />
                         </div>
 
-                        <p className="text-sm font-bold text-[#173A2F]">
+                        <p className="text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                           Keranjang masih kosong
                         </p>
 
-                        <p className="mt-1.5 text-xs leading-5 text-gray-400">
+                        <p className="mt-1.5 text-xs leading-5 text-gray-400 dark:text-[#788C83]">
                           Tambahkan barang menggunakan
                           pencarian manual atau scanner
                           barcode.
@@ -4392,20 +4392,20 @@ export default function BarangKeluarPage() {
                   cart.map((item, index) => (
                     <tr
                       key={`${item.barangId}-${index}`}
-                      className="group border-b border-[#EEEAE2] transition hover:bg-[#FCFAF6]"
+                      className="group border-b border-[#EEEAE2] transition hover:bg-[#FCFAF6] dark:border-[#34453D]"
                     >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F1EFE9] text-[#5F8A72]">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F1EFE9] text-[#5F8A72] dark:text-[#73B99A] dark:bg-[#18241F]">
                             <PackageMinus size={17} />
                           </div>
 
                           <div className="min-w-0">
-                            <p className="truncate font-bold text-[#173A2F]">
+                            <p className="truncate font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                               {item.name}
                             </p>
 
-                            <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-gray-400">
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-gray-400 dark:text-[#788C83]">
                               <span>
                                 {item.code}
                               </span>
@@ -4430,7 +4430,7 @@ export default function BarangKeluarPage() {
                       </td>
 
                       <td className="px-5 py-4 text-center">
-                        <span className="inline-flex min-w-[64px] justify-center rounded-lg bg-[#EEF1EA] px-3 py-1.5 text-xs font-bold text-[#5F8A72]">
+                        <span className="inline-flex min-w-[64px] justify-center rounded-lg bg-[#EEF1EA] px-3 py-1.5 text-xs font-bold text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                           {formatNumber(
                             item.stock
                           )}
@@ -4438,14 +4438,14 @@ export default function BarangKeluarPage() {
                       </td>
 
                       <td className="px-5 py-4 text-center">
-                        <span className="inline-flex min-w-[50px] justify-center rounded-lg bg-[#F3F7F4] px-3 py-1.5 text-xs font-bold text-[#173A2F]">
+                        <span className="inline-flex min-w-[50px] justify-center rounded-lg bg-[#F3F7F4] px-3 py-1.5 text-xs font-bold text-[#173A2F] dark:text-[#E5F1EB] dark:bg-[#18241F]">
                           {formatNumber(
                             item.qty
                           )}
                         </span>
                       </td>
 
-                      <td className="whitespace-nowrap px-5 py-4 text-right text-xs font-medium text-gray-500">
+                      <td className="whitespace-nowrap px-5 py-4 text-right text-xs font-medium text-gray-500 dark:text-[#93A69D]">
                         Rp{" "}
                         {formatNumber(
                           item.price
@@ -4453,7 +4453,7 @@ export default function BarangKeluarPage() {
                       </td>
 
                       <td className="whitespace-nowrap px-5 py-4 text-right">
-                        <p className="text-sm font-bold text-[#173A2F]">
+                        <p className="text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                           Rp{" "}
                           {formatNumber(
                             item.subtotal
@@ -4467,7 +4467,7 @@ export default function BarangKeluarPage() {
                           onClick={() =>
                             hapus(index)
                           }
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-100 bg-red-50 text-red-500 transition hover:border-red-200 hover:bg-red-100"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-100 bg-red-50 text-red-500 transition hover:border-red-200 hover:bg-red-100 dark:border-[#5A2B2F] dark:bg-[#351A1C] dark:hover:bg-[#5A252A]"
                           title="Hapus barang"
                         >
                           <Trash2 size={16} />
@@ -4486,18 +4486,18 @@ export default function BarangKeluarPage() {
         ===================================================== */}
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
-          <div className="rounded-[22px] border border-[#DDE8E1] bg-white p-5 shadow-[0_8px_30px_rgba(23,58,47,0.055)] md:p-6">
+          <div className="rounded-[22px] border border-[#DDE8E1] bg-white p-5 shadow-[0_8px_30px_rgba(23,58,47,0.055)] md:p-6 dark:border-[#2E4038] dark:bg-[#101A16] dark:border-[#34453D]">
             <div className="mb-5 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72]">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                 <ReceiptText size={19} />
               </div>
 
               <div>
-                <h2 className="text-sm font-bold text-[#173A2F]">
+                <h2 className="text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                   Ringkasan Transaksi
                 </h2>
 
-                <p className="mt-0.5 text-xs text-gray-500">
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-[#93A69D]">
                   Informasi jumlah barang yang akan
                   dikeluarkan.
                 </p>
@@ -4505,53 +4505,53 @@ export default function BarangKeluarPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="rounded-[22px] border border-[#E7E3DB] bg-[#F7F5F0] p-5">
+              <div className="rounded-[22px] border border-[#E7E3DB] bg-[#F7F5F0] p-5 dark:border-[#2C3933] dark:border-[#34453D] dark:bg-[#18241F]">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-[#788C83]">
                     Total Jenis Barang
                   </p>
 
                   <Boxes
                     size={17}
-                    className="text-[#5F8A72]"
+                    className="text-[#5F8A72] dark:text-[#73B99A]"
                   />
                 </div>
 
-                <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-[#173A2F]">
+                <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-[#173A2F] dark:text-[#E5F1EB]">
                   {formatNumber(
                     cart.length
                   )}
                 </p>
 
-                <p className="mt-1 text-xs text-gray-400">
+                <p className="mt-1 text-xs text-gray-400 dark:text-[#788C83]">
                   jenis item berbeda
                 </p>
               </div>
 
-              <div className="rounded-[22px] border border-[#E7E3DB] bg-[#F7F5F0] p-5">
+              <div className="rounded-[22px] border border-[#E7E3DB] bg-[#F7F5F0] p-5 dark:border-[#2C3933] dark:border-[#34453D] dark:bg-[#18241F]">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-[#788C83]">
                     Total Quantity
                   </p>
 
                   <PackageMinus
                     size={17}
-                    className="text-[#5F8A72]"
+                    className="text-[#5F8A72] dark:text-[#73B99A]"
                   />
                 </div>
 
-                <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-[#173A2F]">
+                <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-[#173A2F] dark:text-[#E5F1EB]">
                   {formatNumber(totalQty)}
                 </p>
 
-                <p className="mt-1 text-xs text-gray-400">
+                <p className="mt-1 text-xs text-gray-400 dark:text-[#788C83]">
                   total unit barang keluar
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="relative overflow-hidden rounded-[22px] bg-[#173A2F] p-6 text-white shadow-[0_18px_45px_rgba(28,40,34,0.16)]">
+          <div className="relative overflow-hidden rounded-[22px] bg-[#173A2F] p-6 text-white shadow-[0_18px_45px_rgba(28,40,34,0.16)] dark:bg-[#356B58]">
             <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-white/5" />
 
             <div className="absolute -bottom-20 -left-16 h-44 w-44 rounded-full bg-[#5F8A72]/20" />
@@ -4574,7 +4574,7 @@ export default function BarangKeluarPage() {
                 <div className="flex h-11 w-11 items-center justify-center rounded-[22px] bg-white/10">
                   <Warehouse
                     size={20}
-                    className="text-[#C9D2C5]"
+                    className="text-[#C9D2C5] dark:text-[#D8E6DF]"
                   />
                 </div>
               </div>
@@ -4609,8 +4609,8 @@ export default function BarangKeluarPage() {
                     Status
                   </span>
 
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 font-semibold text-[#D8DFD3]">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#8BC4B2]" />
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 font-semibold text-[#D8DFD3] dark:text-[#D8E6DF]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#8BC4B2] dark:bg-[#18241F]" />
                     Draft
                   </span>
                 </div>
@@ -4623,7 +4623,7 @@ export default function BarangKeluarPage() {
                   saving ||
                   cart.length === 0
                 }
-                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#D8C9A8] bg-[#E8F1EB] px-5 py-3.5 text-sm font-bold text-[#254D3D] shadow-[0_8px_24px_rgba(82,70,45,0.10)] transition hover:border-[#BBAA86] hover:bg-[#DCEAE1] hover:shadow-[0_12px_28px_rgba(82,70,45,0.14)] disabled:cursor-not-allowed disabled:opacity-40"
+                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#D8C9A8] bg-[#E8F1EB] px-5 py-3.5 text-sm font-bold text-[#254D3D] shadow-[0_8px_24px_rgba(82,70,45,0.10)] transition hover:border-[#BBAA86] hover:bg-[#DCEAE1] hover:shadow-[0_12px_28px_rgba(82,70,45,0.14)] disabled:cursor-not-allowed disabled:opacity-40 dark:border-[#34453D] dark:bg-[#18241F]"
               >
                 {saving ? (
                   <>
@@ -4657,22 +4657,22 @@ export default function BarangKeluarPage() {
 
       {showRequestDetail &&
         requestDetail && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#141B17]/65 p-4 backdrop-blur-sm">
-            <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-[24px] border border-[#DDE8E1] bg-white shadow-2xl">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#141B17]/65 p-4 backdrop-blur-sm dark:bg-[#050A08]/80">
+            <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-[24px] border border-[#DDE8E1] bg-white shadow-2xl dark:border-[#2E4038] dark:bg-[#101A16] dark:border-[#34453D]">
               {/* HEADER */}
 
-              <div className="flex items-center justify-between border-b border-[#E7E3DB] px-5 py-5 md:px-6">
+              <div className="flex items-center justify-between border-b border-[#E7E3DB] px-5 py-5 md:px-6 dark:border-[#2C3933] dark:border-[#34453D]">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#173A2F] text-white">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#173A2F] text-white dark:bg-[#356B58]">
                     <ClipboardList size={19} />
                   </div>
 
                   <div>
-                    <p className="text-sm font-bold text-[#173A2F]">
+                    <p className="text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                       Detail Delivery Request
                     </p>
 
-                    <p className="mt-0.5 text-xs text-gray-500">
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-[#93A69D]">
                       {getRequestNumber(
                         requestDetail
                       )}
@@ -4692,7 +4692,7 @@ export default function BarangKeluarPage() {
                       setRequestDetail(null);
                       setEditingRequest(false);
                     }}
-                    className="rounded-xl p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                    className="rounded-xl p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:text-[#788C83] dark:hover:bg-[#24332D]"
                   >
                     <X size={19} />
                   </button>
@@ -4703,44 +4703,44 @@ export default function BarangKeluarPage() {
                 {/* INFO */}
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                  <div className="rounded-xl border border-[#E5EAE7] bg-[#F8FAF8] p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                  <div className="rounded-xl border border-[#E5EAE7] bg-[#F8FAF8] p-4 dark:border-[#34453D] dark:bg-[#18241F] dark:border-[#2E4038] dark:bg-[#17241F]">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#788C83]">
                       Request
                     </p>
 
-                    <p className="mt-1.5 text-sm font-bold text-[#173A2F]">
+                    <p className="mt-1.5 text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                       {getRequestNumber(
                         requestDetail
                       )}
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-[#E5EAE7] bg-[#F8FAF8] p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                  <div className="rounded-xl border border-[#E5EAE7] bg-[#F8FAF8] p-4 dark:border-[#34453D] dark:bg-[#18241F] dark:border-[#2E4038] dark:bg-[#17241F]">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#788C83]">
                       Outlet
                     </p>
 
-                    <p className="mt-1.5 text-sm font-bold text-[#173A2F]">
+                    <p className="mt-1.5 text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                       {getRequestOutlet(
                         requestDetail
                       )}
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-[#E5EAE7] bg-[#F8FAF8] p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                  <div className="rounded-xl border border-[#E5EAE7] bg-[#F8FAF8] p-4 dark:border-[#34453D] dark:bg-[#18241F] dark:border-[#2E4038] dark:bg-[#17241F]">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#788C83]">
                       Tanggal
                     </p>
 
-                    <p className="mt-1.5 text-sm font-bold text-[#173A2F]">
+                    <p className="mt-1.5 text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                       {formatDate(
                         requestDetail.requestDate
                       )}
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-[#E5EAE7] bg-[#F8FAF8] p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                  <div className="rounded-xl border border-[#E5EAE7] bg-[#F8FAF8] p-4 dark:border-[#34453D] dark:bg-[#18241F] dark:border-[#2E4038] dark:bg-[#17241F]">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#788C83]">
                       Status
                     </p>
 
@@ -4770,14 +4770,14 @@ export default function BarangKeluarPage() {
                 {/* STOCK SUMMARY */}
 
                 {!editingRequest && (
-                  <div className="mt-5 rounded-[20px] border border-[#DDE8E1] bg-[#F8FAF8] p-4">
+                  <div className="mt-5 rounded-[20px] border border-[#DDE8E1] bg-[#F8FAF8] p-4 dark:border-[#2E4038] dark:border-[#34453D] dark:bg-[#18241F] dark:bg-[#17241F]">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div>
-                        <p className="text-xs font-bold uppercase tracking-wider text-[#5F8A72]">
+                        <p className="text-xs font-bold uppercase tracking-wider text-[#5F8A72] dark:text-[#73B99A]">
                           Validasi Stock Pusat
                         </p>
 
-                        <p className="mt-1 text-xs text-gray-500">
+                        <p className="mt-1 text-xs text-gray-500 dark:text-[#93A69D]">
                           Stock pusat digunakan sebagai acuan
                           untuk menyesuaikan qty request
                           sebelum Delivery diproses.
@@ -4785,19 +4785,19 @@ export default function BarangKeluarPage() {
                       </div>
 
                       <div className="flex flex-wrap gap-2">
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-700">
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-700 dark:border-[#245B47] dark:bg-[#123128] dark:text-[#6FE0B0]">
                           <PackageCheck size={12} />
                           Stock Cukup
                         </span>
 
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-[10px] font-bold text-amber-700">
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-[10px] font-bold text-amber-700 dark:border-[#66511E] dark:bg-[#332A16] dark:text-[#F5C96B]">
                           <AlertTriangle
                             size={12}
                           />
                           Stock Kurang
                         </span>
 
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] font-bold text-red-600">
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] font-bold text-red-600 dark:border-[#71353A] dark:bg-[#351A1C] dark:text-[#FF7E86]">
                           <PackageX size={12} />
                           Stock Kosong
                         </span>
@@ -4809,49 +4809,49 @@ export default function BarangKeluarPage() {
                 {/* EDIT MODE */}
 
                 {editingRequest ? (
-                  <div className="mt-5 overflow-hidden rounded-[20px] border border-[#BFD1C5]">
-                    <div className="flex flex-col gap-3 border-b border-[#DDE8E1] bg-[#F3F8F5] px-4 py-4 md:flex-row md:items-center md:justify-between">
+                  <div className="mt-5 overflow-hidden rounded-[20px] border border-[#BFD1C5] dark:border-[#34453D]">
+                    <div className="flex flex-col gap-3 border-b border-[#DDE8E1] bg-[#F3F8F5] px-4 py-4 md:flex-row md:items-center md:justify-between dark:border-[#2E4038] dark:border-[#34453D] dark:bg-[#18241F]">
                       <div>
                         <p className="text-xs font-bold uppercase tracking-wider text-[#285744]">
                           Edit Delivery Request
                         </p>
 
-                        <p className="mt-1 text-[11px] text-gray-500">
+                        <p className="mt-1 text-[11px] text-gray-500 dark:text-[#93A69D]">
                           Sesuaikan Qty request dengan
                           stock pusat yang tersedia.
                         </p>
                       </div>
 
-                      <div className="rounded-xl border border-[#C9DCCF] bg-white px-3 py-2 text-[11px] font-semibold text-[#285744]">
+                      <div className="rounded-xl border border-[#C9DCCF] bg-white px-3 py-2 text-[11px] font-semibold text-[#285744] dark:bg-[#101A16] dark:border-[#34453D]">
                         Stock pusat tidak boleh terlewati
                       </div>
                     </div>
 
-                    <div className="overflow-x-auto bg-white">
+                    <div className="overflow-x-auto bg-white dark:bg-[#101A16]">
                       <table className="min-w-[900px] w-full text-xs">
-                        <thead className="bg-[#F8FAF8]">
+                        <thead className="bg-[#F8FAF8] dark:bg-[#18241F] dark:bg-[#17241F]">
                           <tr>
-                            <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-gray-400">
+                            <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-gray-400 dark:text-[#788C83]">
                               Barang
                             </th>
 
-                            <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-gray-400">
+                            <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-gray-400 dark:text-[#788C83]">
                               Stock Pusat
                             </th>
 
-                            <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-gray-400">
+                            <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-gray-400 dark:text-[#788C83]">
                               Qty Request
                             </th>
 
-                            <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-gray-400">
+                            <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-gray-400 dark:text-[#788C83]">
                               Satuan
                             </th>
 
-                            <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-gray-400">
+                            <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-gray-400 dark:text-[#788C83]">
                               Status
                             </th>
 
-                            <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-gray-400">
+                            <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-gray-400 dark:text-[#788C83]">
                               Aksi
                             </th>
                           </tr>
@@ -4898,18 +4898,18 @@ export default function BarangKeluarPage() {
                                   key={
                                     editItem.id
                                   }
-                                  className="border-t border-[#EDF1EE]"
+                                  className="border-t border-[#EDF1EE] dark:border-[#34453D]"
                                 >
                                   <td className="px-4 py-4">
                                     <div>
-                                      <p className="font-bold text-[#173A2F]">
+                                      <p className="font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                                         {originalItem
                                           ?.barang
                                           ?.name ||
                                           `Barang #${editItem.barangId}`}
                                       </p>
 
-                                      <p className="mt-1 text-[11px] text-gray-400">
+                                      <p className="mt-1 text-[11px] text-gray-400 dark:text-[#788C83]">
                                         {originalItem
                                           ?.barang
                                           ?.code ||
@@ -4977,7 +4977,7 @@ export default function BarangKeluarPage() {
                                   </td>
 
                                   <td className="px-4 py-4 text-center">
-                                    <span className="inline-flex rounded-lg bg-[#F5F4F0] px-3 py-1.5 font-semibold text-[#44564A]">
+                                    <span className="inline-flex rounded-lg bg-[#F5F4F0] px-3 py-1.5 font-semibold text-[#44564A] dark:bg-[#1B2420] dark:text-[#B8CAC1] dark:bg-[#18241F]">
                                       {getRequestItemUnit(
                                         originalItem
                                       )}
@@ -4986,14 +4986,14 @@ export default function BarangKeluarPage() {
 
                                   <td className="px-4 py-4 text-center">
                                     {stockEmpty ? (
-                                      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1.5 text-[10px] font-bold text-red-600">
+                                      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1.5 text-[10px] font-bold text-red-600 dark:border-[#71353A] dark:bg-[#351A1C] dark:text-[#FF7E86]">
                                         <PackageX
                                           size={11}
                                         />
                                         KOSONG
                                       </span>
                                     ) : enough ? (
-                                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-700">
+                                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-700 dark:border-[#245B47] dark:bg-[#123128] dark:text-[#6FE0B0]">
                                         <PackageCheck
                                           size={
                                             11
@@ -5002,7 +5002,7 @@ export default function BarangKeluarPage() {
                                         CUKUP
                                       </span>
                                     ) : (
-                                      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[10px] font-bold text-amber-700">
+                                      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[10px] font-bold text-amber-700 dark:border-[#66511E] dark:bg-[#332A16] dark:text-[#F5C96B]">
                                         <AlertTriangle
                                           size={
                                             11
@@ -5030,7 +5030,7 @@ export default function BarangKeluarPage() {
                                           ? "Minimal satu barang harus tersisa"
                                           : "Hapus item"
                                       }
-                                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-[#71353A] dark:bg-[#351A1C] dark:text-[#FF7E86] dark:hover:bg-[#5A252A]"
                                     >
                                       <Trash2 size={14} />
                                     </button>
@@ -5046,14 +5046,14 @@ export default function BarangKeluarPage() {
                 ) : (
                   /* NORMAL DETAIL TABLE */
 
-                  <div className="mt-5 overflow-hidden rounded-[20px] border border-[#E2E8E4]">
-                    <div className="border-b border-[#E7EDE9] bg-[#F5F7F5] px-4 py-3">
+                  <div className="mt-5 overflow-hidden rounded-[20px] border border-[#E2E8E4] dark:border-[#34453D]">
+                    <div className="border-b border-[#E7EDE9] bg-[#F5F7F5] px-4 py-3 dark:border-[#34453D] dark:bg-[#18241F] dark:bg-[#18251F]">
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs font-bold uppercase tracking-wider text-[#5F8A72]">
+                        <p className="text-xs font-bold uppercase tracking-wider text-[#5F8A72] dark:text-[#73B99A]">
                           Daftar Barang & Stock Pusat
                         </p>
 
-                        <span className="text-[10px] font-semibold text-gray-400">
+                        <span className="text-[10px] font-semibold text-gray-400 dark:text-[#788C83]">
                           Stock realtime dari Gudang Pusat
                         </span>
                       </div>
@@ -5062,32 +5062,32 @@ export default function BarangKeluarPage() {
                     <div className="overflow-x-auto">
                       <table className="min-w-[850px] w-full text-xs">
                         <thead>
-                          <tr className="border-b border-[#E7EDE9] bg-white">
-                            <th className="px-4 py-3 text-left font-bold text-gray-400">
+                          <tr className="border-b border-[#E7EDE9] bg-white dark:bg-[#101A16] dark:border-[#34453D]">
+                            <th className="px-4 py-3 text-left font-bold text-gray-400 dark:text-[#788C83]">
                               Barang
                             </th>
 
-                            <th className="px-4 py-3 text-left font-bold text-gray-400">
+                            <th className="px-4 py-3 text-left font-bold text-gray-400 dark:text-[#788C83]">
                               Kode
                             </th>
 
-                            <th className="px-4 py-3 text-center font-bold text-gray-400">
+                            <th className="px-4 py-3 text-center font-bold text-gray-400 dark:text-[#788C83]">
                               Request
                             </th>
 
-                            <th className="px-4 py-3 text-center font-bold text-gray-400">
+                            <th className="px-4 py-3 text-center font-bold text-gray-400 dark:text-[#788C83]">
                               Stock Pusat
                             </th>
 
-                            <th className="px-4 py-3 text-center font-bold text-gray-400">
+                            <th className="px-4 py-3 text-center font-bold text-gray-400 dark:text-[#788C83]">
                               Satuan
                             </th>
 
-                            <th className="px-4 py-3 text-center font-bold text-gray-400">
+                            <th className="px-4 py-3 text-center font-bold text-gray-400 dark:text-[#788C83]">
                               Status
                             </th>
 
-                            <th className="px-4 py-3 text-left font-bold text-gray-400">
+                            <th className="px-4 py-3 text-left font-bold text-gray-400 dark:text-[#788C83]">
                               Catatan
                             </th>
                           </tr>
@@ -5113,22 +5113,22 @@ export default function BarangKeluarPage() {
                               return (
                                 <tr
                                   key={item.id}
-                                  className="border-t border-[#EDF1EE]"
+                                  className="border-t border-[#EDF1EE] dark:border-[#34453D]"
                                 >
-                                  <td className="px-4 py-3 font-bold text-[#173A2F]">
+                                  <td className="px-4 py-3 font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                                     {item.barang
                                       ?.name ||
                                       `Barang #${item.barangId}`}
                                   </td>
 
-                                  <td className="px-4 py-3 text-gray-500">
+                                  <td className="px-4 py-3 text-gray-500 dark:text-[#93A69D]">
                                     {item.barang
                                       ?.code ||
                                       "-"}
                                   </td>
 
                                   <td className="px-4 py-3 text-center">
-                                    <span className="inline-flex min-w-[65px] justify-center rounded-lg bg-[#EEF1EA] px-2.5 py-1.5 font-bold text-[#5F8A72]">
+                                    <span className="inline-flex min-w-[65px] justify-center rounded-lg bg-[#EEF1EA] px-2.5 py-1.5 font-bold text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                                       {formatNumber(
                                         item.qty
                                       )}
@@ -5157,7 +5157,7 @@ export default function BarangKeluarPage() {
                                   </td>
 
                                   <td className="px-4 py-3 text-center">
-                                    <span className="inline-flex min-w-[60px] justify-center rounded-lg bg-[#F5F4F0] px-2.5 py-1.5 font-semibold text-[#44564A]">
+                                    <span className="inline-flex min-w-[60px] justify-center rounded-lg bg-[#F5F4F0] px-2.5 py-1.5 font-semibold text-[#44564A] dark:bg-[#1B2420] dark:text-[#B8CAC1] dark:bg-[#18241F]">
                                       {getRequestItemUnit(
                                         item
                                       )}
@@ -5180,7 +5180,7 @@ export default function BarangKeluarPage() {
                                     </span>
                                   </td>
 
-                                  <td className="px-4 py-3 text-gray-500">
+                                  <td className="px-4 py-3 text-gray-500 dark:text-[#93A69D]">
                                     {item.note ||
                                       "-"}
                                   </td>
@@ -5197,24 +5197,24 @@ export default function BarangKeluarPage() {
                 {/* CREATED INFO */}
 
                 <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div className="rounded-xl border border-[#E5EAE7] bg-[#F8FAF8] p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                  <div className="rounded-xl border border-[#E5EAE7] bg-[#F8FAF8] p-4 dark:border-[#34453D] dark:bg-[#18241F] dark:border-[#2E4038] dark:bg-[#17241F]">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#788C83]">
                       Dibuat Oleh
                     </p>
 
-                    <p className="mt-1.5 text-sm font-bold text-[#173A2F]">
+                    <p className="mt-1.5 text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                       {getRequestCreator(
                         requestDetail
                       )}
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-[#E5EAE7] bg-[#F8FAF8] p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                  <div className="rounded-xl border border-[#E5EAE7] bg-[#F8FAF8] p-4 dark:border-[#34453D] dark:bg-[#18241F] dark:border-[#2E4038] dark:bg-[#17241F]">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#788C83]">
                       Total Quantity
                     </p>
 
-                    <p className="mt-1.5 text-sm font-bold text-[#173A2F]">
+                    <p className="mt-1.5 text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                       {formatNumber(
                         editingRequest
                           ? editItems.reduce(
@@ -5241,12 +5241,12 @@ export default function BarangKeluarPage() {
                 {/* REMARKS */}
 
                 {requestDetail.remarks && (
-                  <div className="mt-4 rounded-xl border border-[#E5EAE7] bg-[#F8FAF8] p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                  <div className="mt-4 rounded-xl border border-[#E5EAE7] bg-[#F8FAF8] p-4 dark:border-[#34453D] dark:bg-[#18241F] dark:border-[#2E4038] dark:bg-[#17241F]">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#788C83]">
                       Keterangan
                     </p>
 
-                    <p className="mt-1.5 text-sm leading-6 text-gray-600">
+                    <p className="mt-1.5 text-sm leading-6 text-gray-600 dark:text-[#B7C7BF]">
                       {requestDetail.remarks}
                     </p>
                   </div>
@@ -5255,7 +5255,7 @@ export default function BarangKeluarPage() {
                 {/* DELIVERY */}
 
                 {requestDetail.delivery && (
-                  <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 p-4">
+                  <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-[#49356D] dark:bg-[#261D38]">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-violet-500">
@@ -5312,7 +5312,7 @@ export default function BarangKeluarPage() {
                           onClick={
                             startEditRequest
                           }
-                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#BFD1C5] bg-[#EEF1EA] px-5 py-3 text-xs font-bold text-[#285744] transition hover:bg-[#DCEAE1]"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#BFD1C5] bg-[#EEF1EA] px-5 py-3 text-xs font-bold text-[#285744] transition hover:bg-[#DCEAE1] dark:bg-[#1B2B24] dark:border-[#34453D] dark:bg-[#18241F]"
                         >
                           <Pencil size={14} />
                           Edit Request
@@ -5333,7 +5333,7 @@ export default function BarangKeluarPage() {
                           disabled={
                             deletingRequest
                           }
-                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-xs font-bold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-xs font-bold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#71353A] dark:bg-[#351A1C] dark:text-[#FF7E86] dark:hover:bg-[#5A252A]"
                         >
                           {deletingRequest ? (
                             <RefreshCw
@@ -5362,7 +5362,7 @@ export default function BarangKeluarPage() {
                           disabled={
                             savingRequestEdit
                           }
-                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#DDD8CE] bg-white px-5 py-3 text-xs font-bold text-gray-600 transition hover:bg-[#F3F1EB] disabled:opacity-50"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#DDD8CE] bg-white px-5 py-3 text-xs font-bold text-gray-600 transition hover:bg-[#F3F1EB] disabled:opacity-50 dark:border-[#3A4A43] dark:bg-[#101A16] dark:text-[#B7C7BF] dark:hover:bg-[#27342F] dark:border-[#34453D]"
                         >
                           <X size={14} />
                           Batal
@@ -5376,7 +5376,7 @@ export default function BarangKeluarPage() {
                           disabled={
                             savingRequestEdit
                           }
-                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#173A2F] px-5 py-3 text-xs font-bold text-white transition hover:bg-[#285744] disabled:cursor-not-allowed disabled:opacity-50"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#173A2F] px-5 py-3 text-xs font-bold text-white transition hover:bg-[#285744] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#356B58] dark:hover:bg-[#43806A]"
                         >
                           {savingRequestEdit ? (
                             <RefreshCw
@@ -5409,7 +5409,7 @@ export default function BarangKeluarPage() {
                               processingRequestId ===
                               requestDetail.id
                             }
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#173A2F] px-5 py-3 text-xs font-bold text-white transition hover:bg-[#285744] disabled:opacity-50"
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#173A2F] px-5 py-3 text-xs font-bold text-white transition hover:bg-[#285744] disabled:opacity-50 dark:bg-[#356B58] dark:hover:bg-[#43806A]"
                           >
                             <Check size={15} />
                             Approve Request
@@ -5433,7 +5433,7 @@ export default function BarangKeluarPage() {
                               processingRequestId ===
                               requestDetail.id
                             }
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#5F8A72] px-5 py-3 text-xs font-bold text-white transition hover:bg-[#285744] disabled:opacity-50"
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#5F8A72] px-5 py-3 text-xs font-bold text-white transition hover:bg-[#285744] disabled:opacity-50 dark:bg-[#4F8F73] dark:hover:bg-[#43806A]"
                           >
                             <Truck size={15} />
                             Proses Delivery
@@ -5451,7 +5451,7 @@ export default function BarangKeluarPage() {
                               requestDetail
                             )
                           }
-                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-xs font-bold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-xs font-bold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 dark:border-[#245B47] dark:bg-[#123128] dark:text-[#6FE0B0] dark:hover:bg-[#1C4B3D]"
                         >
                           <MessageCircle size={15} />
                           WhatsApp
@@ -5465,7 +5465,7 @@ export default function BarangKeluarPage() {
                           );
                           setRequestDetail(null);
                         }}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#DDD8CE] bg-white px-5 py-3 text-xs font-bold text-gray-600 transition hover:bg-[#F3F1EB]"
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#DDD8CE] bg-white px-5 py-3 text-xs font-bold text-gray-600 transition hover:bg-[#F3F1EB] dark:border-[#3A4A43] dark:bg-[#101A16] dark:text-[#B7C7BF] dark:hover:bg-[#27342F] dark:border-[#34453D]"
                       >
                         Tutup
                       </button>
@@ -5483,21 +5483,21 @@ export default function BarangKeluarPage() {
       ===================================================== */}
 
       {scanBarang && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#141B17]/65 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white shadow-2xl">
-            <div className="border-b border-[#E7E3DB] px-5 py-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#141B17]/65 p-4 backdrop-blur-sm dark:bg-[#050A08]/80">
+          <div className="w-full max-w-md overflow-hidden rounded-[22px] border border-[#DDE8E1] bg-white shadow-2xl dark:border-[#2E4038] dark:bg-[#101A16] dark:border-[#34453D]">
+            <div className="border-b border-[#E7E3DB] px-5 py-5 dark:border-[#2C3933] dark:border-[#34453D]">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72]">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EEF1EA] text-[#5F8A72] dark:bg-[#1B2B24] dark:text-[#73B99A] dark:bg-[#18241F]">
                     <ScanLine size={19} />
                   </div>
 
                   <div>
-                    <p className="text-sm font-bold text-[#173A2F]">
+                    <p className="text-sm font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                       Barang Ditemukan
                     </p>
 
-                    <p className="mt-0.5 text-xs text-gray-500">
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-[#93A69D]">
                       Konfirmasi quantity barang
                     </p>
                   </div>
@@ -5508,7 +5508,7 @@ export default function BarangKeluarPage() {
                   onClick={() =>
                     setScanBarang(null)
                   }
-                  className="rounded-xl p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                  className="rounded-xl p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:text-[#788C83] dark:hover:bg-[#24332D]"
                 >
                   <X size={18} />
                 </button>
@@ -5516,60 +5516,60 @@ export default function BarangKeluarPage() {
             </div>
 
             <div className="p-5">
-              <div className="overflow-hidden rounded-[22px] border border-[#E5E1D8]">
-                <div className="border-b border-[#ECE8E0] bg-[#F5F4F0] px-4 py-3">
+              <div className="overflow-hidden rounded-[22px] border border-[#E5E1D8] dark:border-[#35433D] dark:border-[#34453D]">
+                <div className="border-b border-[#ECE8E0] bg-[#F5F4F0] px-4 py-3 dark:border-[#303D37] dark:bg-[#1B2420] dark:border-[#34453D] dark:bg-[#18241F]">
                   <div className="flex items-center gap-2">
                     <PackageMinus
                       size={15}
-                      className="text-[#5F8A72]"
+                      className="text-[#5F8A72] dark:text-[#73B99A]"
                     />
 
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#5F8A72]">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#5F8A72] dark:text-[#73B99A]">
                       Detail Barang
                     </span>
                   </div>
                 </div>
 
-                <div className="divide-y divide-[#EDF2EF]">
+                <div className="divide-y divide-[#EDF2EF] dark:divide-[#293A33] dark:divide-[#2B3B34]">
                   <div className="flex justify-between gap-4 px-4 py-3.5">
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-400 dark:text-[#788C83]">
                       Kode
                     </span>
 
-                    <span className="text-right text-xs font-bold text-[#173A2F]">
+                    <span className="text-right text-xs font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                       {scanBarang.code ||
                         "-"}
                     </span>
                   </div>
 
                   <div className="flex justify-between gap-4 px-4 py-3.5">
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-400 dark:text-[#788C83]">
                       Barcode
                     </span>
 
-                    <span className="text-right text-xs font-medium text-gray-600">
+                    <span className="text-right text-xs font-medium text-gray-600 dark:text-[#B7C7BF]">
                       {scanBarang.barcode ||
                         "-"}
                     </span>
                   </div>
 
                   <div className="flex justify-between gap-4 px-4 py-3.5">
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-400 dark:text-[#788C83]">
                       Nama
                     </span>
 
-                    <span className="max-w-[230px] text-right text-xs font-bold text-[#173A2F]">
+                    <span className="max-w-[230px] text-right text-xs font-bold text-[#173A2F] dark:text-[#E5F1EB]">
                       {scanBarang.name ||
                         "-"}
                     </span>
                   </div>
 
                   <div className="flex justify-between gap-4 px-4 py-3.5">
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-400 dark:text-[#788C83]">
                       Stock Tersedia
                     </span>
 
-                    <span className="text-right text-xs font-bold text-[#5F8A72]">
+                    <span className="text-right text-xs font-bold text-[#5F8A72] dark:text-[#73B99A]">
                       {formatNumber(
                         getCentralStock(scanBarang)
                       )}{" "}
@@ -5580,14 +5580,14 @@ export default function BarangKeluarPage() {
               </div>
 
               <div className="mt-5">
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A]">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-[#44564A] dark:text-[#B8CAC1]">
                   Qty Keluar
                 </label>
 
                 <input
                   type="number"
                   min="1"
-                  className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] px-4 text-sm font-semibold outline-none transition focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10"
+                  className="h-12 w-full rounded-xl border border-[#DDD8CE] bg-[#FAF9F6] px-4 text-sm font-semibold outline-none transition focus:border-[#5F8A72] focus:bg-white focus:ring-4 focus:ring-[#5F8A72]/10 dark:border-[#3A4A43] dark:bg-[#111B17] dark:focus:bg-[#16231E] dark:border-[#34453D] dark:bg-[#18241F]"
                   value={scanQty}
                   onChange={(e) =>
                     setScanQty(e.target.value)
@@ -5601,7 +5601,7 @@ export default function BarangKeluarPage() {
                   onClick={() =>
                     setScanBarang(null)
                   }
-                  className="rounded-xl border border-[#DDD8CE] bg-white px-4 py-3 text-sm font-bold text-gray-600 transition hover:bg-[#F3F1EB]"
+                  className="rounded-xl border border-[#DDD8CE] bg-white px-4 py-3 text-sm font-bold text-gray-600 transition hover:bg-[#F3F1EB] dark:border-[#3A4A43] dark:bg-[#101A16] dark:text-[#B7C7BF] dark:hover:bg-[#27342F] dark:border-[#34453D]"
                 >
                   Batal
                 </button>
@@ -5609,7 +5609,7 @@ export default function BarangKeluarPage() {
                 <button
                   type="button"
                   onClick={tambahDariScan}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#5F8A72] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#285744]"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#5F8A72] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#285744] dark:bg-[#4F8F73] dark:hover:bg-[#43806A]"
                 >
                   <Plus size={17} />
                   Tambahkan

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ElementType } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   LayoutDashboard,
@@ -37,6 +37,7 @@ import {
   Factory,
   Utensils,
   X,
+  Search,
 } from "lucide-react";
 
 type Role =
@@ -227,70 +228,35 @@ const menus: Menu[] = [
     icon: LayoutDashboard,
     iconTone: "teal",
   },
-  {
-    title: "Attendance",
-    url: "/attendance",
-    roles: ["ADMIN", "MANAGER", "GUDANG"],
-    icon: CalendarCheck,
-    iconTone: "sky",
-  },
-  {
-    title: "Riwayat Absensi",
-    url: "/attendance/history",
-    roles: ["ADMIN", "MANAGER", "GUDANG"],
-    icon: History,
-    iconTone: "violet",
-  },
 
-  {
-    title: "MASTER DATA",
+    {
+    title: "FINANCE",
     header: true,
   },
   {
-    title: "Master Barang",
-    url: "/master-barang",
-    roles: ["ADMIN", "PURCHASING"],
-    icon: Package,
-    iconTone: "emerald",
+    title: "Payment",
+    url: "/payment",
+    roles: ["ADMIN", "MANAGER"],
+    icon: CreditCard,
+    iconTone: "sky",
   },
   {
-    title: "Master Supplier",
-    url: "/supplier",
-    roles: ["ADMIN", "PURCHASING"],
-    icon: Truck,
-    iconTone: "cyan",
-  },
-  {
-    title: "Master Customer",
-    url: "/customer",
-    roles: ["ADMIN"],
-    icon: Users,
-    iconTone: "violet",
-  },
-  {
-    title: "Master User",
-    url: "/master/user",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
-    icon: UserCog,
-    iconTone: "indigo",
-  },
-  {
-    title: "Master Outlet",
-    url: "/master/outlet",
-    roles: ["ADMIN"],
-    icon: Warehouse,
+    title: "Purchase Payable / Hutang",
+    url: "/purchase-payable",
+    roles: ["ADMIN", "MANAGER", "OUTLET_ADMIN"],
+    icon: FileClock,
     iconTone: "amber",
   },
   {
-    title: "Master Karyawan",
-    url: "/employee",
-    roles: ["ADMIN", "MANAGER"],
-    icon: UserRound,
-    iconTone: "rose",
+    title: "Petty Cash",
+    url: "/petty-cash",
+    roles: ["ADMIN", "MANAGER", "OUTLET_ADMIN"],
+    icon: WalletCards,
+    iconTone: "emerald",
   },
 
   {
-    title: "PURCHASE",
+    title: "PURCHASE & DELIVERY CENTRAL",
     header: true,
   },
   {
@@ -323,9 +289,32 @@ const menus: Menu[] = [
     iconTone: "teal",
     badgeKey: "barangMasuk",
   },
-
   {
-    title: "GUDANG",
+    title: "Barang Keluar Pusat & Delivery Request",
+    url: "/barang-keluar",
+    roles: ["ADMIN", "GUDANG"],
+    icon: PackageMinus,
+    iconTone: "orange",
+    badgeKey: "deliveryRequest",
+  },
+    {
+    title: "Delivery Order",
+    url: "/pengiriman",
+    roles: ["ADMIN"],
+    icon: Send,
+    iconTone: "cyan",
+    badgeKey: "deliveryOrder",
+  },
+  {
+    title: "Surat Jalan",
+    url: "/surat-jalan",
+    roles: ["ADMIN", "GUDANG"],
+    icon: FileText,
+    iconTone: "sky",
+    badgeKey: "suratJalan",
+  },
+  {
+    title: "PUSAT/CENTRAL",
     header: true,
   },
   {
@@ -335,67 +324,40 @@ const menus: Menu[] = [
     icon: Warehouse,
     iconTone: "emerald",
   },
-  {
-    title: "Kartu Stok",
-    url: "/gudang/stock-card",
-    roles: ["ADMIN", "GUDANG"],
-    icon: Warehouse,
-    iconTone: "cyan",
+    {
+    title: "Cost Item Stock Pusat",
+    url: "/inventory",
+    roles: ["ADMIN", "MANAGER", "GUDANG"],
+    icon: Boxes,
+    iconTone: "emerald",
   },
   {
-    title: "Expired Barang",
+    title: "Expired Barang Pusat",
     url: "/expired",
     roles: ["ADMIN", "GUDANG"],
     icon: Package,
     iconTone: "rose",
   },
   {
-    title: "Barang Keluar",
-    url: "/barang-keluar",
-    roles: ["ADMIN", "GUDANG"],
-    icon: PackageMinus,
-    iconTone: "orange",
-    badgeKey: "deliveryRequest",
-  },
-  {
-    title: "Stock Card",
-    url: "/stock-card",
-    roles: ["ADMIN", "GUDANG"],
-    icon: Boxes,
-    iconTone: "teal",
-  },
-  {
-    title: "Mutasi Stock",
-    url: "/mutasi-stock",
-    roles: ["ADMIN", "GUDANG"],
-    icon: ArrowLeftRight,
-    iconTone: "indigo",
-  },
-  {
-    title: "Stock Opname",
+    title: "Stock Opname Pusat",
     url: "/stock-opname",
     roles: ["ADMIN", "GUDANG"],
     icon: ClipboardList,
     iconTone: "violet",
   },
   {
-    title: "Adjustment Stock",
+    title: "Adjustment Stock Pusat",
     url: "/adjustment",
     roles: ["ADMIN", "GUDANG"],
     icon: SlidersHorizontal,
     iconTone: "amber",
   },
   {
-    title: "History Stock",
+    title: "History Stock Pusat",
     url: "/history",
     roles: ["ADMIN", "GUDANG"],
     icon: FileClock,
     iconTone: "slate",
-  },
-
-  {
-    title: "WASTE",
-    header: true,
   },
   {
     title: "Waste Pusat",
@@ -414,28 +376,7 @@ const menus: Menu[] = [
   },
 
   {
-    title: "PENJUALAN",
-    header: true,
-  },
-  {
-    title: "Delivery Order",
-    url: "/pengiriman",
-    roles: ["ADMIN"],
-    icon: Send,
-    iconTone: "cyan",
-    badgeKey: "deliveryOrder",
-  },
-  {
-    title: "Surat Jalan",
-    url: "/surat-jalan",
-    roles: ["ADMIN", "GUDANG"],
-    icon: FileText,
-    iconTone: "sky",
-    badgeKey: "suratJalan",
-  },
-
-  {
-    title: "INVENTORY",
+    title: "MANUFACTURING",
     header: true,
   },
   {
@@ -448,20 +389,13 @@ const menus: Menu[] = [
   {
     title: "Manufacture",
     url: "/manufacture",
-    roles: ["ADMIN", "MANAGER", "GUDANG", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "MANAGER", "GUDANG", "OUTLET_ADMIN", "STAFF_OUTLET"],
     icon: Factory,
     iconTone: "orange",
   },
-  {
-    title: "Inventory",
-    url: "/inventory",
-    roles: ["ADMIN", "MANAGER", "GUDANG"],
-    icon: Boxes,
-    iconTone: "emerald",
-  },
 
   {
-    title: "COST CONTROL",
+    title: "COST CONTROL OUTLET",
     header: true,
   },
   {
@@ -473,40 +407,7 @@ const menus: Menu[] = [
   },
 
   {
-    title: "FINANCE",
-    header: true,
-  },
-  {
-    title: "Payment",
-    url: "/payment",
-    roles: ["ADMIN", "MANAGER"],
-    icon: CreditCard,
-    iconTone: "sky",
-  },
-  {
-    title: "Master Account",
-    url: "/petty-cash/accounts",
-    roles: ["ADMIN"],
-    icon: WalletCards,
-    iconTone: "violet",
-  },
-  {
-    title: "Purchase Payable / Hutang",
-    url: "/purchase-payable",
-    roles: ["ADMIN", "MANAGER", "OUTLET_ADMIN"],
-    icon: FileClock,
-    iconTone: "amber",
-  },
-  {
-    title: "Petty Cash",
-    url: "/petty-cash",
-    roles: ["ADMIN", "MANAGER", "OUTLET_ADMIN"],
-    icon: WalletCards,
-    iconTone: "emerald",
-  },
-
-  {
-    title: "OUTLET",
+    title: "PURCHASE OUTLET & MASTER",
     header: true,
   },
   {
@@ -663,8 +564,62 @@ const menus: Menu[] = [
     iconTone: "violet",
   },
 
+    {
+    title: "MASTER DATA PUSAT",
+    header: true,
+  },
   {
-    title: "LAPORAN",
+    title: "Master Barang",
+    url: "/master-barang",
+    roles: ["ADMIN", "PURCHASING"],
+    icon: Package,
+    iconTone: "emerald",
+  },
+  {
+    title: "Master Supplier",
+    url: "/supplier",
+    roles: ["ADMIN", "PURCHASING"],
+    icon: Truck,
+    iconTone: "cyan",
+  },
+  {
+    title: "Master Customer",
+    url: "/customer",
+    roles: ["ADMIN"],
+    icon: Users,
+    iconTone: "violet",
+  },
+  {
+    title: "Master User",
+    url: "/master/user",
+    roles: ["ADMIN", "OUTLET_ADMIN"],
+    icon: UserCog,
+    iconTone: "indigo",
+  },
+  {
+    title: "Master Outlet",
+    url: "/master/outlet",
+    roles: ["ADMIN"],
+    icon: Warehouse,
+    iconTone: "amber",
+  },
+  {
+    title: "Master Karyawan",
+    url: "/employee",
+    roles: ["ADMIN", "MANAGER"],
+    icon: UserRound,
+    iconTone: "rose",
+  },
+    {
+    title: "Master Account",
+    url: "/petty-cash/accounts",
+    roles: ["ADMIN"],
+    icon: WalletCards,
+    iconTone: "violet",
+  },
+
+  {
+    title: "LAPORAN PUSAT",
     header: true,
   },
   {
@@ -728,6 +683,20 @@ const menus: Menu[] = [
     title: "SETTING",
     header: true,
   },
+    {
+    title: "Attendance",
+    url: "/attendance",
+    roles: ["ADMIN", "MANAGER", "GUDANG"],
+    icon: CalendarCheck,
+    iconTone: "sky",
+  },
+  {
+    title: "Riwayat Absensi",
+    url: "/attendance/history",
+    roles: ["ADMIN", "MANAGER", "GUDANG"],
+    icon: History,
+    iconTone: "violet",
+  },
   {
     title: "Pengaturan",
     url: "/pengaturan",
@@ -753,6 +722,12 @@ export default function Sidebar({
 
   const [pendingCounts, setPendingCounts] =
     useState<PendingCounts>(EMPTY_PENDING_COUNTS);
+
+  const [menuSearch, setMenuSearch] =
+    useState("");
+
+  const searchInputRef =
+    useRef<HTMLInputElement>(null);
 
   const normalizeCount = (value: unknown) => {
     const numberValue = Number(value ?? 0);
@@ -906,37 +881,166 @@ export default function Sidebar({
     };
   }, [loadPendingCounts]);
 
-  const visibleMenus = menus.filter((menu) => {
-    if (menu.header) {
-      return true;
-    }
+  /*
+   * =====================================================
+   * ROLE FILTER
+   * =====================================================
+   */
 
-    if (!menu.roles) {
-      return false;
-    }
-
-    if (!role) {
-      return false;
-    }
-
-    return menu.roles.includes(role);
-  });
-
-  const allowedMenus = visibleMenus.filter(
-    (menu, index, array) => {
-      if (!menu.header) {
+  const roleFilteredMenus = useMemo(() => {
+    return menus.filter((menu) => {
+      if (menu.header) {
         return true;
       }
 
-      const nextMenu = array[index + 1];
-
-      if (!nextMenu) {
+      if (!menu.roles) {
         return false;
       }
 
-      return !nextMenu.header;
+      if (!role) {
+        return false;
+      }
+
+      return menu.roles.includes(role);
+    });
+  }, [role]);
+
+  /*
+   * =====================================================
+   * SEARCH FILTER
+   *
+   * Header hanya ditampilkan apabila memiliki minimal
+   * satu menu yang cocok dengan keyword pencarian.
+   * =====================================================
+   */
+
+  const filteredMenus = useMemo(() => {
+    const query = menuSearch
+      .trim()
+      .toLowerCase();
+
+    if (!query) {
+      return roleFilteredMenus.filter(
+        (menu, index, array) => {
+          if (!menu.header) {
+            return true;
+          }
+
+          const nextMenu =
+            array[index + 1];
+
+          if (!nextMenu) {
+            return false;
+          }
+
+          return !nextMenu.header;
+        }
+      );
     }
-  );
+
+    const result: Menu[] = [];
+
+    let currentHeader: Menu | null = null;
+    let currentItems: Menu[] = [];
+
+    const flushSection = () => {
+      if (currentItems.length === 0) {
+        currentHeader = null;
+        currentItems = [];
+        return;
+      }
+
+      if (currentHeader) {
+        result.push(currentHeader);
+      }
+
+      result.push(...currentItems);
+
+      currentHeader = null;
+      currentItems = [];
+    };
+
+    for (const menu of roleFilteredMenus) {
+      if (menu.header) {
+        flushSection();
+        currentHeader = menu;
+        continue;
+      }
+
+      const title =
+        menu.title.toLowerCase();
+
+      const url =
+        menu.url?.toLowerCase() ?? "";
+
+      const matches =
+        title.includes(query) ||
+        url.includes(query);
+
+      if (matches) {
+        currentItems.push(menu);
+      }
+    }
+
+    flushSection();
+
+    return result;
+  }, [menuSearch, roleFilteredMenus]);
+
+  /*
+   * =====================================================
+   * SEARCH KEYBOARD
+   * =====================================================
+   */
+
+  useEffect(() => {
+    const handleKeyDown = (
+      event: KeyboardEvent
+    ) => {
+      if (event.key === "Escape") {
+        if (menuSearch) {
+          setMenuSearch("");
+          return;
+        }
+      }
+
+      /*
+       * Ctrl + K / Cmd + K
+       * fokus langsung ke pencarian sidebar.
+       */
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "k"
+      ) {
+        event.preventDefault();
+
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+
+    window.addEventListener(
+      "keydown",
+      handleKeyDown
+    );
+
+    return () => {
+      window.removeEventListener(
+        "keydown",
+        handleKeyDown
+      );
+    };
+  }, [menuSearch]);
+
+  /*
+   * Saat sidebar ditutup, kosongkan pencarian
+   * agar ketika dibuka kembali kondisi awal.
+   */
+  useEffect(() => {
+    if (!open) {
+      setMenuSearch("");
+    }
+  }, [open]);
 
   const displayName =
     user?.fullname ||
@@ -974,6 +1078,14 @@ export default function Sidebar({
 
     return Math.floor(value);
   };
+
+  const hasSearch =
+    menuSearch.trim().length > 0;
+
+  const searchResultCount =
+    filteredMenus.filter(
+      (menu) => !menu.header
+    ).length;
 
   return (
     <>
@@ -1440,6 +1552,190 @@ export default function Sidebar({
               </div>
             </div>
           </div>
+
+          {/* SIDEBAR SEARCH */}
+
+          <div className="relative mt-3.5">
+            <div
+              className={`
+                group
+                relative
+                flex
+                h-[40px]
+                items-center
+                overflow-hidden
+                rounded-xl
+                border
+                bg-black/[0.12]
+                transition-all
+                duration-200
+                ${
+                  hasSearch
+                    ? `
+                      border-emerald-300/[0.18]
+                      bg-emerald-400/[0.045]
+                      shadow-[0_8px_25px_rgba(0,0,0,0.10)]
+                    `
+                    : `
+                      border-white/[0.075]
+                      hover:border-white/[0.11]
+                      hover:bg-white/[0.035]
+                    `
+                }
+              `}
+            >
+              <span
+                className={`
+                  pointer-events-none
+                  ml-3
+                  flex
+                  shrink-0
+                  items-center
+                  justify-center
+                  transition-colors
+                  duration-200
+                  ${
+                    hasSearch
+                      ? "text-emerald-300"
+                      : "text-slate-500 group-focus-within:text-emerald-300"
+                  }
+                `}
+              >
+                <Search
+                  size={15}
+                  strokeWidth={1.9}
+                />
+              </span>
+
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={menuSearch}
+                onChange={(event) =>
+                  setMenuSearch(
+                    event.target.value
+                  )
+                }
+                placeholder="Cari menu..."
+                aria-label="Cari menu sidebar"
+                spellCheck={false}
+                autoComplete="off"
+                className="
+                  min-w-0
+                  flex-1
+                  bg-transparent
+                  px-2.5
+                  text-[10px]
+                  font-medium
+                  text-white
+                  outline-none
+                  placeholder:text-slate-600
+                "
+              />
+
+              {hasSearch ? (
+                <button
+                  type="button"
+                  aria-label="Hapus pencarian"
+                  onClick={() => {
+                    setMenuSearch("");
+                    searchInputRef.current?.focus();
+                  }}
+                  className="
+                    mr-1.5
+                    flex
+                    h-7
+                    w-7
+                    shrink-0
+                    items-center
+                    justify-center
+                    rounded-lg
+                    text-slate-500
+                    transition-all
+                    duration-200
+                    hover:bg-white/[0.07]
+                    hover:text-white
+                    active:scale-90
+                  "
+                >
+                  <X
+                    size={13}
+                    strokeWidth={2}
+                  />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  aria-label="Fokus pencarian menu"
+                  onClick={() =>
+                    searchInputRef.current?.focus()
+                  }
+                  className="
+                    mr-2
+                    hidden
+                    h-6
+                    shrink-0
+                    items-center
+                    rounded-md
+                    border
+                    border-white/[0.06]
+                    bg-white/[0.025]
+                    px-1.5
+                    text-[6px]
+                    font-bold
+                    tracking-[0.08em]
+                    text-slate-600
+                    transition-colors
+                    hover:border-white/[0.10]
+                    hover:text-slate-400
+                    min-[1100px]:flex
+                  "
+                >
+                  CTRL K
+                </button>
+              )}
+            </div>
+
+            {hasSearch && (
+              <div
+                className="
+                  mt-1.5
+                  flex
+                  items-center
+                  justify-between
+                  px-1
+                "
+              >
+                <span
+                  className="
+                    text-[6.5px]
+                    font-bold
+                    uppercase
+                    tracking-[0.14em]
+                    text-slate-600
+                  "
+                >
+                  Hasil pencarian
+                </span>
+
+                <span
+                  className="
+                    rounded-full
+                    border
+                    border-emerald-300/[0.07]
+                    bg-emerald-300/[0.025]
+                    px-1.5
+                    py-0.5
+                    text-[6.5px]
+                    font-bold
+                    text-emerald-400/70
+                  "
+                >
+                  {searchResultCount}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* NAVIGATION */}
@@ -1458,407 +1754,497 @@ export default function Sidebar({
             hover:[&::-webkit-scrollbar-thumb]:bg-white/[0.12]
           "
         >
-          {allowedMenus.map(
-            (menu, index) => {
-              if (menu.header) {
-                return (
-                  <div
-                    key={`header-${index}`}
-                    className="
-                      mb-2
-                      mt-6
-                      flex
-                      items-center
-                      gap-2.5
-                      px-3
-                      pt-1
-                    "
-                  >
-                    <span
-                      className="
-                        h-px
-                        w-3
-                        bg-gradient-to-r
-                        from-emerald-400/[0.38]
-                        to-transparent
-                      "
-                    />
+          {filteredMenus.length === 0 ? (
+            <div
+              className="
+                flex
+                min-h-[180px]
+                flex-col
+                items-center
+                justify-center
+                px-5
+                text-center
+              "
+            >
+              <div
+                className="
+                  flex
+                  h-11
+                  w-11
+                  items-center
+                  justify-center
+                  rounded-2xl
+                  border
+                  border-white/[0.07]
+                  bg-white/[0.025]
+                  text-slate-600
+                  shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]
+                "
+              >
+                <Search
+                  size={18}
+                  strokeWidth={1.6}
+                />
+              </div>
 
-                    <span
+              <p
+                className="
+                  mt-3
+                  text-[10px]
+                  font-bold
+                  text-slate-400
+                "
+              >
+                Menu tidak ditemukan
+              </p>
+
+              <p
+                className="
+                  mt-1
+                  max-w-[180px]
+                  text-[7px]
+                  leading-relaxed
+                  text-slate-600
+                "
+              >
+                Tidak ada menu yang cocok dengan
+                pencarian "{menuSearch.trim()}".
+              </p>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setMenuSearch("")
+                }
+                className="
+                  mt-3
+                  rounded-lg
+                  border
+                  border-emerald-300/[0.09]
+                  bg-emerald-300/[0.035]
+                  px-3
+                  py-1.5
+                  text-[7px]
+                  font-bold
+                  uppercase
+                  tracking-[0.10em]
+                  text-emerald-300/80
+                  transition-all
+                  hover:border-emerald-300/[0.16]
+                  hover:bg-emerald-300/[0.06]
+                  hover:text-emerald-200
+                  active:scale-95
+                "
+              >
+                Hapus Pencarian
+              </button>
+            </div>
+          ) : (
+            filteredMenus.map(
+              (menu, index) => {
+                if (menu.header) {
+                  return (
+                    <div
+                      key={`header-${menu.title}-${index}`}
                       className="
-                        text-[8px]
-                        font-bold
-                        uppercase
-                        tracking-[0.23em]
-                        text-slate-500
+                        mb-2
+                        mt-6
+                        flex
+                        items-center
+                        gap-2.5
+                        px-3
+                        pt-1
                       "
                     >
-                      {menu.title}
-                    </span>
-
-                    <span
-                      className="
-                        h-px
-                        flex-1
-                        bg-gradient-to-r
-                        from-white/[0.045]
-                        to-transparent
-                      "
-                    />
-                  </div>
-                );
-              }
-
-              if (!menu.url) {
-                return null;
-              }
-
-              const active =
-                pathname === menu.url ||
-                pathname.startsWith(
-                  `${menu.url}/`
-                );
-
-              const Icon =
-                menu.icon || Package;
-
-              const tone =
-                ICON_TONES[
-                  menu.iconTone || "emerald"
-                ] ?? ICON_TONES.emerald;
-
-              const badgeValue =
-                getBadgeValue(
-                  menu.badgeKey
-                );
-
-              const hasBadge =
-                badgeValue > 0;
-
-              return (
-                <Link
-                  key={menu.url}
-                  href={menu.url}
-                  onClick={() => {
-                    if (
-                      pathname !== menu.url
-                    ) {
-                      window.dispatchEvent(
-                        new CustomEvent(
-                          "erp:navigation-start"
-                        )
-                      );
-                    }
-
-                    onClose();
-                  }}
-                  aria-current={
-                    active
-                      ? "page"
-                      : undefined
-                  }
-                  className={`
-                    group
-                    relative
-                    mb-1
-                    flex
-                    h-[43px]
-                    items-center
-                    overflow-hidden
-                    rounded-xl
-                    px-2.5
-                    transition-all
-                    duration-200
-
-                    ${
-                      active
-                        ? `
-                          border
-                          border-emerald-200/[0.09]
-                          bg-gradient-to-r
-                          from-white/[0.085]
-                          via-emerald-400/[0.065]
-                          to-transparent
-                          text-white
-                          shadow-[0_8px_25px_rgba(0,0,0,0.12)]
-                        `
-                        : `
-                          border
-                          border-transparent
-                          text-slate-400
-                          hover:border-white/[0.055]
-                          hover:bg-white/[0.035]
-                          hover:text-white
-                        `
-                    }
-                  `}
-                >
-                  {active && (
-                    <>
                       <span
                         className="
-                          absolute
-                          left-0
-                          top-1/2
-                          h-6
-                          w-[3px]
-                          -translate-y-1/2
-                          rounded-r-full
-                          bg-emerald-300
-                          shadow-[0_0_15px_rgba(52,211,153,0.80)]
-                        "
-                      />
-
-                      <span
-                        className="
-                          pointer-events-none
-                          absolute
-                          -right-8
-                          top-1/2
-                          h-24
-                          w-24
-                          -translate-y-1/2
-                          rounded-full
-                          bg-emerald-400/[0.07]
-                          blur-2xl
-                        "
-                      />
-
-                      <span
-                        className="
-                          pointer-events-none
-                          absolute
-                          inset-x-0
-                          top-0
                           h-px
+                          w-3
                           bg-gradient-to-r
-                          from-white/[0.11]
-                          via-emerald-300/[0.09]
+                          from-emerald-400/[0.38]
                           to-transparent
                         "
                       />
-                    </>
-                  )}
 
-                  <span
+                      <span
+                        className="
+                          text-[8px]
+                          font-bold
+                          uppercase
+                          tracking-[0.23em]
+                          text-slate-500
+                        "
+                      >
+                        {menu.title}
+                      </span>
+
+                      <span
+                        className="
+                          h-px
+                          flex-1
+                          bg-gradient-to-r
+                          from-white/[0.045]
+                          to-transparent
+                        "
+                      />
+                    </div>
+                  );
+                }
+
+                if (!menu.url) {
+                  return null;
+                }
+
+                const active =
+                  pathname === menu.url ||
+                  pathname.startsWith(
+                    `${menu.url}/`
+                  );
+
+                const Icon =
+                  menu.icon || Package;
+
+                const tone =
+                  ICON_TONES[
+                    menu.iconTone ||
+                      "emerald"
+                  ] ??
+                  ICON_TONES.emerald;
+
+                const badgeValue =
+                  getBadgeValue(
+                    menu.badgeKey
+                  );
+
+                const hasBadge =
+                  badgeValue > 0;
+
+                return (
+                  <Link
+                    key={menu.url}
+                    href={menu.url}
+                    onClick={() => {
+                      if (
+                        pathname !==
+                        menu.url
+                      ) {
+                        window.dispatchEvent(
+                          new CustomEvent(
+                            "erp:navigation-start"
+                          )
+                        );
+                      }
+
+                      onClose();
+                    }}
+                    aria-current={
+                      active
+                        ? "page"
+                        : undefined
+                    }
                     className={`
+                      group
                       relative
+                      mb-1
                       flex
-                      h-8
-                      w-8
-                      shrink-0
+                      h-[43px]
                       items-center
-                      justify-center
                       overflow-hidden
-                      rounded-lg
-                      border
+                      rounded-xl
+                      px-2.5
                       transition-all
-                      duration-300
-                      ease-out
-
-                      group-hover:scale-[1.055]
-                      group-hover:-translate-y-0.5
-                      group-hover:shadow-[0_6px_18px_rgba(0,0,0,0.14)]
-                      group-active:scale-90
-                      group-active:translate-y-0
-                      group-active:rotate-1
+                      duration-200
 
                       ${
                         active
                           ? `
-                            border-emerald-200/[0.10]
-                            bg-gradient-to-br
-                            from-emerald-300/[0.13]
-                            via-white/[0.045]
+                            border
+                            border-emerald-200/[0.09]
+                            bg-gradient-to-r
+                            from-white/[0.085]
+                            via-emerald-400/[0.065]
                             to-transparent
-                            text-emerald-200
-                            shadow-[inset_0_1px_0_rgba(255,255,255,0.055),0_4px_14px_rgba(0,0,0,0.10)]
+                            text-white
+                            shadow-[0_8px_25px_rgba(0,0,0,0.12)]
                           `
                           : `
-                            ${tone.bg}
-                            ${tone.border}
-                            ${tone.icon}
+                            border
+                            border-transparent
+                            text-slate-400
+                            hover:border-white/[0.055]
+                            hover:bg-white/[0.035]
+                            hover:text-white
                           `
                       }
                     `}
                   >
-                    {!active && (
+                    {active && (
                       <>
                         <span
-                          className={`
-                            pointer-events-none
+                          className="
                             absolute
-                            -right-2
-                            -top-2
-                            h-5
-                            w-5
-                            rounded-full
-                            ${tone.glow}
-                            blur-md
-                            opacity-70
-                            transition-all
-                            duration-300
-                            group-hover:scale-150
-                            group-hover:opacity-100
-                          `}
+                            left-0
+                            top-1/2
+                            h-6
+                            w-[3px]
+                            -translate-y-1/2
+                            rounded-r-full
+                            bg-emerald-300
+                            shadow-[0_0_15px_rgba(52,211,153,0.80)]
+                          "
                         />
 
                         <span
                           className="
                             pointer-events-none
                             absolute
-                            inset-0
-                            bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.09),transparent_42%)]
+                            -right-8
+                            top-1/2
+                            h-24
+                            w-24
+                            -translate-y-1/2
+                            rounded-full
+                            bg-emerald-400/[0.07]
+                            blur-2xl
+                          "
+                        />
+
+                        <span
+                          className="
+                            pointer-events-none
+                            absolute
+                            inset-x-0
+                            top-0
+                            h-px
+                            bg-gradient-to-r
+                            from-white/[0.11]
+                            via-emerald-300/[0.09]
+                            to-transparent
                           "
                         />
                       </>
                     )}
 
-                    {active && (
-                      <span
-                        className="
-                          pointer-events-none
-                          absolute
-                          inset-0
-                          bg-[radial-gradient(circle_at_30%_20%,rgba(110,231,183,0.18),transparent_55%)]
-                          transition-transform
-                          duration-300
-                          group-hover:scale-125
-                        "
-                      />
-                    )}
-
-                    <Icon
-                      aria-hidden="true"
-                      size={16.5}
-                      strokeWidth={1.85}
-                      className="
-                        relative
-                        z-10
-                        origin-center
-                        transition-all
-                        duration-300
-                        ease-out
-                        group-hover:scale-110
-                        group-hover:-translate-y-0.5
-                        group-hover:rotate-[-4deg]
-                        group-active:scale-90
-                        group-active:translate-y-0
-                        group-active:rotate-[5deg]
-                      "
-                    />
-                  </span>
-
-                  <span
-                    className={`
-                      relative
-                      ml-2.5
-                      min-w-0
-                      flex-1
-                      truncate
-                      text-[10.5px]
-                      leading-none
-                      transition-transform
-                      duration-200
-                      ${
-                        active
-                          ? "font-bold text-white group-hover:translate-x-0.5"
-                          : "font-medium text-inherit group-hover:translate-x-0.5"
-                      }
-                    `}
-                  >
-                    {menu.title}
-                  </span>
-
-                  {hasBadge && (
                     <span
-                      aria-label={`${badgeValue} pending`}
-                      className="
+                      className={`
                         relative
-                        mr-1
                         flex
-                        h-[23px]
-                        min-w-[23px]
+                        h-8
+                        w-8
                         shrink-0
                         items-center
                         justify-center
                         overflow-hidden
-                        rounded-full
+                        rounded-lg
                         border
-                        border-white/[0.22]
-                        bg-white
-                        px-1.5
-                        text-[9px]
-                        font-black
-                        leading-none
-                        text-[#18352D]
-                        shadow-[0_3px_12px_rgba(0,0,0,0.16),0_0_0_1px_rgba(255,255,255,0.08)]
                         transition-all
-                        duration-200
-                        group-hover:scale-110
-                        group-hover:bg-slate-50
-                        group-hover:shadow-[0_5px_18px_rgba(255,255,255,0.14)]
-                      "
-                    >
-                      {badgeValue > 99
-                        ? "99+"
-                        : badgeValue}
+                        duration-300
+                        ease-out
 
-                      <span
+                        group-hover:scale-[1.055]
+                        group-hover:-translate-y-0.5
+                        group-hover:shadow-[0_6px_18px_rgba(0,0,0,0.14)]
+                        group-active:scale-90
+                        group-active:translate-y-0
+                        group-active:rotate-1
+
+                        ${
+                          active
+                            ? `
+                              border-emerald-200/[0.10]
+                              bg-gradient-to-br
+                              from-emerald-300/[0.13]
+                              via-white/[0.045]
+                              to-transparent
+                              text-emerald-200
+                              shadow-[inset_0_1px_0_rgba(255,255,255,0.055),0_4px_14px_rgba(0,0,0,0.10)]
+                            `
+                            : `
+                              ${tone.bg}
+                              ${tone.border}
+                              ${tone.icon}
+                            `
+                        }
+                      `}
+                    >
+                      {!active && (
+                        <>
+                          <span
+                            className={`
+                              pointer-events-none
+                              absolute
+                              -right-2
+                              -top-2
+                              h-5
+                              w-5
+                              rounded-full
+                              ${tone.glow}
+                              blur-md
+                              opacity-70
+                              transition-all
+                              duration-300
+                              group-hover:scale-150
+                              group-hover:opacity-100
+                            `}
+                          />
+
+                          <span
+                            className="
+                              pointer-events-none
+                              absolute
+                              inset-0
+                              bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.09),transparent_42%)]
+                            "
+                          />
+                        </>
+                      )}
+
+                      {active && (
+                        <span
+                          className="
+                            pointer-events-none
+                            absolute
+                            inset-0
+                            bg-[radial-gradient(circle_at_30%_20%,rgba(110,231,183,0.18),transparent_55%)]
+                            transition-transform
+                            duration-300
+                            group-hover:scale-125
+                          "
+                        />
+                      )}
+
+                      <Icon
+                        aria-hidden="true"
+                        size={16.5}
+                        strokeWidth={1.85}
                         className="
-                          pointer-events-none
-                          absolute
-                          right-[3px]
-                          top-[3px]
-                          h-1.5
-                          w-1.5
-                          rounded-full
-                          bg-emerald-300
-                          shadow-[0_0_5px_rgba(52,211,153,0.6)]
+                          relative
+                          z-10
+                          origin-center
+                          transition-all
+                          duration-300
+                          ease-out
+                          group-hover:scale-110
+                          group-hover:-translate-y-0.5
+                          group-hover:rotate-[-4deg]
+                          group-active:scale-90
+                          group-active:translate-y-0
+                          group-active:rotate-[5deg]
                         "
                       />
                     </span>
-                  )}
 
-                  <span
-                    className={`
-                      relative
-                      flex
-                      h-6
-                      w-6
-                      shrink-0
-                      items-center
-                      justify-center
-                      rounded-md
-                      transition-all
-                      duration-200
-
-                      ${
-                        active
-                          ? `
-                            text-emerald-300/70
-                            group-hover:translate-x-0.5
-                          `
-                          : `
-                            text-transparent
-                            group-hover:text-slate-600
-                          `
-                      }
-                    `}
-                  >
-                    <ChevronRight
-                      size={13}
-                      strokeWidth={1.8}
-                      className="
+                    <span
+                      className={`
+                        relative
+                        ml-2.5
+                        min-w-0
+                        flex-1
+                        truncate
+                        text-[10.5px]
+                        leading-none
                         transition-transform
                         duration-200
-                        group-hover:translate-x-0.5
-                      "
-                    />
-                  </span>
-                </Link>
-              );
-            }
+                        ${
+                          active
+                            ? "font-bold text-white group-hover:translate-x-0.5"
+                            : "font-medium text-inherit group-hover:translate-x-0.5"
+                        }
+                      `}
+                    >
+                      {menu.title}
+                    </span>
+
+                    {hasBadge && (
+                      <span
+                        aria-label={`${badgeValue} pending`}
+                        className="
+                          relative
+                          mr-1
+                          flex
+                          h-[23px]
+                          min-w-[23px]
+                          shrink-0
+                          items-center
+                          justify-center
+                          overflow-hidden
+                          rounded-full
+                          border
+                          border-white/[0.22]
+                          bg-white
+                          px-1.5
+                          text-[9px]
+                          font-black
+                          leading-none
+                          text-[#18352D]
+                          shadow-[0_3px_12px_rgba(0,0,0,0.16),0_0_0_1px_rgba(255,255,255,0.08)]
+                          transition-all
+                          duration-200
+                          group-hover:scale-110
+                          group-hover:bg-slate-50
+                          group-hover:shadow-[0_5px_18px_rgba(255,255,255,0.14)]
+                        "
+                      >
+                        {badgeValue > 99
+                          ? "99+"
+                          : badgeValue}
+
+                        <span
+                          className="
+                            pointer-events-none
+                            absolute
+                            right-[3px]
+                            top-[3px]
+                            h-1.5
+                            w-1.5
+                            rounded-full
+                            bg-emerald-300
+                            shadow-[0_0_5px_rgba(52,211,153,0.6)]
+                          "
+                        />
+                      </span>
+                    )}
+
+                    <span
+                      className={`
+                        relative
+                        flex
+                        h-6
+                        w-6
+                        shrink-0
+                        items-center
+                        justify-center
+                        rounded-md
+                        transition-all
+                        duration-200
+
+                        ${
+                          active
+                            ? `
+                              text-emerald-300/70
+                              group-hover:translate-x-0.5
+                            `
+                            : `
+                              text-transparent
+                              group-hover:text-slate-600
+                            `
+                        }
+                      `}
+                    >
+                      <ChevronRight
+                        size={13}
+                        strokeWidth={1.8}
+                        className="
+                          transition-transform
+                          duration-200
+                          group-hover:translate-x-0.5
+                        "
+                      />
+                    </span>
+                  </Link>
+                );
+              }
+            )
           )}
         </nav>
 

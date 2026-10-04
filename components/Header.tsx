@@ -380,6 +380,22 @@ export default function Header({
   const [canGoBack, setCanGoBack] =
     useState(false);
 
+  // =========================================================
+  // USER ROLE
+  // =========================================================
+
+  const [userRole, setUserRole] =
+    useState<string | null>(null);
+
+  const [
+    userRoleLoading,
+    setUserRoleLoading,
+  ] = useState(true);
+
+  // =========================================================
+  // MODAL
+  // =========================================================
+
   const [
     notificationOpen,
     setNotificationOpen,
@@ -433,6 +449,115 @@ export default function Header({
     customEndDate,
     setCustomEndDate,
   ] = useState("");
+
+  // =========================================================
+  // LOAD CURRENT USER / ROLE
+  // =========================================================
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCurrentUser =
+      async () => {
+        try {
+          setUserRoleLoading(true);
+
+          const response =
+            await fetch(
+              "/api/me",
+              {
+                method: "GET",
+                credentials: "include",
+                cache: "no-store",
+                headers: {
+                  Accept:
+                    "application/json",
+                },
+              }
+            );
+
+          if (!response.ok) {
+            throw new Error(
+              `HTTP ${response.status}`
+            );
+          }
+
+          const payload =
+            await response.json();
+
+          const role = String(
+            payload?.user?.role ??
+              payload?.role ??
+              ""
+          )
+            .trim()
+            .toUpperCase();
+
+          if (!cancelled) {
+            setUserRole(
+              role || null
+            );
+          }
+        } catch (error) {
+          console.error(
+            "[Header] Failed to load current user:",
+            error
+          );
+
+          if (!cancelled) {
+            setUserRole(null);
+          }
+        } finally {
+          if (!cancelled) {
+            setUserRoleLoading(
+              false
+            );
+          }
+        }
+      };
+
+    loadCurrentUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // =========================================================
+  // STAFF OUTLET ACCESS
+  // =========================================================
+
+  const isStaffOutlet =
+    userRole ===
+    "STAFF_OUTLET";
+
+  /*
+   * STAFF_OUTLET hanya boleh berada di area Manufacture.
+   *
+   * Root:
+   *   /manufacture
+   *
+   * Jika sedang berada di halaman turunan/detail:
+   *   /manufacture/...
+   *
+   * tombol kembali akan diarahkan ke:
+   *   /manufacture
+   *
+   * Tidak pernah menggunakan router.back()
+   * sehingga tidak mungkin kembali ke:
+   *   /outlet/dashboard
+   */
+
+  const isStaffOutletAtManufacture =
+    isStaffOutlet &&
+    pathname === "/manufacture";
+
+  const backButtonDisabled =
+    userRoleLoading ||
+    userRole === null ||
+    isStaffOutletAtManufacture ||
+    (!isStaffOutlet &&
+      !canGoBack);
 
   // =========================================================
   // GLOBAL MODAL DETECTION
@@ -549,6 +674,65 @@ export default function Header({
   // =========================================================
 
   const goBack = () => {
+    /*
+     * Jangan melakukan navigasi sebelum role selesai
+     * diperiksa. Ini penting supaya STAFF_OUTLET tidak
+     * sempat menggunakan browser history ketika role
+     * masih null/loading.
+     */
+    if (
+      userRoleLoading ||
+      userRole === null
+    ) {
+      return;
+    }
+
+    /*
+     * =======================================================
+     * STAFF_OUTLET
+     * =======================================================
+     *
+     * STAFF_OUTLET TIDAK BOLEH menggunakan router.back().
+     *
+     * Browser history dapat berisi:
+     *   /outlet/dashboard
+     *   /dashboard
+     *   /login
+     *   halaman role lain
+     *
+     * Karena itu navigasi dibuat eksplisit.
+     *
+     * Dari:
+     *   /manufacture/detail
+     *
+     * menjadi:
+     *   /manufacture
+     *
+     * Jika sudah:
+     *   /manufacture
+     *
+     * tidak melakukan apa-apa.
+     */
+    if (isStaffOutlet) {
+      if (
+        pathname !==
+        "/manufacture"
+      ) {
+        router.replace(
+          "/manufacture"
+        );
+      }
+
+      return;
+    }
+
+    /*
+     * =======================================================
+     * ROLE LAIN
+     * =======================================================
+     *
+     * Pertahankan perilaku tombol kembali sebelumnya.
+     */
     if (canGoBack) {
       router.back();
       return;
@@ -730,6 +914,7 @@ export default function Header({
         setNotificationOpen(
           false
         );
+
         setFilterOpen(false);
       }
     };
@@ -1257,19 +1442,40 @@ export default function Header({
 
         <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
 
+          {/* BACK */}
+
           <button
             type="button"
             onClick={goBack}
-            disabled={!canGoBack}
+            disabled={
+              backButtonDisabled
+            }
             aria-label="Kembali"
             title={
-              canGoBack
+              userRoleLoading
+                ? "Memeriksa akses..."
+                : userRole === null
+                ? "Akses belum tersedia"
+                : isStaffOutlet
+                ? pathname ===
+                  "/manufacture"
+                  ? "Sudah di halaman utama Manufacture"
+                  : "Kembali ke Manufacture"
+                : canGoBack
                 ? "Kembali"
                 : "Tidak ada halaman sebelumnya"
             }
             className={[
               "group flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border backdrop-blur-2xl backdrop-saturate-150 transition-all duration-200",
-              canGoBack
+              userRoleLoading ||
+              userRole === null
+                ? "cursor-wait border-white/20 bg-white/10 text-slate-300"
+                : isStaffOutlet
+                ? pathname ===
+                  "/manufacture"
+                  ? "cursor-not-allowed border-white/20 bg-white/10 text-slate-300"
+                  : "border-emerald-300/60 bg-emerald-50/30 text-emerald-700 shadow-[0_8px_25px_rgba(15,118,110,0.12)] hover:-translate-x-0.5 hover:border-emerald-400/70 hover:bg-white/30 hover:shadow-[0_12px_30px_rgba(15,118,110,0.18)]"
+                : canGoBack
                 ? "border-white/30 bg-white/15 text-emerald-700 shadow-[0_8px_25px_rgba(15,118,110,0.10)] hover:-translate-x-0.5 hover:border-emerald-300/60 hover:bg-white/30 hover:shadow-[0_12px_30px_rgba(15,118,110,0.16)]"
                 : "cursor-not-allowed border-white/20 bg-white/10 text-slate-300",
             ].join(" ")}
@@ -1280,6 +1486,8 @@ export default function Header({
               className="transition-transform duration-200 group-hover:-translate-x-0.5"
             />
           </button>
+
+          {/* MENU */}
 
           <button
             type="button"
@@ -1345,7 +1553,7 @@ export default function Header({
             />
 
             <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-600">
-              Secure
+              
             </span>
           </div>
 
@@ -1401,13 +1609,9 @@ export default function Header({
               ].join(" ")}
             >
 
-              {/* OUTER GLOW */}
-
               {hasUnread && (
                 <span className="pointer-events-none absolute -inset-1 -z-10 rounded-2xl bg-emerald-400/20 opacity-80 blur-md animate-pulse" />
               )}
-
-              {/* ICON */}
 
               <span
                 className={[
@@ -1430,8 +1634,6 @@ export default function Header({
                 />
               </span>
 
-              {/* UNREAD PULSE */}
-
               {hasUnread && (
                 <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-70" />
@@ -1439,8 +1641,6 @@ export default function Header({
                   <span className="relative block h-2.5 w-2.5 rounded-full border-2 border-white bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_12px_rgba(16,185,129,0.65)]" />
                 </span>
               )}
-
-              {/* COUNT BADGE */}
 
               {hasUnread && (
                 <span className="absolute -right-2.5 -top-2.5 flex min-w-[22px] items-center justify-center rounded-full border-2 border-white bg-gradient-to-br from-emerald-500 via-emerald-600 to-green-700 px-1.5 py-1 text-[9px] font-black leading-none text-white shadow-[0_5px_16px_rgba(16,185,129,0.38)]">
@@ -1454,8 +1654,6 @@ export default function Header({
                   </span>
                 </span>
               )}
-
-              {/* ACTIVE INDICATOR */}
 
               {notificationOpen && (
                 <span className="absolute -bottom-1 left-1/2 h-1 w-6 -translate-x-1/2 rounded-full bg-gradient-to-r from-emerald-400 to-green-600 shadow-[0_0_12px_rgba(16,185,129,0.55)]" />
@@ -1472,10 +1670,6 @@ export default function Header({
                 aria-label="Pemberitahuan"
                 className="animate-[notificationPanelIn_180ms_ease-out] absolute right-0 top-[calc(100%+14px)] w-[min(500px,calc(100vw-24px))] overflow-hidden rounded-[28px] border border-emerald-100/80 bg-white shadow-[0_30px_90px_rgba(6,78,59,0.24)] ring-1 ring-black/[0.02]"
               >
-
-                {/* =================================================
-                    PREMIUM HEADER
-                ================================================= */}
 
                 <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top_right,rgba(110,231,183,0.24),transparent_30%),linear-gradient(135deg,#064E3B,#065F46_48%,#022C22)] px-5 pb-5 pt-5 text-white">
 
@@ -1545,8 +1739,6 @@ export default function Header({
                     </button>
                   </div>
 
-                  {/* HEADER STATUS */}
-
                   <div className="relative mt-5 grid grid-cols-3 gap-2">
 
                     <div className="rounded-2xl border border-white/10 bg-white/[0.07] px-3 py-2.5 backdrop-blur-sm">
@@ -1588,8 +1780,6 @@ export default function Header({
                     </div>
                   </div>
 
-                  {/* ACTION ROW */}
-
                   <div className="relative mt-3 flex items-center justify-between gap-3">
 
                     <div className="flex items-center gap-2">
@@ -1627,15 +1817,9 @@ export default function Header({
                   </div>
                 </div>
 
-                {/* =================================================
-                    SEARCH + FILTER TOOLBAR
-                ================================================= */}
-
                 <div className="border-b border-emerald-100/80 bg-white px-4 pb-3 pt-4">
 
                   <div className="flex items-center gap-2">
-
-                    {/* SEARCH */}
 
                     <div className="relative min-w-0 flex-1">
                       <Search
@@ -1676,8 +1860,6 @@ export default function Header({
                       )}
                     </div>
 
-                    {/* FILTER BUTTON */}
-
                     <button
                       type="button"
                       onClick={() =>
@@ -1714,8 +1896,6 @@ export default function Header({
                     </button>
                   </div>
 
-                  {/* SEARCH RESULT SUMMARY */}
-
                   <div className="mt-2.5 flex items-center justify-between gap-2 px-1">
 
                     <div className="flex min-w-0 items-center gap-1.5">
@@ -1751,10 +1931,6 @@ export default function Header({
                     )}
                   </div>
 
-                  {/* =================================================
-                      PREMIUM FILTER PANEL
-                  ================================================= */}
-
                   {filterOpen && (
                     <div className="mt-3 overflow-hidden rounded-[22px] border border-emerald-100 bg-gradient-to-br from-emerald-50/70 via-white to-slate-50/80 p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_10px_30px_rgba(15,118,110,0.06)]">
 
@@ -1789,8 +1965,6 @@ export default function Header({
                           Reset
                         </button>
                       </div>
-
-                      {/* DATE PRESETS */}
 
                       <div>
                         <div className="mb-2 flex items-center gap-1.5">
@@ -1863,8 +2037,6 @@ export default function Header({
                           )}
                         </div>
                       </div>
-
-                      {/* CUSTOM DATE */}
 
                       <div className="mt-3">
                         <button
@@ -1980,8 +2152,6 @@ export default function Header({
                         )}
                       </div>
 
-                      {/* ACTIVE FILTER SUMMARY */}
-
                       <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-white/80 px-3 py-2">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.10)]" />
@@ -1998,10 +2168,6 @@ export default function Header({
                     </div>
                   )}
                 </div>
-
-                {/* =================================================
-                    BODY
-                ================================================= */}
 
                 <div className="max-h-[475px] overflow-y-auto bg-[#FBFDFC]">
 
@@ -2170,13 +2336,9 @@ export default function Header({
                               )}
                             >
 
-                              {/* UNREAD SIDE ACCENT */}
-
                               {isUnread && (
                                 <span className="absolute bottom-0 left-0 top-0 w-1 bg-gradient-to-b from-emerald-400 via-emerald-500 to-green-600" />
                               )}
-
-                              {/* ICON */}
 
                               <div
                                 className={[
@@ -2205,8 +2367,6 @@ export default function Header({
                                   }
                                 />
                               </div>
-
-                              {/* CONTENT */}
 
                               <div className="min-w-0 flex-1">
 
@@ -2309,8 +2469,6 @@ export default function Header({
                                 </div>
                               </div>
 
-                              {/* CHEVRON */}
-
                               <div className="flex shrink-0 items-center">
 
                                 <ChevronRight
@@ -2327,10 +2485,6 @@ export default function Header({
                     </div>
                   )}
                 </div>
-
-                {/* =================================================
-                    FOOTER
-                ================================================= */}
 
                 <div className="border-t border-emerald-100 bg-gradient-to-r from-slate-50 via-white to-emerald-50/40 px-5 py-3.5">
 
@@ -2398,7 +2552,7 @@ export default function Header({
             />
 
             <span className="hidden text-[10px] font-extrabold uppercase tracking-[0.08em] sm:inline">
-              Keluar
+              Log Out
             </span>
           </button>
         </div>

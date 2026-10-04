@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 const ROLE_ADMIN = "ADMIN";
 const ROLE_MANAGER = "MANAGER";
 const ROLE_OUTLET_ADMIN = "OUTLET_ADMIN";
+const ROLE_STAFF_OUTLET = "STAFF_OUTLET";
 const ROLE_ADMIN_PUSAT = "ADMIN_PUSAT";
 
 const ALLOWED_ROLES = new Set([
@@ -15,6 +16,7 @@ const ALLOWED_ROLES = new Set([
   ROLE_MANAGER,
   ROLE_ADMIN_PUSAT,
   ROLE_OUTLET_ADMIN,
+  ROLE_STAFF_OUTLET,
 ]);
 
 type CurrentUser = {
@@ -44,6 +46,15 @@ type RecipeItemInput = {
 
 function roleOf(value: unknown) {
   return String(value ?? "").trim().toUpperCase();
+}
+
+function isOutletScopedRole(role: unknown) {
+  const normalizedRole = roleOf(role);
+
+  return (
+    normalizedRole === ROLE_OUTLET_ADMIN ||
+    normalizedRole === ROLE_STAFF_OUTLET
+  );
 }
 
 function jsonError(
@@ -137,15 +148,25 @@ function resolveOutletId(
 ) {
   const role = roleOf(user.role);
 
-  if (role === ROLE_OUTLET_ADMIN) {
+  /**
+   * OUTLET_ADMIN dan STAFF_OUTLET
+   * selalu dikunci ke outlet miliknya sendiri.
+   */
+  if (isOutletScopedRole(role)) {
     const own = Number(user.outletId ?? 0);
 
     if (!Number.isInteger(own) || own <= 0) {
       throw new Error(
-        "User Outlet Admin belum terhubung dengan outlet",
+        role === ROLE_STAFF_OUTLET
+          ? "User Staff Outlet belum terhubung dengan outlet"
+          : "User Outlet Admin belum terhubung dengan outlet",
       );
     }
 
+    /**
+     * Kalau client mencoba mengirim outlet lain,
+     * langsung ditolak.
+     */
     if (
       requested !== undefined &&
       requested !== null &&
@@ -160,6 +181,10 @@ function resolveOutletId(
     return own;
   }
 
+  /**
+   * ADMIN / MANAGER / ADMIN_PUSAT
+   * boleh memilih outlet.
+   */
   const outletId = Number(requested ?? 0);
 
   if (!Number.isInteger(outletId) || outletId <= 0) {
@@ -849,9 +874,12 @@ export async function GET(
         );
       }
 
+      /**
+       * OUTLET_ADMIN dan STAFF_OUTLET
+       * hanya boleh melihat Recipe outlet sendiri.
+       */
       if (
-        roleOf(user.role) ===
-          ROLE_OUTLET_ADMIN &&
+        isOutletScopedRole(user.role) &&
         Number(recipe.outletId) !==
           Number(user.outletId)
       ) {
@@ -871,9 +899,12 @@ export async function GET(
       | number
       | undefined;
 
+    /**
+     * OUTLET_ADMIN dan STAFF_OUTLET
+     * selalu dikunci ke outlet sendiri.
+     */
     if (
-      roleOf(user.role) ===
-      ROLE_OUTLET_ADMIN
+      isOutletScopedRole(user.role)
     ) {
       outletId =
         resolveOutletId(
@@ -1017,6 +1048,14 @@ export async function POST(
       );
     }
 
+    /**
+     * Untuk STAFF_OUTLET:
+     * outletId dari request tidak bisa digunakan
+     * untuk pindah outlet.
+     *
+     * resolveOutletId() akan selalu menggunakan
+     * user.outletId dari database.
+     */
     const outletId =
       resolveOutletId(
         user,
@@ -1198,9 +1237,12 @@ async function updateRecipe(
     );
   }
 
+  /**
+   * OUTLET_ADMIN dan STAFF_OUTLET
+   * tidak boleh membuka Recipe outlet lain.
+   */
   if (
-    roleOf(user.role) ===
-      ROLE_OUTLET_ADMIN &&
+    isOutletScopedRole(user.role) &&
     Number(existing.outletId) !==
       Number(user.outletId)
   ) {
@@ -1279,6 +1321,10 @@ async function updateRecipe(
         }
       : body;
 
+  /**
+   * Untuk STAFF_OUTLET dan OUTLET_ADMIN,
+   * resolveOutletId() memaksa outlet miliknya sendiri.
+   */
   const outletId =
     resolveOutletId(
       user,
@@ -1498,9 +1544,12 @@ export async function DELETE(
       );
     }
 
+    /**
+     * OUTLET_ADMIN dan STAFF_OUTLET
+     * hanya boleh menghapus Recipe outlet sendiri.
+     */
     if (
-      roleOf(user.role) ===
-        ROLE_OUTLET_ADMIN &&
+      isOutletScopedRole(user.role) &&
       Number(existing.outletId) !==
         Number(user.outletId)
     ) {

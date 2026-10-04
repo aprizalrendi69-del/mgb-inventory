@@ -108,7 +108,11 @@ const userSelect = {
 // =====================================================
 
 function isOutletRole(role: string) {
-  return role === "OUTLET_ADMIN" || role === "KASIR";
+  return (
+    role === "OUTLET_ADMIN" ||
+    role === "KASIR" ||
+    role === "STAFF_OUTLET"
+  );
 }
 
 function requiresCustomer(role: string) {

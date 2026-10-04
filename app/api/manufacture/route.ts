@@ -39,6 +39,19 @@ export const dynamic = "force-dynamic";
  *
  * Jika gagal:
  *   SEMUA perubahan rollback.
+ *
+ * ROLE:
+ *
+ * ADMIN / MANAGER / ADMIN_PUSAT
+ *   dapat memilih outlet.
+ *
+ * OUTLET_ADMIN
+ *   hanya outlet miliknya.
+ *
+ * STAFF_OUTLET
+ *   hanya outlet miliknya.
+ *   outletId dari request/body TIDAK DIPERCAYA.
+ *   outletId selalu diambil dari session user.
  * =========================================================
  */
 
@@ -49,6 +62,7 @@ export const dynamic = "force-dynamic";
 const ROLE_ADMIN = "ADMIN";
 const ROLE_MANAGER = "MANAGER";
 const ROLE_OUTLET_ADMIN = "OUTLET_ADMIN";
+const ROLE_STAFF_OUTLET = "STAFF_OUTLET";
 const ROLE_ADMIN_PUSAT = "ADMIN_PUSAT";
 
 const MANUFACTURE_STATUS = "COMPLETED";
@@ -184,7 +198,23 @@ function canManufacture(role: unknown): boolean {
     normalizedRole === ROLE_ADMIN ||
     normalizedRole === ROLE_MANAGER ||
     normalizedRole === ROLE_ADMIN_PUSAT ||
-    normalizedRole === ROLE_OUTLET_ADMIN
+    normalizedRole === ROLE_OUTLET_ADMIN ||
+    normalizedRole === ROLE_STAFF_OUTLET
+  );
+}
+
+/* =========================================================
+ * OUTLET ROLE
+ * ========================================================= */
+
+function isOwnOutletRole(role: unknown): boolean {
+  const normalizedRole = String(role)
+    .trim()
+    .toUpperCase();
+
+  return (
+    normalizedRole === ROLE_OUTLET_ADMIN ||
+    normalizedRole === ROLE_STAFF_OUTLET
   );
 }
 
@@ -204,14 +234,17 @@ function resolveOutletId(
     .toUpperCase();
 
   /*
-   * OUTLET_ADMIN:
-   * selalu outlet miliknya.
+   * OUTLET_ADMIN / STAFF_OUTLET:
+   *
+   * selalu menggunakan outlet milik user.
+   *
+   * requestedOutletId sengaja diabaikan.
    */
 
-  if (role === ROLE_OUTLET_ADMIN) {
+  if (isOwnOutletRole(role)) {
     if (!user.outletId) {
       throw new Error(
-        "User Outlet Admin belum terhubung dengan outlet",
+        `User ${role} belum terhubung dengan outlet`,
       );
     }
 
@@ -219,7 +252,7 @@ function resolveOutletId(
   }
 
   /*
-   * ADMIN / MANAGER:
+   * ADMIN / MANAGER / ADMIN_PUSAT:
    * outlet harus dikirim.
    */
 
@@ -410,13 +443,20 @@ export async function GET(
       .trim()
       .toUpperCase();
 
-    if (role === ROLE_OUTLET_ADMIN) {
+    /*
+     * OUTLET_ADMIN / STAFF_OUTLET
+     *
+     * Tidak boleh menggunakan outletId
+     * dari query parameter.
+     */
+
+    if (isOwnOutletRole(role)) {
       if (!user.outletId) {
         return NextResponse.json(
           {
             success: false,
             message:
-              "User Outlet Admin belum terhubung dengan outlet",
+              `User ${role} belum terhubung dengan outlet`,
           },
           {
             status: 403,
@@ -428,6 +468,10 @@ export async function GET(
         user.outletId,
       );
     } else if (requestedOutletId) {
+      /*
+       * ADMIN / MANAGER / ADMIN_PUSAT
+       */
+
       const parsedOutletId =
         Number(requestedOutletId);
 
@@ -723,7 +767,7 @@ export async function GET(
         role: user.role,
 
         outletId:
-          role === ROLE_OUTLET_ADMIN
+          isOwnOutletRole(role)
             ? user.outletId
             : outletId ?? null,
       },
@@ -987,18 +1031,19 @@ export async function POST(
           }
 
           /*
-           * OUTLET ADMIN SECURITY
+           * OUTLET ADMIN / STAFF OUTLET SECURITY
            */
 
           if (
-            String(user.role)
-              .trim()
-              .toUpperCase() ===
-            ROLE_OUTLET_ADMIN
+            isOwnOutletRole(
+              user.role,
+            )
           ) {
             if (!user.outletId) {
               throw new Error(
-                "User Outlet Admin belum terhubung dengan outlet",
+                `User ${String(
+                  user.role,
+                ).trim().toUpperCase()} belum terhubung dengan outlet`,
               );
             }
 
@@ -1103,7 +1148,8 @@ export async function POST(
 
           if (
             recipe.outletId &&
-            Number(recipe.outletId) !== Number(outlet.id)
+            Number(recipe.outletId) !==
+              Number(outlet.id)
           ) {
             throw new Error(
               "Recipe / BOM bukan milik outlet tersebut",
@@ -1772,13 +1818,32 @@ export async function POST(
               );
             }
 
-            const stockBefore = Number(outletStock.stock || 0);
-            const qtyOutBase = Number(requirement.requiredQty);
-            const qtyOut = baseToMainQty(qtyOutBase, requirement.barang);
-            const averageCost = Number(outletStock.averageCost ?? 0);
-            const unitCostBase = Number(requirement.conversionRate) > 0
-              ? averageCost / Number(requirement.conversionRate)
-              : averageCost;
+            const stockBefore = Number(
+              outletStock.stock || 0,
+            );
+
+            const qtyOutBase = Number(
+              requirement.requiredQty,
+            );
+
+            const qtyOut = baseToMainQty(
+              qtyOutBase,
+              requirement.barang,
+            );
+
+            const averageCost = Number(
+              outletStock.averageCost ?? 0,
+            );
+
+            const unitCostBase =
+              Number(
+                requirement.conversionRate,
+              ) > 0
+                ? averageCost /
+                  Number(
+                    requirement.conversionRate,
+                  )
+                : averageCost;
 
             if (
               !Number.isFinite(
@@ -1814,12 +1879,18 @@ export async function POST(
               );
             }
 
-            const materialCost = qtyOutBase * unitCostBase;
+            const materialCost =
+              qtyOutBase *
+              unitCostBase;
 
             totalMaterialCost +=
               materialCost;
 
-            const stockAfter = normalizeStock(stockBefore - qtyOut);
+            const stockAfter =
+              normalizeStock(
+                stockBefore -
+                  qtyOut,
+              );
 
             if (
               stockAfter <
@@ -1830,35 +1901,91 @@ export async function POST(
               );
             }
 
-            const ledger = await changeOutletStock(tx, {
-              outletId,
-              barangId: requirement.barangId,
-              deltaBaseQty: -qtyOutBase,
-              reference: number,
-              description: `Manufacture ${number} - konsumsi bahan`,
-            });
+            await changeOutletStock(
+              tx,
+              {
+                outletId,
 
-            const updated = await tx.outletStock.findUnique({
-              where: { outletId_barangId: { outletId, barangId: requirement.barangId } },
-              select: { id: true, outletId: true, barangId: true, stock: true, averageCost: true, minimumStock: true },
-            });
+                barangId:
+                  requirement.barangId,
 
-            if (!updated) throw new Error(`Stock outlet ${requirement.barang.name} tidak ditemukan setelah perubahan.`);
+                deltaBaseQty:
+                  -qtyOutBase,
+
+                reference:
+                  number,
+
+                description:
+                  `Manufacture ${number} - konsumsi bahan`,
+              },
+            );
+
+            const updated =
+              await tx.outletStock.findUnique(
+                {
+                  where: {
+                    outletId_barangId: {
+                      outletId,
+
+                      barangId:
+                        requirement.barangId,
+                    },
+                  },
+
+                  select: {
+                    id: true,
+                    outletId: true,
+                    barangId: true,
+                    stock: true,
+                    averageCost: true,
+                    minimumStock: true,
+                  },
+                },
+              );
+
+            if (!updated) {
+              throw new Error(
+                `Stock outlet ${requirement.barang.name} tidak ditemukan setelah perubahan.`,
+              );
+            }
 
             await tx.stockCard.create({
               data: {
-                barangId: requirement.barangId,
-                trxDate: now,
-                trxType: "MANUFACTURE_CONSUME",
-                trxNumber: number,
-                referenceId: order.id,
-                warehouse: `OUTLET:${outlet.code}`,
+                barangId:
+                  requirement.barangId,
+
+                trxDate:
+                  now,
+
+                trxType:
+                  "MANUFACTURE_CONSUME",
+
+                trxNumber:
+                  number,
+
+                referenceId:
+                  order.id,
+
+                warehouse:
+                  `OUTLET:${outlet.code}`,
+
                 qtyIn: 0,
-                qtyOut: qtyOut,
-                balance: updated.stock,
-                unitPrice: averageCost,
-                totalValue: qtyOut * averageCost,
-                note: `Manufacture ${number} - konsumsi ${qtyOutBase} ${requirement.unit}`,
+
+                qtyOut:
+                  qtyOut,
+
+                balance:
+                  updated.stock,
+
+                unitPrice:
+                  averageCost,
+
+                totalValue:
+                  qtyOut *
+                  averageCost,
+
+                note:
+                  `Manufacture ${number} - konsumsi ${qtyOutBase} ${requirement.unit}`,
               },
             });
 
@@ -2133,18 +2260,41 @@ export async function POST(
 
           await tx.stockCard.create({
             data: {
-              barangId: outputBarangId,
-              trxDate: now,
-              trxType: "MANUFACTURE_OUTPUT",
-              trxNumber: number,
-              referenceId: order.id,
-              warehouse: `OUTLET:${outlet.code}`,
-              qtyIn: producedQty,
+              barangId:
+                outputBarangId,
+
+              trxDate:
+                now,
+
+              trxType:
+                "MANUFACTURE_OUTPUT",
+
+              trxNumber:
+                number,
+
+              referenceId:
+                order.id,
+
+              warehouse:
+                `OUTLET:${outlet.code}`,
+
+              qtyIn:
+                producedQty,
+
               qtyOut: 0,
-              balance: outputStock.stock,
-              unitPrice: outputStock.averageCost,
-              totalValue: producedQty * outputStock.averageCost,
-              note: `Manufacture ${number} - hasil produksi`,
+
+              balance:
+                outputStock.stock,
+
+              unitPrice:
+                outputStock.averageCost,
+
+              totalValue:
+                producedQty *
+                outputStock.averageCost,
+
+              note:
+                `Manufacture ${number} - hasil produksi`,
             },
           });
 
@@ -2156,24 +2306,31 @@ export async function POST(
             order,
 
             outlet: {
-              id: outlet.id,
+              id:
+                outlet.id,
 
-              code: outlet.code,
+              code:
+                outlet.code,
 
-              name: outlet.name,
+              name:
+                outlet.name,
             },
 
             recipe: {
-              id: recipe.id,
+              id:
+                recipe.id,
 
-              code: recipe.code,
+              code:
+                recipe.code,
 
-              name: recipe.name,
+              name:
+                recipe.name,
 
               outputQty:
                 recipe.outputQty,
 
-              menu: recipe.menu,
+              menu:
+                recipe.menu,
 
               productCk:
                 recipe.productCk,
@@ -2324,6 +2481,8 @@ export async function POST(
       "Outlet tidak aktif",
 
       "User Outlet Admin belum terhubung dengan outlet",
+
+      "User STAFF_OUTLET belum terhubung dengan outlet",
 
       "Anda tidak dapat melakukan manufacture di outlet lain",
 

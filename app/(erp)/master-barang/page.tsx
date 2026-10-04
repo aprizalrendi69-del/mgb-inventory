@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   History,
+  ListFilter,
 } from "lucide-react";
 
 import BarangForm from "@/components/master/barang/BarangForm";
@@ -27,6 +28,7 @@ export default function BarangPage() {
   const [barang, setBarang] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [source, setSource] = useState("CENTRAL");
+  const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [openImport, setOpenImport] = useState(false);
   const [openTambahBarang, setOpenTambahBarang] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -99,13 +101,19 @@ export default function BarangPage() {
 
   /*
   =========================================================
-  LOAD SAAT FILTER BERUBAH
+  LOAD SAAT FILTER SUMBER / SEARCH BERUBAH
   =========================================================
   */
 
   useEffect(() => {
     loadBarang();
   }, [search, source]);
+
+  /*
+  =========================================================
+  RESET KATEGORI JIKA SUDAH TIDAK TERSEDIA
+  =========================================================
+  */
 
   /*
   =========================================================
@@ -131,6 +139,75 @@ export default function BarangPage() {
       .trim()
       .toLocaleLowerCase("id-ID");
   }
+
+  /*
+  =========================================================
+  NORMALIZE KATEGORI
+  =========================================================
+  */
+
+  function normalizeCategory(value: any) {
+    return String(value ?? "")
+      .normalize("NFKC")
+      .replace(/\u00A0/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  /*
+  =========================================================
+  DAFTAR KATEGORI
+  =========================================================
+
+  Mengambil kategori langsung dari data barang yang sedang
+  dimuat.
+
+  Kategori kosong tidak ditampilkan sebagai pilihan.
+  =========================================================
+  */
+
+  const categoryOptions = useMemo(() => {
+    const map = new Map<string, string>();
+
+    for (const item of barang) {
+      const category = normalizeCategory(item?.category);
+
+      if (!category) {
+        continue;
+      }
+
+      const key = category.toLocaleLowerCase("id-ID");
+
+      if (!map.has(key)) {
+        map.set(key, category);
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.localeCompare(b, "id-ID", {
+        sensitivity: "base",
+      })
+    );
+  }, [barang]);
+
+  /*
+  =========================================================
+  RESET FILTER KATEGORI JIKA KATEGORI SUDAH TIDAK ADA
+  =========================================================
+  */
+
+  useEffect(() => {
+    if (
+      categoryFilter !== "ALL" &&
+      !categoryOptions.some(
+        (category) =>
+          category.toLocaleLowerCase("id-ID") ===
+          categoryFilter.toLocaleLowerCase("id-ID")
+      )
+    ) {
+      setCategoryFilter("ALL");
+    }
+  }, [categoryOptions, categoryFilter]);
 
   /*
   =========================================================
@@ -274,6 +351,25 @@ export default function BarangPage() {
 
     /*
     ---------------------------------------------------------
+    FILTER KATEGORI
+    ---------------------------------------------------------
+    */
+
+    if (categoryFilter !== "ALL") {
+      result = result.filter((item) => {
+        const itemCategory = normalizeCategory(
+          item?.category
+        );
+
+        return (
+          itemCategory.toLocaleLowerCase("id-ID") ===
+          categoryFilter.toLocaleLowerCase("id-ID")
+        );
+      });
+    }
+
+    /*
+    ---------------------------------------------------------
     FILTER DUPLIKAT
     ---------------------------------------------------------
     */
@@ -340,6 +436,7 @@ export default function BarangPage() {
     return result;
   }, [
     barang,
+    categoryFilter,
     showDuplicates,
     duplicateBarangIds,
     deleteFilter,
@@ -360,6 +457,17 @@ export default function BarangPage() {
 
   /*
   =========================================================
+  CATEGORY LABEL
+  =========================================================
+  */
+
+  const categoryLabel =
+    categoryFilter === "ALL"
+      ? "Semua Kategori"
+      : categoryFilter;
+
+  /*
+  =========================================================
   RESET DUPLIKAT
   =========================================================
   */
@@ -376,6 +484,28 @@ export default function BarangPage() {
 
   function clearDeleteFilter() {
     setDeleteFilter("ALL");
+  }
+
+  /*
+  =========================================================
+  RESET CATEGORY FILTER
+  =========================================================
+  */
+
+  function clearCategoryFilter() {
+    setCategoryFilter("ALL");
+  }
+
+  /*
+  =========================================================
+  RESET SEMUA FILTER
+  =========================================================
+  */
+
+  function clearAllFilters() {
+    setDeleteFilter("ALL");
+    setShowDuplicates(false);
+    setCategoryFilter("ALL");
   }
 
   /*
@@ -1123,6 +1253,111 @@ export default function BarangPage() {
       </div>
 
       {/* =====================================================
+          FILTER KATEGORI
+      ===================================================== */}
+
+      <div
+        className="
+          mb-6
+          rounded-2xl
+          border
+          border-[#DDE9E4]
+          bg-white
+          p-4
+          shadow-sm
+        "
+      >
+
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#18352D]">
+          <ListFilter
+            size={17}
+            className="text-[#497F70]"
+          />
+
+          Filter Kategori
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+
+          {/* SEMUA KATEGORI */}
+
+          <button
+            type="button"
+            onClick={() => setCategoryFilter("ALL")}
+            className={`
+              inline-flex
+              items-center
+              gap-2
+              rounded-xl
+              px-4
+              py-2.5
+              text-sm
+              font-semibold
+              transition
+
+              ${
+                categoryFilter === "ALL"
+                  ? "bg-[#497F70] text-white shadow-sm"
+                  : "border border-[#D5E5DC] bg-white text-gray-600 hover:bg-[#F5F8F6]"
+              }
+            `}
+          >
+            <Boxes size={17} />
+
+            Semua Kategori
+          </button>
+
+          {/* KATEGORI */}
+
+          {categoryOptions.map((category) => {
+            const active =
+              categoryFilter.toLocaleLowerCase("id-ID") ===
+              category.toLocaleLowerCase("id-ID");
+
+            return (
+              <button
+                key={category}
+                type="button"
+                onClick={() =>
+                  setCategoryFilter(category)
+                }
+                className={`
+                  inline-flex
+                  items-center
+                  gap-2
+                  rounded-xl
+                  px-4
+                  py-2.5
+                  text-sm
+                  font-semibold
+                  transition
+
+                  ${
+                    active
+                      ? "bg-[#497F70] text-white shadow-sm"
+                      : "border border-[#D5E5DC] bg-white text-gray-600 hover:bg-[#F5F8F6]"
+                  }
+                `}
+              >
+                <Package size={16} />
+
+                {category}
+              </button>
+            );
+          })}
+
+        </div>
+
+        {categoryOptions.length === 0 && (
+          <p className="mt-3 text-xs text-gray-400">
+            Belum ada kategori pada data barang yang sedang
+            dimuat.
+          </p>
+        )}
+
+      </div>
+
+      {/* =====================================================
           FILTER STATUS
       ===================================================== */}
 
@@ -1279,13 +1514,11 @@ export default function BarangPage() {
           {/* RESET */}
 
           {(deleteFilter !== "ALL" ||
-            showDuplicates) && (
+            showDuplicates ||
+            categoryFilter !== "ALL") && (
             <button
               type="button"
-              onClick={() => {
-                clearDeleteFilter();
-                clearDuplicateFilter();
-              }}
+              onClick={clearAllFilters}
               className="
                 inline-flex
                 items-center
@@ -1313,6 +1546,57 @@ export default function BarangPage() {
       </div>
 
       {/* =====================================================
+          ACTIVE FILTER INFO
+      ===================================================== */}
+
+      {categoryFilter !== "ALL" && (
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+
+          <span className="text-xs font-medium text-gray-500">
+            Filter aktif:
+          </span>
+
+          <span
+            className="
+              inline-flex
+              items-center
+              gap-1.5
+              rounded-full
+              border
+              border-[#CFE1D8]
+              bg-[#EAF3EF]
+              px-3
+              py-1.5
+              text-xs
+              font-semibold
+              text-[#355F52]
+            "
+          >
+            <ListFilter size={13} />
+
+            {categoryLabel}
+
+            <button
+              type="button"
+              onClick={clearCategoryFilter}
+              className="
+                ml-1
+                rounded-full
+                p-0.5
+                transition
+                hover:bg-white
+                hover:text-red-600
+              "
+              aria-label="Hapus filter kategori"
+            >
+              <X size={12} />
+            </button>
+          </span>
+
+        </div>
+      )}
+
+      {/* =====================================================
           ACTION TAMBAH BARANG
       ===================================================== */}
 
@@ -1327,8 +1611,12 @@ export default function BarangPage() {
               <Plus size={19} />
             </span>
             <span className="text-left">
-              <span className="block leading-5">Tambah Barang</span>
-              <span className="block text-[10px] font-medium text-white/70">Buat master barang baru</span>
+              <span className="block leading-5">
+                Tambah Barang
+              </span>
+              <span className="block text-[10px] font-medium text-white/70">
+                Buat master barang baru
+              </span>
             </span>
           </button>
         </div>
@@ -1393,6 +1681,8 @@ export default function BarangPage() {
                   <ShieldCheck size={19} />
                 ) : deleteFilter === "USED" ? (
                   <History size={19} />
+                ) : categoryFilter !== "ALL" ? (
+                  <ListFilter size={19} />
                 ) : (
                   <Search size={19} />
                 )}
@@ -1401,7 +1691,7 @@ export default function BarangPage() {
 
               <div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
 
                   <h2 className="font-semibold text-[#18352D]">
 
@@ -1411,9 +1701,29 @@ export default function BarangPage() {
                       ? "Barang Aman Dihapus"
                       : deleteFilter === "USED"
                       ? "Barang Sudah Digunakan"
+                      : categoryFilter !== "ALL"
+                      ? categoryLabel
                       : sourceLabel}
 
                   </h2>
+
+                  {categoryFilter !== "ALL" &&
+                    !showDuplicates &&
+                    deleteFilter === "ALL" && (
+                      <span
+                        className="
+                          rounded-full
+                          bg-[#EAF3EF]
+                          px-2.5
+                          py-1
+                          text-[11px]
+                          font-bold
+                          text-[#497F70]
+                        "
+                      >
+                        KATEGORI
+                      </span>
+                    )}
 
                   {showDuplicates && (
                     <span
@@ -1441,6 +1751,8 @@ export default function BarangPage() {
                     ? "Barang yang belum memiliki history/relasi dan stock 0"
                     : deleteFilter === "USED"
                     ? "Barang yang sudah digunakan dalam transaksi atau relasi lain"
+                    : categoryFilter !== "ALL"
+                    ? `Menampilkan barang dengan kategori ${categoryLabel}`
                     : "Data master barang inventory perusahaan"}
 
                 </p>
@@ -1451,16 +1763,14 @@ export default function BarangPage() {
 
             {/* TOTAL */}
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
 
               {(showDuplicates ||
-                deleteFilter !== "ALL") && (
+                deleteFilter !== "ALL" ||
+                categoryFilter !== "ALL") && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowDuplicates(false);
-                    setDeleteFilter("ALL");
-                  }}
+                  onClick={clearAllFilters}
                   className="
                     inline-flex
                     items-center
@@ -1666,6 +1976,8 @@ export default function BarangPage() {
                   <ShieldCheck size={27} />
                 ) : deleteFilter === "USED" ? (
                   <History size={27} />
+                ) : categoryFilter !== "ALL" ? (
+                  <ListFilter size={27} />
                 ) : (
                   <Package size={27} />
                 )}
@@ -1680,6 +1992,8 @@ export default function BarangPage() {
                   ? "Tidak ada barang yang aman dihapus"
                   : deleteFilter === "USED"
                   ? "Tidak ada barang yang mempunyai history"
+                  : categoryFilter !== "ALL"
+                  ? `Tidak ada barang kategori ${categoryLabel}`
                   : "Data barang tidak ditemukan"}
 
               </h3>
@@ -1692,6 +2006,8 @@ export default function BarangPage() {
                   ? "Semua barang yang ditampilkan mempunyai stock atau sudah mempunyai relasi/history."
                   : deleteFilter === "USED"
                   ? "Tidak ditemukan barang dengan history pada data yang sedang dimuat."
+                  : categoryFilter !== "ALL"
+                  ? `Tidak ditemukan barang dengan kategori ${categoryLabel}.`
                   : `Tidak ada data pada filter ${sourceLabel}.`}
 
               </p>
@@ -1741,7 +2057,8 @@ export default function BarangPage() {
 
             barang
 
-            {showDuplicates && (
+            {(showDuplicates ||
+              categoryFilter !== "ALL") && (
               <>
                 {" "}
                 dari{" "}
@@ -1756,6 +2073,7 @@ export default function BarangPage() {
           <div
             className="
               flex
+              flex-wrap
               items-center
               gap-2
               font-medium
@@ -1790,6 +2108,15 @@ export default function BarangPage() {
 
                 {usedCount} barang sudah digunakan
               </>
+            ) : categoryFilter !== "ALL" ? (
+              <>
+                <ListFilter
+                  size={15}
+                  className="text-[#497F70]"
+                />
+
+                {categoryLabel} · {displayedBarang.length} barang
+              </>
             ) : (
               <>
                 <Package
@@ -1818,7 +2145,9 @@ export default function BarangPage() {
           aria-modal="true"
           aria-labelledby="tambah-barang-title"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setOpenTambahBarang(false);
+            if (event.target === event.currentTarget) {
+              setOpenTambahBarang(false);
+            }
           }}
         >
           <div className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[26px] border border-white/70 bg-white shadow-[0_30px_90px_-30px_rgba(15,23,42,0.55)]">
@@ -1829,15 +2158,21 @@ export default function BarangPage() {
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#18352D] to-[#497F70] text-white shadow-lg shadow-emerald-900/15">
                   <Plus size={21} />
                 </div>
+
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 id="tambah-barang-title" className="truncate text-lg font-bold tracking-tight text-[#18352D] sm:text-xl">
+                    <h2
+                      id="tambah-barang-title"
+                      className="truncate text-lg font-bold tracking-tight text-[#18352D] sm:text-xl"
+                    >
                       Tambah Barang
                     </h2>
+
                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-700">
                       Master Data
                     </span>
                   </div>
+
                   <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">
                     Buat data barang baru untuk inventory pusat.
                   </p>
@@ -1846,7 +2181,9 @@ export default function BarangPage() {
 
               <button
                 type="button"
-                onClick={() => setOpenTambahBarang(false)}
+                onClick={() =>
+                  setOpenTambahBarang(false)
+                }
                 aria-label="Tutup form tambah barang"
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
               >
@@ -1869,6 +2206,7 @@ export default function BarangPage() {
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-700">
                 ✓
               </span>
+
               Lengkapi data barang dengan benar sebelum menyimpan.
             </div>
           </div>

@@ -365,7 +365,7 @@ export default function StockPusatPage() {
       return {
         text: "HABIS",
         className:
-          "border-red-200 bg-red-50 text-red-700",
+          "border-red-200 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300",
         icon: PackageX,
       };
     }
@@ -374,7 +374,7 @@ export default function StockPusatPage() {
       return {
         text: "MINIMUM",
         className:
-          "border-amber-200 bg-amber-50 text-amber-700",
+          "border-amber-200 bg-amber-50 dark:bg-amber-950/30 text-amber-700",
         icon: AlertTriangle,
       };
     }
@@ -382,7 +382,7 @@ export default function StockPusatPage() {
     return {
       text: "AMAN",
       className:
-        "border-emerald-200 bg-emerald-50 text-emerald-700",
+        "border-emerald-200 bg-emerald-50 dark:bg-emerald-950/25 text-emerald-700 dark:text-emerald-300",
       icon: CheckCircle2,
     };
   }
@@ -483,8 +483,8 @@ export default function StockPusatPage() {
         return {
           text: "Barang Masuk Supplier",
           className:
-            "border-emerald-200 bg-emerald-50 text-emerald-700",
-          dot: "bg-emerald-500",
+            "border-emerald-200 bg-emerald-50 dark:bg-emerald-950/25 text-emerald-700 dark:text-emerald-300",
+          dot: "bg-emerald-50 dark:bg-emerald-950/250",
         };
 
       case "TRANSFER":
@@ -492,7 +492,7 @@ export default function StockPusatPage() {
         return {
           text: "Transfer Masuk",
           className:
-            "border-[#BFD9CE] bg-[#EEF7F3] text-[#497F70]",
+            "border-[#BFD9CE] bg-[#EEF7F3] text-[#497F70] dark:text-[#72B7A0]",
           dot: "bg-[#497F70]",
         };
 
@@ -502,16 +502,16 @@ export default function StockPusatPage() {
         return {
           text: "Barang Keluar",
           className:
-            "border-red-200 bg-red-50 text-red-700",
-          dot: "bg-red-500",
+            "border-red-200 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300",
+          dot: "bg-red-50 dark:bg-red-950/300",
         };
 
       case "ADJUSTMENT":
         return {
           text: "Adjustment Stock",
           className:
-            "border-amber-200 bg-amber-50 text-amber-700",
-          dot: "bg-amber-500",
+            "border-amber-200 bg-amber-50 dark:bg-amber-950/30 text-amber-700",
+          dot: "bg-amber-50 dark:bg-amber-950/300",
         };
 
       case "OPNAME":
@@ -519,15 +519,15 @@ export default function StockPusatPage() {
         return {
           text: "Stock Opname",
           className:
-            "border-purple-200 bg-purple-50 text-purple-700",
-          dot: "bg-purple-500",
+            "border-purple-200 bg-purple-50 dark:bg-purple-950/25 text-purple-700",
+          dot: "bg-purple-50 dark:bg-purple-950/250",
         };
 
       case "PURCHASE":
         return {
           text: "Purchase Order",
           className:
-            "border-gray-200 bg-gray-50 text-gray-700",
+            "border-gray-200 dark:border-[#293D36] bg-gray-50 dark:bg-[#111B18] text-gray-700 dark:text-slate-200",
           dot: "bg-gray-400",
         };
 
@@ -535,7 +535,7 @@ export default function StockPusatPage() {
         return {
           text: type || "-",
           className:
-            "border-gray-200 bg-gray-50 text-gray-600",
+            "border-gray-200 dark:border-[#293D36] bg-gray-50 dark:bg-[#111B18] text-gray-600 dark:text-slate-300",
           dot: "bg-gray-400",
         };
     }
@@ -561,8 +561,8 @@ export default function StockPusatPage() {
       return {
         text: value || "APPROVED",
         className:
-          "border-emerald-200 bg-emerald-50 text-emerald-700",
-        dot: "bg-emerald-500",
+          "border-emerald-200 bg-emerald-50 dark:bg-emerald-950/25 text-emerald-700 dark:text-emerald-300",
+        dot: "bg-emerald-50 dark:bg-emerald-950/250",
       };
     }
 
@@ -574,8 +574,8 @@ export default function StockPusatPage() {
       return {
         text: value,
         className:
-          "border-amber-200 bg-amber-50 text-amber-700",
-        dot: "bg-amber-500",
+          "border-amber-200 bg-amber-50 dark:bg-amber-950/30 text-amber-700",
+        dot: "bg-amber-50 dark:bg-amber-950/300",
       };
     }
 
@@ -587,15 +587,15 @@ export default function StockPusatPage() {
       return {
         text: value,
         className:
-          "border-red-200 bg-red-50 text-red-700",
-        dot: "bg-red-500",
+          "border-red-200 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300",
+        dot: "bg-red-50 dark:bg-red-950/300",
       };
     }
 
     return {
       text: value || "-",
       className:
-        "border-gray-200 bg-gray-50 text-gray-600",
+        "border-gray-200 dark:border-[#293D36] bg-gray-50 dark:bg-[#111B18] text-gray-600 dark:text-slate-300",
       dot: "bg-gray-400",
     };
   }
@@ -613,7 +613,7 @@ export default function StockPusatPage() {
       return {
         text: "APPROVED",
         className:
-          "border-emerald-200 bg-emerald-50 text-emerald-700",
+          "border-emerald-200 bg-emerald-50 dark:bg-emerald-950/25 text-emerald-700 dark:text-emerald-300",
       };
     }
 
@@ -624,7 +624,7 @@ export default function StockPusatPage() {
       return {
         text: "MENUNGGU",
         className:
-          "border-amber-200 bg-amber-50 text-amber-700",
+          "border-amber-200 bg-amber-50 dark:bg-amber-950/30 text-amber-700",
       };
     }
 
@@ -632,14 +632,14 @@ export default function StockPusatPage() {
       return {
         text: "REJECTED",
         className:
-          "border-red-200 bg-red-50 text-red-700",
+          "border-red-200 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300",
       };
     }
 
     return {
       text: value || "-",
       className:
-        "border-gray-200 bg-gray-50 text-gray-600",
+        "border-gray-200 dark:border-[#293D36] bg-gray-50 dark:bg-[#111B18] text-gray-600 dark:text-slate-300",
     };
   }
 
@@ -882,7 +882,7 @@ export default function StockPusatPage() {
   // =====================================================
 
   return (
-    <div className="min-h-full bg-[radial-gradient(circle_at_top,_#EAF3EF_0,_#F3F7F5_32%,_#F3F7F5_100%)] text-[#18352D]">
+    <div className="min-h-full bg-[radial-gradient(circle_at_top,_#EAF3EF_0,_#F3F7F5_32%,_#F3F7F5_100%)] text-[#18352D] dark:bg-[radial-gradient(circle_at_top,_#18352D_0,_#08120F_38%,_#07100D_100%)] dark:text-[#E8F3EE]">
 
       {/* =================================================
           PREMIUM HEADER
@@ -943,7 +943,7 @@ export default function StockPusatPage() {
 
                 <div className="mt-4 flex flex-wrap items-center gap-2">
 
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.035] px-2.5 py-1.5 text-[10px] font-semibold text-slate-300">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] bg-white dark:bg-[#0D1714]/[0.035] px-2.5 py-1.5 text-[10px] font-semibold text-slate-300">
                     <Warehouse size={12} />
                     Gudang Pusat
                   </span>
@@ -953,7 +953,7 @@ export default function StockPusatPage() {
                     Read Only
                   </span>
 
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.035] px-2.5 py-1.5 text-[10px] font-semibold text-slate-400">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] bg-white dark:bg-[#0D1714]/[0.035] px-2.5 py-1.5 text-[10px] font-semibold text-slate-400">
                     <Activity size={12} />
                     Monitoring Aktif
                   </span>
@@ -976,7 +976,7 @@ export default function StockPusatPage() {
                 loading ||
                 priceLoading
               }
-              className="group inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-emerald-300/[0.16] bg-white/[0.055] px-5 text-sm font-bold text-emerald-100 shadow-[0_12px_35px_rgba(0,0,0,0.14)] backdrop-blur-md transition-all hover:-translate-y-0.5 hover:border-emerald-300/[0.28] hover:bg-emerald-300/[0.12] hover:shadow-[0_16px_40px_rgba(16,185,129,0.10)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+              className="group inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-emerald-300/[0.16] bg-white dark:bg-[#0D1714]/[0.055] px-5 text-sm font-bold text-emerald-100 shadow-[0_12px_35px_rgba(0,0,0,0.14)] backdrop-blur-md transition-all hover:-translate-y-0.5 hover:border-emerald-300/[0.28] hover:bg-emerald-300/[0.12] hover:shadow-[0_16px_40px_rgba(16,185,129,0.10)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
             >
 
               <RefreshCw
@@ -1012,7 +1012,7 @@ export default function StockPusatPage() {
 
         {/* SECURITY */}
 
-        <div className="mb-6 overflow-hidden rounded-[26px] border border-[#CFE1D9] bg-white shadow-[0_10px_35px_rgba(30,70,58,0.055)]">
+        <div className="mb-6 overflow-hidden rounded-[26px] border border-[#CFE1D9] bg-white dark:bg-[#0D1714] shadow-[0_10px_35px_rgba(30,70,58,0.055)]">
 
           <div className="relative flex flex-col gap-5 p-5 md:flex-row md:items-center md:justify-between md:px-6">
 
@@ -1020,7 +1020,7 @@ export default function StockPusatPage() {
 
             <div className="flex items-start gap-3">
 
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#497F70]">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EAF3EF] dark:bg-[#16352B] text-[#497F70] dark:text-[#72B7A0]">
                 <ShieldCheck size={20} />
               </div>
 
@@ -1032,7 +1032,7 @@ export default function StockPusatPage() {
                     Stock pusat terkunci
                   </p>
 
-                  <span className="rounded-full bg-[#EAF3EF] px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[#497F70]">
+                  <span className="rounded-full bg-[#EAF3EF] dark:bg-[#16352B] px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[#497F70] dark:text-[#72B7A0]">
                     Protected
                   </span>
 
@@ -1050,14 +1050,14 @@ export default function StockPusatPage() {
 
             </div>
 
-            <div className="flex shrink-0 items-center gap-2 rounded-xl border border-[#DCE7E2] bg-[#FAFCFB] px-3.5 py-2.5">
+            <div className="flex shrink-0 items-center gap-2 rounded-xl border border-[#DCE7E2] bg-[#FAFCFB] dark:bg-[#101C18] px-3.5 py-2.5">
 
               <span className="relative flex h-2 w-2">
                 <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400 opacity-40" />
-                <span className="relative h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="relative h-2 w-2 rounded-full bg-emerald-50 dark:bg-emerald-950/250" />
               </span>
 
-              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">
                 Sistem Aktif
               </span>
 
@@ -1077,7 +1077,7 @@ export default function StockPusatPage() {
 
             <div className="relative flex items-start gap-3">
 
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#DDEEE7] text-[#497F70]">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#DDEEE7] text-[#497F70] dark:text-[#72B7A0]">
                 <Boxes size={20} />
               </div>
 
@@ -1090,7 +1090,7 @@ export default function StockPusatPage() {
                     Persediaan
                   </p>
 
-                  <span className="rounded-full bg-[#DDEEE7] px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[#497F70]">
+                  <span className="rounded-full bg-[#DDEEE7] px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[#497F70] dark:text-[#72B7A0]">
                     Monitoring
                   </span>
 
@@ -1106,35 +1106,35 @@ export default function StockPusatPage() {
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
 
-                  <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-[#DCEBE4] bg-white/80 px-3 py-2 text-[10px] font-semibold text-[#497F70] shadow-sm">
+                  <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-[#DCEBE4] dark:border-[#29483E] bg-white dark:bg-[#0D1714]/80 px-3 py-2 text-[10px] font-semibold text-[#497F70] dark:text-[#72B7A0] shadow-sm">
 
                     <span>Stock Dasar</span>
                     <span className="text-[#A8C6BA]">=</span>
 
-                    <span className="rounded-lg bg-[#EAF3EF] px-2 py-1">
+                    <span className="rounded-lg bg-[#EAF3EF] dark:bg-[#16352B] px-2 py-1">
                       Stock Transaksi
                     </span>
 
                     <span className="text-[#A8C6BA]">×</span>
 
-                    <span className="rounded-lg bg-[#EAF3EF] px-2 py-1">
+                    <span className="rounded-lg bg-[#EAF3EF] dark:bg-[#16352B] px-2 py-1">
                       Konversi
                     </span>
 
                   </div>
 
-                  <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-[#DCEBE4] bg-white/80 px-3 py-2 text-[10px] font-semibold text-[#497F70] shadow-sm">
+                  <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-[#DCEBE4] dark:border-[#29483E] bg-white dark:bg-[#0D1714]/80 px-3 py-2 text-[10px] font-semibold text-[#497F70] dark:text-[#72B7A0] shadow-sm">
 
                     <span>Total Nilai</span>
                     <span className="text-[#A8C6BA]">=</span>
 
-                    <span className="rounded-lg bg-[#EAF3EF] px-2 py-1">
+                    <span className="rounded-lg bg-[#EAF3EF] dark:bg-[#16352B] px-2 py-1">
                       Stock
                     </span>
 
                     <span className="text-[#A8C6BA]">×</span>
 
-                    <span className="rounded-lg bg-[#EAF3EF] px-2 py-1">
+                    <span className="rounded-lg bg-[#EAF3EF] dark:bg-[#16352B] px-2 py-1">
                       Harga Terbaru
                     </span>
 
@@ -1153,21 +1153,21 @@ export default function StockPusatPage() {
         {/* ERROR */}
 
         {error && (
-          <div className="mb-6 overflow-hidden rounded-2xl border border-red-200 bg-red-50 shadow-sm">
+          <div className="mb-6 overflow-hidden rounded-2xl border border-red-200 bg-red-50 dark:bg-red-950/30 shadow-sm">
 
             <div className="flex items-start gap-3 px-5 py-4">
 
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-red-500 shadow-sm">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white dark:bg-[#0D1714] text-red-500 shadow-sm">
                 <Info size={17} />
               </div>
 
               <div>
 
-                <p className="text-sm font-bold text-red-700">
+                <p className="text-sm font-bold text-red-700 dark:text-red-300">
                   Gagal memuat stock pusat
                 </p>
 
-                <p className="mt-1 text-xs leading-5 text-red-600">
+                <p className="mt-1 text-xs leading-5 text-red-600 dark:text-red-300">
                   {error}
                 </p>
 
@@ -1190,11 +1190,11 @@ export default function StockPusatPage() {
                 "Barang terdaftar di pusat",
               icon: Package,
               iconClass:
-                "bg-[#EAF3EF] text-[#497F70]",
+                "bg-[#EAF3EF] dark:bg-[#16352B] text-[#497F70] dark:text-[#72B7A0]",
               lineClass:
                 "bg-[#497F70]",
               glow:
-                "bg-emerald-50/80",
+                "bg-emerald-50 dark:bg-emerald-950/25/80",
               isCurrency: false,
             },
             {
@@ -1204,7 +1204,7 @@ export default function StockPusatPage() {
                 "Akumulasi satuan transaksi",
               icon: Boxes,
               iconClass:
-                "bg-[#EEF6F3] text-[#497F70]",
+                "bg-[#EEF6F3] text-[#497F70] dark:text-[#72B7A0]",
               lineClass:
                 "bg-[#497F70]",
               glow:
@@ -1218,11 +1218,11 @@ export default function StockPusatPage() {
                 "Hasil konversi monitoring",
               icon: TrendingUp,
               iconClass:
-                "bg-[#EEF6F3] text-[#497F70]",
+                "bg-[#EEF6F3] text-[#497F70] dark:text-[#72B7A0]",
               lineClass:
                 "bg-[#497F70]",
               glow:
-                "bg-emerald-50/70",
+                "bg-emerald-50 dark:bg-emerald-950/25/70",
               isCurrency: false,
             },
             {
@@ -1234,11 +1234,11 @@ export default function StockPusatPage() {
                 )} barang memiliki harga`,
               icon: DollarSign,
               iconClass:
-                "bg-[#F0F6F3] text-[#497F70]",
+                "bg-[#F0F6F3] dark:bg-[#142A23] text-[#497F70] dark:text-[#72B7A0]",
               lineClass:
                 "bg-[#497F70]",
               glow:
-                "bg-emerald-50/80",
+                "bg-emerald-50 dark:bg-emerald-950/25/80",
               isCurrency: true,
             },
             {
@@ -1252,9 +1252,9 @@ export default function StockPusatPage() {
               iconClass:
                 "bg-[#F2F0FA] text-purple-600",
               lineClass:
-                "bg-purple-500",
+                "bg-purple-50 dark:bg-purple-950/250",
               glow:
-                "bg-purple-50/80",
+                "bg-purple-50 dark:bg-purple-950/25/80",
               isCurrency: false,
             },
           ].map((card) => {
@@ -1263,7 +1263,7 @@ export default function StockPusatPage() {
             return (
               <div
                 key={card.label}
-                className="group relative overflow-hidden rounded-[20px] border border-[#DDE9E4] bg-white p-5 shadow-[0_6px_25px_rgba(30,70,58,0.045)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_15px_40px_rgba(30,70,58,0.085)]"
+                className="group relative overflow-hidden rounded-[20px] border border-[#DDE9E4] dark:border-[#263F37] bg-white dark:bg-[#0D1714] p-5 shadow-[0_6px_25px_rgba(30,70,58,0.045)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_15px_40px_rgba(30,70,58,0.085)]"
               >
 
                 <div
@@ -1278,17 +1278,17 @@ export default function StockPusatPage() {
 
                   <div className="min-w-0">
 
-                    <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-gray-400">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-slate-500">
                       {card.label}
                     </p>
 
-                    <p className="mt-2 truncate text-[24px] font-bold tracking-[-0.03em] text-[#18352D]">
+                    <p className="mt-2 truncate text-[24px] font-bold tracking-[-0.03em] text-[#18352D] dark:text-[#E8F3EE]">
                       {card.isCurrency
                         ? formatCurrency(card.value)
                         : formatNumber(card.value)}
                     </p>
 
-                    <p className="mt-1 text-[10px] text-gray-400">
+                    <p className="mt-1 text-[10px] text-gray-400 dark:text-slate-500">
                       {card.description}
                     </p>
 
@@ -1319,11 +1319,11 @@ export default function StockPusatPage() {
               count: totalAman,
               icon: CheckCircle2,
               iconClass:
-                "bg-emerald-50 text-emerald-600",
+                "bg-emerald-50 dark:bg-emerald-950/25 text-emerald-600 dark:text-emerald-300",
               active:
                 "border-emerald-300 ring-2 ring-emerald-100",
               hover:
-                "group-hover:text-emerald-600",
+                "group-hover:text-emerald-600 dark:text-emerald-300",
             },
             {
               value: "MINIMUM" as FilterStatus,
@@ -1331,7 +1331,7 @@ export default function StockPusatPage() {
               count: totalMinimum,
               icon: AlertTriangle,
               iconClass:
-                "bg-amber-50 text-amber-600",
+                "bg-amber-50 dark:bg-amber-950/30 text-amber-600",
               active:
                 "border-amber-300 ring-2 ring-amber-100",
               hover:
@@ -1343,11 +1343,11 @@ export default function StockPusatPage() {
               count: totalHabis,
               icon: PackageX,
               iconClass:
-                "bg-red-50 text-red-600",
+                "bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-300",
               active:
                 "border-red-300 ring-2 ring-red-100",
               hover:
-                "group-hover:text-red-600",
+                "group-hover:text-red-600 dark:text-red-300",
             },
           ].map((status) => {
             const Icon = status.icon;
@@ -1364,15 +1364,15 @@ export default function StockPusatPage() {
                       : status.value
                   )
                 }
-                className={`group relative overflow-hidden rounded-[20px] border bg-white p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${
+                className={`group relative overflow-hidden rounded-[20px] border bg-white dark:bg-[#0D1714] p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${
                   filterStatus ===
                   status.value
                     ? status.active
-                    : "border-[#DDE9E4]"
+                    : "border-[#DDE9E4] dark:border-[#263F37]"
                 }`}
               >
 
-                <div className="absolute right-0 top-0 h-20 w-20 rounded-full bg-gray-50 blur-2xl transition-transform group-hover:scale-125" />
+                <div className="absolute right-0 top-0 h-20 w-20 rounded-full bg-gray-50 dark:bg-[#111B18] blur-2xl transition-transform group-hover:scale-125" />
 
                 <div className="relative flex items-center justify-between">
 
@@ -1386,11 +1386,11 @@ export default function StockPusatPage() {
 
                     <div>
 
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500">
                         {status.label}
                       </p>
 
-                      <p className="mt-0.5 text-xl font-bold text-[#18352D]">
+                      <p className="mt-0.5 text-xl font-bold text-[#18352D] dark:text-[#E8F3EE]">
                         {formatNumber(
                           status.count
                         )}
@@ -1402,7 +1402,7 @@ export default function StockPusatPage() {
 
                   <ChevronRight
                     size={16}
-                    className={`text-gray-300 transition-transform group-hover:translate-x-1 ${status.hover}`}
+                    className={`text-gray-300 dark:text-slate-600 transition-transform group-hover:translate-x-1 ${status.hover}`}
                   />
 
                 </div>
@@ -1415,7 +1415,7 @@ export default function StockPusatPage() {
 
         {/* FILTER */}
 
-        <div className="mb-6 overflow-hidden rounded-[26px] border border-[#DDE9E4] bg-white shadow-[0_10px_35px_rgba(30,70,58,0.055)]">
+        <div className="mb-6 overflow-hidden rounded-[26px] border border-[#DDE9E4] dark:border-[#263F37] bg-white dark:bg-[#0D1714] shadow-[0_10px_35px_rgba(30,70,58,0.055)]">
 
           <div className="p-5 md:p-6">
 
@@ -1423,7 +1423,7 @@ export default function StockPusatPage() {
 
               <div className="flex-1">
 
-                <label className="mb-2 block text-[9px] font-bold uppercase tracking-[0.16em] text-gray-400">
+                <label className="mb-2 block text-[9px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-slate-500">
                   Cari Barang
                 </label>
 
@@ -1431,7 +1431,7 @@ export default function StockPusatPage() {
 
                   <Search
                     size={17}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500"
                   />
 
                   <input
@@ -1441,7 +1441,7 @@ export default function StockPusatPage() {
                     onChange={(e) =>
                       setSearch(e.target.value)
                     }
-                    className="h-11 w-full rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] pl-10 pr-10 text-sm text-[#18352D] outline-none transition-all placeholder:text-gray-400 focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                    className="h-11 w-full rounded-xl border border-[#D5E5DC] dark:border-[#29483E] bg-[#FAFCFB] dark:bg-[#101C18] pl-10 pr-10 text-sm text-[#18352D] dark:text-[#E8F3EE] outline-none transition-all placeholder:text-gray-400 dark:text-slate-500 focus:border-[#497F70] focus:bg-white dark:focus:bg-[#14241F] dark:bg-[#0D1714] focus:ring-4 focus:ring-[#497F70]/10"
                   />
 
                   {search && (
@@ -1450,7 +1450,7 @@ export default function StockPusatPage() {
                       onClick={() =>
                         setSearch("")
                       }
-                      className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-lg p-1.5 text-gray-400 dark:text-slate-500 transition hover:bg-gray-100 dark:hover:bg-[#1A2B25] dark:bg-[#17231F] hover:text-gray-600 dark:text-slate-300"
                     >
                       <X size={14} />
                     </button>
@@ -1462,11 +1462,11 @@ export default function StockPusatPage() {
 
               <div className="xl:w-[360px]">
 
-                <label className="mb-2 block text-[9px] font-bold uppercase tracking-[0.16em] text-gray-400">
+                <label className="mb-2 block text-[9px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-slate-500">
                   Filter Status
                 </label>
 
-                <div className="flex rounded-xl border border-[#D5E5DC] bg-[#FAFCFB] p-1">
+                <div className="flex rounded-xl border border-[#D5E5DC] dark:border-[#29483E] bg-[#FAFCFB] dark:bg-[#101C18] p-1">
 
                   {(
                     [
@@ -1489,7 +1489,7 @@ export default function StockPusatPage() {
                         className={`flex-1 rounded-lg px-2 py-2 text-[10px] font-bold transition-all ${
                           filterStatus === value
                             ? "bg-[#497F70] text-white shadow-sm"
-                            : "text-gray-500 hover:bg-white hover:text-[#497F70]"
+                            : "text-gray-500 dark:text-slate-400 hover:bg-white dark:hover:bg-[#183029] dark:bg-[#0D1714] hover:text-[#497F70] dark:text-[#72B7A0]"
                         }`}
                       >
                         {label}
@@ -1503,24 +1503,24 @@ export default function StockPusatPage() {
 
             </div>
 
-            <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-[#EEF2F0] pt-4">
+            <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-[#EEF2F0] dark:border-[#243A33] pt-4">
 
-              <span className="text-[11px] text-gray-400">
+              <span className="text-[11px] text-gray-400 dark:text-slate-500">
                 Menampilkan
               </span>
 
-              <span className="rounded-full border border-[#DCEBE4] bg-[#EAF3EF] px-3 py-1 text-[10px] font-bold text-[#497F70]">
+              <span className="rounded-full border border-[#DCEBE4] dark:border-[#29483E] bg-[#EAF3EF] dark:bg-[#16352B] px-3 py-1 text-[10px] font-bold text-[#497F70] dark:text-[#72B7A0]">
                 {formatNumber(
                   filteredData.length
                 )}{" "}
                 barang
               </span>
 
-              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[10px] font-medium text-gray-500">
+              <span className="rounded-full border border-gray-200 dark:border-[#293D36] bg-gray-50 dark:bg-[#111B18] px-3 py-1 text-[10px] font-medium text-gray-500 dark:text-slate-400">
                 Gudang Pusat
               </span>
 
-              <span className="rounded-full border border-[#DCEBE4] bg-[#F4F9F6] px-3 py-1 text-[10px] font-semibold text-[#497F70]">
+              <span className="rounded-full border border-[#DCEBE4] dark:border-[#29483E] bg-[#F4F9F6] dark:bg-[#12231E] px-3 py-1 text-[10px] font-semibold text-[#497F70] dark:text-[#72B7A0]">
                 Harga tersedia:{" "}
                 {formatNumber(
                   totalPricedItems
@@ -1528,13 +1528,13 @@ export default function StockPusatPage() {
               </span>
 
               {filterStatus !== "ALL" && (
-                <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-600">
+                <span className="rounded-full border border-gray-200 dark:border-[#293D36] bg-white dark:bg-[#0D1714] px-3 py-1 text-[10px] font-semibold text-gray-600 dark:text-slate-300">
                   Status: {filterStatus}
                 </span>
               )}
 
               {search && (
-                <span className="max-w-full truncate rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-medium text-gray-500">
+                <span className="max-w-full truncate rounded-full border border-gray-200 dark:border-[#293D36] bg-white dark:bg-[#0D1714] px-3 py-1 text-[10px] font-medium text-gray-500 dark:text-slate-400">
                   Pencarian: "{search}"
                 </span>
               )}
@@ -1547,7 +1547,7 @@ export default function StockPusatPage() {
                     setSearch("");
                     setFilterStatus("ALL");
                   }}
-                  className="ml-auto rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-[#497F70] transition hover:bg-[#EAF3EF]"
+                  className="ml-auto rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-[#497F70] dark:text-[#72B7A0] transition hover:bg-[#EAF3EF] dark:bg-[#16352B]"
                 >
                   Reset Filter
                 </button>
@@ -1563,25 +1563,25 @@ export default function StockPusatPage() {
             TABLE
         ================================================= */}
 
-        <div className="overflow-hidden rounded-[28px] border border-[#DDE9E4] bg-white shadow-[0_12px_38px_rgba(30,70,58,0.065)]">
+        <div className="overflow-hidden rounded-[28px] border border-[#DDE9E4] dark:border-[#263F37] bg-white dark:bg-[#0D1714] shadow-[0_12px_38px_rgba(30,70,58,0.065)]">
 
-          <div className="flex flex-col gap-3 border-b border-[#E5ECE9] px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
+          <div className="flex flex-col gap-3 border-b border-[#E5ECE9] dark:border-[#263A34] px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
 
             <div>
 
               <div className="flex items-center gap-2.5">
 
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF3EF] dark:bg-[#16352B] text-[#497F70] dark:text-[#72B7A0]">
                   <Warehouse size={16} />
                 </div>
 
                 <div>
 
-                  <h2 className="text-sm font-bold tracking-[-0.01em] text-[#18352D]">
+                  <h2 className="text-sm font-bold tracking-[-0.01em] text-[#18352D] dark:text-[#E8F3EE]">
                     Persediaan Gudang Pusat
                   </h2>
 
-                  <p className="mt-0.5 text-[9px] text-gray-400">
+                  <p className="mt-0.5 text-[9px] text-gray-400 dark:text-slate-500">
                     Monitoring stock sistem, harga
                     terbaru, dan total nilai persediaan.
                   </p>
@@ -1594,27 +1594,27 @@ export default function StockPusatPage() {
 
             <div className="flex flex-wrap items-center gap-1.5 self-start md:self-auto">
 
-              <div className="flex items-center gap-1.5 rounded-lg border border-[#DDE9E4] bg-[#FAFCFB] px-2.5 py-1.5">
+              <div className="flex items-center gap-1.5 rounded-lg border border-[#DDE9E4] dark:border-[#263F37] bg-[#FAFCFB] dark:bg-[#101C18] px-2.5 py-1.5">
 
                 <LockKeyhole
                   size={11}
-                  className="text-[#497F70]"
+                  className="text-[#497F70] dark:text-[#72B7A0]"
                 />
 
-                <span className="text-[9px] font-bold text-gray-500">
+                <span className="text-[9px] font-bold text-gray-500 dark:text-slate-400">
                   Stock Terkunci
                 </span>
 
               </div>
 
-              <div className="flex items-center gap-1.5 rounded-lg border border-[#DDE9E4] bg-[#FAFCFB] px-2.5 py-1.5">
+              <div className="flex items-center gap-1.5 rounded-lg border border-[#DDE9E4] dark:border-[#263F37] bg-[#FAFCFB] dark:bg-[#101C18] px-2.5 py-1.5">
 
                 <DollarSign
                   size={11}
-                  className="text-[#497F70]"
+                  className="text-[#497F70] dark:text-[#72B7A0]"
                 />
 
-                <span className="text-[9px] font-bold text-gray-500">
+                <span className="text-[9px] font-bold text-gray-500 dark:text-slate-400">
                   Harga Master
                 </span>
 
@@ -1647,9 +1647,9 @@ export default function StockPusatPage() {
                 <col className="w-[190px]" />
               </colgroup>
 
-              <thead className="bg-[#F7F9F8]">
+              <thead className="bg-[#F7F9F8] dark:bg-[#101A17]">
 
-                <tr className="border-b border-[#E5ECE9]">
+                <tr className="border-b border-[#E5ECE9] dark:border-[#263A34]">
 
                   {[
                     ["No", "text-left"],
@@ -1670,7 +1670,7 @@ export default function StockPusatPage() {
                     ([label, align]) => (
                       <th
                         key={label}
-                        className={`whitespace-nowrap px-2.5 py-3 ${align} text-[8px] font-bold uppercase tracking-[0.11em] text-gray-400`}
+                        className={`whitespace-nowrap px-2.5 py-3 ${align} text-[8px] font-bold uppercase tracking-[0.11em] text-gray-400 dark:text-slate-500`}
                       >
                         {label}
                       </th>
@@ -1694,11 +1694,11 @@ export default function StockPusatPage() {
 
                         <div className="absolute inset-0 rounded-2xl bg-emerald-100 blur-xl" />
 
-                        <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
+                        <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-[#DDE9E4] dark:border-[#263F37] bg-white dark:bg-[#0D1714] shadow-sm">
 
                           <RefreshCw
                             size={22}
-                            className="animate-spin text-[#497F70]"
+                            className="animate-spin text-[#497F70] dark:text-[#72B7A0]"
                           />
 
                         </div>
@@ -1709,7 +1709,7 @@ export default function StockPusatPage() {
                         Memuat stock pusat...
                       </p>
 
-                      <p className="mt-1 text-[11px] text-gray-400">
+                      <p className="mt-1 text-[11px] text-gray-400 dark:text-slate-500">
                         Mengambil data persediaan
                         terbaru.
                       </p>
@@ -1723,15 +1723,15 @@ export default function StockPusatPage() {
                       className="px-5 py-20 text-center"
                     >
 
-                      <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-50 text-gray-300">
+                      <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-50 dark:bg-[#111B18] text-gray-300 dark:text-slate-600">
                         <Package size={28} />
                       </div>
 
-                      <p className="font-semibold text-gray-500">
+                      <p className="font-semibold text-gray-500 dark:text-slate-400">
                         Tidak ada data ditemukan
                       </p>
 
-                      <p className="mt-1 text-[11px] text-gray-400">
+                      <p className="mt-1 text-[11px] text-gray-400 dark:text-slate-500">
                         Coba ubah pencarian atau
                         filter status.
                       </p>
@@ -1745,7 +1745,7 @@ export default function StockPusatPage() {
                             setSearch("");
                             setFilterStatus("ALL");
                           }}
-                          className="mt-5 rounded-xl border border-[#CFE1D9] bg-white px-4 py-2.5 text-[11px] font-bold text-[#497F70] shadow-sm transition hover:bg-[#EAF3EF]"
+                          className="mt-5 rounded-xl border border-[#CFE1D9] bg-white dark:bg-[#0D1714] px-4 py-2.5 text-[11px] font-bold text-[#497F70] dark:text-[#72B7A0] shadow-sm transition hover:bg-[#EAF3EF] dark:bg-[#16352B]"
                         >
                           Reset Filter
                         </button>
@@ -1807,12 +1807,12 @@ export default function StockPusatPage() {
                       return (
                         <tr
                           key={item.id}
-                          className="group border-b border-[#EDF2EF] transition-colors hover:bg-[#FBFDFC]"
+                          className="group border-b border-[#EDF2EF] dark:border-[#20342E] transition-colors hover:bg-[#FBFDFC] dark:hover:bg-[#111F1A]"
                         >
 
                           {/* NO */}
 
-                          <td className="whitespace-nowrap px-2.5 py-2.5 text-[10px] font-medium text-gray-400">
+                          <td className="whitespace-nowrap px-2.5 py-2.5 text-[10px] font-medium text-gray-400 dark:text-slate-500">
                             {String(
                               index + 1
                             ).padStart(2, "0")}
@@ -1824,7 +1824,7 @@ export default function StockPusatPage() {
 
                             <div className="flex items-center gap-2">
 
-                              <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F0F6F3] text-[#497F70] transition-all group-hover:bg-[#E4F0EB]">
+                              <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F0F6F3] dark:bg-[#142A23] text-[#497F70] dark:text-[#72B7A0] transition-all group-hover:bg-[#E4F0EB]">
 
                                 <Package size={15} />
 
@@ -1834,36 +1834,36 @@ export default function StockPusatPage() {
 
                               <div className="min-w-0">
 
-                                <div className="truncate text-[11px] font-bold text-[#18352D]">
+                                <div className="truncate text-[11px] font-bold text-[#18352D] dark:text-[#E8F3EE]">
                                   {item.barang?.name || "-"}
                                 </div>
 
                                 <div className="mt-0.5 flex min-w-0 items-center gap-1">
 
-                                  <span className="max-w-[80px] truncate rounded bg-[#F0F6F3] px-1.5 py-0.5 font-mono text-[8px] font-bold text-[#497F70]">
+                                  <span className="max-w-[80px] truncate rounded bg-[#F0F6F3] dark:bg-[#142A23] px-1.5 py-0.5 font-mono text-[8px] font-bold text-[#497F70] dark:text-[#72B7A0]">
                                     {item.barang?.code || "-"}
                                   </span>
 
-                                  <span className="text-[8px] text-gray-300">
+                                  <span className="text-[8px] text-gray-300 dark:text-slate-600">
                                     •
                                   </span>
 
-                                  <span className="text-[8px] text-gray-400">
+                                  <span className="text-[8px] text-gray-400 dark:text-slate-500">
                                     {transactionUnit}
                                   </span>
 
-                                  <span className="text-[8px] text-gray-300">
+                                  <span className="text-[8px] text-gray-300 dark:text-slate-600">
                                     •
                                   </span>
 
-                                  <span className="truncate text-[8px] font-semibold text-[#497F70]">
+                                  <span className="truncate text-[8px] font-semibold text-[#497F70] dark:text-[#72B7A0]">
                                     Dasar: {baseUnit}
                                   </span>
 
                                 </div>
 
                                 {item.barang?.barcode && (
-                                  <div className="mt-0.5 truncate font-mono text-[7px] text-gray-400">
+                                  <div className="mt-0.5 truncate font-mono text-[7px] text-gray-400 dark:text-slate-500">
                                     BC: {item.barang.barcode}
                                   </div>
                                 )}
@@ -1884,16 +1884,16 @@ export default function StockPusatPage() {
 
                                 <LockKeyhole
                                   size={9}
-                                  className="text-gray-400"
+                                  className="text-gray-400 dark:text-slate-500"
                                 />
 
-                                <span className="text-[12px] font-bold text-[#18352D]">
+                                <span className="text-[12px] font-bold text-[#18352D] dark:text-[#E8F3EE]">
                                   {formatNumber(
                                     transactionStock
                                   )}
                                 </span>
 
-                                <span className="text-[8px] font-bold text-[#497F70]">
+                                <span className="text-[8px] font-bold text-[#497F70] dark:text-[#72B7A0]">
                                   {transactionUnit}
                                 </span>
 
@@ -1909,11 +1909,11 @@ export default function StockPusatPage() {
 
                             <div className="inline-flex flex-col items-end">
 
-                              <span className="rounded-md border border-[#DCEBE4] bg-[#EAF3EF] px-2 py-1 text-[8px] font-bold text-[#497F70]">
+                              <span className="rounded-md border border-[#DCEBE4] dark:border-[#29483E] bg-[#EAF3EF] dark:bg-[#16352B] px-2 py-1 text-[8px] font-bold text-[#497F70] dark:text-[#72B7A0]">
                                 1 {transactionUnit}
                               </span>
 
-                              <span className="mt-0.5 whitespace-nowrap text-[8px] font-semibold text-gray-400">
+                              <span className="mt-0.5 whitespace-nowrap text-[8px] font-semibold text-gray-400 dark:text-slate-500">
                                 = {formatNumber(conversion)}{" "}
                                 {baseUnit}
                               </span>
@@ -1926,13 +1926,13 @@ export default function StockPusatPage() {
 
                           <td className="px-2.5 py-2.5 text-right">
 
-                            <div className="inline-flex min-w-[92px] flex-col items-end rounded-lg border border-[#DCEBE4] bg-[#F4F9F6] px-2 py-1.5">
+                            <div className="inline-flex min-w-[92px] flex-col items-end rounded-lg border border-[#DCEBE4] dark:border-[#29483E] bg-[#F4F9F6] dark:bg-[#12231E] px-2 py-1.5">
 
                               <span className="text-[12px] font-bold text-[#285346]">
                                 {formatNumber(baseStock)}
                               </span>
 
-                              <span className="text-[8px] font-bold uppercase tracking-wide text-[#497F70]">
+                              <span className="text-[8px] font-bold uppercase tracking-wide text-[#497F70] dark:text-[#72B7A0]">
                                 {baseUnit}
                               </span>
 
@@ -1945,13 +1945,13 @@ export default function StockPusatPage() {
                           <td className="px-2.5 py-2.5 text-right">
 
                             {latestPrice !== null ? (
-                              <div className="inline-flex min-w-[118px] flex-col items-end rounded-lg border border-[#DCEBE4] bg-[#F8FBF9] px-2 py-1.5">
+                              <div className="inline-flex min-w-[118px] flex-col items-end rounded-lg border border-[#DCEBE4] dark:border-[#29483E] bg-[#F8FBF9] dark:bg-[#0F1D18] px-2 py-1.5">
 
                                 <div className="flex items-center gap-1">
 
                                   <DollarSign
                                     size={9}
-                                    className="text-[#497F70]"
+                                    className="text-[#497F70] dark:text-[#72B7A0]"
                                   />
 
                                   <span className="text-[10px] font-bold text-[#285346]">
@@ -1962,19 +1962,19 @@ export default function StockPusatPage() {
 
                                 </div>
 
-                                <span className="mt-0.5 text-[7px] font-medium text-gray-400">
+                                <span className="mt-0.5 text-[7px] font-medium text-gray-400 dark:text-slate-500">
                                   per {transactionUnit}
                                 </span>
 
                               </div>
                             ) : (
-                              <div className="inline-flex min-w-[118px] flex-col items-end rounded-lg border border-dashed border-[#DDE9E4] bg-[#FAFCFB] px-2 py-1.5">
+                              <div className="inline-flex min-w-[118px] flex-col items-end rounded-lg border border-dashed border-[#DDE9E4] dark:border-[#263F37] bg-[#FAFCFB] dark:bg-[#101C18] px-2 py-1.5">
 
-                                <span className="text-[10px] font-bold text-gray-400">
+                                <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500">
                                   -
                                 </span>
 
-                                <span className="mt-0.5 text-[7px] text-gray-400">
+                                <span className="mt-0.5 text-[7px] text-gray-400 dark:text-slate-500">
                                   Harga belum tersedia
                                 </span>
 
@@ -1994,33 +1994,33 @@ export default function StockPusatPage() {
 
                                   <Calculator
                                     size={9}
-                                    className="text-[#497F70]"
+                                    className="text-[#497F70] dark:text-[#72B7A0]"
                                   />
 
-                                  <span className="text-[8px] font-bold uppercase tracking-[0.08em] text-[#497F70]">
+                                  <span className="text-[8px] font-bold uppercase tracking-[0.08em] text-[#497F70] dark:text-[#72B7A0]">
                                     Nilai Stock
                                   </span>
 
                                 </div>
 
-                                <span className="mt-0.5 text-[11px] font-bold tracking-[-0.02em] text-[#18352D]">
+                                <span className="mt-0.5 text-[11px] font-bold tracking-[-0.02em] text-[#18352D] dark:text-[#E8F3EE]">
                                   {formatCurrency(stockValue)}
                                 </span>
 
-                                <span className="mt-0.5 whitespace-nowrap text-[7px] text-gray-400">
+                                <span className="mt-0.5 whitespace-nowrap text-[7px] text-gray-400 dark:text-slate-500">
                                   {formatNumber(transactionStock)} ×{" "}
                                   {formatCurrency(latestPrice)}
                                 </span>
 
                               </div>
                             ) : (
-                              <div className="inline-flex min-w-[135px] flex-col items-end rounded-lg border border-dashed border-[#DDE9E4] bg-[#FAFCFB] px-2 py-1.5">
+                              <div className="inline-flex min-w-[135px] flex-col items-end rounded-lg border border-dashed border-[#DDE9E4] dark:border-[#263F37] bg-[#FAFCFB] dark:bg-[#101C18] px-2 py-1.5">
 
-                                <span className="text-[10px] font-bold text-gray-400">
+                                <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500">
                                   -
                                 </span>
 
-                                <span className="mt-0.5 text-[7px] text-gray-400">
+                                <span className="mt-0.5 text-[7px] text-gray-400 dark:text-slate-500">
                                   Tidak dapat dihitung
                                 </span>
 
@@ -2038,7 +2038,7 @@ export default function StockPusatPage() {
 
                                 <div className="flex items-center gap-1.5">
 
-                                  <div className="flex h-5 w-5 items-center justify-center rounded-md bg-purple-50">
+                                  <div className="flex h-5 w-5 items-center justify-center rounded-md bg-purple-50 dark:bg-purple-950/25">
                                     <CalendarDays
                                       size={10}
                                       className="text-purple-500"
@@ -2053,13 +2053,13 @@ export default function StockPusatPage() {
 
                                 </div>
 
-                                <div className="mt-0.5 truncate font-mono text-[7px] text-gray-400">
+                                <div className="mt-0.5 truncate font-mono text-[7px] text-gray-400 dark:text-slate-500">
                                   {lastOpname.code}
                                 </div>
 
                               </div>
                             ) : (
-                              <span className="inline-flex whitespace-nowrap rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[8px] font-medium text-gray-400">
+                              <span className="inline-flex whitespace-nowrap rounded-md border border-gray-200 dark:border-[#293D36] bg-gray-50 dark:bg-[#111B18] px-2 py-1 text-[8px] font-medium text-gray-400 dark:text-slate-500">
                                 Belum ada SO
                               </span>
                             )}
@@ -2073,7 +2073,7 @@ export default function StockPusatPage() {
                             {lastOpname ? (
                               <div className="inline-flex flex-col items-end">
 
-                                <span className="text-[10px] font-bold text-[#18352D]">
+                                <span className="text-[10px] font-bold text-[#18352D] dark:text-[#E8F3EE]">
                                   {formatNumber(
                                     Number(
                                       lastOpname.physicalQty
@@ -2081,13 +2081,13 @@ export default function StockPusatPage() {
                                   )}
                                 </span>
 
-                                <span className="text-[7px] text-gray-400">
+                                <span className="text-[7px] text-gray-400 dark:text-slate-500">
                                   {transactionUnit}
                                 </span>
 
                               </div>
                             ) : (
-                              <span className="text-gray-300">
+                              <span className="text-gray-300 dark:text-slate-600">
                                 -
                               </span>
                             )}
@@ -2099,11 +2099,11 @@ export default function StockPusatPage() {
                           <td className="px-2.5 py-2.5 text-right">
 
                             {!lastOpname ? (
-                              <span className="text-gray-300">
+                              <span className="text-gray-300 dark:text-slate-600">
                                 -
                               </span>
                             ) : difference > 0 ? (
-                              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-emerald-100 bg-emerald-50 px-2 py-1 font-bold text-[8px] text-emerald-700">
+                              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-emerald-100 bg-emerald-50 dark:bg-emerald-950/25 px-2 py-1 font-bold text-[8px] text-emerald-700 dark:text-emerald-300">
 
                                 <ArrowUp size={9} />
 
@@ -2112,7 +2112,7 @@ export default function StockPusatPage() {
 
                               </span>
                             ) : difference < 0 ? (
-                              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-red-100 bg-red-50 px-2 py-1 font-bold text-[8px] text-red-700">
+                              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-red-100 bg-red-50 dark:bg-red-950/30 px-2 py-1 font-bold text-[8px] text-red-700 dark:text-red-300">
 
                                 <ArrowDown size={9} />
 
@@ -2121,7 +2121,7 @@ export default function StockPusatPage() {
 
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-gray-200 bg-gray-50 px-2 py-1 font-semibold text-[8px] text-gray-500">
+                              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-gray-200 dark:border-[#293D36] bg-gray-50 dark:bg-[#111B18] px-2 py-1 font-semibold text-[8px] text-gray-500 dark:text-slate-400">
 
                                 <Minus size={9} />
 
@@ -2143,7 +2143,7 @@ export default function StockPusatPage() {
                                 {opnameStatus.text}
                               </span>
                             ) : (
-                              <span className="text-[9px] text-gray-300">
+                              <span className="text-[9px] text-gray-300 dark:text-slate-600">
                                 -
                               </span>
                             )}
@@ -2156,13 +2156,13 @@ export default function StockPusatPage() {
 
                             <div className="inline-flex flex-col items-end">
 
-                              <span className="text-[10px] font-semibold text-gray-600">
+                              <span className="text-[10px] font-semibold text-gray-600 dark:text-slate-300">
                                 {formatNumber(
                                   minimumStock
                                 )}
                               </span>
 
-                              <span className="text-[7px] text-gray-400">
+                              <span className="text-[7px] text-gray-400 dark:text-slate-500">
                                 {transactionUnit}
                               </span>
 
@@ -2195,10 +2195,10 @@ export default function StockPusatPage() {
                               onClick={() =>
                                 openHistory(item)
                               }
-                              className="group/history flex min-w-[170px] items-center gap-2 rounded-lg border border-[#CFE1D9] bg-white px-2.5 py-2 text-left shadow-[0_2px_8px_rgba(30,70,58,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#AFCDBF] hover:bg-[#F8FCFA] hover:shadow-[0_6px_15px_rgba(30,70,58,0.07)]"
+                              className="group/history flex min-w-[170px] items-center gap-2 rounded-lg border border-[#CFE1D9] bg-white dark:bg-[#0D1714] px-2.5 py-2 text-left shadow-[0_2px_8px_rgba(30,70,58,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#AFCDBF] hover:bg-[#F8FCFA] hover:shadow-[0_6px_15px_rgba(30,70,58,0.07)]"
                             >
 
-                              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#EAF3EF] text-[#497F70] transition-colors group-hover/history:bg-[#DDEEE7]">
+                              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#EAF3EF] dark:bg-[#16352B] text-[#497F70] dark:text-[#72B7A0] transition-colors group-hover/history:bg-[#DDEEE7]">
 
                                 <History size={13} />
 
@@ -2208,13 +2208,13 @@ export default function StockPusatPage() {
 
                                 <div className="flex items-center gap-1">
 
-                                  <span className="text-[8px] font-bold uppercase tracking-[0.08em] text-gray-400">
+                                  <span className="text-[8px] font-bold uppercase tracking-[0.08em] text-gray-400 dark:text-slate-500">
                                     History
                                   </span>
 
                                   <ChevronRight
                                     size={8}
-                                    className="text-gray-300 transition-transform group-hover/history:translate-x-0.5"
+                                    className="text-gray-300 dark:text-slate-600 transition-transform group-hover/history:translate-x-0.5"
                                   />
 
                                 </div>
@@ -2223,7 +2223,7 @@ export default function StockPusatPage() {
 
                                   <FileText
                                     size={9}
-                                    className="shrink-0 text-[#497F70]"
+                                    className="shrink-0 text-[#497F70] dark:text-[#72B7A0]"
                                   />
 
                                   <span className="truncate font-mono text-[8px] font-bold text-[#35564C]">
@@ -2266,19 +2266,19 @@ export default function StockPusatPage() {
 
           {!loading &&
             filteredData.length > 0 && (
-              <div className="flex flex-col gap-3 border-t border-[#E5ECE9] bg-[#FAFCFB] px-4 py-3 text-[9px] text-gray-400 md:px-5">
+              <div className="flex flex-col gap-3 border-t border-[#E5ECE9] dark:border-[#263A34] bg-[#FAFCFB] dark:bg-[#101C18] px-4 py-3 text-[9px] text-gray-400 dark:text-slate-500 md:px-5">
 
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
 
                   <span>
                     Menampilkan{" "}
-                    <strong className="text-gray-600">
+                    <strong className="text-gray-600 dark:text-slate-300">
                       {formatNumber(
                         filteredData.length
                       )}
                     </strong>{" "}
                     dari{" "}
-                    <strong className="text-gray-600">
+                    <strong className="text-gray-600 dark:text-slate-300">
                       {formatNumber(
                         data.length
                       )}
@@ -2288,12 +2288,12 @@ export default function StockPusatPage() {
 
                   <div className="flex flex-wrap items-center gap-1.5">
 
-                    <span className="inline-flex items-center gap-1 border border-[#DDE9E4] bg-white px-2 py-1 rounded-md">
+                    <span className="inline-flex items-center gap-1 border border-[#DDE9E4] dark:border-[#263F37] bg-white dark:bg-[#0D1714] px-2 py-1 rounded-md">
                       <LockKeyhole size={9} />
                       Stock terkunci
                     </span>
 
-                    <span className="inline-flex items-center gap-1 border border-[#DDE9E4] bg-[#F4F9F6] px-2 py-1 rounded-md text-[#497F70]">
+                    <span className="inline-flex items-center gap-1 border border-[#DDE9E4] dark:border-[#263F37] bg-[#F4F9F6] dark:bg-[#12231E] px-2 py-1 rounded-md text-[#497F70] dark:text-[#72B7A0]">
                       <DollarSign size={9} />
                       Nilai:{" "}
                       <strong>
@@ -2303,9 +2303,9 @@ export default function StockPusatPage() {
                       </strong>
                     </span>
 
-                    <span className="inline-flex items-center gap-1 border border-[#DDE9E4] bg-white px-2 py-1 rounded-md">
+                    <span className="inline-flex items-center gap-1 border border-[#DDE9E4] dark:border-[#263F37] bg-white dark:bg-[#0D1714] px-2 py-1 rounded-md">
                       Harga tersedia:{" "}
-                      <strong className="text-gray-600">
+                      <strong className="text-gray-600 dark:text-slate-300">
                         {formatNumber(
                           totalPricedItems
                         )}
@@ -2340,7 +2340,7 @@ export default function StockPusatPage() {
           }}
         >
 
-          <div className="flex max-h-[95vh] w-full max-w-[1450px] flex-col overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_40px_120px_rgba(6,27,21,0.35)]">
+          <div className="flex max-h-[95vh] w-full max-w-[1450px] flex-col overflow-hidden rounded-[28px] border border-white/70 bg-white dark:bg-[#0D1714] shadow-[0_40px_120px_rgba(6,27,21,0.35)]">
 
             {/* MODAL HEADER */}
 
@@ -2354,11 +2354,11 @@ export default function StockPusatPage() {
 
                 <div className="flex min-w-0 items-start gap-4">
 
-                  <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[#CFE1D9] bg-[#EAF3EF] text-[#497F70] shadow-sm">
+                  <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[#CFE1D9] bg-[#EAF3EF] dark:bg-[#16352B] text-[#497F70] dark:text-[#72B7A0] shadow-sm">
 
                     <History size={23} />
 
-                    <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-emerald-500">
+                    <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-emerald-50 dark:bg-emerald-950/250">
 
                       <LockKeyhole
                         size={8}
@@ -2373,11 +2373,11 @@ export default function StockPusatPage() {
 
                     <div className="flex flex-wrap items-center gap-2">
 
-                      <h2 className="text-xl font-bold tracking-[-0.025em] text-[#18352D]">
+                      <h2 className="text-xl font-bold tracking-[-0.025em] text-[#18352D] dark:text-[#E8F3EE]">
                         History Stock
                       </h2>
 
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#CFE1D9] bg-white px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-[#497F70] shadow-sm">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#CFE1D9] bg-white dark:bg-[#0D1714] px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-[#497F70] dark:text-[#72B7A0] shadow-sm">
 
                         <LockKeyhole size={10} />
 
@@ -2387,13 +2387,13 @@ export default function StockPusatPage() {
 
                     </div>
 
-                    <p className="mt-1 truncate text-sm font-semibold text-gray-500">
+                    <p className="mt-1 truncate text-sm font-semibold text-gray-500 dark:text-slate-400">
                       {selectedHistory.barang?.name || "-"}
                     </p>
 
                     <div className="mt-3 flex flex-wrap gap-1.5">
 
-                      <span className="inline-flex items-center gap-1 rounded-lg bg-[#EAF3EF] px-2.5 py-1 text-[9px] font-bold text-[#497F70]">
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-[#EAF3EF] dark:bg-[#16352B] px-2.5 py-1 text-[9px] font-bold text-[#497F70] dark:text-[#72B7A0]">
 
                         <Package size={10} />
 
@@ -2401,7 +2401,7 @@ export default function StockPusatPage() {
 
                       </span>
 
-                      <span className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1 text-[9px] font-medium text-gray-500">
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-gray-100 dark:bg-[#17231F] px-2.5 py-1 text-[9px] font-medium text-gray-500 dark:text-slate-400">
 
                         Satuan:{" "}
                         {selectedHistory.barang?.unit || "-"}
@@ -2409,7 +2409,7 @@ export default function StockPusatPage() {
                       </span>
 
                       {selectedHistory.barang?.baseUnit && (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-[#EEF7F3] px-2.5 py-1 text-[9px] font-bold text-[#497F70]">
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-[#EEF7F3] px-2.5 py-1 text-[9px] font-bold text-[#497F70] dark:text-[#72B7A0]">
 
                           Dasar:{" "}
                           {selectedHistory.barang.baseUnit}
@@ -2421,7 +2421,7 @@ export default function StockPusatPage() {
                         Number(
                           selectedHistory.barang.conversion
                         ) > 0 && (
-                          <span className="rounded-lg bg-[#F2F7F4] px-2.5 py-1 text-[9px] font-bold text-[#497F70]">
+                          <span className="rounded-lg bg-[#F2F7F4] px-2.5 py-1 text-[9px] font-bold text-[#497F70] dark:text-[#72B7A0]">
 
                             1{" "}
                             {selectedHistory.barang.unit}{" "}
@@ -2449,7 +2449,7 @@ export default function StockPusatPage() {
 
                       </span>
 
-                      <span className="rounded-lg bg-[#EAF3EF] px-2.5 py-1 text-[9px] font-bold text-[#497F70]">
+                      <span className="rounded-lg bg-[#EAF3EF] dark:bg-[#16352B] px-2.5 py-1 text-[9px] font-bold text-[#497F70] dark:text-[#72B7A0]">
                         Gudang Pusat
                       </span>
 
@@ -2457,7 +2457,7 @@ export default function StockPusatPage() {
                         selectedHistory
                       ) !== null && (
                         <>
-                          <span className="inline-flex items-center gap-1 rounded-lg bg-[#EEF7F3] px-2.5 py-1 text-[9px] font-bold text-[#497F70]">
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-[#EEF7F3] px-2.5 py-1 text-[9px] font-bold text-[#497F70] dark:text-[#72B7A0]">
 
                             <DollarSign size={10} />
 
@@ -2470,7 +2470,7 @@ export default function StockPusatPage() {
 
                           </span>
 
-                          <span className="inline-flex items-center gap-1 rounded-lg bg-[#EAF3EF] px-2.5 py-1 text-[9px] font-bold text-[#285346]">
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-[#EAF3EF] dark:bg-[#16352B] px-2.5 py-1 text-[9px] font-bold text-[#285346]">
 
                             <Calculator size={10} />
 
@@ -2494,7 +2494,7 @@ export default function StockPusatPage() {
                 <button
                   type="button"
                   onClick={closeHistory}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-transparent text-gray-400 transition-all hover:border-gray-200 hover:bg-white hover:text-gray-600 hover:shadow-sm"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-transparent text-gray-400 dark:text-slate-500 transition-all hover:border-gray-200 dark:border-[#293D36] hover:bg-white dark:hover:bg-[#183029] dark:bg-[#0D1714] hover:text-gray-600 dark:text-slate-300 hover:shadow-sm"
                 >
                   <X size={18} />
                 </button>
@@ -2505,7 +2505,7 @@ export default function StockPusatPage() {
 
             {/* SUMMARY */}
 
-            <div className="grid grid-cols-2 gap-3 border-b border-[#E5ECE9] bg-[#FAFCFB] p-4 md:grid-cols-4 md:p-5">
+            <div className="grid grid-cols-2 gap-3 border-b border-[#E5ECE9] dark:border-[#263A34] bg-[#FAFCFB] dark:bg-[#101C18] p-4 md:grid-cols-4 md:p-5">
 
               {[
                 {
@@ -2516,9 +2516,9 @@ export default function StockPusatPage() {
                     "Total aktivitas",
                   icon: History,
                   className:
-                    "bg-[#EAF3EF] text-[#497F70]",
+                    "bg-[#EAF3EF] dark:bg-[#16352B] text-[#497F70] dark:text-[#72B7A0]",
                   valueClass:
-                    "text-[#18352D]",
+                    "text-[#18352D] dark:text-[#E8F3EE]",
                 },
                 {
                   label: "Masuk",
@@ -2529,9 +2529,9 @@ export default function StockPusatPage() {
                     "Stock masuk",
                   icon: ArrowDownCircle,
                   className:
-                    "bg-emerald-50 text-emerald-600",
+                    "bg-emerald-50 dark:bg-emerald-950/25 text-emerald-600 dark:text-emerald-300",
                   valueClass:
-                    "text-emerald-700",
+                    "text-emerald-700 dark:text-emerald-300",
                 },
                 {
                   label: "Keluar",
@@ -2542,9 +2542,9 @@ export default function StockPusatPage() {
                     "Stock keluar",
                   icon: ArrowUpCircle,
                   className:
-                    "bg-red-50 text-red-600",
+                    "bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-300",
                   valueClass:
-                    "text-red-700",
+                    "text-red-700 dark:text-red-300",
                 },
                 {
                   label: "Informasi",
@@ -2554,9 +2554,9 @@ export default function StockPusatPage() {
                     "Aktivitas informasi",
                   icon: Info,
                   className:
-                    "bg-[#F0F6F3] text-[#497F70]",
+                    "bg-[#F0F6F3] dark:bg-[#142A23] text-[#497F70] dark:text-[#72B7A0]",
                   valueClass:
-                    "text-[#497F70]",
+                    "text-[#497F70] dark:text-[#72B7A0]",
                 },
               ].map((card) => {
                 const Icon = card.icon;
@@ -2564,7 +2564,7 @@ export default function StockPusatPage() {
                 return (
                   <div
                     key={card.label}
-                    className="group rounded-2xl border border-[#DDE9E4] bg-white p-4 shadow-[0_3px_15px_rgba(30,70,58,0.03)] transition hover:shadow-md"
+                    className="group rounded-2xl border border-[#DDE9E4] dark:border-[#263F37] bg-white dark:bg-[#0D1714] p-4 shadow-[0_3px_15px_rgba(30,70,58,0.03)] transition hover:shadow-md"
                   >
 
                     <div className="flex items-center justify-between">
@@ -2575,7 +2575,7 @@ export default function StockPusatPage() {
                         <Icon size={14} />
                       </div>
 
-                      <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                      <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-slate-500">
                         {card.label}
                       </span>
 
@@ -2588,7 +2588,7 @@ export default function StockPusatPage() {
                       {formatNumber(card.value)}
                     </p>
 
-                    <p className="mt-0.5 text-[9px] text-gray-400">
+                    <p className="mt-0.5 text-[9px] text-gray-400 dark:text-slate-500">
                       {card.description}
                     </p>
 
@@ -2600,23 +2600,23 @@ export default function StockPusatPage() {
 
             {/* PRICE SUMMARY */}
 
-            <div className="grid grid-cols-1 gap-3 border-b border-[#E5ECE9] bg-[#F8FBF9] p-4 md:grid-cols-3 md:p-5">
+            <div className="grid grid-cols-1 gap-3 border-b border-[#E5ECE9] dark:border-[#263A34] bg-[#F8FBF9] dark:bg-[#0F1D18] p-4 md:grid-cols-3 md:p-5">
 
-              <div className="rounded-2xl border border-[#DDE9E4] bg-white p-4 shadow-sm">
+              <div className="rounded-2xl border border-[#DDE9E4] dark:border-[#263F37] bg-white dark:bg-[#0D1714] p-4 shadow-sm">
 
                 <div className="flex items-center gap-2">
 
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EAF3EF] dark:bg-[#16352B] text-[#497F70] dark:text-[#72B7A0]">
                     <DollarSign size={14} />
                   </div>
 
-                  <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-slate-500">
                     Harga Terbaru
                   </span>
 
                 </div>
 
-                <p className="mt-3 text-lg font-bold text-[#18352D]">
+                <p className="mt-3 text-lg font-bold text-[#18352D] dark:text-[#E8F3EE]">
                   {formatCurrency(
                     getLatestPrice(
                       selectedHistory
@@ -2624,28 +2624,28 @@ export default function StockPusatPage() {
                   )}
                 </p>
 
-                <p className="mt-0.5 text-[9px] text-gray-400">
+                <p className="mt-0.5 text-[9px] text-gray-400 dark:text-slate-500">
                   Per{" "}
                   {selectedHistory.barang?.unit || "-"}
                 </p>
 
               </div>
 
-              <div className="rounded-2xl border border-[#DDE9E4] bg-white p-4 shadow-sm">
+              <div className="rounded-2xl border border-[#DDE9E4] dark:border-[#263F37] bg-white dark:bg-[#0D1714] p-4 shadow-sm">
 
                 <div className="flex items-center gap-2">
 
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EEF7F3] text-[#497F70]">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EEF7F3] text-[#497F70] dark:text-[#72B7A0]">
                     <Boxes size={14} />
                   </div>
 
-                  <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-slate-500">
                     Stock Saat Ini
                   </span>
 
                 </div>
 
-                <p className="mt-3 text-lg font-bold text-[#18352D]">
+                <p className="mt-3 text-lg font-bold text-[#18352D] dark:text-[#E8F3EE]">
                   {formatNumber(
                     getTransactionStock(
                       selectedHistory
@@ -2653,7 +2653,7 @@ export default function StockPusatPage() {
                   )}
                 </p>
 
-                <p className="mt-0.5 text-[9px] text-gray-400">
+                <p className="mt-0.5 text-[9px] text-gray-400 dark:text-slate-500">
                   {selectedHistory.barang?.unit || "-"}
                 </p>
 
@@ -2663,17 +2663,17 @@ export default function StockPusatPage() {
 
                 <div className="flex items-center gap-2">
 
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#DDEEE7] text-[#497F70]">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#DDEEE7] text-[#497F70] dark:text-[#72B7A0]">
                     <Calculator size={14} />
                   </div>
 
-                  <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#497F70]">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#497F70] dark:text-[#72B7A0]">
                     Total Nilai Stock
                   </span>
 
                 </div>
 
-                <p className="mt-3 text-lg font-bold text-[#18352D]">
+                <p className="mt-3 text-lg font-bold text-[#18352D] dark:text-[#E8F3EE]">
                   {formatCurrency(
                     getStockValue(
                       selectedHistory
@@ -2681,7 +2681,7 @@ export default function StockPusatPage() {
                   )}
                 </p>
 
-                <p className="mt-0.5 text-[9px] text-gray-400">
+                <p className="mt-0.5 text-[9px] text-gray-400 dark:text-slate-500">
                   Stock × harga terbaru
                 </p>
 
@@ -2691,32 +2691,32 @@ export default function StockPusatPage() {
 
             {/* BODY */}
 
-            <div className="min-h-0 flex-1 overflow-y-auto bg-white p-4 md:p-6">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-white dark:bg-[#0D1714] p-4 md:p-6">
 
               {historyLoading ? (
 
-                <div className="flex min-h-[380px] flex-col items-center justify-center rounded-2xl border border-[#DDE9E4] bg-[#FAFCFB]">
+                <div className="flex min-h-[380px] flex-col items-center justify-center rounded-2xl border border-[#DDE9E4] dark:border-[#263F37] bg-[#FAFCFB] dark:bg-[#101C18]">
 
                   <div className="relative flex h-16 w-16 items-center justify-center">
 
                     <div className="absolute inset-0 rounded-2xl bg-emerald-100 blur-xl" />
 
-                    <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-[#DDE9E4] bg-white shadow-sm">
+                    <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-[#DDE9E4] dark:border-[#263F37] bg-white dark:bg-[#0D1714] shadow-sm">
 
                       <RefreshCw
                         size={24}
-                        className="animate-spin text-[#497F70]"
+                        className="animate-spin text-[#497F70] dark:text-[#72B7A0]"
                       />
 
                     </div>
 
                   </div>
 
-                  <p className="mt-5 font-semibold text-gray-500">
+                  <p className="mt-5 font-semibold text-gray-500 dark:text-slate-400">
                     Memuat history transaksi...
                   </p>
 
-                  <p className="mt-1 text-[10px] text-gray-400">
+                  <p className="mt-1 text-[10px] text-gray-400 dark:text-slate-500">
                     Mengambil aktivitas stock barang.
                   </p>
 
@@ -2724,17 +2724,17 @@ export default function StockPusatPage() {
 
               ) : historyError ? (
 
-                <div className="flex min-h-[380px] flex-col items-center justify-center rounded-2xl border border-red-200 bg-red-50">
+                <div className="flex min-h-[380px] flex-col items-center justify-center rounded-2xl border border-red-200 bg-red-50 dark:bg-red-950/30">
 
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-red-400 shadow-sm">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white dark:bg-[#0D1714] text-red-400 shadow-sm">
                     <Info size={25} />
                   </div>
 
-                  <p className="mt-4 font-bold text-red-700">
+                  <p className="mt-4 font-bold text-red-700 dark:text-red-300">
                     Gagal mengambil history
                   </p>
 
-                  <p className="mt-1 max-w-md text-center text-xs leading-5 text-red-600">
+                  <p className="mt-1 max-w-md text-center text-xs leading-5 text-red-600 dark:text-red-300">
                     {historyError}
                   </p>
 
@@ -2754,17 +2754,17 @@ export default function StockPusatPage() {
 
               ) : historyData.length === 0 ? (
 
-                <div className="flex min-h-[380px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#DDE9E4] bg-[#FAFCFB]">
+                <div className="flex min-h-[380px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#DDE9E4] dark:border-[#263F37] bg-[#FAFCFB] dark:bg-[#101C18]">
 
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-300">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 dark:bg-[#17231F] text-gray-300 dark:text-slate-600">
                     <History size={27} />
                   </div>
 
-                  <p className="mt-4 font-semibold text-gray-500">
+                  <p className="mt-4 font-semibold text-gray-500 dark:text-slate-400">
                     Belum ada history transaksi
                   </p>
 
-                  <p className="mt-1 max-w-md text-center text-[10px] leading-5 text-gray-400">
+                  <p className="mt-1 max-w-md text-center text-[10px] leading-5 text-gray-400 dark:text-slate-500">
                     Barang ini belum memiliki
                     transaksi stock pusat.
                   </p>
@@ -2773,45 +2773,45 @@ export default function StockPusatPage() {
 
               ) : (
 
-                <div className="overflow-hidden rounded-[20px] border border-[#DDE9E4] shadow-sm">
+                <div className="overflow-hidden rounded-[20px] border border-[#DDE9E4] dark:border-[#263F37] shadow-sm">
 
                   <div className="overflow-x-auto">
 
                     <table className="min-w-[1450px] w-full text-sm">
 
-                      <thead className="bg-[#F7F9F8]">
+                      <thead className="bg-[#F7F9F8] dark:bg-[#101A17]">
 
-                        <tr className="border-b border-[#E5ECE9]">
+                        <tr className="border-b border-[#E5ECE9] dark:border-[#263A34]">
 
-                          <th className="px-4 py-3.5 text-left text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                          <th className="px-4 py-3.5 text-left text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-slate-500">
                             No
                           </th>
 
-                          <th className="px-4 py-3.5 text-left text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                          <th className="px-4 py-3.5 text-left text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-slate-500">
                             Waktu
                           </th>
 
-                          <th className="px-4 py-3.5 text-left text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                          <th className="px-4 py-3.5 text-left text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-slate-500">
                             Transaksi
                           </th>
 
-                          <th className="px-4 py-3.5 text-left text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                          <th className="px-4 py-3.5 text-left text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-slate-500">
                             No. Invoice / Transaksi
                           </th>
 
-                          <th className="px-4 py-3.5 text-right text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                          <th className="px-4 py-3.5 text-right text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-slate-500">
                             Masuk
                           </th>
 
-                          <th className="px-4 py-3.5 text-right text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                          <th className="px-4 py-3.5 text-right text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-slate-500">
                             Keluar
                           </th>
 
-                          <th className="px-4 py-3.5 text-center text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                          <th className="px-4 py-3.5 text-center text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-slate-500">
                             Status
                           </th>
 
-                          <th className="px-4 py-3.5 text-left text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                          <th className="px-4 py-3.5 text-left text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-slate-500">
                             Keterangan
                           </th>
 
@@ -2848,10 +2848,10 @@ export default function StockPusatPage() {
                             return (
                               <tr
                                 key={history.id}
-                                className="border-b border-[#EDF2EF] transition last:border-b-0 hover:bg-[#FBFDFC]"
+                                className="border-b border-[#EDF2EF] dark:border-[#20342E] transition last:border-b-0 hover:bg-[#FBFDFC] dark:hover:bg-[#111F1A]"
                               >
 
-                                <td className="px-4 py-4 text-xs font-medium text-gray-400">
+                                <td className="px-4 py-4 text-xs font-medium text-gray-400 dark:text-slate-500">
                                   {String(
                                     index + 1
                                   ).padStart(
@@ -2868,20 +2868,20 @@ export default function StockPusatPage() {
 
                                       <CalendarDays
                                         size={12}
-                                        className="text-[#497F70]"
+                                        className="text-[#497F70] dark:text-[#72B7A0]"
                                       />
 
                                     </div>
 
                                     <div>
 
-                                      <div className="font-semibold text-[#18352D]">
+                                      <div className="font-semibold text-[#18352D] dark:text-[#E8F3EE]">
                                         {formatDate(
                                           history.date
                                         )}
                                       </div>
 
-                                      <div className="mt-0.5 text-[9px] text-gray-400">
+                                      <div className="mt-0.5 text-[9px] text-gray-400 dark:text-slate-500">
                                         {
                                           formatDateTime(
                                             history.date
@@ -2919,7 +2919,7 @@ export default function StockPusatPage() {
 
                                     <div className="flex items-center gap-2">
 
-                                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#EAF3EF] text-[#497F70]">
+                                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#EAF3EF] dark:bg-[#16352B] text-[#497F70] dark:text-[#72B7A0]">
 
                                         <ReceiptText
                                           size={13}
@@ -2929,7 +2929,7 @@ export default function StockPusatPage() {
 
                                       <div className="min-w-0">
 
-                                        <p className="text-[8px] font-bold uppercase tracking-[0.13em] text-gray-400">
+                                        <p className="text-[8px] font-bold uppercase tracking-[0.13em] text-gray-400 dark:text-slate-500">
                                           No. Invoice / Transaksi
                                         </p>
 
@@ -2948,7 +2948,7 @@ export default function StockPusatPage() {
                                 <td className="px-4 py-4 text-right">
 
                                   {isIn ? (
-                                    <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-100 bg-emerald-50 px-2 py-1.5 text-[10px] font-bold text-emerald-700">
+                                    <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-100 bg-emerald-50 dark:bg-emerald-950/25 px-2 py-1.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
 
                                       <ArrowDownCircle size={12} />
 
@@ -2970,7 +2970,7 @@ export default function StockPusatPage() {
                                 <td className="px-4 py-4 text-right">
 
                                   {isOut ? (
-                                    <span className="inline-flex items-center gap-1 rounded-lg border border-red-100 bg-red-50 px-2 py-1.5 text-[10px] font-bold text-red-700">
+                                    <span className="inline-flex items-center gap-1 rounded-lg border border-red-100 bg-red-50 dark:bg-red-950/30 px-2 py-1.5 text-[10px] font-bold text-red-700 dark:text-red-300">
 
                                       <ArrowUpCircle size={12} />
 
@@ -3009,19 +3009,19 @@ export default function StockPusatPage() {
 
                                   <div className="max-w-[410px]">
 
-                                    <p className="text-[10px] leading-5 text-gray-600">
+                                    <p className="text-[10px] leading-5 text-gray-600 dark:text-slate-300">
                                       {history.description || "-"}
                                     </p>
 
                                     {(history.stockBefore !== null ||
                                       history.stockAfter !== null) && (
-                                      <div className="mt-2 flex items-center gap-2 text-[9px] text-gray-400">
+                                      <div className="mt-2 flex items-center gap-2 text-[9px] text-gray-400 dark:text-slate-500">
 
                                         <span className="font-medium">
                                           Stock
                                         </span>
 
-                                        <span className="rounded-md border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-semibold text-gray-500">
+                                        <span className="rounded-md border border-gray-200 dark:border-[#293D36] bg-gray-50 dark:bg-[#111B18] px-1.5 py-0.5 font-semibold text-gray-500 dark:text-slate-400">
                                           {history.stockBefore !== null
                                             ? formatNumber(
                                                 Number(
@@ -3033,7 +3033,7 @@ export default function StockPusatPage() {
 
                                         <ChevronRight size={10} />
 
-                                        <span className="rounded-md border border-[#DCEBE4] bg-[#EAF3EF] px-1.5 py-0.5 font-semibold text-[#497F70]">
+                                        <span className="rounded-md border border-[#DCEBE4] dark:border-[#29483E] bg-[#EAF3EF] dark:bg-[#16352B] px-1.5 py-0.5 font-semibold text-[#497F70] dark:text-[#72B7A0]">
                                           {history.stockAfter !== null
                                             ? formatNumber(
                                                 Number(
@@ -3069,9 +3069,9 @@ export default function StockPusatPage() {
 
             {/* FOOTER */}
 
-            <div className="flex flex-col gap-3 border-t border-[#E5ECE9] bg-[#FAFCFB] px-5 py-4 sm:flex-row sm:items-center sm:justify-between md:px-6">
+            <div className="flex flex-col gap-3 border-t border-[#E5ECE9] dark:border-[#263A34] bg-[#FAFCFB] dark:bg-[#101C18] px-5 py-4 sm:flex-row sm:items-center sm:justify-between md:px-6">
 
-              <div className="flex flex-wrap items-center gap-2 text-[10px] text-gray-400">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] text-gray-400 dark:text-slate-500">
 
                 <span className="flex items-center gap-2">
                   <LockKeyhole size={12} />

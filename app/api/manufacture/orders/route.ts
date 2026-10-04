@@ -114,6 +114,32 @@ export const dynamic = "force-dynamic";
 
 /*
  * =========================================================
+ * ROLE HELPERS
+ * =========================================================
+ */
+
+const ROLE_ADMIN = "ADMIN";
+const ROLE_MANAGER = "MANAGER";
+const ROLE_OUTLET_ADMIN = "OUTLET_ADMIN";
+const ROLE_STAFF_OUTLET = "STAFF_OUTLET";
+
+function roleOf(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase();
+}
+
+function isOutletScopedRole(role: unknown) {
+  const normalizedRole = roleOf(role);
+
+  return (
+    normalizedRole === ROLE_OUTLET_ADMIN ||
+    normalizedRole === ROLE_STAFF_OUTLET
+  );
+}
+
+/*
+ * =========================================================
  * CURRENT USER
  * =========================================================
  */
@@ -221,9 +247,10 @@ function canManufacture(
   role: string
 ) {
   return (
-    role === "ADMIN" ||
-    role === "MANAGER" ||
-    role === "OUTLET_ADMIN"
+    role === ROLE_ADMIN ||
+    role === ROLE_MANAGER ||
+    role === ROLE_OUTLET_ADMIN ||
+    role === ROLE_STAFF_OUTLET
   );
 }
 
@@ -343,9 +370,7 @@ export async function POST(
      */
 
     const role =
-      String(
-        user.role
-      ).toUpperCase();
+      roleOf(user.role);
 
     if (
       !canManufacture(role)
@@ -379,7 +404,7 @@ export async function POST(
       );
 
     /*
-     * OUTLET_ADMIN:
+     * OUTLET_ADMIN / STAFF_OUTLET:
      * hanya boleh menggunakan outlet sendiri.
      *
      * ADMIN / MANAGER:
@@ -387,12 +412,15 @@ export async function POST(
      */
 
     const outletId =
-      role === "OUTLET_ADMIN"
+      isOutletScopedRole(role)
         ? Number(
             user.outletId || 0
           )
         : requestedOutletId;
 
+    /*
+     * User outlet wajib memiliki outlet.
+     */
     if (
       !Number.isInteger(
         outletId
@@ -400,12 +428,29 @@ export async function POST(
       outletId <= 0
     ) {
       throw new Error(
-        "Outlet produksi wajib dipilih."
+        isOutletScopedRole(role)
+          ? role === ROLE_STAFF_OUTLET
+            ? "User Staff Outlet belum terhubung dengan outlet."
+            : "User Outlet Admin belum terhubung dengan outlet."
+          : "Outlet produksi wajib dipilih."
       );
     }
 
+    /*
+     * OUTLET_ADMIN / STAFF_OUTLET
+     * tidak boleh menggunakan outlet lain.
+     *
+     * Walaupun body mengirim:
+     *
+     * outletId: 99
+     *
+     * nilai yang digunakan tetap user.outletId.
+     *
+     * Jika outletId user tidak sama dengan outlet target,
+     * akses ditolak.
+     */
     if (
-      role === "OUTLET_ADMIN" &&
+      isOutletScopedRole(role) &&
       Number(
         user.outletId
       ) !== outletId
@@ -565,8 +610,10 @@ export async function POST(
           /*
            * Jika Recipe memiliki outlet,
            * harus sesuai outlet produksi.
+           *
+           * Untuk STAFF_OUTLET / OUTLET_ADMIN,
+           * outlet produksi sudah dipaksa ke user.outletId.
            */
-
           if (
             recipe.outletId &&
             recipe.outletId !==
@@ -956,6 +1003,9 @@ export async function POST(
  * OUTLET_ADMIN:
  *   hanya outlet sendiri.
  *
+ * STAFF_OUTLET:
+ *   hanya outlet sendiri.
+ *
  * Query:
  *
  * ?outletId=4
@@ -997,12 +1047,11 @@ export async function GET(
      * =======================================================
      */
 
+    const role =
+      roleOf(user.role);
+
     if (
-      !canManufacture(
-        String(
-          user.role
-        ).toUpperCase()
-      )
+      !canManufacture(role)
     ) {
       return NextResponse.json(
         {
@@ -1046,22 +1095,20 @@ export async function GET(
       | undefined;
 
     /*
-     * OUTLET_ADMIN:
+     * OUTLET_ADMIN / STAFF_OUTLET:
      * selalu menggunakan outlet sendiri.
      */
-
     if (
-      String(
-        user.role
-      ).toUpperCase() ===
-      "OUTLET_ADMIN"
+      isOutletScopedRole(role)
     ) {
       if (!user.outletId) {
         return NextResponse.json(
           {
             success: false,
             message:
-              "User Outlet Admin belum terhubung dengan outlet",
+              role === ROLE_STAFF_OUTLET
+                ? "User Staff Outlet belum terhubung dengan outlet"
+                : "User Outlet Admin belum terhubung dengan outlet",
           },
           {
             status: 403,
@@ -1091,6 +1138,54 @@ export async function GET(
           }
         );
       }
+
+      /*
+       * Jika STAFF_OUTLET / OUTLET_ADMIN
+       * mengirim outletId lain melalui query,
+       * jangan izinkan akses lintas outlet.
+       */
+      if (
+        requestedOutletId
+      ) {
+        const requested =
+          Number(
+            requestedOutletId
+          );
+
+        if (
+          !Number.isInteger(
+            requested
+          ) ||
+          requested <= 0
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "Outlet ID tidak valid",
+            },
+            {
+              status: 400,
+            }
+          );
+        }
+
+        if (
+          requested !==
+          outletId
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "Anda tidak dapat melihat Manufacture outlet lain",
+            },
+            {
+              status: 403,
+            }
+          );
+        }
+      }
     }
 
     /*
@@ -1101,7 +1196,6 @@ export async function GET(
      * Jika tidak diberikan:
      * semua outlet.
      */
-
     else if (
       requestedOutletId
     ) {
@@ -1602,10 +1696,7 @@ export async function GET(
           user.role,
 
         outletId:
-          String(
-            user.role
-          ).toUpperCase() ===
-          "OUTLET_ADMIN"
+          isOutletScopedRole(role)
             ? Number(
                 user.outletId
               )
