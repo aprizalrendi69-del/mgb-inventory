@@ -72,6 +72,7 @@ model Outlet {
   manufactureOrders ManufactureOrder[]
   stockMutations    StockMutation[]
   outletAdjustments OutletAdjustment[]
+  inventoryMonthly OutletInventoryMonthly[]
 }
 
 model OutletStockOut {
@@ -234,6 +235,7 @@ model Barang {
   stockOpnameItems      StockOpnameItem[]
   stockWastes           StockWaste[]
   outletAdjustmentItems OutletAdjustmentItem[]
+  inventoryMonthly OutletInventoryMonthly[]
 
   @@index([source])
   @@index([sourceOutletId])
@@ -547,35 +549,35 @@ model OutletBarang {
 }
 
 model OutletSale {
-  id            Int              @id @default(autoincrement())
-  number        String           @unique
-  outletId      Int
-  userId        Int?
-  customerName  String?
-  saleDate      DateTime         @default(now())
+  id           Int      @id @default(autoincrement())
+  number       String   @unique
+  outletId     Int
+  userId       Int?
+  customerName String?
+  saleDate     DateTime @default(now())
 
-  subtotal      Float            @default(0)
-  discount      Float            @default(0)
-  serviceCharge Float            @default(0)
-  ppn           Float            @default(0)
-  total         Float            @default(0)
+  subtotal      Float @default(0)
+  discount      Float @default(0)
+  serviceCharge Float @default(0)
+  ppn           Float @default(0)
+  total         Float @default(0)
 
-  paidAmount    Float            @default(0)
-  changeAmount  Float            @default(0)
+  paidAmount   Float @default(0)
+  changeAmount Float @default(0)
 
   paymentMethod String           @default("CASH")
   status        OutletSaleStatus @default(PAID)
 
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  voidedAt      DateTime?
-  voidedBy      Int?
-  voidReason    String?
-  voidedById    Int?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  voidedAt   DateTime?
+  voidedBy   Int?
+  voidReason String?
+  voidedById Int?
 
-  user          User?            @relation(fields: [userId], references: [id])
-  outlet        Outlet           @relation(fields: [outletId], references: [id])
-  items         OutletSaleItem[]
+  user   User?            @relation(fields: [userId], references: [id])
+  outlet Outlet           @relation(fields: [outletId], references: [id])
+  items  OutletSaleItem[]
 
   @@index([outletId])
   @@index([userId])
@@ -1259,6 +1261,39 @@ model OutletAdjustmentItem {
   @@index([barangId])
 }
 
+model OutletInventoryMonthly {
+  id                   Int      @id @default(autoincrement())
+  outletId             Int
+  barangId             Int
+  periodYear           Int
+  periodMonth          Int
+
+  openingStock         Float    @default(0)
+  incomingQty          Float    @default(0)
+  outgoingQty          Float    @default(0)
+  endingStock          Float    @default(0)
+
+  averageCost          Float    @default(0)
+  outgoingCost         Float    @default(0)
+  usagePercentage      Float    @default(0)
+
+  previousOutgoingCost Float    @default(0)
+  costChangePercentage Float    @default(0)
+  costStatus           String   @default("STABIL")
+
+  stockStatus          String   @default("AMAN")
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  barang Barang @relation(fields: [barangId], references: [id], onDelete: Cascade)
+
+  @@unique([outletId, barangId, periodYear, periodMonth])
+  @@index([outletId, periodYear, periodMonth])
+  @@index([barangId])
+}
+
 enum Role {
   ADMIN
   MANAGER
@@ -1307,6 +1342,7 @@ enum OutletPurchaseStatus {
   DRAFT
   APPROVED
   RECEIVED
+  CANCELLED
 }
 
 enum OutletTransferStatus {

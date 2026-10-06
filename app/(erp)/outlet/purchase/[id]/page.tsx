@@ -239,6 +239,12 @@ export default function PurchaseOutletDetailPage() {
   const [remarks, setRemarks] =
     useState("");
 
+  // Tanggal Purchase Order / Tanggal Pengiriman.
+  // Hanya dapat diubah ketika status Purchase masih DRAFT.
+  // Disimpan dalam format YYYY-MM-DD agar aman untuk input type="date".
+  const [purchaseDate, setPurchaseDate] =
+    useState("");
+
   // Metode pembayaran Purchase.
   // Hanya dapat diubah ketika Purchase masih DRAFT.
   const [paymentMethod, setPaymentMethod] =
@@ -1104,6 +1110,14 @@ export default function PurchaseOutletDetailPage() {
         data.remarks || ""
       );
 
+      setPurchaseDate(
+        toDateInputValue(
+          data.purchaseDate ??
+            data.createdAt ??
+            null
+        )
+      );
+
       setPaymentMethod(
         String(
           data.paymentMethod ||
@@ -1605,6 +1619,51 @@ export default function PurchaseOutletDetailPage() {
         year: "numeric",
       }
     );
+  }
+
+  function toDateInputValue(
+    value?: string | Date | null
+  ): string {
+    if (!value) {
+      return "";
+    }
+
+    if (typeof value === "string") {
+      // Jika API sudah mengembalikan YYYY-MM-DD,
+      // gunakan langsung agar tidak terkena pergeseran timezone.
+      const dateOnlyMatch =
+        value.match(/^\\d{4}-\\d{2}-\\d{2}/);
+
+      if (dateOnlyMatch) {
+        return dateOnlyMatch[0];
+      }
+    }
+
+    const date =
+      value instanceof Date
+        ? value
+        : new Date(value);
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return "";
+    }
+
+    const year =
+      date.getFullYear();
+
+    const month = String(
+      date.getMonth() + 1
+    ).padStart(2, "0");
+
+    const day = String(
+      date.getDate()
+    ).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
   }
 
   function getStatusStyle(
@@ -2471,6 +2530,13 @@ export default function PurchaseOutletDetailPage() {
       return;
     }
 
+    if (!purchaseDate) {
+      alert(
+        "Tanggal Purchase Order wajib diisi"
+      );
+      return;
+    }
+
     const ok =
       confirm(
         "Simpan perubahan Purchase Outlet?"
@@ -2529,6 +2595,12 @@ export default function PurchaseOutletDetailPage() {
 
                 paymentMethod:
                   paymentMethod,
+
+                // Simpan tanggal yang dipilih user.
+                // Format YYYY-MM-DD dapat diproses langsung oleh
+                // backend sebagai tanggal Purchase Order.
+                purchaseDate:
+                  purchaseDate,
 
                 remarks:
                   remarks.trim() ||
@@ -3138,11 +3210,30 @@ export default function PurchaseOutletDetailPage() {
                     Tanggal
                   </div>
 
-                  <p className="text-sm font-black text-[#18352D]">
-                    {formatPurchaseDate(
-                      purchase.purchaseDate
-                    )}
-                  </p>
+                  {isDraft ? (
+                    <>
+                      <input
+                        type="date"
+                        value={purchaseDate}
+                        onChange={(e) =>
+                          setPurchaseDate(
+                            e.target.value
+                          )
+                        }
+                        className="h-11 w-full rounded-xl border border-[#D5E5DC] bg-white px-3 text-sm font-black text-[#18352D] outline-none transition focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                      />
+
+                      <p className="mt-2 text-[10px] font-medium leading-4 text-gray-400">
+                        Tanggal masih dapat diubah selama PO berstatus Draft.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm font-black text-[#18352D]">
+                      {formatPurchaseDate(
+                        purchase.purchaseDate
+                      )}
+                    </p>
+                  )}
 
                 </div>
 

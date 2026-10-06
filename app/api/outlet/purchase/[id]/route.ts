@@ -555,25 +555,6 @@ export async function GET(
 
           supplier: true,
 
-          // =================================================
-          // PURCHASE PAYABLE
-          // =================================================
-          //
-          // Purchase TEMPO membuat payable saat RECEIVE.
-          //
-          // GET detail wajib membawa payable supaya:
-          //
-          // TEMPO
-          // -> RECEIVED
-          // -> PurchasePayable
-          // -> Payment
-          //
-          // dapat dibaca frontend secara konsisten.
-          //
-          // Tidak membuat payable baru di sini.
-          //
-          // =================================================
-
           payable: {
             select: {
               id: true,
@@ -618,24 +599,6 @@ export async function GET(
     // =================================================
     // HITUNG HARGA
     // =================================================
-    //
-    // PENTING:
-    //
-    // Harga histori sekarang SELALU dicari.
-    //
-    // Sebelumnya histori hanya dicari kalau
-    // current price kosong/0.
-    //
-    // Sekarang histori digunakan juga untuk:
-    //
-    // - deteksi harga naik
-    // - deteksi harga turun
-    // - menampilkan harga terakhir
-    // - menghitung persentase perubahan
-    //
-    // Tetapi price database TIDAK diubah.
-    //
-    // =================================================
 
     const formattedItems =
       await Promise.all(
@@ -652,20 +615,12 @@ export async function GET(
               ) &&
               currentPrice > 0;
 
-            // =========================================
-            // HARGA HISTORI
-            // =========================================
-
             const lastPurchase =
               await getLastPurchasePrice(
                 purchase.outletId,
                 item.barangId,
                 purchase.id
               );
-
-            // =========================================
-            // HARGA MASTER CENTRAL
-            // =========================================
 
             const masterPurchasePrice =
               Number(
@@ -679,10 +634,6 @@ export async function GET(
               ) &&
               masterPurchasePrice >
                 0;
-
-            // =========================================
-            // HARGA EFEKTIF
-            // =========================================
 
             let effectivePrice = 0;
 
@@ -715,20 +666,12 @@ export async function GET(
                 "CENTRAL_MASTER_PURCHASE_PRICE";
             }
 
-            // =========================================
-            // PRICE CHANGE
-            // =========================================
-
             const priceChange =
               calculatePriceChange(
                 currentPrice,
                 lastPurchase?.price ??
                   null
               );
-
-            // =========================================
-            // QTY
-            // =========================================
 
             const qty =
               Number(
@@ -741,39 +684,18 @@ export async function GET(
               ) &&
               qty >= 0;
 
-            // =========================================
-            // SUBTOTAL
-            // =========================================
-
             const effectiveSubtotal =
               validQty
                 ? qty *
                   effectivePrice
                 : 0;
 
-            // =========================================
-            // RETURN
-            // =========================================
-
             return {
               ...item,
 
-              /*
-               * Harga yang disimpan pada
-               * Purchase Outlet tetap menjadi
-               * harga utama.
-               *
-               * Kalau harga PO 0/kosong,
-               * frontend lama tetap mendapatkan
-               * harga efektif sebagai fallback.
-               */
               price:
                 effectivePrice,
 
-              /*
-               * Harga asli yang tersimpan
-               * di database.
-               */
               originalPrice:
                 Number.isFinite(
                   currentPrice
@@ -781,19 +703,10 @@ export async function GET(
                   ? currentPrice
                   : 0,
 
-              /*
-               * Harga efektif.
-               */
               effectivePrice,
 
-              /*
-               * Source harga efektif.
-               */
               priceSource,
 
-              /*
-               * Histori harga outlet.
-               */
               lastPurchasePrice:
                 lastPurchase?.price ??
                 null,
@@ -814,9 +727,6 @@ export async function GET(
                   ?.purchaseId ??
                 null,
 
-              /*
-               * Informasi perubahan harga.
-               */
               hasPriceChange:
                 priceChange.hasPriceChange,
 
@@ -829,28 +739,16 @@ export async function GET(
               priceChangeDirection:
                 priceChange.priceChangeDirection,
 
-              /*
-               * Harga master central.
-               */
               masterPurchasePrice:
                 validMasterPrice
                   ? masterPurchasePrice
                   : 0,
 
-              /*
-               * Subtotal efektif.
-               */
               effectiveSubtotal,
 
-              /*
-               * Barang tetap lengkap.
-               */
               barang: {
                 ...item.barang,
 
-                /*
-                 * Harga master central.
-                 */
                 purchasePrice:
                   validMasterPrice
                     ? masterPurchasePrice
@@ -858,26 +756,13 @@ export async function GET(
                         ?.purchasePrice ??
                       0,
 
-                /*
-                 * Alias harga efektif.
-                 */
                 hargaPembelian:
                   effectivePrice,
 
-                /*
-                 * Harga histori.
-                 */
                 lastPurchasePrice:
                   lastPurchase?.price ??
                   null,
 
-                /*
-                 * Informasi perubahan
-                 * pada object barang juga,
-                 * agar frontend yang membaca
-                 * item.barang tetap bisa
-                 * menggunakan data ini.
-                 */
                 priceChange:
                   priceChange.priceChange,
 
@@ -988,12 +873,6 @@ export async function GET(
       data: {
         ...purchase,
 
-        /*
-         * Purchase Payable TEMPO.
-         *
-         * Relation ini berasal langsung dari database.
-         * Tidak membuat atau mengubah payable.
-         */
         payable:
           purchase.payable
             ? {
@@ -1031,30 +910,16 @@ export async function GET(
               }
             : null,
 
-        /*
-         * Items diperkaya.
-         */
         items:
           formattedItems,
 
-        /*
-         * Total asli database.
-         *
-         * TIDAK DIUBAH.
-         */
         originalTotal:
           Number(
             purchase.total
           ),
 
-        /*
-         * Total efektif.
-         */
         effectiveTotal,
 
-        /*
-         * Ringkasan perubahan harga.
-         */
         priceChangeSummary: {
           changedCount,
 
@@ -1262,6 +1127,121 @@ export async function PATCH(
           success: false,
           message:
             "Body request tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =================================================
+    // PURCHASE DATE
+    // =================================================
+    //
+    // PATCH menerima tanggal Purchase Order.
+    //
+    // Frontend diharapkan mengirim:
+    //
+    // purchaseDate: "2026-10-05"
+    //
+    // Disimpan sebagai:
+    //
+    // 2026-10-05T00:00:00.000Z
+    //
+    // Dengan cara ini tanggal tidak bergeser
+    // akibat timezone ketika dibaca kembali.
+    //
+    // =================================================
+
+    const purchaseDateRaw =
+      typeof body?.purchaseDate ===
+      "string"
+        ? body.purchaseDate.trim()
+        : "";
+
+    if (!purchaseDateRaw) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Tanggal Purchase Order wajib diisi",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =================================================
+    // VALIDASI FORMAT TANGGAL
+    // =================================================
+
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(
+        purchaseDateRaw
+      )
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Format tanggal Purchase Order tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =================================================
+    // VALIDASI TANGGAL SEBENARNYA
+    // =================================================
+    //
+    // Regex saja masih menerima contoh:
+    //
+    // 2026-02-31
+    //
+    // Karena itu tanggal dibuat lalu dibandingkan
+    // kembali dengan input.
+    //
+    // =================================================
+
+    const purchaseDate =
+      new Date(
+        `${purchaseDateRaw}T00:00:00.000Z`
+      );
+
+    if (
+      Number.isNaN(
+        purchaseDate.getTime()
+      )
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Tanggal Purchase Order tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const normalizedPurchaseDate =
+      purchaseDate
+        .toISOString()
+        .slice(0, 10);
+
+    if (
+      normalizedPurchaseDate !==
+      purchaseDateRaw
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Tanggal Purchase Order tidak valid",
         },
         {
           status: 400,
@@ -1706,7 +1686,7 @@ export async function PATCH(
               `Subtotal barang ${barang.name} tidak valid`,
           },
           {
-            status: 400
+            status: 400,
           }
         );
       }
@@ -1852,6 +1832,8 @@ export async function PATCH(
                   finalOutletId,
 
                 supplierId,
+
+                purchaseDate,
 
                 remarks:
                   remarks || null,

@@ -1380,24 +1380,41 @@ export async function PATCH(
              * Fallback:
              * purchasePrice barang.
              */
-            const unitCost =
-              Number(item.price) >
-              0
-                ? Number(
-                    item.price
-                  )
-                : Number(
-                    current?.averageCost ??
-                      item.barang
-                        .purchasePrice ??
-                      0
-                  );
+            /*
+             * Harga adjustment adalah harga yang HARUS dibawa
+             * ke stock outlet ketika adjustment IN di-approve.
+             *
+             * Prioritas:
+             * 1. Harga yang disimpan pada item adjustment
+             * 2. averageCost stock outlet yang sudah ada
+             * 3. purchasePrice Master Barang
+             *
+             * Jadi harga dari frontend tidak hilang saat approval.
+             */
+            const inputPrice = Number(item.price ?? 0);
 
-            let averageCost =
-              Number(
-                current?.averageCost ??
-                  0
+            const existingAverageCost = Number(
+              current?.averageCost ?? 0
+            );
+
+            const masterPurchasePrice = Number(
+              item.barang.purchasePrice ?? 0
+            );
+
+            const unitCost =
+              inputPrice > 0
+                ? inputPrice
+                : existingAverageCost > 0
+                  ? existingAverageCost
+                  : masterPurchasePrice;
+
+            if (!Number.isFinite(unitCost) || unitCost < 0) {
+              throw new Error(
+                `Harga barang "${item.barang.name}" tidak valid`
               );
+            }
+
+            let averageCost = existingAverageCost;
 
             /*
              * ====================================================
@@ -1420,12 +1437,20 @@ export async function PATCH(
               const newValue =
                 qty * unitCost;
 
+              /*
+               * Harga baru langsung masuk ke nilai stock outlet.
+               * Jika stock sebelumnya 0, harga stock = harga adjustment.
+               * Jika stock sebelumnya masih ada, gunakan weighted average.
+               */
               averageCost =
                 stockAfter > 0
-                  ? (oldValue +
-                      newValue) /
+                  ? (oldValue + newValue) /
                     stockAfter
                   : unitCost;
+
+              averageCost = normalizeStock(
+                averageCost
+              );
             }
 
             /*
@@ -1454,6 +1479,13 @@ export async function PATCH(
              * ====================================================
              */
             if (current) {
+              /*
+               * Stock outlet menerima 2 nilai sekaligus:
+               * - stock       = saldo qty terbaru
+               * - averageCost = harga stock terbaru
+               *
+               * Keduanya berada di transaction yang sama.
+               */
               await tx.outletStock.update(
                 {
                   where: {
@@ -1461,10 +1493,11 @@ export async function PATCH(
                   },
 
                   data: {
-                    stock:
-                      stockAfter,
-
-                    averageCost,
+                    stock: stockAfter,
+                    averageCost:
+                      type === "IN"
+                        ? averageCost
+                        : existingAverageCost,
                   },
                 }
               );
@@ -1494,7 +1527,7 @@ export async function PATCH(
 
                     averageCost:
                       type === "IN"
-                        ? unitCost
+                        ? averageCost
                         : 0,
                   },
                 }

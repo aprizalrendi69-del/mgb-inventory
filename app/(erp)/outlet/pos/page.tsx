@@ -1913,595 +1913,1431 @@ export default function PosOutletPage() {
     }
 
     try {
-      const outletName = selectedOutlet?.name || selectedOutlet?.code || currentOutlet?.name || "Outlet";
-      const outletCode = selectedOutlet?.code || currentOutlet?.code || "OUTLET";
+      const outletName =
+        selectedOutlet?.name ||
+        selectedOutlet?.code ||
+        currentOutlet?.name ||
+        "Outlet";
+
+      const outletCode =
+        selectedOutlet?.code ||
+        currentOutlet?.code ||
+        "OUTLET";
+
       const safeFilePart = (value: string) =>
         String(value || "")
           .trim()
           .replace(/[^a-zA-Z0-9_-]+/g, "-")
           .replace(/^-+|-+$/g, "") || "REPORT";
 
-      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
+      const doc = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4",
+        compress: true,
+      });
+
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 9;
-      const contentWidth = pageWidth - margin * 2;
+
+      // ============================================================
+      // PREMIUM PDF SYSTEM
+      // - compact vertical rhythm
+      // - no unnecessary blank pages
+      // - every page has the same header/footer system
+      // - detailed food-cost analysis
+      // - native vector charts (no external chart dependency)
+      // ============================================================
+
+      const M = 9;
+      const CONTENT_W = pageWidth - M * 2;
+      const TOP = 29;
+      const BOTTOM = 10;
 
       const C = {
         dark: [24, 53, 45] as [number, number, number],
-        dark2: [38, 78, 66] as [number, number, number],
-        emerald: [73, 127, 112] as [number, number, number],
-        soft: [239, 246, 243] as [number, number, number],
-        soft2: [248, 251, 250] as [number, number, number],
-        line: [214, 226, 221] as [number, number, number],
+        green: [73, 127, 112] as [number, number, number],
+        green2: [35, 92, 76] as [number, number, number],
+        pale: [239, 246, 243] as [number, number, number],
+        pale2: [248, 251, 250] as [number, number, number],
+        line: [211, 225, 219] as [number, number, number],
         text: [35, 45, 50] as [number, number, number],
         muted: [100, 116, 139] as [number, number, number],
         white: [255, 255, 255] as [number, number, number],
         good: [29, 112, 80] as [number, number, number],
         warn: [161, 108, 28] as [number, number, number],
-        bad: [160, 55, 55] as [number, number, number],
+        red: [166, 57, 57] as [number, number, number],
+        gold: [176, 128, 44] as [number, number, number],
+        blue: [66, 103, 151] as [number, number, number],
       };
 
-      const fmtMoney = (value: number) => {
-        const amount = Number(value || 0);
-        return `Rp ${amount.toLocaleString("id-ID", {
-          minimumFractionDigits: Math.abs(amount % 1) > 0 ? 2 : 0,
-          maximumFractionDigits: 2,
-        })}`;
-      };
-      const fmtQty = (value: number) => Number(value || 0).toLocaleString("id-ID", { maximumFractionDigits: 4 });
-      const fmtPct = (value: number) => `${Number(value || 0).toFixed(2)}%`;
-      const fmtDateTime = (value: string | Date | null | undefined) => {
+      const fmtMoney = (value: number) =>
+        `Rp ${Math.round(Number(value || 0)).toLocaleString("id-ID")}`;
+
+      const fmtQty = (value: number) =>
+        Number(value || 0).toLocaleString("id-ID", {
+          maximumFractionDigits: 4,
+        });
+
+      const fmtPct = (value: number) =>
+        `${Number(value || 0).toFixed(2)}%`;
+
+      const fmtDateTime = (
+        value: string | Date | null | undefined
+      ) => {
         if (!value) return "-";
         const d = new Date(value);
         if (Number.isNaN(d.getTime())) return "-";
-        return d.toLocaleString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-      };
-      const dateKey = (value: string | Date | null | undefined) => {
-        if (!value) return "";
-        const d = new Date(value);
-        if (Number.isNaN(d.getTime())) return "";
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        return d.toLocaleString("id-ID", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
       };
 
-      const drawHeader = (title: string, subtitle = "") => {
-        doc.setFillColor(...C.dark);
-        doc.roundedRect(margin, 7, contentWidth, 18, 3, 3, "F");
-        doc.setTextColor(...C.white);
+      const setFill = (c: [number, number, number]) => doc.setFillColor(...c);
+      const setDraw = (c: [number, number, number]) => doc.setDrawColor(...c);
+      const setText = (c: [number, number, number]) => doc.setTextColor(...c);
+
+      const pageTitle = (
+        title: string,
+        subtitle = reportDateLabel
+      ) => {
+        setFill(C.dark);
+        doc.roundedRect(M, 6, CONTENT_W, 19, 3, 3, "F");
+
+        setText(C.white);
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(14);
-        doc.text("MGB", margin + 5, 15.5);
-        doc.setFontSize(7.5);
-        doc.text("PT. MITRA GARAM BOGATAMA", margin + 24, 13.5);
-        doc.setFont("helvetica", "normal");
+        doc.setFontSize(14.5);
+        doc.text("MGB", M + 5, 14.5);
+
         doc.setFontSize(6.2);
-        doc.setTextColor(207, 227, 220);
-        doc.text(`${outletCode} • ${outletName}`, margin + 24, 19.2);
+        doc.text(
+          `${outletCode} • ${outletName}`,
+          M + 25,
+          11.5
+        );
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(5.7);
+        setText([205, 225, 218]);
+        doc.text(
+          `Periode: ${subtitle}`,
+          M + 25,
+          17.5
+        );
+
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9.5);
-        doc.setTextColor(...C.white);
-        doc.text(title, pageWidth - margin - 5, 14.5, { align: "right" });
-        if (subtitle) {
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(6.1);
-          doc.setTextColor(207, 227, 220);
-          doc.text(subtitle, pageWidth - margin - 5, 19.7, { align: "right" });
-        }
+        setText(C.white);
+        doc.text(
+          title,
+          pageWidth - M - 5,
+          15,
+          { align: "right" }
+        );
       };
 
       const footer = () => {
         const pages = doc.getNumberOfPages();
+
         for (let page = 1; page <= pages; page += 1) {
           doc.setPage(page);
-          doc.setDrawColor(...C.line);
-          doc.line(margin, pageHeight - 7, pageWidth - margin, pageHeight - 7);
+          setDraw(C.line);
+          doc.line(M, pageHeight - 6.5, pageWidth - M, pageHeight - 6.5);
+
           doc.setFont("helvetica", "normal");
-          doc.setFontSize(6);
-          doc.setTextColor(...C.muted);
-          doc.text("MGB POS • Daily Control Report • Generated by ERP", margin, pageHeight - 3.5);
-          doc.text(`Page ${page} / ${pages}`, pageWidth - margin, pageHeight - 3.5, { align: "right" });
+          doc.setFontSize(5.5);
+          setText(C.muted);
+
+          doc.text(
+            "PT. MITRA GARAM BOGATAMA • MGB POS",
+            M,
+            pageHeight - 3.1
+          );
+
+          doc.text(
+            `Halaman ${page} / ${pages}`,
+            pageWidth - M,
+            pageHeight - 3.1,
+            { align: "right" }
+          );
         }
       };
 
-      const section = (title: string, subtitle = "", forcedY?: number) => {
-        const base = (doc as any).lastAutoTable?.finalY;
-        const y = forcedY ?? (base ? base + 4 : 31);
-        if (y > pageHeight - 27) {
-          doc.addPage();
-          drawHeader(title, subtitle);
-          return 31;
-        }
-        doc.setFillColor(...C.soft);
-        doc.roundedRect(margin, y, contentWidth, 7, 2, 2, "F");
+      const section = (
+        title: string,
+        subtitle = "",
+        y: number
+      ) => {
+        const h = subtitle ? 7.5 : 7;
+
+        setFill(C.pale);
+        setDraw(C.line);
+        doc.roundedRect(
+          M,
+          y,
+          CONTENT_W,
+          h,
+          2,
+          2,
+          "FD"
+        );
+
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(7.5);
-        doc.setTextColor(...C.dark);
-        doc.text(title.toUpperCase(), margin + 4, y + 4.8);
+        doc.setFontSize(7.2);
+        setText(C.dark);
+        doc.text(
+          title.toUpperCase(),
+          M + 3.5,
+          y + 4.8
+        );
+
         if (subtitle) {
           doc.setFont("helvetica", "normal");
-          doc.setFontSize(6);
-          doc.setTextColor(...C.muted);
-          doc.text(subtitle, pageWidth - margin - 4, y + 4.7, { align: "right" });
+          doc.setFontSize(5.4);
+          setText(C.muted);
+
+          const subtitleMaxW = CONTENT_W * 0.52;
+          const subtitleLines = doc.splitTextToSize(
+            String(subtitle),
+            subtitleMaxW
+          );
+
+          // Section bar tetap satu baris secara visual. Jika subtitle terlalu
+          // panjang, gunakan baris pertama saja agar tidak keluar margin.
+          doc.text(
+            subtitleLines[0] || "",
+            pageWidth - M - 3.5,
+            y + 4.7,
+            { align: "right" }
+          );
         }
-        return y + 9;
+
+        return y + h + 2.2;
       };
 
-      // ============================================================
-      // PDF TABLE ENGINE
-      // - Always stays inside A4 landscape printable width.
-      // - Explicit column widths are automatically scaled down when
-      //   their sum is wider than the paper.
-      // - Tables flow naturally from page to page; no horizontal spill.
-      // - Wide tables get smaller typography/padding automatically.
-      // ============================================================
       const table = (
         startY: number,
         head: string[][],
         body: (string | number)[][],
         options: Record<string, any> = {}
       ) => {
-        const baseStyles = {
-          font: "helvetica",
-          fontSize: 6.1,
-          textColor: C.text,
-          cellPadding: 1.45,
-          lineColor: C.line,
-          lineWidth: 0.22,
-          overflow: "linebreak",
-          valign: "middle",
-          cellWidth: "auto",
-        };
-        const baseHeadStyles = {
-          fillColor: C.dark,
-          textColor: C.white,
-          fontStyle: "bold",
-          fontSize: 6.1,
-          cellPadding: 1.7,
-          overflow: "linebreak",
-          valign: "middle",
-        };
-
-        const columnStyles: Record<number, any> = {
-          ...(options.columnStyles || {}),
-        };
-
-        // Only explicit numeric widths participate in scaling.
-        const explicitWidths = Object.keys(columnStyles)
-          .map((key) => Number(key))
-          .filter((key) => Number.isFinite(key))
-          .map((key) => ({ key, width: Number(columnStyles[key]?.cellWidth) }))
-          .filter((item) => Number.isFinite(item.width) && item.width > 0);
-
-        const requestedTableWidth = Number(options.tableWidth);
-        const tableWidth = Number.isFinite(requestedTableWidth) && requestedTableWidth > 0
-          ? Math.min(requestedTableWidth, contentWidth)
-          : contentWidth;
-
-        const explicitTotal = explicitWidths.reduce((sum, item) => sum + item.width, 0);
-        const widthScale = explicitTotal > tableWidth
-          ? tableWidth / explicitTotal
-          : 1;
-
-        if (widthScale < 1) {
-          for (const item of explicitWidths) {
-            columnStyles[item.key] = {
-              ...columnStyles[item.key],
-              cellWidth: Math.max(9, Number((item.width * widthScale).toFixed(2))),
-            };
-          }
-        }
-
-        const columnCount = Math.max(
+        const cols = Math.max(
           head?.[0]?.length || 0,
-          ...(body.slice(0, 20).map((row) => row.length))
+          ...body.slice(0, 20).map((row) => row.length)
         );
 
-        // Automatically tighten dense tables while keeping readable text.
-        const densityFont =
-          columnCount >= 15 ? 4.35 :
-          columnCount >= 13 ? 4.65 :
-          columnCount >= 10 ? 5.05 :
-          columnCount >= 8 ? 5.45 :
-          6.1;
-        const densityPadding =
-          columnCount >= 15 ? 0.85 :
-          columnCount >= 13 ? 0.95 :
-          columnCount >= 10 ? 1.1 :
-          1.35;
-
-        const mergedStyles = {
-          ...baseStyles,
-          fontSize: Math.min(Number(baseStyles.fontSize), densityFont),
-          cellPadding: Math.min(Number(baseStyles.cellPadding), densityPadding),
-          ...(options.styles || {}),
-        };
-        const mergedHeadStyles = {
-          ...baseHeadStyles,
-          fontSize: Math.min(Number(baseHeadStyles.fontSize), Math.max(4.25, densityFont)),
-          cellPadding: Math.min(Number(baseHeadStyles.cellPadding), Math.max(1.05, densityPadding + 0.25)),
-          ...(options.headStyles || {}),
-        };
-
-        // If a caller supplied a larger font for a very wide table, still cap it.
-        if (columnCount >= 13) {
-          mergedStyles.fontSize = Math.min(Number(mergedStyles.fontSize) || 4.65, 5.0);
-          mergedHeadStyles.fontSize = Math.min(Number(mergedHeadStyles.fontSize) || 4.65, 5.0);
-        }
-
-        const safeStartY = Math.max(31, Math.min(startY, pageHeight - 22));
+        const dense =
+          cols >= 12 ? 4.7 :
+          cols >= 10 ? 5.0 :
+          cols >= 8 ? 5.3 :
+          5.8;
 
         autoTable(doc, {
-          startY: safeStartY,
+          startY,
           head,
           body,
-          margin: { left: margin, right: margin, top: 30, bottom: 11 },
-          tableWidth,
+          margin: {
+            left: M,
+            right: M,
+            top: TOP,
+            bottom: BOTTOM,
+          },
+          tableWidth: CONTENT_W,
           theme: "grid",
-          styles: mergedStyles,
-          headStyles: mergedHeadStyles,
-          alternateRowStyles: { fillColor: C.soft2, ...(options.alternateRowStyles || {}) },
-          columnStyles,
-          pageBreak: options.pageBreak || "auto",
-          rowPageBreak: "auto",
+          styles: {
+            font: "helvetica",
+            fontSize: dense,
+            textColor: C.text,
+            cellPadding: cols >= 10 ? 0.9 : 1.15,
+            lineColor: C.line,
+            lineWidth: 0.18,
+            overflow: "linebreak",
+            cellWidth: "auto",
+            valign: "middle",
+            ...(options.styles || {}),
+          },
+          headStyles: {
+            fillColor: C.dark,
+            textColor: C.white,
+            fontStyle: "bold",
+            fontSize: dense,
+            cellPadding: cols >= 10 ? 1.15 : 1.35,
+            valign: "middle",
+            ...(options.headStyles || {}),
+          },
+          alternateRowStyles: {
+            fillColor: C.pale2,
+            ...(options.alternateRowStyles || {}),
+          },
+          // ============================================================
+          // HARD FIT: pastikan TOTAL lebar explicit columnStyles tidak
+          // pernah melebihi CONTENT_W. Beberapa tabel detail memiliki
+          // banyak kolom sehingga jika cellWidth dijumlahkan langsung
+          // akan melewati batas kertas A4 landscape.
+          //
+          // Kita scale proporsional hanya jika memang overflow. Jadi
+          // struktur/urutan/isi tabel tetap sama, tetapi seluruh kolom
+          // dipaksa masuk ke area cetak.
+          // ============================================================
+          columnStyles: (() => {
+            const source = options.columnStyles || {};
+            const entries = Object.entries(source);
+            const explicit = entries.filter(([, style]: any) =>
+              style && typeof style.cellWidth === "number" && style.cellWidth > 0
+            );
+
+            const explicitTotal = explicit.reduce(
+              (sum, [, style]: any) => sum + Number(style.cellWidth || 0),
+              0
+            );
+
+            if (explicitTotal <= CONTENT_W || explicitTotal <= 0) {
+              return source;
+            }
+
+            const scale = CONTENT_W / explicitTotal;
+            const fitted: Record<string, any> = {};
+
+            for (const [key, style] of entries as [string, any][]) {
+              if (style && typeof style.cellWidth === "number" && style.cellWidth > 0) {
+                fitted[key] = {
+                  ...style,
+                  cellWidth: Math.max(5, Number(style.cellWidth) * scale),
+                };
+              } else {
+                fitted[key] = style;
+              }
+            }
+
+            return fitted;
+          })(),
+          pageBreak: "auto",
+          rowPageBreak: "avoid",
           showHead: "everyPage",
           didDrawPage: (data: any) => {
-            if (data.pageNumber > 1) drawHeader("MGB POS • LANJUTAN", reportDateLabel);
-            if (typeof options.didDrawPage === "function") options.didDrawPage(data);
+            if (data.pageNumber > 1) {
+              pageTitle(
+                "LAPORAN POS • LANJUTAN",
+                reportDateLabel
+              );
+            }
           },
         });
 
-        return (doc as any).lastAutoTable?.finalY || safeStartY + 10;
+        return (doc as any).lastAutoTable?.finalY || startY + 8;
       };
 
-      // Starts a new page only when the current page is actually full.
-      // This prevents the large blank gaps caused by forcing every section
-      // onto a fresh page.
-      const addPage = (title: string, subtitle = reportDateLabel) => {
-        const lastY = Number((doc as any).lastAutoTable?.finalY || 0);
-        if (lastY > pageHeight - 42) {
-          doc.addPage();
-          drawHeader(title, subtitle);
-          return 31;
+      const ensureSpace = (
+        y: number,
+        required: number,
+        title: string
+      ) => {
+        if (y + required <= pageHeight - BOTTOM - 2) {
+          return y;
         }
-        return section(title, subtitle);
+
+        doc.addPage();
+        pageTitle(title, reportDateLabel);
+        return TOP + 1;
+      };
+
+      const card = (
+        x: number,
+        y: number,
+        w: number,
+        h: number,
+        label: string,
+        value: string,
+        accent: [number, number, number] = C.green
+      ) => {
+        setFill(C.pale2);
+        setDraw(C.line);
+        doc.roundedRect(x, y, w, h, 2.2, 2.2, "FD");
+
+        setFill(accent);
+        doc.roundedRect(x, y, 1.8, h, 0.9, 0.9, "F");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(5.2);
+        setText(C.muted);
+        doc.text(label.toUpperCase(), x + 4, y + 5);
+
+        doc.setFontSize(value.length > 19 ? 7.2 : 8.2);
+        setText(C.dark);
+        doc.text(value, x + 4, y + 13);
+      };
+
+      // Native vector horizontal bar chart.
+      const barChart = (
+        x: number,
+        y: number,
+        w: number,
+        h: number,
+        title: string,
+        rows: Array<{ label: string; value: number; color?: [number, number, number] }>,
+        moneyMode = true
+      ) => {
+        const safeRows = rows
+          .filter((row) => Number(row.value || 0) > 0)
+          .slice(0, 8);
+
+        setFill(C.white);
+        setDraw(C.line);
+        doc.roundedRect(x, y, w, h, 2.5, 2.5, "FD");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(6.3);
+        setText(C.dark);
+        doc.text(title.toUpperCase(), x + 4, y + 7);
+
+        if (!safeRows.length) {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(5.5);
+          setText(C.muted);
+          doc.text("Belum ada data chart.", x + 4, y + 17);
+          return;
+        }
+
+        const max = Math.max(...safeRows.map((row) => Number(row.value || 0)), 1);
+        const rowH = Math.min(12, (h - 14) / safeRows.length);
+        const labelW = Math.min(46, w * 0.34);
+        const chartW = w - labelW - 16;
+
+        safeRows.forEach((row, index) => {
+          const yy = y + 12 + index * rowH;
+          const ratio = Math.max(0, Math.min(1, Number(row.value || 0) / max));
+          const bw = chartW * ratio;
+
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(4.8);
+          setText(C.text);
+
+          const label = row.label.length > 22
+            ? `${row.label.slice(0, 21)}…`
+            : row.label;
+
+          doc.text(label, x + 4, yy + 4);
+
+          setFill(C.pale);
+          doc.roundedRect(
+            x + labelW,
+            yy,
+            chartW,
+            5.2,
+            1.5,
+            1.5,
+            "F"
+          );
+
+          setFill(row.color || C.green);
+          doc.roundedRect(
+            x + labelW,
+            yy,
+            Math.max(1.5, bw),
+            5.2,
+            1.5,
+            1.5,
+            "F"
+          );
+
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(4.6);
+          setText(C.dark);
+          doc.text(
+            moneyMode ? fmtMoney(row.value) : fmtPct(row.value),
+            x + w - 4,
+            yy + 4,
+            { align: "right" }
+          );
+        });
+      };
+
+      const metricBar = (
+        x: number,
+        y: number,
+        w: number,
+        label: string,
+        value: number,
+        max: number,
+        suffix = ""
+      ) => {
+        const ratio = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(5.1);
+        setText(C.text);
+        doc.text(label, x, y);
+
+        doc.setFont("helvetica", "bold");
+        setText(C.dark);
+        doc.text(
+          `${fmtPct(value)}${suffix}`,
+          x + w,
+          y,
+          { align: "right" }
+        );
+
+        setFill(C.pale);
+        doc.roundedRect(x, y + 2.2, w, 3.2, 1, 1, "F");
+
+        setFill(C.green);
+        doc.roundedRect(
+          x,
+          y + 2.2,
+          Math.max(1, w * ratio),
+          3.2,
+          1,
+          1,
+          "F"
+        );
       };
 
       // ============================================================
-      // EXECUTIVE SUMMARY
+      // PAGE 1 — EXECUTIVE SUMMARY
       // ============================================================
-      drawHeader("EXECUTIVE SUMMARY", reportDateLabel);
-      doc.setTextColor(...C.dark);
+      pageTitle(
+        "LAPORAN HARIAN POS",
+        reportDateLabel
+      );
+
+      let y = 31;
+
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(17);
-      doc.text("DAILY POS CONTROL REPORT", margin, 36);
+      doc.setFontSize(15);
+      setText(C.dark);
+      doc.text("EXECUTIVE SUMMARY", M, y + 1);
+
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(7.2);
-      doc.setTextColor(...C.muted);
-      doc.text("Laporan menyeluruh penjualan, pembayaran, PAX, item, paket, pemakaian bahan, HPP, staff, dan rekonsiliasi kontrol.", margin, 42);
+      doc.setFontSize(5.8);
+      setText(C.muted);
+      doc.text(
+        "Ringkasan untuk manajemen: angka utama, arus pembayaran, performa layanan, dan posisi food cost.",
+        M,
+        y + 6.5
+      );
 
-      const avgTx = reportSales.length ? reportTotal / reportSales.length : 0;
-      const cards = [
-        ["GRAND TOTAL", fmtMoney(reportTotal)],
-        ["NET SALES", fmtMoney(reportNetSales)],
-        ["TRANSAKSI", String(reportSales.length)],
-        ["PAX", String(reportPax)],
-        ["TOTAL ITEM", fmtQty(reportItems)],
-        ["HPP BAHAN", fmtMoney(reportConsumptionHpp)],
-      ];
-      const gap = 2.7;
-      const cardW = (contentWidth - gap * 5) / 6;
-      cards.forEach(([label, value], i) => {
-        const x = margin + i * (cardW + gap);
-        doc.setFillColor(...C.soft);
-        doc.setDrawColor(...C.line);
-        doc.roundedRect(x, 47, cardW, 22, 2.5, 2.5, "FD");
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(5.6);
-        doc.setTextColor(...C.muted);
-        doc.text(label, x + 3, 53.5);
-        doc.setFontSize(i < 2 ? 8.2 : 9);
-        doc.setTextColor(...C.dark);
-        doc.text(value, x + 3, 64);
+      y += 10;
+
+      const gap = 2.6;
+      const cardW = (CONTENT_W - gap * 5) / 6;
+
+      [
+        ["GRAND TOTAL", fmtMoney(reportTotal), C.green],
+        ["NET SALES", fmtMoney(reportNetSales), C.green2],
+        ["TRANSAKSI", String(reportSales.length), C.blue],
+        ["PAX", String(reportPax), C.gold],
+        ["ITEM QTY", fmtQty(reportItems), C.green],
+        ["HPP BAHAN", fmtMoney(reportConsumptionHpp), C.red],
+      ].forEach(([label, value, accent], index) => {
+        card(
+          M + index * (cardW + gap),
+          y,
+          cardW,
+          20,
+          String(label),
+          String(value),
+          accent as [number, number, number]
+        );
       });
 
-      let y = 76;
-      y = table(y, [["KOMPONEN", "NOMINAL"]], [
-        ["Gross Item Sales", fmtMoney(reportGrossItemSales)],
-        ["Discount", fmtMoney(reportDiscount)],
-        ["Net Sales", fmtMoney(reportNetSales)],
-        ["Service Charge", fmtMoney(reportService)],
-        ["PPN", fmtMoney(reportPpn)],
-        ["Grand Total", fmtMoney(reportTotal)],
-        ["Paid Amount", fmtMoney(reportPaid)],
-        ["Kembalian", fmtMoney(reportSales.reduce((s, x) => s + Number(x.changeAmount || 0), 0))],
-        ["Rata-rata / Transaksi", fmtMoney(avgTx)],
-        ["Rata-rata / PAX", fmtMoney(reportAvgPerPax)],
-      ], { columnStyles: { 0: { cellWidth: 95 }, 1: { cellWidth: 65, halign: "right" } }, tableWidth: 160 });
+      y += 24;
 
-      y = section("PEMBAYARAN", "Jumlah transaksi, nominal, dan persentase");
-      const paymentMap = new Map<string, { tx: number; amount: number; paid: number }>();
-      for (const sale of reportSales) {
-        const method = String(sale.paymentMethod || "LAINNYA").trim() || "LAINNYA";
-        const current = paymentMap.get(method) || { tx: 0, amount: 0, paid: 0 };
-        current.tx += 1;
-        current.amount += Number(sale.total || 0);
-        current.paid += Number(sale.paidAmount || 0);
-        paymentMap.set(method, current);
+      y = section(
+        "ALUR NILAI PENJUALAN",
+        "Cara sederhana membaca angka dari penjualan kotor sampai Grand Total",
+        y
+      );
+
+      y = table(
+        y,
+        [["KOMPONEN", "NOMINAL", "ARTI SEDERHANA"]],
+        [
+          ["Gross Item Sales", fmtMoney(reportGrossItemSales), "Nilai item/menu sebelum pengurang."],
+          ["Discount", fmtMoney(reportDiscount), "Potongan yang diberikan kepada customer."],
+          ["Net Sales", fmtMoney(reportNetSales), "Penjualan setelah discount."],
+          ["Service Charge 5%", fmtMoney(reportService), "Service charge berdasarkan taxable."],
+          ["PPN 10%", fmtMoney(reportPpn), "PPN sesuai perhitungan POS."],
+          ["Grand Total", fmtMoney(reportTotal), "Jumlah akhir yang harus dibayar customer."],
+        ],
+        {
+          columnStyles: {
+            0: { cellWidth: 48 },
+            1: { cellWidth: 48, halign: "right" },
+            2: { cellWidth: 100 },
+          },
+        }
+      );
+
+      y += 4;
+
+      y = ensureSpace(y, 58, "PEMBAYARAN & OPERASIONAL");
+
+      y = section(
+        "PEMBAYARAN & REKONSILIASI",
+        "Balance Rp 0 berarti pembayaran sesuai Grand Total",
+        y
+      );
+
+      const paymentSubtotal = roundMoney(
+        reportCash + reportTransfer + reportQris
+      );
+      const balance = roundMoney(
+        reportTotal - paymentSubtotal
+      );
+      const balanceStatus =
+        Math.abs(balance) < 0.01
+          ? "MATCH"
+          : balance > 0
+          ? "BELUM TERBAYAR"
+          : "LEBIH BAYAR / CEK";
+
+      y = table(
+        y,
+        [["METODE", "NOMINAL", "% DARI TOTAL"]],
+        [
+          ["Cash", fmtMoney(reportCash), fmtPct(reportTotal ? reportCash / reportTotal * 100 : 0)],
+          ["Transfer", fmtMoney(reportTransfer), fmtPct(reportTotal ? reportTransfer / reportTotal * 100 : 0)],
+          ["QRIS", fmtMoney(reportQris), fmtPct(reportTotal ? reportQris / reportTotal * 100 : 0)],
+          ["Subtotal Pembayaran", fmtMoney(paymentSubtotal), "100.00%*"],
+          ["Balance", fmtMoney(balance), balanceStatus],
+        ],
+        {
+          columnStyles: {
+            0: { cellWidth: 70 },
+            1: { cellWidth: 70, halign: "right" },
+            2: { cellWidth: 55, halign: "right" },
+          },
+        }
+      );
+
+      // ============================================================
+      // PAGE 2 — SALES & STAFF
+      // ============================================================
+      doc.addPage();
+      pageTitle(
+        "SALES • STAFF • PACKAGE",
+        reportDateLabel
+      );
+
+      y = TOP + 1;
+
+      y = section(
+        "PERFORMA TRANSAKSI",
+        "AYCE vs Regular dan rata-rata transaksi",
+        y
+      );
+
+      const ayceSales = reportSales.filter((sale) => sale.ayce);
+      const regularSales = reportSales.filter((sale) => !sale.ayce);
+
+      y = table(
+        y,
+        [["TIPE", "TRANSAKSI", "PAX", "AVG / TX", "AVG / PAX", "GRAND TOTAL"]],
+        [
+          [
+            "AYCE",
+            ayceSales.length,
+            ayceSales.reduce((n, s) => n + Number(s.pax || 0), 0),
+            fmtMoney(ayceSales.length ? ayceSales.reduce((n, s) => n + Number(s.total || 0), 0) / ayceSales.length : 0),
+            fmtMoney(ayceSales.reduce((n, s) => n + Number(s.pax || 0), 0) > 0 ? ayceSales.reduce((n, s) => n + Number(s.total || 0), 0) / ayceSales.reduce((n, s) => n + Number(s.pax || 0), 0) : 0),
+            fmtMoney(ayceSales.reduce((n, s) => n + Number(s.total || 0), 0)),
+          ],
+          [
+            "REGULAR",
+            regularSales.length,
+            regularSales.reduce((n, s) => n + Number(s.pax || 0), 0),
+            fmtMoney(regularSales.length ? regularSales.reduce((n, s) => n + Number(s.total || 0), 0) / regularSales.length : 0),
+            fmtMoney(regularSales.reduce((n, s) => n + Number(s.pax || 0), 0) > 0 ? regularSales.reduce((n, s) => n + Number(s.total || 0), 0) / regularSales.reduce((n, s) => n + Number(s.pax || 0), 0) : 0),
+            fmtMoney(regularSales.reduce((n, s) => n + Number(s.total || 0), 0)),
+          ],
+          [
+            "TOTAL",
+            reportSales.length,
+            reportPax,
+            fmtMoney(reportSales.length ? reportTotal / reportSales.length : 0),
+            fmtMoney(reportAvgPerPax),
+            fmtMoney(reportTotal),
+          ],
+        ],
+        {
+          columnStyles: {
+            0: { cellWidth: 45 },
+            1: { cellWidth: 30, halign: "center" },
+            2: { cellWidth: 30, halign: "center" },
+            3: { cellWidth: 48, halign: "right" },
+            4: { cellWidth: 48, halign: "right" },
+            5: { cellWidth: 55, halign: "right" },
+          },
+        }
+      );
+
+      y += 4;
+
+      y = section(
+        "REKAP STAFF",
+        "Staff transaksi = staff yang dicatat saat checkout, bukan sekadar akun login",
+        y
+      );
+
+      y = table(
+        y,
+        [["STAFF", "TRANSAKSI", "QTY ITEM", "OMZET", "AVG / TX"]],
+        reportStaffSummary.length
+          ? reportStaffSummary.map((staff) => [
+              staff.staff,
+              staff.transactions,
+              fmtQty(staff.items),
+              fmtMoney(staff.total),
+              fmtMoney(staff.transactions ? staff.total / staff.transactions : 0),
+            ])
+          : [["Belum ada staff tercatat", 0, "0", fmtMoney(0), fmtMoney(0)]],
+        {
+          columnStyles: {
+            0: { cellWidth: 85 },
+            1: { cellWidth: 35, halign: "center" },
+            2: { cellWidth: 40, halign: "right" },
+            3: { cellWidth: 55, halign: "right" },
+            4: { cellWidth: 55, halign: "right" },
+          },
+        }
+      );
+
+      y += 4;
+      y = ensureSpace(y, 62, "SALES • STAFF • PACKAGE");
+
+      y = section(
+        "PAKET & PRODUK YANG KELUAR",
+        "Ringkasan paket dan item yang paling banyak tercatat",
+        y
+      );
+
+      const packageRows = reportPackageSummary.length
+        ? reportPackageSummary.map((item) => [
+            item.name,
+            item.qty,
+            item.pax,
+            fmtMoney(item.value),
+            fmtPct(reportTotal ? item.value / reportTotal * 100 : 0),
+          ])
+        : [["Tidak ada paket tercatat", 0, 0, fmtMoney(0), "0.00%"]];
+
+      y = table(
+        y,
+        [["PAKET", "TX", "PAX", "NILAI PAKET", "SHARE TOTAL"]],
+        packageRows,
+        {
+          columnStyles: {
+            0: { cellWidth: 90 },
+            1: { cellWidth: 28, halign: "center" },
+            2: { cellWidth: 30, halign: "center" },
+            3: { cellWidth: 55, halign: "right" },
+            4: { cellWidth: 45, halign: "right" },
+          },
+        }
+      );
+
+      y += 4;
+
+      const topItems = reportItemSummary.slice(0, 7);
+      barChart(
+        M,
+        y,
+        CONTENT_W,
+        Math.max(50, 17 + topItems.length * 8),
+        "TOP ITEM BERDASARKAN QTY",
+        topItems.map((item) => ({
+          label: item.name,
+          value: item.qty,
+          color: C.green,
+        })),
+        false
+      );
+
+      // ============================================================
+      // PAGE 3 — FOOD COST DETAIL + CHART
+      // ============================================================
+      doc.addPage();
+      pageTitle(
+        "FOOD COST • HPP DETAIL",
+        reportDateLabel
+      );
+
+      y = TOP + 1;
+
+      y = section(
+        "FOOD COST EXECUTIVE",
+        "HPP aktual bahan dari StockCard POS_OUT dibandingkan dengan Net Sales",
+        y
+      );
+
+      const foodGap = roundMoney(
+        reportNetSales - reportConsumptionHpp
+      );
+
+      const foodCostCards = [
+        ["NET SALES", fmtMoney(reportNetSales), C.green],
+        ["HPP BAHAN", fmtMoney(reportConsumptionHpp), C.red],
+        ["FOOD COST", fmtPct(reportFoodCostRatio), C.gold],
+        ["HPP / PAX", fmtMoney(reportPax > 0 ? reportConsumptionHpp / reportPax : 0), C.blue],
+        ["HPP DAGING", fmtMoney(reportMeatHpp), C.red],
+        ["MEAT SHARE", fmtPct(reportConsumptionHpp > 0 ? reportMeatHpp / reportConsumptionHpp * 100 : 0), C.gold],
+      ];
+
+      foodCostCards.forEach(([label, value, accent], index) => {
+        card(
+          M + index * (cardW + gap),
+          y,
+          cardW,
+          20,
+          String(label),
+          String(value),
+          accent as [number, number, number]
+        );
+      });
+
+      y += 24;
+
+      // Two visual panels: total food cost and composition.
+      const chartH = 56;
+      barChart(
+        M,
+        y,
+        CONTENT_W * 0.48 - 2,
+        chartH,
+        "HPP PER KATEGORI",
+        reportCategorySummary.map((item) => ({
+          label: item.category,
+          value: item.hpp,
+          color:
+            item.category === "PORK" || item.category === "BEEF" || item.category === "CHICKEN"
+              ? C.red
+              : C.green,
+        })),
+        true
+      );
+
+      const compositionRows = reportCategorySummary
+        .filter((item) => item.hpp > 0)
+        .slice(0, 8);
+
+      const cx = M + CONTENT_W * 0.48 + 2;
+      const cw = CONTENT_W * 0.52 - 2;
+
+      setFill(C.white);
+      setDraw(C.line);
+      doc.roundedRect(cx, y, cw, chartH, 2.5, 2.5, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.3);
+      setText(C.dark);
+      doc.text("KOMPOSISI FOOD COST", cx + 4, y + 7);
+
+      const totalCatHpp = compositionRows.reduce(
+        (sum, item) => sum + Number(item.hpp || 0),
+        0
+      );
+
+      const palette = [
+        C.green,
+        C.red,
+        C.gold,
+        C.blue,
+        C.green2,
+        [110, 92, 137] as [number, number, number],
+        [95, 122, 105] as [number, number, number],
+        [130, 103, 72] as [number, number, number],
+      ];
+
+      // Donut-like vector chart.
+      const centerX = cx + 28;
+      const centerY = y + 32;
+      const radius = 17;
+      const inner = 9;
+
+      if (totalCatHpp > 0) {
+        let startAngle = -Math.PI / 2;
+
+        compositionRows.forEach((item, index) => {
+          const share = Number(item.hpp || 0) / totalCatHpp;
+          const endAngle = startAngle + share * Math.PI * 2;
+          const color = palette[index % palette.length];
+
+          // Approximate donut segment with radial polygons.
+          const points: [number, number][] = [
+            [centerX, centerY],
+          ];
+
+          const steps = Math.max(3, Math.ceil(Math.abs(endAngle - startAngle) / (Math.PI / 18)));
+
+          for (let step = 0; step <= steps; step += 1) {
+            const a = startAngle + (endAngle - startAngle) * (step / steps);
+            points.push([
+              centerX + Math.cos(a) * radius,
+              centerY + Math.sin(a) * radius,
+            ]);
+          }
+
+          setFill(color);
+          for (let p = 1; p < points.length - 1; p += 1) {
+            doc.triangle(
+              points[0][0], points[0][1],
+              points[p][0], points[p][1],
+              points[p + 1][0], points[p + 1][1],
+              "F"
+            );
+          }
+
+          startAngle = endAngle;
+        });
+
+        setFill(C.white);
+        doc.circle(centerX, centerY, inner, "F");
+      } else {
+        setFill(C.pale);
+        doc.circle(centerX, centerY, radius, "F");
       }
-      const paymentRows = Array.from(paymentMap.entries()).sort((a, b) => b[1].amount - a[1].amount).map(([method, v]) => [
-        method,
-        v.tx,
-        fmtMoney(v.amount),
-        fmtPct(reportSales.length ? (v.tx / reportSales.length) * 100 : 0),
-        fmtMoney(v.paid),
-        fmtPct(reportPaid ? (v.paid / reportPaid) * 100 : 0),
-      ]);
-      y = table(y, [["METODE", "TX", "NOMINAL TOTAL", "% TX", "PAID", "% PAID"]], paymentRows.length ? paymentRows : [["Tidak ada", 0, fmtMoney(0), "0.00%", fmtMoney(0), "0.00%"]], {
-        columnStyles: { 0: { cellWidth: 42 }, 1: { halign: "center", cellWidth: 20 }, 2: { halign: "right", cellWidth: 45 }, 3: { halign: "right", cellWidth: 25 }, 4: { halign: "right", cellWidth: 45 }, 5: { halign: "right", cellWidth: 25 } },
+
+      compositionRows.forEach((item, index) => {
+        const yy = y + 14 + index * 5.1;
+        const share = totalCatHpp > 0
+          ? item.hpp / totalCatHpp * 100
+          : 0;
+
+        setFill(palette[index % palette.length]);
+        doc.rect(cx + 52, yy - 3.1, 2.8, 2.8, "F");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(4.8);
+        setText(C.text);
+        doc.text(
+          item.category.length > 17
+            ? `${item.category.slice(0, 16)}…`
+            : item.category,
+          cx + 57,
+          yy
+        );
+
+        doc.text(
+          `${fmtMoney(item.hpp)} • ${fmtPct(share)}`,
+          cx + cw - 4,
+          yy,
+          { align: "right" }
+        );
       });
 
-      y = section("AYCE & REGULAR", "Jumlah transaksi, PAX, nilai paket, dan kontribusi penjualan");
-      const ayceRows = [
-        ["AYCE", reportAyceTransactions, reportSales.filter(s => s.ayce).reduce((n, s) => n + Number(s.pax || 0), 0), fmtMoney(reportSales.filter(s => s.ayce).reduce((n, s) => n + (Number(s.packagePrice || 0) * Math.max(1, Number(s.pax || 0))), 0)), fmtMoney(reportSales.filter(s => s.ayce).reduce((n, s) => n + Number(s.total || 0), 0))],
-        ["REGULAR", reportRegularTransactions, reportSales.filter(s => !s.ayce).reduce((n, s) => n + Number(s.pax || 0), 0), fmtMoney(reportSales.filter(s => !s.ayce).reduce((n, s) => n + Number(s.packagePrice || 0), 0)), fmtMoney(reportSales.filter(s => !s.ayce).reduce((n, s) => n + Number(s.total || 0), 0))],
+      y += chartH + 4;
+
+      y = section(
+        "FOOD COST PER KATEGORI",
+        reportCategoryComparisonAvailable
+          ? "Ratio = HPP kategori ÷ Net Sales. Trend memakai percentage point terhadap H-1."
+          : "Ratio = HPP kategori ÷ Net Sales. Tidak ada pembanding H-1 untuk periode ALL.",
+        y
+      );
+
+      y = table(
+        y,
+        [["KATEGORI", "QTY", "HPP", "SHARE HPP", "FOOD COST", "H-1", "DELTA", "TREND"]],
+        reportCategorySummary.length
+          ? reportCategorySummary.map((item) => [
+              item.category,
+              fmtQty(item.qty),
+              fmtMoney(item.hpp),
+              fmtPct(reportConsumptionHpp ? item.hpp / reportConsumptionHpp * 100 : 0),
+              fmtPct(item.ratio),
+              reportCategoryComparisonAvailable ? fmtPct(item.previousRatio) : "-",
+              reportCategoryComparisonAvailable ? `${item.deltaRatio >= 0 ? "+" : ""}${item.deltaRatio.toFixed(2)} pp` : "-",
+              reportCategoryComparisonAvailable
+                ? item.deltaRatio > 0.005
+                  ? "NAIK"
+                  : item.deltaRatio < -0.005
+                  ? "TURUN"
+                  : "STABIL"
+                : "-",
+            ])
+          : [["Tidak ada data", "0", fmtMoney(0), "0.00%", "0.00%", "-", "-", "-"]],
+        {
+          columnStyles: {
+            0: { cellWidth: 45 },
+            1: { cellWidth: 28, halign: "right" },
+            2: { cellWidth: 43, halign: "right" },
+            3: { cellWidth: 43, halign: "right" },
+            4: { cellWidth: 42, halign: "right" },
+            5: { cellWidth: 35, halign: "right" },
+            6: { cellWidth: 35, halign: "right" },
+            7: { cellWidth: 32, halign: "center" },
+          },
+        }
+      );
+
+      y += 4;
+      y = ensureSpace(y, 48, "FOOD COST • HPP DETAIL");
+
+      y = section(
+        "INTERPRETASI UNTUK ORANG AWAM",
+        "Cara membaca food cost tanpa harus memahami akuntansi restoran",
+        y
+      );
+
+      const interpretation = [
+        [
+          "Food Cost",
+          `${fmtPct(reportFoodCostRatio)} dari Net Sales`,
+          reportFoodCostRatio > 0
+            ? "Semakin tinggi angka ini, semakin besar bagian penjualan yang terserap untuk bahan."
+            : "Belum ada HPP bahan tercatat pada periode ini.",
+        ],
+        [
+          "HPP Daging",
+          fmtMoney(reportMeatHpp),
+          "Menunjukkan berapa rupiah nilai pemakaian bahan yang teridentifikasi sebagai protein/daging.",
+        ],
+        [
+          "HPP / Pax",
+          fmtMoney(reportPax > 0 ? reportConsumptionHpp / reportPax : 0),
+          "Rata-rata nilai bahan yang terpakai untuk setiap customer/pax pada periode laporan.",
+        ],
+        [
+          "Gross Profit Bahan*",
+          fmtMoney(foodGap),
+          "Net Sales dikurangi HPP bahan. Ini bukan laba bersih karena belum memperhitungkan gaji, sewa, utilitas, dan biaya lain.",
+        ],
       ];
-      y = table(y, [["TIPE", "TX", "PAX", "NILAI PAKET", "GRAND TOTAL"]], ayceRows, { columnStyles: { 0: { cellWidth: 50 }, 1: { halign: "center", cellWidth: 25 }, 2: { halign: "center", cellWidth: 25 }, 3: { halign: "right", cellWidth: 60 }, 4: { halign: "right", cellWidth: 60 } } });
+
+      y = table(
+        y,
+        [["INDIKATOR", "HASIL", "PENJELASAN SEDERHANA"]],
+        interpretation,
+        {
+          columnStyles: {
+            0: { cellWidth: 48 },
+            1: { cellWidth: 52, halign: "right" },
+            2: { cellWidth: 140 },
+          },
+        }
+      );
 
       // ============================================================
-      // AYCE SESSION / PACKAGE DETAIL
+      // PAGE 4 — FOOD COST ITEM DETAIL / STOCK CARD
       // ============================================================
-      y = addPage("AYCE & PACKAGE DETAIL");
-      y = section("DETAIL SESI AYCE", "Meja, customer, PAX, paket, durasi, mulai, dan expire", y);
-      const ayceDetailRows = reportSales.filter(s => s.ayce).map(s => [
-        s.number,
-        fmtDateTime(s.saleDate),
-        s.tableName || "-",
-        s.customerName || "-",
-        String(s.pax || 0),
-        (s.packageName || s.packageKey || "-"),
-        fmtMoney(Number(s.packagePrice || 0)),
-        `${Number(s.durationMinutes || 0)} m`,
-        fmtDateTime(s.startedAt),
-        fmtDateTime(s.expiresAt),
-      ]);
-      y = table(y, [["TRANSAKSI", "WAKTU", "MEJA", "CUSTOMER", "PAX", "PAKET", "HARGA/PAX", "DURASI", "START", "EXPIRE"]], ayceDetailRows.length ? ayceDetailRows : [["-", "-", "-", "Tidak ada AYCE", "0", "-", fmtMoney(0), "-", "-", "-"]], {
-        styles: { fontSize: 5.4, cellPadding: 1.6 },
-        columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 27 }, 2: { cellWidth: 22 }, 3: { cellWidth: 36 }, 4: { halign: "center", cellWidth: 17 }, 5: { cellWidth: 42 }, 6: { halign: "right", cellWidth: 34 }, 7: { halign: "center", cellWidth: 25 }, 8: { cellWidth: 30 }, 9: { cellWidth: 30 } },
-      });
+      doc.addPage();
+      pageTitle(
+        "FOOD COST • ITEM DETAIL",
+        reportDateLabel
+      );
 
-      y = section("PAKET", "Rekap paket yang tercatat pada transaksi", y);
-      y = table(y, [["PAKET", "TX", "PAX", "NILAI PAKET", "TOTAL SALES"]], reportPackageSummary.length ? reportPackageSummary.map(x => [x.name, x.qty, x.pax, fmtMoney(x.value), fmtMoney(reportSales.filter(s => (s.packageName || "").trim().toLowerCase() === x.name.trim().toLowerCase()).reduce((n, s) => n + Number(s.total || 0), 0))]) : [["Tidak ada paket", 0, 0, fmtMoney(0), fmtMoney(0)]], {
-        columnStyles: { 0: { cellWidth: 85 }, 1: { halign: "center", cellWidth: 25 }, 2: { halign: "center", cellWidth: 25 }, 3: { halign: "right", cellWidth: 55 }, 4: { halign: "right", cellWidth: 60 } },
-      });
+      y = TOP + 1;
+
+      y = section(
+        "DETAIL PEMAKAIAN BAHAN",
+        "Level bahan: stock awal → pemakaian → stock akhir → base unit → HPP",
+        y
+      );
+
+      const detailRows = reportStockSummary.length
+        ? reportStockSummary.map((item) => [
+            item.code,
+            item.name,
+            reportMaterialCategory(item.name, item.code),
+            item.unit,
+            fmtQty(item.startStock),
+            fmtQty(item.qty),
+            fmtQty(item.endStock),
+            item.baseUnit,
+            `${fmtQty(item.conversionRate)}x`,
+            fmtMoney(item.qty > 0 ? item.hpp / item.qty : 0),
+            fmtMoney(item.hpp),
+            fmtPct(reportConsumptionHpp ? item.hpp / reportConsumptionHpp * 100 : 0),
+          ])
+        : [[
+            "-", "Tidak ada pemakaian", "-", "-", "0", "0", "0",
+            "-", "-", fmtMoney(0), fmtMoney(0), "0.00%",
+          ]];
+
+      y = table(
+        y,
+        [[
+          "KODE",
+          "BAHAN",
+          "KATEGORI",
+          "UNIT",
+          "AWAL",
+          "PAKAI",
+          "AKHIR",
+          "BASE UNIT",
+          "KONV.",
+          "HPP/UNIT",
+          "TOTAL HPP",
+          "SHARE HPP",
+        ]],
+        detailRows,
+        {
+          styles: {
+            fontSize: 4.45,
+            cellPadding: 0.82,
+          },
+          headStyles: {
+            fontSize: 4.45,
+            cellPadding: 1.05,
+          },
+          columnStyles: {
+            0: { cellWidth: 25 },
+            1: { cellWidth: 48 },
+            2: { cellWidth: 32 },
+            3: { cellWidth: 22 },
+            4: { cellWidth: 27, halign: "right" },
+            5: { cellWidth: 27, halign: "right" },
+            6: { cellWidth: 27, halign: "right" },
+            7: { cellWidth: 30 },
+            8: { cellWidth: 24, halign: "right" },
+            9: { cellWidth: 42, halign: "right" },
+            10: { cellWidth: 46, halign: "right" },
+            11: { cellWidth: 35, halign: "right" },
+          },
+        }
+      );
+
+      y += 4;
+
+      y = ensureSpace(y, 58, "FOOD COST • ITEM DETAIL");
+
+      y = section(
+        "TOP COST DRIVER",
+        "Bahan dengan kontribusi HPP terbesar perlu menjadi fokus kontrol pembelian, waste, dan portioning",
+        y
+      );
+
+      const topCost = reportStockSummary.slice(0, 6);
+
+      y = table(
+        y,
+        [["RANK", "BAHAN", "KATEGORI", "TOTAL HPP", "SHARE", "HPP / UNIT", "PEMAKAIAN"]],
+        topCost.length
+          ? topCost.map((item, index) => [
+              index + 1,
+              item.name,
+              reportMaterialCategory(item.name, item.code),
+              fmtMoney(item.hpp),
+              fmtPct(reportConsumptionHpp ? item.hpp / reportConsumptionHpp * 100 : 0),
+              fmtMoney(item.qty > 0 ? item.hpp / item.qty : 0),
+              fmtQty(item.qty),
+            ])
+          : [["-", "Belum ada data", "-", fmtMoney(0), "0.00%", fmtMoney(0), "0"]],
+        {
+          columnStyles: {
+            0: { cellWidth: 22, halign: "center" },
+            1: { cellWidth: 72 },
+            2: { cellWidth: 45 },
+            3: { cellWidth: 52, halign: "right" },
+            4: { cellWidth: 40, halign: "right" },
+            5: { cellWidth: 50, halign: "right" },
+            6: { cellWidth: 40, halign: "right" },
+          },
+        }
+      );
+
+      y += 4;
+
+      barChart(
+        M,
+        y,
+        CONTENT_W,
+        Math.max(52, 18 + topCost.length * 7.5),
+        "TOP 6 COST DRIVER",
+        topCost.map((item) => ({
+          label: item.name,
+          value: item.hpp,
+          color: reportIsMeat(item.name, item.code) ? C.red : C.green,
+        })),
+        true
+      );
 
       // ============================================================
-      // ITEM SALES
+      // PAGE 5 — TRANSACTIONS + CONTROL + SIGN-OFF
       // ============================================================
-      y = addPage("ITEM SALES DETAIL");
-      y = section("SEMUA ITEM TERJUAL", "Nama item, qty, jumlah transaksi, qty AYCE, qty PAID, dan nilai penjualan", y);
-      y = table(y, [["ITEM", "QTY", "TX", "QTY AYCE", "QTY PAID", "NILAI PENJUALAN"]], reportItemSummary.length ? reportItemSummary.map(item => [item.name, fmtQty(item.qty), item.transactions, fmtQty(item.ayceQty), fmtQty(item.paidQty), fmtMoney(item.salesValue)]) : [["Tidak ada item", "0", "0", "0", "0", fmtMoney(0)]], {
-        columnStyles: { 0: { cellWidth: 90 }, 1: { halign: "right", cellWidth: 25 }, 2: { halign: "center", cellWidth: 25 }, 3: { halign: "right", cellWidth: 32 }, 4: { halign: "right", cellWidth: 32 }, 5: { halign: "right", cellWidth: 55 } },
-      });
+      doc.addPage();
+      pageTitle(
+        "DETAIL TRANSAKSI • CONTROL",
+        reportDateLabel
+      );
 
-      // ============================================================
-      // ALL MATERIAL USAGE SUMMARY
-      // ============================================================
-      y = addPage("MATERIAL USAGE", "Semua bahan yang keluar dari stock usage");
-      y = section("SEMUA BAHAN YANG DIGUNAKAN", "Tidak dibatasi hanya daging; seluruh StockCard POS_OUT yang tersedia", y);
-      y = table(y, [["KODE", "NAMA BAHAN", "UNIT", "BASE UNIT", "KONVERSI", "QTY KELUAR", "QTY BASE", "HPP/UNIT", "TOTAL HPP", "SALDO AKHIR"]], reportStockSummary.length ? reportStockSummary.map(item => [item.code, item.name, item.unit, item.baseUnit, fmtQty(item.conversionRate), fmtQty(item.qty), fmtQty(item.qty * Number(item.conversionRate || 1)), fmtMoney(item.qty ? item.hpp / item.qty : 0), fmtMoney(item.hpp), fmtQty(item.endStock)]) : [["-", "Tidak ada bahan keluar", "-", "-", "-", "0", "0", fmtMoney(0), fmtMoney(0), "0"]], {
-        styles: { fontSize: 5.3, cellPadding: 1.55 },
-        columnStyles: { 0: { cellWidth: 25 }, 1: { cellWidth: 58 }, 2: { cellWidth: 22 }, 3: { cellWidth: 25 }, 4: { halign: "right", cellWidth: 25 }, 5: { halign: "right", cellWidth: 25 }, 6: { halign: "right", cellWidth: 30 }, 7: { halign: "right", cellWidth: 35 }, 8: { halign: "right", cellWidth: 38 }, 9: { halign: "right", cellWidth: 30 } },
-      });
+      y = TOP + 1;
 
-      // ============================================================
-      // MATERIAL USAGE TRANSACTION DETAIL
-      // ============================================================
-      y = addPage("MATERIAL USAGE DETAIL");
-      y = section("DETAIL SETIAP PEMAKAIAN BAHAN", "Tanggal/waktu, tipe transaksi, referensi, bahan, qty, HPP, saldo, keterangan", y);
-      const usageRows = [...reportStockUsage].sort((a, b) => new Date(a.trxDate).getTime() - new Date(b.trxDate).getTime()).map(row => [
-        fmtDateTime(row.trxDate),
-        row.trxType || "-",
-        row.trxNumber || (row.referenceId ? `REF-${row.referenceId}` : "-"),
-        row.barang?.code || "-",
-        row.barang?.name || "-",
-        row.barang?.unit || "-",
-        row.barang?.baseUnit || row.barang?.unit || "-",
-        fmtQty(row.barang?.conversionRate || 1),
-        fmtQty(row.qtyOut),
-        fmtQty(Number(row.qtyOut || 0) * Number(row.barang?.conversionRate || 1)),
-        fmtMoney(row.unitPrice),
-        fmtMoney(row.totalValue || Number(row.qtyOut || 0) * Number(row.unitPrice || 0)),
-        fmtQty(row.balance),
-        row.note || "-",
-      ]);
-      y = table(y, [["WAKTU", "TIPE", "NO/REF", "KODE", "BAHAN", "UNIT", "BASE", "KONV", "QTY KELUAR", "QTY BASE", "HPP/UNIT", "TOTAL HPP", "SALDO", "KETERANGAN"]], usageRows.length ? usageRows : [["-", "-", "-", "-", "Tidak ada pemakaian", "-", "-", "-", "0", "0", fmtMoney(0), fmtMoney(0), "0", "-"]], {
-        styles: { fontSize: 4.9, cellPadding: 1.4 },
-        headStyles: { fontSize: 5.1, cellPadding: 1.7 },
-        columnStyles: { 0: { cellWidth: 28 }, 1: { cellWidth: 24 }, 2: { cellWidth: 30 }, 3: { cellWidth: 23 }, 4: { cellWidth: 62 }, 5: { cellWidth: 20 }, 6: { cellWidth: 23 }, 7: { halign: "right", cellWidth: 22 }, 8: { halign: "right", cellWidth: 25 }, 9: { halign: "right", cellWidth: 25 }, 10: { halign: "right", cellWidth: 30 }, 11: { halign: "right", cellWidth: 35 }, 12: { halign: "right", cellWidth: 27 }, 13: { cellWidth: 45 } },
-      });
+      y = section(
+        "DETAIL TRANSAKSI",
+        "Satu baris = satu transaksi; staff dan metode pembayaran tetap terlihat untuk audit",
+        y
+      );
 
-      // ============================================================
-      // FOOD COST
-      // ============================================================
-      y = addPage("FOOD COST & HPP");
-      y = section("FOOD COST", "Setiap kategori: HPP, ratio aktif, ratio H-1, status naik/turun/stabil, dan delta percentage point", y);
-      y = table(y, [["KATEGORI", "QTY", "HPP", "% NET SALES", "H-1 HPP", "H-1 %", "TREND", "DELTA PP"]], reportCategorySummary.length ? reportCategorySummary.map(item => [
-        item.category,
-        fmtQty(item.qty),
-        fmtMoney(item.hpp),
-        fmtPct(item.ratio),
-        reportCategoryComparisonAvailable ? fmtMoney(item.previousHpp) : "-",
-        reportCategoryComparisonAvailable ? fmtPct(item.previousRatio) : "-",
-        reportCategoryComparisonAvailable
-          ? item.deltaRatio > 0.005
-            ? "NAIK"
-            : item.deltaRatio < -0.005
-              ? "TURUN"
-              : "STABIL"
-          : "NO COMP",
-        reportCategoryComparisonAvailable
-          ? `${item.deltaRatio >= 0 ? "+" : ""}${item.deltaRatio.toFixed(2)} pp`
-          : "-",
-      ]) : [["Tidak ada data", "0", fmtMoney(0), "0.00%", "-", "-", "-", "-"]], {
-        columnStyles: {
-          0: { cellWidth: 48 },
-          1: { halign: "right", cellWidth: 22 },
-          2: { halign: "right", cellWidth: 38 },
-          3: { halign: "right", cellWidth: 30 },
-          4: { halign: "right", cellWidth: 38 },
-          5: { halign: "right", cellWidth: 30 },
-          6: { halign: "center", cellWidth: 27 },
-          7: { halign: "right", cellWidth: 30 },
-        },
-      });
-
-      y = section("RINGKASAN HPP", "Food Cost keseluruhan dan HPP daging/protein");
-      y = table(y, [["METRIK", "NILAI", "% NET SALES"]], [
-        ["Total HPP Bahan", fmtMoney(reportConsumptionHpp), fmtPct(reportFoodCostRatio)],
-        ["HPP Daging / Protein", fmtMoney(reportMeatHpp), fmtPct(reportMeatFoodCostRatio)],
-        ["Net Sales", fmtMoney(reportNetSales), "100.00%"],
-      ], { columnStyles: { 0: { cellWidth: 95 }, 1: { halign: "right", cellWidth: 60 }, 2: { halign: "right", cellWidth: 50 } } });
-
-      // ============================================================
-      // MEAT CONTROL
-      // ============================================================
-      y = addPage("MEAT / PROTEIN CONTROL");
-      y = section("KONTROL BAHAN DAGING", "Saldo awal, pemakaian, saldo akhir, base unit, conversion rate, dan HPP", y);
-      y = table(y, [["KODE", "BAHAN", "UNIT", "SALDO AWAL", "PEMAKAIAN", "SALDO AKHIR", "BASE UNIT", "CONVERSION", "HPP"]], reportMeatStockSummary.length ? reportMeatStockSummary.map(item => [item.code, item.name, item.unit, fmtQty(item.startStock), fmtQty(item.qty), fmtQty(item.endStock), item.baseUnit, fmtQty(item.conversionRate), fmtMoney(item.hpp)]) : [["-", "Tidak ada bahan daging/protein", "-", "0", "0", "0", "-", "-", fmtMoney(0)]], {
-        styles: { fontSize: 5.8, cellPadding: 1.7 },
-        columnStyles: { 0: { cellWidth: 27 }, 1: { cellWidth: 72 }, 2: { cellWidth: 25 }, 3: { halign: "right", cellWidth: 30 }, 4: { halign: "right", cellWidth: 30 }, 5: { halign: "right", cellWidth: 30 }, 6: { cellWidth: 30 }, 7: { halign: "right", cellWidth: 32 }, 8: { halign: "right", cellWidth: 45 } },
-      });
-
-      // ============================================================
-      // STAFF / CASHIER
-      // ============================================================
-      y = addPage("STAFF / CASHIER CONTROL");
-      y = section("STAFF / KASIR TRANSAKSI", "Jumlah transaksi, total item, dan total penjualan per staff", y);
-      y = table(y, [["STAFF / KASIR", "TRANSAKSI", "TOTAL ITEM", "TOTAL PENJUALAN", "% SALES"]], reportStaffSummary.length ? reportStaffSummary.map(staff => [staff.staff, staff.transactions, fmtQty(staff.items), fmtMoney(staff.total), fmtPct(reportTotal ? (staff.total / reportTotal) * 100 : 0)]) : [["Tidak ada transaksi", 0, "0", fmtMoney(0), "0.00%"]], {
-        columnStyles: { 0: { cellWidth: 110 }, 1: { halign: "center", cellWidth: 30 }, 2: { halign: "right", cellWidth: 35 }, 3: { halign: "right", cellWidth: 60 }, 4: { halign: "right", cellWidth: 35 } },
-      });
-
-      // ============================================================
-      // FULL TRANSACTION DETAIL
-      // ============================================================
-      y = addPage("FULL TRANSACTION DETAIL", `${reportSales.length} transaksi`);
-      y = section("DETAIL SELURUH TRANSAKSI", "Nomor transaksi, waktu, kasir, meja, customer, tipe, paket, PAX, payment, diskon, service, PPN, total, paid, kembalian, catatan", y);
-      const txRows = reportSales.map(sale => [
+      const txRows = reportSales.map((sale) => [
         sale.number,
         fmtDateTime(sale.saleDate),
-        (sale.cashierName || sale.staffName || "-"),
+        sale.ayce ? "AYCE" : "REG",
         sale.tableName || "-",
-        sale.customerName || "-",
-        sale.ayce ? "AYCE" : "REGULAR",
-        (sale.packageName || sale.packageKey || "-"),
         String(sale.pax || 0),
+        sale.staffName || sale.cashierName || "-",
         sale.paymentMethod || "-",
         fmtMoney(sale.discount || 0),
         fmtMoney(sale.serviceCharge || 0),
         fmtMoney(sale.ppn || 0),
         fmtMoney(sale.total || 0),
-        fmtMoney(sale.paidAmount || 0),
-        fmtMoney(sale.changeAmount || 0),
-        sale.note || "-",
       ]);
-      y = table(y, [["NO TRANSAKSI", "WAKTU", "KASIR", "MEJA", "CUSTOMER", "TIPE", "PAKET", "PAX", "PAYMENT", "DISKON", "SERVICE", "PPN", "TOTAL", "PAID", "KEMBALIAN", "CATATAN"]], txRows.length ? txRows : [["-", "-", "-", "-", "Tidak ada transaksi", "-", "-", "0", "-", fmtMoney(0), fmtMoney(0), fmtMoney(0), fmtMoney(0), fmtMoney(0), fmtMoney(0), "-"]], {
-        styles: { fontSize: 4.6, cellPadding: 1.25 },
-        headStyles: { fontSize: 4.8, cellPadding: 1.5 },
-        columnStyles: { 0: { cellWidth: 29 }, 1: { cellWidth: 28 }, 2: { cellWidth: 32 }, 3: { cellWidth: 20 }, 4: { cellWidth: 38 }, 5: { cellWidth: 25 }, 6: { cellWidth: 38 }, 7: { halign: "center", cellWidth: 16 }, 8: { cellWidth: 25 }, 9: { halign: "right", cellWidth: 28 }, 10: { halign: "right", cellWidth: 28 }, 11: { halign: "right", cellWidth: 25 }, 12: { halign: "right", cellWidth: 34 }, 13: { halign: "right", cellWidth: 34 }, 14: { halign: "right", cellWidth: 32 }, 15: { cellWidth: 48 } },
-      });
 
-      // ============================================================
-      // FULL ITEM DETAIL
-      // ============================================================
-      y = addPage("FULL ITEM DETAIL", `${reportItems} qty item`);
-      y = section("DETAIL SELURUH ITEM TRANSAKSI", "Transaksi, waktu, kasir, item, unit, qty, harga, subtotal, tipe AYCE/PAID", y);
-      const itemRows: (string | number)[][] = [];
-      for (const sale of reportSales) {
-        for (const item of sale.items || []) {
-          itemRows.push([
-            sale.number,
-            fmtDateTime(sale.saleDate),
-            sale.cashierName || sale.staffName || "-",
-            item.menu?.name || item.barang?.name || `Item #${item.id}`,
-            item.barang?.unit || "-",
-            fmtQty(item.qty),
-            fmtMoney(item.unitPrice),
-            fmtMoney(item.subtotal),
-            sale.ayce ? "AYCE" : "PAID",
-          ]);
+      y = table(
+        y,
+        [[
+          "TRANSAKSI",
+          "WAKTU",
+          "TIPE",
+          "MEJA",
+          "PAX",
+          "STAFF",
+          "PAYMENT",
+          "DISKON",
+          "SERVICE",
+          "PPN",
+          "TOTAL",
+        ]],
+        txRows.length
+          ? txRows
+          : [["-", "-", "-", "-", "0", "-", "-", fmtMoney(0), fmtMoney(0), fmtMoney(0), fmtMoney(0)]],
+        {
+          styles: {
+            fontSize: 4.55,
+            cellPadding: 0.9,
+          },
+          headStyles: {
+            fontSize: 4.55,
+            cellPadding: 1.1,
+          },
+          columnStyles: {
+            0: { cellWidth: 29 },
+            1: { cellWidth: 30 },
+            2: { cellWidth: 22, halign: "center" },
+            3: { cellWidth: 23 },
+            4: { cellWidth: 17, halign: "center" },
+            5: { cellWidth: 43 },
+            6: { cellWidth: 28 },
+            7: { cellWidth: 29, halign: "right" },
+            8: { cellWidth: 31, halign: "right" },
+            9: { cellWidth: 29, halign: "right" },
+            10: { cellWidth: 39, halign: "right" },
+          },
         }
-      }
-      y = table(y, [["TRANSAKSI", "WAKTU", "KASIR", "ITEM", "UNIT", "QTY", "HARGA", "SUBTOTAL", "TIPE"]], itemRows.length ? itemRows : [["-", "-", "-", "Tidak ada item", "-", "0", fmtMoney(0), fmtMoney(0), "-"]], {
-        styles: { fontSize: 5.5, cellPadding: 1.6 },
-        columnStyles: { 0: { cellWidth: 32 }, 1: { cellWidth: 29 }, 2: { cellWidth: 32 }, 3: { cellWidth: 100 }, 4: { cellWidth: 23 }, 5: { halign: "right", cellWidth: 25 }, 6: { halign: "right", cellWidth: 35 }, 7: { halign: "right", cellWidth: 38 }, 8: { halign: "center", cellWidth: 25 } },
+      );
+
+      y += 4;
+
+      y = ensureSpace(y, 72, "DETAIL TRANSAKSI • CONTROL");
+
+      y = section(
+        "KONTROL AKHIR",
+        "Pemeriksaan cepat sebelum laporan diserahkan ke manajemen",
+        y
+      );
+
+      const grossByItems =
+        reportSales.reduce(
+          (sum, sale) =>
+            sum +
+            (sale.items || []).reduce(
+              (n, item) => n + Number(item.subtotal || 0),
+              0
+            ),
+          0
+        );
+
+      const expectedTotal =
+        reportNetSales +
+        reportService +
+        reportPpn;
+
+      const salesGap =
+        reportGrossItemSales - grossByItems;
+
+      const totalGap =
+        reportTotal - expectedTotal;
+
+      const paymentGap =
+        reportPaid - reportTotal;
+
+      const status = (value: number) =>
+        Math.abs(value) < 0.01 ? "MATCH" : "PERLU CEK";
+
+      y = table(
+        y,
+        [["KONTROL", "SISTEM", "PEMBANDING", "SELISIH", "STATUS"]],
+        [
+          [
+            "Gross Item Sales",
+            fmtMoney(reportGrossItemSales),
+            fmtMoney(grossByItems),
+            fmtMoney(salesGap),
+            status(salesGap),
+          ],
+          [
+            "Grand Total",
+            fmtMoney(reportTotal),
+            fmtMoney(expectedTotal),
+            fmtMoney(totalGap),
+            status(totalGap),
+          ],
+          [
+            "Pembayaran",
+            fmtMoney(reportPaid),
+            fmtMoney(reportTotal),
+            fmtMoney(paymentGap),
+            paymentGap >= -0.01 ? "MATCH" : "PERLU CEK",
+          ],
+          [
+            "Food Cost",
+            fmtMoney(reportConsumptionHpp),
+            fmtPct(reportFoodCostRatio),
+            "-",
+            reportNetSales > 0 ? "OK" : "PERLU CEK",
+          ],
+          [
+            "Pemakaian Bahan",
+            fmtQty(reportConsumptionQty),
+            `${reportStockUsage.length} baris`,
+            "-",
+            reportStockUsage.length || reportSales.length === 0 ? "OK" : "PERLU CEK",
+          ],
+        ],
+        {
+          columnStyles: {
+            0: { cellWidth: 65 },
+            1: { cellWidth: 55, halign: "right" },
+            2: { cellWidth: 60, halign: "right" },
+            3: { cellWidth: 45, halign: "right" },
+            4: { cellWidth: 35, halign: "center" },
+          },
+        }
+      );
+
+      y += 4;
+
+      y = section(
+        "KESIMPULAN MANAJEMEN",
+        "Ringkasan yang bisa dibaca tanpa harus membuka detail tabel",
+        y
+      );
+
+      const conclusions = [
+        [
+          "1",
+          "Penjualan",
+          `${reportSales.length} transaksi menghasilkan ${fmtMoney(reportTotal)} dengan ${reportPax} pax.`,
+        ],
+        [
+          "2",
+          "Food Cost",
+          `HPP bahan ${fmtMoney(reportConsumptionHpp)} atau ${fmtPct(reportFoodCostRatio)} dari Net Sales.`,
+        ],
+        [
+          "3",
+          "Cost Driver",
+          topCost.length
+            ? `${topCost[0].name} adalah cost driver terbesar dengan HPP ${fmtMoney(topCost[0].hpp)}.`
+            : "Belum ada cost driver karena belum ada pemakaian bahan.",
+        ],
+        [
+          "4",
+          "Staff",
+          reportStaffSummary.length
+            ? `${reportStaffSummary[0].staff} memiliki omzet tertinggi sebesar ${fmtMoney(reportStaffSummary[0].total)}.`
+            : "Belum ada data staff transaksi.",
+        ],
+        [
+          "5",
+          "Rekonsiliasi",
+          `Status pembayaran: ${balanceStatus}. Selisih pembayaran ${fmtMoney(Math.abs(balance))}.`,
+        ],
+      ];
+
+      y = table(
+        y,
+        [["NO", "AREA", "KESIMPULAN"]],
+        conclusions,
+        {
+          columnStyles: {
+            0: { cellWidth: 20, halign: "center" },
+            1: { cellWidth: 45 },
+            2: { cellWidth: 170 },
+          },
+        }
+      );
+
+      y += 5;
+      y = ensureSpace(y, 38, "DETAIL TRANSAKSI • CONTROL");
+
+      setFill(C.pale2);
+      setDraw(C.line);
+      doc.roundedRect(M, y, CONTENT_W, 29, 2.5, 2.5, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6);
+      setText(C.dark);
+      doc.text("OTORISASI / PEMERIKSAAN", M + 4, y + 7);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(5.2);
+      setText(C.muted);
+      doc.text(
+        "Laporan ini digunakan sebagai bahan kontrol operasional. HPP bahan adalah nilai pemakaian StockCard POS_OUT dan bukan laba bersih.",
+        M + 4,
+        y + 12
+      );
+
+      const sigY = y + 20;
+      const sigW = (CONTENT_W - 18) / 3;
+
+      [
+        ["DIBUAT OLEH", "Staff / Kasir"],
+        ["DIPERIKSA OLEH", "Supervisor / Manager"],
+        ["DISETUJUI OLEH", "Management"],
+      ].forEach(([label, roleName], index) => {
+        const sx = M + index * (sigW + 9);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(5);
+        setText(C.muted);
+        doc.text(String(label), sx, sigY);
+
+        setDraw(C.line);
+        doc.line(sx, sigY + 6, sx + sigW, sigY + 6);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(4.8);
+        setText(C.muted);
+        doc.text(String(roleName), sx, sigY + 10);
       });
 
-      // ============================================================
-      // RECONCILIATION / DATA COMPLETENESS
-      // ============================================================
-      y = addPage("RECONCILIATION & DATA CONTROL");
-      y = section("REKONSILIASI AKHIR", "Kontrol penjualan, pembayaran, pemakaian bahan, Food Cost, HPP daging, dan kelengkapan data", y);
-
-      const grossBySales = reportSales.reduce((n, s) => n + (s.items || []).reduce((m, i) => m + Number(i.subtotal || 0), 0), 0);
-      const expectedTotal = reportNetSales + reportService + reportPpn;
-      const paidGap = reportPaid - reportTotal;
-      const salesGap = reportGrossItemSales - grossBySales;
-      const completeness = {
-        sales: reportSales.length > 0,
-        payment: reportSales.every(s => Boolean(s.paymentMethod)),
-        cashier: reportSales.every(s => Boolean(s.cashierName)),
-        item: reportSales.every(s => Array.isArray(s.items) && s.items.length > 0),
-        stock: reportStockUsage.length > 0 || reportSales.length === 0,
-        hpp: reportStockUsage.every(r => Number.isFinite(Number(r.totalValue || Number(r.qtyOut || 0) * Number(r.unitPrice || 0)))),
-        ayce: reportSales.filter(s => s.ayce).every(s => Boolean(s.tableName && Number(s.pax || 0) > 0 && s.packageName)),
-      };
-      const ok = (v: boolean) => v ? "OK" : "PERLU CEK";
-
-      y = table(y, [["KONTROL", "NILAI SISTEM", "PEMBANDING", "SELISIH", "STATUS"]], [
-        ["Kontrol Penjualan", fmtMoney(reportGrossItemSales), fmtMoney(grossBySales), fmtMoney(salesGap), Math.abs(salesGap) < 0.01 ? "OK" : "PERLU CEK"],
-        ["Kontrol Grand Total", fmtMoney(reportTotal), fmtMoney(expectedTotal), fmtMoney(reportTotal - expectedTotal), Math.abs(reportTotal - expectedTotal) < 0.01 ? "OK" : "PERLU CEK"],
-        ["Kontrol Pembayaran", fmtMoney(reportPaid), fmtMoney(reportTotal), fmtMoney(paidGap), paidGap >= -0.01 ? "OK" : "PERLU CEK"],
-        ["Kontrol Pemakaian Bahan", fmtQty(reportConsumptionQty), String(reportStockUsage.length) + " baris", "-", completeness.stock ? "OK" : "PERLU CEK"],
-        ["Food Cost HPP", fmtMoney(reportConsumptionHpp), fmtPct(reportFoodCostRatio), "-", reportNetSales > 0 ? "OK" : "PERLU CEK"],
-        ["HPP Daging", fmtMoney(reportMeatHpp), fmtPct(reportMeatFoodCostRatio), "-", reportMeatStockSummary.length || reportSales.length === 0 ? "OK" : "PERLU CEK"],
-        ["Jumlah Jenis Bahan", String(reportStockSummary.length), "unik barang", "-", "OK"],
-        ["Jumlah Baris Pemakaian", String(reportStockUsage.length), "StockCard POS_OUT", "-", completeness.stock ? "OK" : "PERLU CEK"],
-      ], { columnStyles: { 0: { cellWidth: 75 }, 1: { halign: "right", cellWidth: 48 }, 2: { halign: "right", cellWidth: 48 }, 3: { halign: "right", cellWidth: 40 }, 4: { halign: "center", cellWidth: 35 } } });
-
-      y = section("STATUS KELENGKAPAN DATA", "Pengecekan field penting yang tersedia pada data laporan");
-      y = table(y, [["DATA", "JUMLAH / KONDISI", "STATUS"]], [
-        ["Transaksi", String(reportSales.length), ok(completeness.sales)],
-        ["Payment Method", `${reportSales.filter(s => Boolean(s.paymentMethod)).length}/${reportSales.length}`, ok(completeness.payment)],
-        ["Staff Transaksi", `${reportSales.filter(s => Boolean(s.staffName || s.cashierName)).length}/${reportSales.length}`, ok(completeness.cashier)],
-        ["Item transaksi", `${reportSales.filter(s => Array.isArray(s.items) && s.items.length > 0).length}/${reportSales.length}`, ok(completeness.item)],
-        ["Stock Usage / HPP", `${reportStockUsage.length} baris`, ok(completeness.stock && completeness.hpp)],
-        ["AYCE metadata", `${reportSales.filter(s => s.ayce).filter(s => Boolean(s.tableName && Number(s.pax || 0) > 0 && s.packageName)).length}/${reportSales.filter(s => s.ayce).length}`, ok(completeness.ayce)],
-      ], { columnStyles: { 0: { cellWidth: 90 }, 1: { cellWidth: 90 }, 2: { halign: "center", cellWidth: 45 } } });
-
-      y = section("CONTROL TOTAL", "Angka akhir yang harus menjadi referensi audit");
-      y = table(y, [["METRIK", "NILAI"]], [
-        ["Grand Total", fmtMoney(reportTotal)],
-        ["Net Sales", fmtMoney(reportNetSales)],
-        ["Paid Amount", fmtMoney(reportPaid)],
-        ["Total Item", fmtQty(reportItems)],
-        ["Total PAX", fmtQty(reportPax)],
-        ["Total Pemakaian Bahan", fmtQty(reportConsumptionQty)],
-        ["Total HPP Bahan", fmtMoney(reportConsumptionHpp)],
-        ["Food Cost", fmtPct(reportFoodCostRatio)],
-        ["HPP Daging", fmtMoney(reportMeatHpp)],
-        ["Jumlah Jenis Bahan", String(reportStockSummary.length)],
-        ["Jumlah Baris Pemakaian", String(reportStockUsage.length)],
-      ], { columnStyles: { 0: { cellWidth: 110 }, 1: { halign: "right", cellWidth: 80 } }, tableWidth: 190 });
-
+      // Apply footer after all pages have been generated so page count is final.
       footer();
-      const periodPart = reportRange === "ALL" ? "ALL" : reportDate;
-      const filename = `MGB_POS_FULL_CONTROL_REPORT_${safeFilePart(outletCode)}_${safeFilePart(periodPart)}.pdf`;
+
+      const periodPart =
+        reportRange === "ALL"
+          ? "ALL"
+          : reportDate;
+
+      const filename =
+        `MGB_POS_DAILY_REPORT_${safeFilePart(outletCode)}_${safeFilePart(periodPart)}_PREMIUM.pdf`;
+
       doc.save(filename);
     } catch (error: any) {
       console.error("DOWNLOAD POS PDF ERROR:", error);
-      alert(error?.message || "Gagal membuat PDF laporan POS.");
+      alert(
+        error?.message ||
+          "Gagal membuat PDF laporan POS."
+      );
     }
   }
+
   const filteredSales =
     useMemo(() => {
       const q =
@@ -3059,8 +3895,8 @@ export default function PosOutletPage() {
     const packageLines = reportPackageSummary.length
       ? reportPackageSummary
           .map(
-            (item) =>
-              `• ${item.name} — ${item.qty} transaksi | ${item.pax} pax | ${money(item.value)}`
+            (item, index) =>
+              `${index + 1}. ${item.name} — ${item.qty} transaksi | ${item.pax} pax | ${money(item.value)}`
           )
           .join("\n")
       : "• Tidak ada paket tercatat";
@@ -3075,60 +3911,74 @@ export default function PosOutletPage() {
       : "• Tidak ada pemakaian daging tercatat";
 
     const categoryLines = reportCategorySummary.length
-      ? reportCategorySummary.map((item) => {
-          const trend = reportCategoryComparisonAvailable
-            ? `${item.deltaRatio > 0.005 ? "↗️ Naik" : item.deltaRatio < -0.005 ? "↘️ Turun" : "→ Stabil"} ${Math.abs(item.deltaRatio).toFixed(2)} pp (H-1 ${item.previousRatio.toFixed(2)}% → ${item.ratio.toFixed(2)}%)`
-            : "• Belum ada pembanding";
-          return `• ${item.category} — HPP ${money(item.hpp)} | Ratio ${item.ratio.toFixed(2)}% | ${trend}`;
-        }).join("\n")
+      ? reportCategorySummary
+          .map((item) => {
+            const trend = reportCategoryComparisonAvailable
+              ? `${
+                  item.deltaRatio > 0.005
+                    ? "↗️ Naik"
+                    : item.deltaRatio < -0.005
+                    ? "↘️ Turun"
+                    : "→ Stabil"
+                } ${Math.abs(item.deltaRatio).toFixed(2)} pp`
+              : "Belum ada pembanding";
+            return `• ${item.category} — HPP ${money(item.hpp)} | Ratio ${item.ratio.toFixed(2)}% | ${trend}`;
+          })
+          .join("\n")
       : "• Belum ada data kategori bahan";
 
-    const staffLines = reportStaffSummary.length
-      ? reportStaffSummary
-          .map(
-            (staff) =>
-              `• ${staff.staff} — ${staff.transactions} tx | ${staff.items} item | ${money(staff.total)}`
-          )
-          .join("\n")
-      : "• Tidak ada transaksi";
+    const paymentSubtotal = roundMoney(
+      reportCash + reportTransfer + reportQris
+    );
+    const balance = roundMoney(reportTotal - paymentSubtotal);
+    const balanceStatus =
+      Math.abs(balance) < 0.01
+        ? "SEIMBANG / MATCH"
+        : balance > 0
+        ? "BELUM TERBAYAR"
+        : "LEBIH BAYAR / PERLU CEK";
 
     return [
       "🔖 *DAILY REPORT — MGB POS*",
       "━━━━━━━━━━━━━━━━━━━━",
       `🏪 *Outlet:* ${outletName}`,
-      `📅 *Tanggal:* ${reportDateLabel}`,
+      `📅 *Periode:* ${reportDateLabel}`,
+      `📊 *Transaksi:* ${reportSales.length} | *PAX:* ${reportPax} | *Qty Item:* ${reportItems}`,
       "",
-      "💰 *NOMINAL SALES*",
-      `• Net Sales : ${money(reportNetSales)}`,
-      `• Tax / PPN : ${money(reportPpn)}`,
-      `• Service : ${money(reportService)}`,
+      "💰 *1. NOMINAL SALES*",
+      `• Gross Item Sales : ${money(reportGrossItemSales)}`,
       `• Discount : ${money(reportDiscount)}`,
-      `• Grand Total : ${money(reportTotal)}`,
+      `• Net Sales : ${money(reportNetSales)}`,
+      `• Service 5% : ${money(reportService)}`,
+      `• PPN 10% : ${money(reportPpn)}`,
+      `• *Grand Total : ${money(reportTotal)}*`,
       "",
-      "💳 *PEMBAYARAN*",
+      "💳 *2. PEMBAYARAN & REKONSILIASI*",
       `• Cash : ${money(reportCash)}`,
       `• Transfer : ${money(reportTransfer)}`,
       `• QRIS : ${money(reportQris)}`,
-      `• Subtotal Pembayaran : ${money(roundMoney(reportCash + reportTransfer + reportQris))}`,
-      `• Balance : ${money(roundMoney(reportTotal - (reportCash + reportTransfer + reportQris)))}`,
+      `• *Subtotal Pembayaran : ${money(paymentSubtotal)}*`,
+      `• *Balance : ${money(balance)}*`,
+      `• Status : ${balanceStatus}`,
       "",
-      "🍽️ *PAKET KELUAR*",
+      "🍽️ *3. PAKET KELUAR*",
       packageLines,
       "",
-      "📦 *STOCK BAHAN*",
+      "📦 *4. STOCK BAHAN / PEMAKAIAN*",
       stockLines,
       "",
-      "👥 *REKAP TRANSAKSI / STAFF*",
-      staffLines,
-      "",
-      "🍳 *FOOD COST*",
-      `1. Food Cost keseluruhan : ${money(reportConsumptionHpp)} | Ratio ${reportFoodCostRatio.toFixed(2)}%`,
-      `2. Food Cost daging saja : ${money(reportMeatHpp)} | Ratio ${reportMeatFoodCostRatio.toFixed(2)}%`,
-      "3. Ratio per kategori bahan :",
+      "🍳 *5. FOOD COST / HPP*",
+      `• Total HPP Bahan : ${money(reportConsumptionHpp)}`,
+      `• Food Cost : ${reportFoodCostRatio.toFixed(2)}% dari Net Sales`,
+      `• HPP Daging : ${money(reportMeatHpp)}`,
+      `• Food Cost Daging : ${reportMeatFoodCostRatio.toFixed(2)}%`,
+      "• Ratio per kategori:",
       categoryLines,
       "",
       "━━━━━━━━━━━━━━━━━━━━",
-      `📊 ${reportSales.length} transaksi • ${reportPax} pax • ${reportItems} qty item`,
+      `📌 *CONTROL TOTAL:* ${reportSales.length} transaksi | ${reportPax} pax | ${reportItems} qty item`,
+      `💵 *Grand Total:* ${money(reportTotal)} | *Pembayaran:* ${money(paymentSubtotal)} | *Balance:* ${money(balance)}`,
+      `✅ *Status:* ${balanceStatus}`,
       "Terimakasih 🙏🏻",
     ].join("\n");
   }, [
@@ -3137,9 +3987,9 @@ export default function PosOutletPage() {
     reportPackageSummary,
     reportMeatStockSummary,
     reportCategorySummary,
-    reportStaffSummary,
     reportDateLabel,
     reportNetSales,
+    reportGrossItemSales,
     reportPpn,
     reportService,
     reportDiscount,
@@ -3152,7 +4002,7 @@ export default function PosOutletPage() {
     reportMeatHpp,
     reportMeatFoodCostRatio,
     reportCategoryComparisonAvailable,
-    reportSales.length,
+    reportSales,
     reportPax,
     reportItems,
   ]);

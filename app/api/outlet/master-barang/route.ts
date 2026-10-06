@@ -135,9 +135,6 @@ function toCleanString(value: unknown) {
  *   seluruh Barang Central aktif tetap dapat dibaca
  *   untuk modal Hubungkan Barang Central.
  *
- * Jadi daftar outlet tidak menampilkan master Central
- * yang belum dihubungkan ke outlet.
- *
  * Barang lama source=OUTLET:
  *   - tetap ada
  *   - tidak dihapus
@@ -206,12 +203,7 @@ export async function GET(
     /*
      * mode:
      * - outlet  = daftar Master Barang Outlet
-     *              hanya barang yang sudah terhubung ke outlet.
      * - central  = daftar seluruh Barang Central aktif
-     *              untuk modal "Hubungkan Barang Central".
-     *
-     * Default tetap "outlet" agar halaman daftar barang
-     * tidak lagi menampilkan seluruh master Central.
      */
     const mode =
       searchParams
@@ -219,7 +211,10 @@ export async function GET(
         ?.trim()
         .toLowerCase() || "outlet";
 
-    if (mode !== "outlet" && mode !== "central") {
+    if (
+      mode !== "outlet" &&
+      mode !== "central"
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -318,11 +313,6 @@ export async function GET(
     /*
      * =====================================================
      * QUERY BARANG CENTRAL
-     *
-     * Filter mengikuti mode GET:
-     * - mode=outlet  -> hanya Barang Central yang sudah
-     *                   terhubung melalui OutletBarang aktif.
-     * - mode=central -> seluruh Barang Central aktif.
      * =====================================================
      */
 
@@ -331,22 +321,8 @@ export async function GET(
       active: true,
     };
 
-    /*
-     * MODE OUTLET:
-     * Hanya Barang Central yang sudah memiliki mapping
-     * OutletBarang pada outlet yang sedang dipilih/session.
-     *
-     * MODE CENTRAL:
-     * Tidak memakai filter OutletBarang sehingga seluruh
-     * Barang Central aktif tetap tersedia untuk modal connect.
-     */
     if (mode === "outlet") {
       if (outletId === null) {
-        /*
-         * Untuk Admin/Manager/Purchasing tanpa outlet filter,
-         * daftar outlet berarti gabungan seluruh master barang
-         * yang sudah terhubung minimal ke satu outlet aktif.
-         */
         barangWhere.outletBarang = {
           some: {
             aktif: true,
@@ -420,9 +396,6 @@ export async function GET(
           createdAt: true,
           updatedAt: true,
 
-          /*
-           * Mapping outlet tertentu.
-           */
           outletBarang:
             outletId !== null
               ? {
@@ -453,9 +426,6 @@ export async function GET(
                 }
               : true,
 
-          /*
-           * Stock outlet tertentu.
-           */
           outletStocks:
             outletId !== null
               ? {
@@ -505,8 +475,6 @@ export async function GET(
     /*
      * =====================================================
      * AMBIL MAPPING SEMUA OUTLET
-     *
-     * Hanya digunakan jika filter outlet kosong.
      * =====================================================
      */
 
@@ -628,9 +596,6 @@ export async function GET(
     /*
      * =====================================================
      * OUTLET IDS
-     *
-     * Digunakan untuk mencari harga pembelian
-     * jika Admin melihat semua outlet.
      * =====================================================
      */
 
@@ -659,8 +624,6 @@ export async function GET(
     /*
      * =====================================================
      * MAP HARGA RECEIPT TERAKHIR
-     *
-     * Receipt adalah harga aktual barang masuk.
      * =====================================================
      */
 
@@ -941,15 +904,6 @@ export async function GET(
     const formattedData =
       barangData.map(
         (barang) => {
-          /*
-           * =================================================
-           * UNIT
-           *
-           * unit      = purchase unit
-           * baseUnit  = stock/BOM/Manufacture unit
-           * =================================================
-           */
-
           const conversionRate =
             Number(
               barang.conversionRate
@@ -979,12 +933,6 @@ export async function GET(
                 conversionRate > 0
             );
 
-          /*
-           * =================================================
-           * MAPPING
-           * =================================================
-           */
-
           let mappings: any[] = [];
 
           if (
@@ -1004,12 +952,6 @@ export async function GET(
                 )
               ) || [];
           }
-
-          /*
-           * =================================================
-           * STOCK
-           * =================================================
-           */
 
           let stocks: any[] = [];
 
@@ -1042,18 +984,6 @@ export async function GET(
               ? stocks[0] ??
                 null
               : null;
-
-          /*
-           * =================================================
-           * HARGA
-           *
-           * Receipt
-           *   ↓
-           * Purchase
-           *   ↓
-           * Central Purchase Price
-           * =================================================
-           */
 
           let hargaReceiptTerakhir:
             number | null = null;
@@ -1206,12 +1136,6 @@ export async function GET(
                 : null;
           }
 
-          /*
-           * =================================================
-           * CENTRAL PURCHASE PRICE
-           * =================================================
-           */
-
           const centralPurchasePrice =
             Number(
               barang.purchasePrice
@@ -1225,36 +1149,18 @@ export async function GET(
               ? centralPurchasePrice
               : 0;
 
-          /*
-           * =================================================
-           * RESPONSE
-           * =================================================
-           */
-
           return {
-            /*
-             * GLOBAL BARANG ID
-             */
             id: barang.id,
 
             barangId:
               barang.id,
 
-            /*
-             * MAPPING ID
-             *
-             * NULL = barang Central belum
-             * diaktifkan/didaftarkan ke outlet.
-             */
             outletBarangId:
               currentMapping?.id ??
               null,
 
             outletId,
 
-            /*
-             * STATUS OUTLET
-             */
             terdaftarDiOutlet:
               Boolean(
                 currentMapping
@@ -1267,16 +1173,10 @@ export async function GET(
                   )
                 : false,
 
-            /*
-             * HARGA MASTER OUTLET
-             */
             harga:
               currentMapping?.harga ??
               0,
 
-            /*
-             * HARGA PEMBELIAN TERAKHIR
-             */
             hargaTerakhir:
               hargaPembelian > 0
                 ? hargaPembelian
@@ -1295,9 +1195,6 @@ export async function GET(
 
             hargaTerakhirPurchaseId,
 
-            /*
-             * DETAIL RECEIPT
-             */
             hargaReceiptTerakhir:
               hargaReceiptTerakhir,
 
@@ -1322,9 +1219,6 @@ export async function GET(
                 ?.receiptId ??
               null,
 
-            /*
-             * DETAIL PURCHASE
-             */
             hargaPurchaseTerakhir:
               hargaPurchaseTerakhir,
 
@@ -1344,9 +1238,6 @@ export async function GET(
                 ?.purchaseId ??
               null,
 
-            /*
-             * PRICE INFO
-             */
             priceInfo: {
               purchasePrice:
                 hargaPembelian,
@@ -1405,9 +1296,6 @@ export async function GET(
                 null,
             },
 
-            /*
-             * BARANG CENTRAL
-             */
             barang: {
               id: barang.id,
 
@@ -1426,17 +1314,11 @@ export async function GET(
               brand:
                 barang.brand,
 
-              /*
-               * PURCHASE UNIT
-               */
               unit,
 
               purchaseUnit:
                 unit,
 
-              /*
-               * BASE UNIT
-               */
               baseUnit,
 
               stockUnit:
@@ -1483,12 +1365,57 @@ export async function GET(
             },
 
             /*
+             * =================================================
              * STOCK OUTLET
              *
-             * Catatan:
-             * nilai stock berasal dari OutletStock.
-             * Route ini tidak mengubah nilai stock.
+             * STOCK AKTUAL SELALU DARI OutletStock.
+             *
+             * Tidak pernah mengambil Barang.stock.
+             * =================================================
              */
+
+            /*
+             * =================================================
+             * FIX:
+             *
+             * Frontend membaca:
+             *
+             * item.outletStock?.stock
+             *
+             * Maka API wajib mengirim object outletStock
+             * untuk outlet yang sedang dipilih/login.
+             *
+             * Stock tetap berasal dari OutletStock.
+             * Tidak pernah dari Barang.stock.
+             * =================================================
+             */
+
+            outletStock:
+              currentStock
+                ? {
+                    id:
+                      currentStock.id,
+
+                    outletId:
+                      currentStock.outletId,
+
+                    barangId:
+                      currentStock.barangId,
+
+                    stock:
+                      currentStock.stock,
+
+                    minimumStock:
+                      currentStock.minimumStock,
+
+                    averageCost:
+                      currentStock.averageCost,
+
+                    updatedAt:
+                      currentStock.updatedAt,
+                  }
+                : null,
+
             stock:
               currentStock?.stock ??
               0,
@@ -1510,9 +1437,6 @@ export async function GET(
                 ?.updatedAt ??
               null,
 
-            /*
-             * MAPPING SEMUA OUTLET
-             */
             outletMappings:
               outletId === null
                 ? mappings
@@ -1525,12 +1449,6 @@ export async function GET(
           };
         }
       );
-
-    /*
-     * =====================================================
-     * RESPONSE
-     * =====================================================
-     */
 
     return NextResponse.json({
       success: true,
@@ -1558,16 +1476,16 @@ export async function GET(
           "Route outlet tidak membuat Barang baru. Barang baru wajib dibuat melalui Master Barang Central.",
 
         outletPolicy:
-          "Daftar Barang Outlet hanya menampilkan Barang Central yang sudah terhubung ke outlet melalui OutletBarang. Modal Hubungkan Barang Central menggunakan mode=central agar tetap membaca seluruh Barang Central aktif.",
+          "Daftar Barang Outlet hanya menampilkan Barang Central yang sudah terhubung ke outlet melalui OutletBarang.",
 
         stockPolicy:
-          "Stock aktual outlet disimpan pada OutletStock berdasarkan kombinasi outletId + barangId.",
+          "Stock aktual outlet disimpan pada OutletStock berdasarkan kombinasi outletId + barangId. Stock satu outlet tidak pernah dibagikan ke outlet lain.",
 
         purchaseUnitPolicy:
           "Barang.unit adalah purchase unit. Purchase unit digunakan pada pembelian/penerimaan.",
 
         baseUnitPolicy:
-          "Barang.baseUnit adalah satuan dasar untuk stock, BOM, Manufacture, dan konsumsi bahan.",
+          "Barang.baseUnit adalah satuan dasar yang digunakan oleh konfigurasi stock lama, BOM, dan Manufacture sesuai alur existing.",
 
         conversionPolicy:
           "Purchase unit dikonversi menjadi base unit ketika barang masuk ke stock.",
@@ -1612,23 +1530,25 @@ export async function GET(
  * =========================================================
  * POST
  *
- * DAFTARKAN / AKTIFKAN BARANG CENTRAL KE OUTLET
+ * SUPPORT:
  *
- * POST INI:
+ * 1. HUBUNGKAN BARANG CENTRAL KE OUTLET
  *
- * Barang Central
- *       ↓
- * OutletBarang
- *       ↓
- * OutletStock
+ * 2. MANUAL_STOCK_AIR_RO
  *
- * POST INI TIDAK PERNAH:
+ * STOCK AIR RO:
  *
- * Barang Central
- *       ↓
- * Barang baru source OUTLET
+ *   Outlet
+ *      ↓
+ *   OutletStock
+ *      ↓
+ *   stock lama + qty
  *
- * Jadi tidak ada duplicate master barang.
+ * TIDAK PERNAH:
+ *
+ *   Barang.stock
+ *
+ * yang diubah oleh action MANUAL_STOCK_AIR_RO.
  * =========================================================
  */
 
@@ -1641,13 +1561,15 @@ export async function POST(
      * CURRENT USER
      * =====================================================
      */
+
     const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message: "Tidak login atau session sudah tidak aktif",
+          message:
+            "Tidak login atau session sudah tidak aktif",
         },
         { status: 401 }
       );
@@ -1658,6 +1580,7 @@ export async function POST(
      * ROLE
      * =====================================================
      */
+
     if (!isAllowedRole(user.role)) {
       return NextResponse.json(
         {
@@ -1673,6 +1596,7 @@ export async function POST(
      * PARSE BODY
      * =====================================================
      */
+
     let body: any;
 
     try {
@@ -1681,7 +1605,8 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message: "Request tidak valid. Body harus berupa JSON.",
+          message:
+            "Request tidak valid. Body harus berupa JSON.",
         },
         { status: 400 }
       );
@@ -1689,41 +1614,586 @@ export async function POST(
 
     /*
      * =====================================================
+     * ACTION
+     *
+     * Frontend Air RO mengirim:
+     *
+     * {
+     *   action: "MANUAL_STOCK_AIR_RO",
+     *   outletId,
+     *   barangId,
+     *   qty
+     * }
+     *
+     * Handler dibuat di awal agar tidak masuk ke flow
+     * Hubungkan Barang Central biasa.
+     * =====================================================
+     */
+
+    const action =
+      toCleanString(
+        body?.action
+      ).toUpperCase();
+
+    if (
+      action ===
+      "MANUAL_STOCK_AIR_RO"
+    ) {
+      /*
+       * ===================================================
+       * OUTLET ID
+       * ===================================================
+       */
+
+      const requestedOutletId =
+        body?.outletId ??
+        body?.outletID;
+
+      let outletId: number;
+
+      if (
+        user.role ===
+        "OUTLET_ADMIN"
+      ) {
+        /*
+         * OUTLET ADMIN TIDAK BOLEH MEMILIH OUTLET LAIN.
+         * Selalu gunakan outlet dari session.
+         */
+
+        if (
+          !user.outletId ||
+          !Number.isInteger(
+            user.outletId
+          ) ||
+          user.outletId <= 0
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "User belum memiliki outlet",
+            },
+            { status: 400 }
+          );
+        }
+
+        outletId =
+          user.outletId;
+      } else {
+        outletId =
+          Number(
+            requestedOutletId
+          );
+
+        if (
+          !Number.isInteger(
+            outletId
+          ) ||
+          outletId <= 0
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "Outlet wajib dipilih",
+              received: {
+                outletId:
+                  requestedOutletId ??
+                  null,
+              },
+            },
+            { status: 400 }
+          );
+        }
+      }
+
+      /*
+       * ===================================================
+       * BARANG ID
+       * ===================================================
+       */
+
+      const barangId =
+        Number(
+          body?.barangId ??
+            body?.masterBarangId ??
+            body?.centralBarangId ??
+            body?.id
+        );
+
+      if (
+        !Number.isInteger(
+          barangId
+        ) ||
+        barangId <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Barang ID tidak valid",
+          },
+          { status: 400 }
+        );
+      }
+
+      /*
+       * ===================================================
+       * QTY
+       *
+       * Hanya menerima penambahan positif.
+       * Tidak boleh 0 atau negatif.
+       * ===================================================
+       */
+
+      const qty =
+        toNumber(
+          body?.qty
+        );
+
+      if (
+        !Number.isFinite(qty) ||
+        qty <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Qty stock harus lebih besar dari 0",
+            received: {
+              qty:
+                body?.qty ??
+                null,
+            },
+          },
+          { status: 400 }
+        );
+      }
+
+      /*
+       * ===================================================
+       * CEK OUTLET + BARANG + MAPPING + STOCK
+       *
+       * Semuanya dilakukan dalam transaction.
+       * ===================================================
+       */
+
+      const result =
+        await prisma.$transaction(
+          async (tx) => {
+            const outlet =
+              await tx.outlet.findUnique({
+                where: {
+                  id: outletId,
+                },
+
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  active: true,
+                },
+              });
+
+            if (!outlet) {
+              throw new Error(
+                "Outlet tidak ditemukan."
+              );
+            }
+
+            if (!outlet.active) {
+              throw new Error(
+                "Outlet sedang tidak aktif."
+              );
+            }
+
+            const barang =
+              await tx.barang.findFirst({
+                where: {
+                  id: barangId,
+                  source: "CENTRAL",
+                  active: true,
+                },
+
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  unit: true,
+                  baseUnit: true,
+                  conversionRate: true,
+                  minimumStock: true,
+                  purchasePrice: true,
+                  active: true,
+                  source: true,
+                },
+              });
+
+            if (!barang) {
+              throw new Error(
+                "Barang Central tidak ditemukan, tidak aktif, atau bukan Barang Central."
+              );
+            }
+
+            /*
+             * Air RO memang harus merupakan barang Air RO.
+             *
+             * Kita sengaja menggunakan nama sebagai validasi
+             * tambahan karena action ini memang khusus Air RO.
+             */
+
+            const normalizedName =
+              toCleanString(
+                barang.name
+              ).toLowerCase();
+
+            if (
+              normalizedName !==
+              "air ro"
+            ) {
+              throw new Error(
+                "Action MANUAL_STOCK_AIR_RO hanya dapat digunakan untuk Barang Air RO."
+              );
+            }
+
+            /*
+             * =================================================
+             * PASTIKAN BARANG SUDAH TERHUBUNG KE OUTLET
+             * =================================================
+             */
+
+            const existingMapping =
+              await tx.outletBarang.findUnique({
+                where: {
+                  outletId_barangId: {
+                    outletId,
+                    barangId,
+                  },
+                },
+
+                select: {
+                  id: true,
+                  outletId: true,
+                  barangId: true,
+                  aktif: true,
+                  harga: true,
+                },
+              });
+
+            /*
+             * Jangan mengizinkan stock Air RO masuk ke outlet
+             * yang belum mempunyai mapping Barang tersebut.
+             *
+             * User harus menghubungkan barang terlebih dahulu.
+             */
+
+            if (
+              !existingMapping
+            ) {
+              throw new Error(
+                "Air RO belum terhubung ke outlet ini. Hubungkan Barang Central ke outlet terlebih dahulu."
+              );
+            }
+
+            if (
+              !existingMapping.aktif
+            ) {
+              throw new Error(
+                "Air RO pada outlet ini sedang tidak aktif. Aktifkan kembali Barang tersebut terlebih dahulu."
+              );
+            }
+
+            /*
+             * =================================================
+             * AMBIL STOCK EXISTING
+             * =================================================
+             */
+
+            const existingStock =
+              await tx.outletStock.findUnique({
+                where: {
+                  outletId_barangId: {
+                    outletId,
+                    barangId,
+                  },
+                },
+
+                select: {
+                  id: true,
+                  outletId: true,
+                  barangId: true,
+                  stock: true,
+                  minimumStock: true,
+                  averageCost: true,
+                  updatedAt: true,
+                },
+              });
+
+            /*
+             * =================================================
+             * CREATE ATAU INCREMENT
+             *
+             * Stock lama TIDAK ditimpa.
+             *
+             * Contoh:
+             *
+             * stock lama = 1000
+             * qty        = 500
+             * hasil      = 1500
+             *
+             * =================================================
+             */
+
+            let outletStock;
+
+            if (
+              existingStock
+            ) {
+              const currentStock =
+                Number(
+                  existingStock.stock
+                );
+
+              const safeCurrentStock =
+                Number.isFinite(
+                  currentStock
+                )
+                  ? currentStock
+                  : 0;
+
+              const nextStock =
+                safeCurrentStock +
+                qty;
+
+              outletStock =
+                await tx.outletStock.update({
+                  where: {
+                    id:
+                      existingStock.id,
+                  },
+
+                  data: {
+                    stock:
+                      nextStock,
+                  },
+
+                  select: {
+                    id: true,
+                    outletId: true,
+                    barangId: true,
+                    stock: true,
+                    minimumStock: true,
+                    averageCost: true,
+                    updatedAt: true,
+                  },
+                });
+            } else {
+              outletStock =
+                await tx.outletStock.create({
+                  data: {
+                    outletId,
+                    barangId,
+
+                    stock:
+                      qty,
+
+                    minimumStock:
+                      Number(
+                        barang.minimumStock
+                      ) >= 0
+                        ? Number(
+                            barang.minimumStock
+                          )
+                        : 0,
+
+                    averageCost:
+                      Number(
+                        barang.purchasePrice
+                      ) >= 0
+                        ? Number(
+                            barang.purchasePrice
+                          )
+                        : 0,
+                  },
+
+                  select: {
+                    id: true,
+                    outletId: true,
+                    barangId: true,
+                    stock: true,
+                    minimumStock: true,
+                    averageCost: true,
+                    updatedAt: true,
+                  },
+                });
+            }
+
+            return {
+              outlet,
+              barang,
+              outletStock,
+
+              qtyAdded:
+                qty,
+
+              previousStock:
+                existingStock
+                  ? Number(
+                      existingStock.stock
+                    )
+                  : 0,
+
+              newStock:
+                Number(
+                  outletStock.stock
+                ),
+            };
+          }
+        );
+
+      /*
+       * ===================================================
+       * RESPONSE MANUAL AIR RO
+       * ===================================================
+       */
+
+      return NextResponse.json(
+        {
+          success: true,
+
+          message:
+            "Stock Air RO berhasil ditambahkan ke outlet.",
+
+          action:
+            "MANUAL_STOCK_AIR_RO",
+
+          outlet: {
+            id:
+              result.outlet.id,
+            code:
+              result.outlet.code,
+            name:
+              result.outlet.name,
+          },
+
+          barang: {
+            id:
+              result.barang.id,
+            code:
+              result.barang.code,
+            name:
+              result.barang.name,
+            unit:
+              toCleanString(
+                result.barang.baseUnit
+              ) ||
+              toCleanString(
+                result.barang.unit
+              ),
+            purchaseUnit:
+              toCleanString(
+                result.barang.unit
+              ),
+            baseUnit:
+              toCleanString(
+                result.barang.baseUnit
+              ) ||
+              toCleanString(
+                result.barang.unit
+              ),
+            conversionRate:
+              Number(
+                result.barang
+                  .conversionRate
+              ) > 0
+                ? Number(
+                    result.barang
+                      .conversionRate
+                  )
+                : 1,
+          },
+
+          stock: {
+            previous:
+              result.previousStock,
+
+            added:
+              result.qtyAdded,
+
+            current:
+              result.newStock,
+          },
+
+          stockPolicy:
+            "Stock Air RO disimpan dan ditambahkan pada OutletStock berdasarkan outletId + barangId. Barang.stock tidak diubah.",
+        },
+        { status: 200 }
+      );
+    }
+
+    /*
+     * =====================================================
+     * FLOW NORMAL:
+     * DAFTARKAN / AKTIFKAN BARANG CENTRAL KE OUTLET
+     * =====================================================
+     */
+
+    /*
+     * =====================================================
      * OUTLET ID
      * =====================================================
      */
+
     const requestedOutletId =
       body?.outletId ??
       body?.outletID;
 
     let outletId: number;
 
-    if (user.role === "OUTLET_ADMIN") {
+    if (
+      user.role ===
+      "OUTLET_ADMIN"
+    ) {
       if (
         !user.outletId ||
-        !Number.isInteger(user.outletId) ||
+        !Number.isInteger(
+          user.outletId
+        ) ||
         user.outletId <= 0
       ) {
         return NextResponse.json(
           {
             success: false,
-            message: "User belum memiliki outlet",
+            message:
+              "User belum memiliki outlet",
           },
           { status: 400 }
         );
       }
 
-      outletId = user.outletId;
+      outletId =
+        user.outletId;
     } else {
-      outletId = Number(requestedOutletId);
+      outletId =
+        Number(
+          requestedOutletId
+        );
 
-      if (!Number.isInteger(outletId) || outletId <= 0) {
+      if (
+        !Number.isInteger(
+          outletId
+        ) ||
+        outletId <= 0
+      ) {
         return NextResponse.json(
           {
             success: false,
-            message: "Outlet wajib dipilih",
+            message:
+              "Outlet wajib dipilih",
             received: {
-              outletId: requestedOutletId ?? null,
+              outletId:
+                requestedOutletId ??
+                null,
             },
           },
           { status: 400 }
@@ -1734,19 +2204,19 @@ export async function POST(
     /*
      * =====================================================
      * BARANG CENTRAL
-     *
-     * Mendukung:
-     *   barangId      = legacy / satu barang
-     *   barangIds[]   = multi select
-     *
-     * Jika keduanya dikirim, keduanya digabung lalu
-     * dideduplikasi.
      * =====================================================
      */
+
     const rawBarangIds: unknown[] = [];
 
-    if (Array.isArray(body?.barangIds)) {
-      rawBarangIds.push(...body.barangIds);
+    if (
+      Array.isArray(
+        body?.barangIds
+      )
+    ) {
+      rawBarangIds.push(
+        ...body.barangIds
+      );
     }
 
     const legacyBarangId =
@@ -1756,34 +2226,50 @@ export async function POST(
       body?.id;
 
     if (
-      legacyBarangId !== undefined &&
-      legacyBarangId !== null &&
+      legacyBarangId !==
+        undefined &&
+      legacyBarangId !==
+        null &&
       legacyBarangId !== ""
     ) {
-      rawBarangIds.push(legacyBarangId);
+      rawBarangIds.push(
+        legacyBarangId
+      );
     }
 
-    const barangIds = Array.from(
-      new Set(
-        rawBarangIds
-          .map((value) => Number(value))
-          .filter(
-            (value) =>
-              Number.isInteger(value) &&
-              value > 0
-          )
-      )
-    );
+    const barangIds =
+      Array.from(
+        new Set(
+          rawBarangIds
+            .map(
+              (value) =>
+                Number(value)
+            )
+            .filter(
+              (value) =>
+                Number.isInteger(
+                  value
+                ) &&
+                value > 0
+            )
+        )
+      );
 
-    if (barangIds.length === 0) {
+    if (
+      barangIds.length === 0
+    ) {
       return NextResponse.json(
         {
           success: false,
           message:
             "Minimal satu Barang Central wajib dipilih.",
           received: {
-            barangIds: body?.barangIds ?? null,
-            barangId: legacyBarangId ?? null,
+            barangIds:
+              body?.barangIds ??
+              null,
+            barangId:
+              legacyBarangId ??
+              null,
           },
         },
         { status: 400 }
@@ -1793,26 +2279,34 @@ export async function POST(
     /*
      * =====================================================
      * HARGA OUTLET
-     *
-     * Semua barang yang dipilih menggunakan harga outlet
-     * yang sama dari modal.
      * =====================================================
      */
+
     const rawHarga =
       body?.harga ??
       body?.price ??
       body?.sellingPrice ??
       0;
 
-    const harga = toNumber(rawHarga);
+    const harga =
+      toNumber(
+        rawHarga
+      );
 
-    if (!Number.isFinite(harga) || harga < 0) {
+    if (
+      !Number.isFinite(
+        harga
+      ) ||
+      harga < 0
+    ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Harga outlet tidak valid",
+          message:
+            "Harga outlet tidak valid",
           received: {
-            harga: rawHarga,
+            harga:
+              rawHarga,
           },
         },
         { status: 400 }
@@ -1824,11 +2318,13 @@ export async function POST(
      * CEK OUTLET
      * =====================================================
      */
+
     const outlet =
       await prisma.outlet.findUnique({
         where: {
           id: outletId,
         },
+
         select: {
           id: true,
           code: true,
@@ -1841,7 +2337,8 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message: "Outlet tidak ditemukan",
+          message:
+            "Outlet tidak ditemukan",
           outletId,
         },
         { status: 404 }
@@ -1852,7 +2349,8 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message: "Outlet sedang tidak aktif",
+          message:
+            "Outlet sedang tidak aktif",
         },
         { status: 400 }
       );
@@ -1861,22 +2359,9 @@ export async function POST(
     /*
      * =====================================================
      * TRANSACTION
-     *
-     * Semua Barang Central diproses dalam satu transaction.
-     * Jika salah satu gagal, seluruh proses dibatalkan.
-     *
-     * Existing mapping:
-     *   -> update harga
-     *   -> aktifkan kembali
-     *
-     * New mapping:
-     *   -> create OutletBarang
-     *
-     * OutletStock:
-     *   -> upsert
-     *   -> stock existing TIDAK diubah
      * =====================================================
      */
+
     const results =
       await prisma.$transaction(
         async (tx) => {
@@ -1899,14 +2384,20 @@ export async function POST(
             }
 
             const masterUnit =
-              toCleanString(barang.unit);
+              toCleanString(
+                barang.unit
+              );
 
             const masterBaseUnit =
-              toCleanString(barang.baseUnit) ||
+              toCleanString(
+                barang.baseUnit
+              ) ||
               masterUnit;
 
             const masterConversionRate =
-              toNumber(barang.conversionRate);
+              toNumber(
+                barang.conversionRate
+              );
 
             if (!masterUnit) {
               throw new Error(
@@ -1936,10 +2427,26 @@ export async function POST(
                 where: {
                   outletId_barangId: {
                     outletId,
-                    barangId: barang.id,
+                    barangId:
+                      barang.id,
                   },
                 },
               });
+
+            /*
+             * =================================================
+             * ENSURE OUTLET STOCK
+             *
+             * IMPORTANT:
+             *
+             * Connect barang ke outlet TIDAK mengisi stock
+             * dari Barang.stock.
+             *
+             * Stock awal tetap 0.
+             *
+             * Kalau stock sudah ada, TIDAK disentuh.
+             * =================================================
+             */
 
             const ensureOutletStock =
               async () => {
@@ -1947,14 +2454,20 @@ export async function POST(
                   where: {
                     outletId_barangId: {
                       outletId,
-                      barangId: barang.id,
+                      barangId:
+                        barang.id,
                     },
                   },
+
                   update: {},
+
                   create: {
                     outletId,
-                    barangId: barang.id,
+                    barangId:
+                      barang.id,
+
                     stock: 0,
+
                     minimumStock:
                       Number(
                         barang.minimumStock
@@ -1963,6 +2476,7 @@ export async function POST(
                             barang.minimumStock
                           )
                         : 0,
+
                     averageCost:
                       Number(
                         barang.purchasePrice
@@ -1976,19 +2490,24 @@ export async function POST(
               };
 
             let outletBarang: any;
-            let mappingCreated = false;
-            let mappingReactivated = false;
+            let mappingCreated =
+              false;
+            let mappingReactivated =
+              false;
 
             if (existing) {
               outletBarang =
                 await tx.outletBarang.update({
                   where: {
-                    id: existing.id,
+                    id:
+                      existing.id,
                   },
+
                   data: {
                     harga,
                     aktif: true,
                   },
+
                   include: {
                     outlet: {
                       select: {
@@ -1998,6 +2517,7 @@ export async function POST(
                         active: true,
                       },
                     },
+
                     barang: true,
                   },
                 });
@@ -2009,10 +2529,12 @@ export async function POST(
                 await tx.outletBarang.create({
                   data: {
                     outletId,
-                    barangId: barang.id,
+                    barangId:
+                      barang.id,
                     harga,
                     aktif: true,
                   },
+
                   include: {
                     outlet: {
                       select: {
@@ -2022,11 +2544,13 @@ export async function POST(
                         active: true,
                       },
                     },
+
                     barang: true,
                   },
                 });
 
-              mappingCreated = true;
+              mappingCreated =
+                true;
             }
 
             const outletStock =
@@ -2043,14 +2567,17 @@ export async function POST(
             const resultBaseUnit =
               toCleanString(
                 resultBarang.baseUnit
-              ) || resultUnit;
+              ) ||
+              resultUnit;
 
             const resultConversionRate =
               Number(
-                resultBarang.conversionRate
+                resultBarang
+                  .conversionRate
               ) > 0
                 ? Number(
-                    resultBarang.conversionRate
+                    resultBarang
+                      .conversionRate
                   )
                 : 1;
 
@@ -2058,27 +2585,49 @@ export async function POST(
               Boolean(
                 resultUnit &&
                   resultBaseUnit &&
-                  resultUnit !== resultBaseUnit
+                  resultUnit !==
+                    resultBaseUnit
               );
 
             output.push({
               outletBarang,
+
               outletStock,
-              barangCreated: false,
+
+              barangCreated:
+                false,
+
               mappingCreated,
+
               mappingReactivated,
-              barang: resultBarang,
+
+              barang:
+                resultBarang,
+
               unit: {
-                unit: resultUnit,
-                purchaseUnit: resultUnit,
-                baseUnit: resultBaseUnit,
-                stockUnit: resultBaseUnit,
-                bomUnit: resultBaseUnit,
+                unit:
+                  resultUnit,
+
+                purchaseUnit:
+                  resultUnit,
+
+                baseUnit:
+                  resultBaseUnit,
+
+                stockUnit:
+                  resultBaseUnit,
+
+                bomUnit:
+                  resultBaseUnit,
+
                 manufactureUnit:
                   resultBaseUnit,
+
                 conversionRate:
                   resultConversionRate,
+
                 hasConversion,
+
                 conversionLabel:
                   hasConversion
                     ? `1 ${resultUnit} = ${resultConversionRate} ${resultBaseUnit}`
@@ -2096,45 +2645,68 @@ export async function POST(
      * FORMAT RESULT
      * =====================================================
      */
+
     const formattedResults =
-      results.map((result) => {
-        const resultBarang =
-          result.barang;
+      results.map(
+        (result) => {
+          const resultBarang =
+            result.barang;
 
-        return {
-          ...result.outletBarang,
-          outletStock:
-            result.outletStock,
+          return {
+            ...result.outletBarang,
 
-          barang: {
-            ...resultBarang,
-            unit:
-              result.unit.unit,
-            baseUnit:
-              result.unit.baseUnit,
-            conversionRate:
-              result.unit.conversionRate,
-            hasConversion:
-              result.unit.hasConversion,
-            conversionLabel:
-              result.unit.conversionLabel,
-            purchaseUnit:
-              result.unit.purchaseUnit,
-            stockUnit:
-              result.unit.stockUnit,
-            stockBaseUnit:
-              result.unit.stockUnit,
-            bomUnit:
-              result.unit.bomUnit,
-            manufactureUnit:
-              result.unit.manufactureUnit,
-          },
-        };
-      });
+            outletStock:
+              result.outletStock,
+
+            barang: {
+              ...resultBarang,
+
+              unit:
+                result.unit.unit,
+
+              baseUnit:
+                result.unit.baseUnit,
+
+              conversionRate:
+                result.unit
+                  .conversionRate,
+
+              hasConversion:
+                result.unit
+                  .hasConversion,
+
+              conversionLabel:
+                result.unit
+                  .conversionLabel,
+
+              purchaseUnit:
+                result.unit
+                  .purchaseUnit,
+
+              stockUnit:
+                result.unit
+                  .stockUnit,
+
+              stockBaseUnit:
+                result.unit
+                  .stockUnit,
+
+              bomUnit:
+                result.unit
+                  .bomUnit,
+
+              manufactureUnit:
+                result.unit
+                  .manufactureUnit,
+            },
+          };
+        }
+      );
 
     const createdCount =
       results.filter(
-        (item) => item.mappingCreated
+        (item) =>
+          item.mappingCreated
       ).length;
 
     const reactivatedCount =
@@ -2150,72 +2722,91 @@ export async function POST(
 
     const isBulk =
       barangIds.length > 1 ||
-      Array.isArray(body?.barangIds);
+      Array.isArray(
+        body?.barangIds
+      );
 
     return NextResponse.json(
       {
         success: true,
 
         message:
-          barangIds.length === 1
-            ? results[0].mappingCreated
+          barangIds.length ===
+          1
+            ? results[0]
+                .mappingCreated
               ? "Barang Master Central berhasil diaktifkan untuk outlet."
-              : results[0].mappingReactivated
+              : results[0]
+                  .mappingReactivated
                 ? "Barang Central sudah terdaftar sebelumnya dan berhasil diaktifkan kembali."
                 : "Barang Central sudah terdaftar pada outlet dan pengaturan outlet berhasil diperbarui."
             : `${barangIds.length} Barang Central berhasil dihubungkan ke outlet.`,
 
-        /*
-         * data tetap berupa object untuk request lama
-         * dengan satu barang.
-         *
-         * Untuk multi-select, data berupa array.
-         */
         data:
-          barangIds.length === 1
+          barangIds.length ===
+          1
             ? formattedResults[0]
             : formattedResults,
 
-        items: formattedResults,
+        items:
+          formattedResults,
 
         count: {
           requested:
             barangIds.length,
+
           processed:
             results.length,
+
           created:
             createdCount,
+
           reactivated:
             reactivatedCount,
+
           updated:
             updatedCount,
         },
 
-        bulkConnect: isBulk,
+        bulkConnect:
+          isBulk,
 
-        barangCreated: false,
+        barangCreated:
+          false,
 
         mappingCreated:
-          barangIds.length === 1
-            ? results[0].mappingCreated
-            : createdCount > 0,
+          barangIds.length ===
+          1
+            ? results[0]
+                .mappingCreated
+            : createdCount >
+                0,
 
         mappingReactivated:
-          barangIds.length === 1
-            ? results[0].mappingReactivated
-            : reactivatedCount > 0,
+          barangIds.length ===
+          1
+            ? results[0]
+                .mappingReactivated
+            : reactivatedCount >
+                0,
 
         outlet: {
-          id: outlet.id,
-          code: outlet.code,
-          name: outlet.name,
+          id:
+            outlet.id,
+
+          code:
+            outlet.code,
+
+          name:
+            outlet.name,
         },
 
         unitPolicy:
-          "Purchase menggunakan purchase unit. Saat barang masuk stock, quantity dikonversi ke base unit. Stock, BOM, dan Manufacture menggunakan base unit.",
+          "Purchase menggunakan purchase unit. Alur stock existing tetap menggunakan policy yang sudah berjalan.",
 
         price: {
           harga,
+
           policy:
             "OutletBarang.harga adalah harga master outlet. Harga pembelian aktual tetap berasal dari proses Purchase/Receipt.",
         },
@@ -2230,6 +2821,9 @@ export async function POST(
           outletStock:
             "OutletStock menyimpan stock aktual berdasarkan outletId + barangId.",
 
+          airRO:
+            "MANUAL_STOCK_AIR_RO menambahkan qty ke OutletStock outlet yang dipilih tanpa mengubah Barang.stock.",
+
           multiConnect:
             "Satu request dapat menghubungkan beberapa Barang Central sekaligus ke outlet.",
 
@@ -2240,13 +2834,15 @@ export async function POST(
             "Barang lama source OUTLET tidak dihapus, tidak diubah, dan tetap dapat digunakan oleh transaksi lama.",
 
           transactionSafety:
-            "Tidak ada penghapusan atau perubahan terhadap transaksi outlet existing. Stock existing juga tidak ditimpa.",
+            "Tidak ada penghapusan atau perubahan terhadap transaksi outlet existing. Stock existing tidak ditimpa ketika Barang dihubungkan kembali.",
         },
       },
       {
         status:
-          barangIds.length === 1 &&
-          results[0].mappingCreated
+          barangIds.length ===
+            1 &&
+          results[0]
+            .mappingCreated
             ? 201
             : 200,
       }
@@ -2258,7 +2854,8 @@ export async function POST(
     );
 
     if (
-      error?.code === "P2002"
+      error?.code ===
+      "P2002"
     ) {
       return NextResponse.json(
         {
@@ -2271,7 +2868,8 @@ export async function POST(
     }
 
     if (
-      error?.code === "P2003"
+      error?.code ===
+      "P2003"
     ) {
       return NextResponse.json(
         {
@@ -2286,6 +2884,7 @@ export async function POST(
     return NextResponse.json(
       {
         success: false,
+
         message:
           error?.message ||
           "Gagal menghubungkan Barang Central ke outlet.",
@@ -2296,6 +2895,7 @@ export async function POST(
             ? {
                 name:
                   error?.name,
+
                 code:
                   error?.code,
               }

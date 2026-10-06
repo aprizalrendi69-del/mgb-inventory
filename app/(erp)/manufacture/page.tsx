@@ -101,7 +101,9 @@ type Order = {
   outletId?: number | null;
   outlet?: Outlet | null;
   recipe: {
+    id?: number;
     name: string;
+    outputQty?: number;
     outputBarang: Barang;
   };
   items: OrderItem[];
@@ -224,8 +226,18 @@ function getConversionRate(barang?: Barang | null) {
   return Number.isFinite(rate) && rate > 0 ? rate : null;
 }
 
+/**
+ * Canonical Master Barang ID.
+ * Recipe STOCK selalu menggunakan Barang.id dari Master Barang.
+ */
+function getMasterBarangId(barang?: Barang | null) {
+  const id = Number(barang?.id ?? 0);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
 function getStockUnitLabel(barang?: Barang | null) {
-  // Manufacture selalu menampilkan stock dalam baseUnit.
+  // Manufacture menampilkan kebutuhan bahan dalam baseUnit.
+  // OutletStock sendiri tetap menyimpan stock dalam Barang.unit.
   return getBarangBaseUnit(barang);
 }
 
@@ -254,9 +266,9 @@ function getStockInBaseUnit(
     return rawStock;
   }
 
-  // Endpoint legacy /api/outlet/stock mengembalikan
-  // OutletStock.stock dalam purchase unit. Manufacture
-  // membutuhkan nilai dalam baseUnit.
+  // Kebijakan unit saat ini:
+  // OutletStock.stock menyimpan Barang.unit.
+  // Manufacture membutuhkan stock bahan dalam baseUnit.
   //
   // Contoh:
   // 4,3 Jerigen × 13.000 gram/Jerigen = 55.900 gram.
@@ -605,12 +617,12 @@ export default function ManufacturePage() {
 
                 stock: (() => {
                   /*
-                   * Stock Manufacture WAJIB baseUnit.
+                   * OutletStock tetap disimpan dalam Barang.unit.
+                   * Manufacture membutuhkan nilai stock dalam baseUnit.
                    *
-                   * Prioritaskan field yang secara eksplisit sudah
-                   * dikonversi oleh backend. Jika endpoint lama hanya
-                   * mengirim `stock`, konversi di sini menggunakan
-                   * conversionRate Master Barang.
+                   * Jika backend menyediakan field stockBaseUnit /
+                   * convertedStock, gunakan nilai tersebut. Jika tidak,
+                   * konversi stock Barang.unit -> baseUnit di UI.
                    *
                    * Contoh:
                    * 4,3 Jerigen × 13.000 gram/Jerigen
@@ -748,11 +760,57 @@ export default function ManufacturePage() {
           barangRes.data ??
           [];
 
-        setBarangs(
+        const masterBarangList: Barang[] =
           Array.isArray(raw)
             ? raw
-            : []
-        );
+                .map((x: any) => {
+                  const id = Number(x?.id);
+
+                  if (!Number.isInteger(id) || id <= 0) {
+                    return null;
+                  }
+
+                  return {
+                    id,
+                    code: String(
+                      x?.code ??
+                        x?.kode ??
+                        ""
+                    ),
+                    name: String(
+                      x?.name ??
+                        x?.nama ??
+                        ""
+                    ),
+                    unit: String(
+                      x?.unit ??
+                        ""
+                    ),
+                    baseUnit:
+                      x?.baseUnit ??
+                      x?.base_unit ??
+                      null,
+                    conversionRate:
+                      x?.conversionRate != null
+                        ? Number(x.conversionRate)
+                        : undefined,
+                    stock:
+                      x?.stock != null
+                        ? Number(x.stock)
+                        : undefined,
+                  } satisfies Barang;
+                })
+                .filter(
+                  (
+                    x: Barang | null
+                  ): x is Barang =>
+                    x !== null &&
+                    x.id > 0 &&
+                    Boolean(x.name)
+                )
+            : [];
+
+        setBarangs(masterBarangList);
       }
     } catch (error) {
       console.error(
@@ -1296,6 +1354,8 @@ export default function ManufacturePage() {
 
   /* =========================================================
    * SAVE RECIPE
+   *
+   * STOCK item selalu menggunakan Master Barang.id.
    * ========================================================= */
 
   async function saveRecipe() {
@@ -1317,9 +1377,28 @@ export default function ManufacturePage() {
       );
     }
 
-    if (!recipe.outputBarangId) {
+    const outputBarangId = Number(
+      recipe.outputBarangId
+    );
+
+    if (
+      !Number.isInteger(outputBarangId) ||
+      outputBarangId <= 0
+    ) {
       return toast.error(
         "Produk hasil wajib dipilih"
+      );
+    }
+
+    const outputBarang = barangs.find(
+      (candidate) =>
+        getMasterBarangId(candidate) ===
+        outputBarangId
+    );
+
+    if (!outputBarang) {
+      return toast.error(
+        "Produk hasil tidak ditemukan pada Master Barang"
       );
     }
 
@@ -1329,9 +1408,7 @@ export default function ManufacturePage() {
       );
 
     if (
-      !Number.isFinite(
-        outputQty
-      ) ||
+      !Number.isFinite(outputQty) ||
       outputQty <= 0
     ) {
       return toast.error(
@@ -1339,81 +1416,182 @@ export default function ManufacturePage() {
       );
     }
 
-    const normalizedItems = recipeItems.map(
-      (item, index) => {
-        const qty = Number(item.qty);
+    let normalizedItems: Array<{
+      itemType: "STOCK" | "UTILITY";
+      barangId: number | null;
+      name: string | null;
+      qty: number;
+      unit: string;
+    }>;
 
-        if (!Number.isFinite(qty) || qty <= 0) {
-          throw new Error(
-            `Qty pada item ke-${index + 1} harus lebih dari 0.`
-          );
-        }
+    try {
+      normalizedItems =
+        recipeItems.map(
+          (item, index) => {
+            const qty =
+              Number(item.qty);
 
-        if (item.itemType === "UTILITY") {
-          const name = item.name.trim();
-          const unit = item.unit.trim();
+            if (
+              !Number.isFinite(qty) ||
+              qty <= 0
+            ) {
+              throw new Error(
+                `Qty pada item ke-${index + 1} harus lebih dari 0.`
+              );
+            }
 
-          if (!name) {
-            throw new Error(
-              `Nama utility pada item ke-${index + 1} wajib diisi.`
-            );
+            if (
+              item.itemType ===
+              "UTILITY"
+            ) {
+              const name =
+                item.name.trim();
+              const unit =
+                item.unit.trim();
+
+              if (!name) {
+                throw new Error(
+                  `Nama utility pada item ke-${index + 1} wajib diisi.`
+                );
+              }
+
+              if (!unit) {
+                throw new Error(
+                  `Unit utility pada item ke-${index + 1} wajib diisi.`
+                );
+              }
+
+              return {
+                itemType:
+                  "UTILITY" as const,
+                barangId: null,
+                name,
+                qty,
+                unit,
+              };
+            }
+
+            /*
+             * STOCK:
+             * item.barangId hanya dipakai sebagai referensi pencarian
+             * ke `barangs`, yaitu daftar yang berasal dari
+             * /api/master/barang.
+             *
+             * ID yang dikirim ke API diambil ulang dari Master Barang.id,
+             * sehingga ID OutletStock atau ID object lain tidak ikut
+             * tersimpan sebagai barangId recipe.
+             */
+            const selectedId =
+              Number(
+                item.barangId
+              );
+
+            if (
+              !Number.isInteger(selectedId) ||
+              selectedId <= 0
+            ) {
+              throw new Error(
+                `Barang pada item ke-${index + 1} wajib dipilih.`
+              );
+            }
+
+            const masterBarang =
+              barangs.find(
+                (candidate) =>
+                  getMasterBarangId(
+                    candidate
+                  ) === selectedId
+              );
+
+            if (!masterBarang) {
+              throw new Error(
+                `Master Barang pada item ke-${index + 1} tidak ditemukan. Silakan pilih ulang barang dari daftar Master Barang.`
+              );
+            }
+
+            const masterBarangId =
+              getMasterBarangId(
+                masterBarang
+              );
+
+            if (
+              masterBarangId ===
+              null
+            ) {
+              throw new Error(
+                `ID Master Barang pada item ke-${index + 1} tidak valid.`
+              );
+            }
+
+            const baseUnit =
+              getBarangBaseUnit(
+                masterBarang
+              );
+
+            if (!baseUnit) {
+              throw new Error(
+                `Base unit untuk ${masterBarang.name} belum dikonfigurasi.`
+              );
+            }
+
+            return {
+              itemType:
+                "STOCK" as const,
+              barangId:
+                masterBarangId,
+              name: null,
+              qty,
+              unit: baseUnit,
+            };
           }
-
-          if (!unit) {
-            throw new Error(
-              `Unit utility pada item ke-${index + 1} wajib diisi.`
-            );
-          }
-
-          return {
-            itemType: "UTILITY" as const,
-            barangId: null,
-            name,
-            qty,
-            unit,
-          };
-        }
-
-        const barangId = Number(item.barangId);
-
-        if (!Number.isInteger(barangId) || barangId <= 0) {
-          throw new Error(
-            `Barang pada item ke-${index + 1} wajib dipilih.`
-          );
-        }
-
-        const barang = barangs.find(
-          (candidate) => Number(candidate.id) === barangId
         );
+    } catch (error: any) {
+      return toast.error(
+        error?.message ||
+          "Data bahan BOM tidak valid"
+      );
+    }
 
-        if (!barang) {
-          throw new Error(
-            `Master Barang pada item ke-${index + 1} tidak ditemukan.`
-          );
-        }
-
-        const baseUnit = getBarangBaseUnit(barang);
-
-        if (!baseUnit) {
-          throw new Error(
-            `Base unit untuk ${barang.name} belum dikonfigurasi.`
-          );
-        }
-
-        return {
-          itemType: "STOCK" as const,
-          barangId,
-          name: null,
-          qty,
-          unit: baseUnit,
-        };
-      }
-    );
-
-    if (!normalizedItems.length) {
+    if (
+      !normalizedItems.length
+    ) {
       return toast.error(
         "Minimal satu komponen STOCK atau UTILITY harus diisi"
       );
+    }
+
+    /*
+     * Final guard sebelum POST/PUT.
+     * Setiap STOCK harus benar-benar memiliki ID yang ada
+     * pada daftar Master Barang yang sedang digunakan UI.
+     */
+    for (
+      let index = 0;
+      index < normalizedItems.length;
+      index += 1
+    ) {
+      const item =
+        normalizedItems[index];
+
+      if (
+        item.itemType === "STOCK" &&
+        (!Number.isInteger(
+          Number(item.barangId)
+        ) ||
+          !barangs.some(
+            (barang) =>
+              getMasterBarangId(
+                barang
+              ) ===
+              Number(
+                item.barangId
+              )
+          ))
+      ) {
+        return toast.error(
+          `ID Master Barang pada item ke-${index + 1} tidak valid.`
+        );
+      }
     }
 
     setSavingRecipe(true);
@@ -1431,17 +1609,16 @@ export default function ManufacturePage() {
         name:
           recipe.name.trim(),
 
-        outputBarangId:
-          Number(
-            recipe.outputBarangId
-          ),
+        // Selalu Master Barang.id.
+        outputBarangId,
 
         outputQty,
 
         notes:
           recipe.notes.trim(),
 
-        items: normalizedItems,
+        items:
+          normalizedItems,
       };
 
       const isEdit =
@@ -1641,111 +1818,103 @@ export default function ManufacturePage() {
    * ========================================================= */
 
   async function createOrder() {
-    if (!selectedOutletId) {
-      return toast.error(
-        "Outlet wajib dipilih"
-      );
+    if (!selectedOutletId) return toast.error("Outlet wajib dipilih");
+    if (!order.recipeId) return toast.error("BOM / resep wajib dipilih");
+
+    /*
+     * FORM menerima QTY HASIL PRODUKSI.
+     * Backend ManufactureOrder.plannedQty menerima JUMLAH BATCH.
+     *
+     * Contoh BOM:
+     *   1 batch = 39,92 kg hasil
+     *   1 batch = 8,4 liter Monggo Jin Soy Sauce
+     *
+     * Request 39,92 kg => 39,92 / 39,92 = 1 batch
+     * => kebutuhan Soy Sauce = 8,4 × 1 = 8,4 liter.
+     *
+     * Request 79,84 kg => 2 batch
+     * => kebutuhan Soy Sauce = 8,4 × 2 = 16,8 liter.
+     *
+     * RecipeItem.qty sudah merupakan kebutuhan untuk 1 batch.
+     * Jangan kalikan RecipeItem.qty dengan conversionRate di sini.
+     */
+    const requestedOutputQty = Number(order.plannedQty);
+
+    if (!Number.isFinite(requestedOutputQty) || requestedOutputQty <= 0) {
+      return toast.error("Qty hasil produksi tidak valid");
     }
 
-    if (!order.recipeId) {
-      return toast.error(
-        "BOM / resep wajib dipilih"
-      );
+    const selectedRecipe = recipes.find(
+      (item) => String(item.id) === String(order.recipeId)
+    );
+
+    if (!selectedRecipe) {
+      return toast.error("BOM / resep tidak ditemukan. Silakan pilih ulang.");
     }
 
-    const plannedQty =
-      Number(
-        order.plannedQty
-      );
+    const outputPerBatch = Number(selectedRecipe.outputQty);
 
-    if (
-      !Number.isFinite(
-        plannedQty
-      ) ||
-      plannedQty <= 0
-    ) {
-      return toast.error(
-        "Qty produksi tidak valid"
-      );
+    if (!Number.isFinite(outputPerBatch) || outputPerBatch <= 0) {
+      return toast.error("Hasil per Batch pada BOM tidak valid");
+    }
+
+    const batchQty = Number(
+      (requestedOutputQty / outputPerBatch).toFixed(10)
+    );
+
+    if (!Number.isFinite(batchQty) || batchQty <= 0) {
+      return toast.error("Jumlah batch hasil perhitungan tidak valid");
+    }
+
+    const totalOutput = batchQty * outputPerBatch;
+    const tolerance = Math.max(0.0000001, Math.abs(requestedOutputQty) * 0.0000001);
+
+    if (Math.abs(totalOutput - requestedOutputQty) > tolerance) {
+      return toast.error("Qty hasil produksi tidak dapat dikonversi dengan BOM yang dipilih");
     }
 
     setSavingOrder(true);
 
     try {
-      const res =
-        await fetch(
-          "/api/manufacture/orders",
-          {
-            method: "POST",
+      const res = await fetch("/api/manufacture/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...order,
+          recipeId: Number(order.recipeId),
+          // Backend menerima multiplier BOM = jumlah batch.
+          plannedQty: batchQty,
+          outletId: Number(
+            isOutletAdmin ? user?.outletId : selectedOutletId
+          ),
+        }),
+      });
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+      const data = await res.json();
 
-            body:
-              JSON.stringify({
-                ...order,
-
-                recipeId:
-                  Number(
-                    order.recipeId
-                  ),
-
-                plannedQty,
-
-                outletId:
-                  Number(
-                    isOutletAdmin
-                      ? user?.outletId
-                      : selectedOutletId
-                  ),
-              }),
-          }
-        );
-
-      const data =
-        await res.json();
-
-      if (
-        !res.ok ||
-        !data.success
-      ) {
-        return toast.error(
-          data.message ||
-            "Gagal membuat order"
-        );
+      if (!res.ok || !data.success) {
+        return toast.error(data.message || "Gagal membuat order");
       }
 
       toast.success(
-        `Order ${
-          data.data?.number ??
-          ""
-        } berhasil dibuat`
+        `Order ${data.data?.number ?? ""} berhasil dibuat • Request ${formatNumber(
+          requestedOutputQty
+        )} ${getBarangBaseUnit(selectedRecipe.outputBarang)} = ${formatNumber(
+          batchQty
+        )} batch`
       );
 
       setShowOrder(false);
-
-      setOrder({
-        recipeId: "",
-        plannedQty: "",
-        note: "",
-      });
-
+      setOrder({ recipeId: "", plannedQty: "", note: "" });
       await load();
     } catch (error) {
-      console.error(
-        "CREATE ORDER ERROR:",
-        error
-      );
-
-      toast.error(
-        "Gagal membuat order produksi"
-      );
+      console.error("CREATE ORDER ERROR:", error);
+      toast.error("Gagal membuat order produksi");
     } finally {
       setSavingOrder(false);
     }
   }
+
 
   /* =========================================================
    * COMPLETE
@@ -1790,11 +1959,44 @@ export default function ManufacturePage() {
       );
     }
 
+    const targetRecipe = recipes.find(
+      (recipe) =>
+        (target.recipe?.id != null &&
+          Number(recipe.id) ===
+            Number(target.recipe.id)) ||
+        (recipe.name ===
+          target.recipe?.name &&
+          Number(recipe.outputBarang?.id) ===
+            Number(target.recipe?.outputBarang?.id))
+    );
+
+    const outputPerBatch =
+      Number(
+        target.recipe?.outputQty ??
+          targetRecipe?.outputQty ??
+          0
+      );
+
+    if (
+      !Number.isFinite(outputPerBatch) ||
+      outputPerBatch <= 0
+    ) {
+      return toast.error(
+        "Hasil per Batch pada BOM tidak ditemukan"
+      );
+    }
+
+    const defaultProducedQty =
+      Number(
+        (Number(target.plannedQty) *
+          outputPerBatch).toFixed(10)
+      );
+
     const qty =
       window.prompt(
         "Qty hasil produksi:",
         String(
-          target.plannedQty
+          defaultProducedQty
         )
       );
 
@@ -2684,7 +2886,18 @@ export default function ManufacturePage() {
                             <td className="px-5 py-4">
                               <div className="font-black text-[#405B50]">
                                 {formatNumber(
-                                  item.plannedQty
+                                  Number(item.plannedQty) *
+                                    Number(
+                                      item.recipe?.outputQty ??
+                                        recipes.find(
+                                          (recipe) =>
+                                            recipe.name ===
+                                            item.recipe?.name &&
+                                            Number(recipe.outputBarang?.id) ===
+                                              Number(item.recipe?.outputBarang?.id)
+                                        )?.outputQty ??
+                                      0
+                                    )
                                 )}
                               </div>
 
@@ -3470,8 +3683,42 @@ export default function ManufacturePage() {
                           </div>
                         </div>
                       ) : (
-                        <div className="grid gap-3 md:grid-cols-[1fr_130px_130px]">
-                          <Field label="Nama Utility">
+                        <div className="space-y-3">
+                          <div className="rounded-xl border border-[#E9DCC5] bg-[#FFF9EF] px-3 py-2.5">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <div className="text-[10px] font-black uppercase tracking-[0.12em] text-[#A87932]">
+                                  Utility Non-Stock
+                                </div>
+                                <div className="mt-0.5 text-[10px] leading-4 text-[#8E7A5D]">
+                                  Tidak perlu terdaftar di Master Barang dan tidak mengurangi stock outlet.
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateRecipeItem(
+                                    index,
+                                    {
+                                      itemType: "UTILITY",
+                                      barangId: "",
+                                      name: "AIR RO",
+                                      unit: "Liter",
+                                    }
+                                  )
+                                }
+                                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[#E2CDA9] bg-white px-3 py-2 text-[10px] font-black text-[#A87932] transition hover:bg-[#FFF4DE]"
+                              >
+                                <CircleDot size={12} />
+                                Gunakan AIR RO
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid gap-3 md:grid-cols-[1fr_130px_130px]">
+                            <Field label="Nama Utility">
+
                             <input
                               value={
                                 item.name
@@ -3539,6 +3786,7 @@ export default function ManufacturePage() {
                               placeholder="Liter"
                             />
                           </Field>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -3782,26 +4030,97 @@ export default function ManufacturePage() {
 
               <div className="mt-4">
                 <Field
-                  label="Qty Produksi"
+                  label="Qty Hasil Produksi"
                   required
                 >
                   <input
                     type="number"
                     min="0.0001"
                     step="any"
-                    value={
-                      order.plannedQty
-                    }
+                    value={order.plannedQty}
                     onChange={(e) =>
                       setOrder({
                         ...order,
-                        plannedQty:
-                          e.target
-                            .value,
+                        plannedQty: e.target.value,
                       })
                     }
-                    placeholder="Contoh: 100"
+                    placeholder="Contoh: 39.92"
                   />
+
+                  {order.plannedQty && (() => {
+                    const selectedRecipe = recipes.find(
+                      (x) => String(x.id) === String(order.recipeId)
+                    );
+
+                    if (!selectedRecipe) return null;
+
+                    const requestedOutputQty = Number(order.plannedQty);
+                    const outputPerBatch = Number(selectedRecipe.outputQty);
+
+                    if (
+                      !Number.isFinite(requestedOutputQty) ||
+                      requestedOutputQty <= 0 ||
+                      !Number.isFinite(outputPerBatch) ||
+                      outputPerBatch <= 0
+                    ) {
+                      return null;
+                    }
+
+                    const batchQty = requestedOutputQty / outputPerBatch;
+
+                    return (
+                      <div className="mt-2 rounded-xl border border-[#DCEAE3] bg-[#F4F9F6] px-3 py-2.5 text-xs text-[#567066]">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span>Request hasil</span>
+                          <strong className="text-[#315F51]">
+                            {formatNumber(requestedOutputQty)} {getBarangBaseUnit(selectedRecipe.outputBarang)}
+                          </strong>
+                        </div>
+
+                        <div className="mt-1 text-[11px] text-[#7B8C84]">
+                          = {formatNumber(batchQty)} batch × {formatNumber(outputPerBatch)} {getBarangBaseUnit(selectedRecipe.outputBarang)} per batch
+                        </div>
+
+                        <div className="mt-2 border-t border-[#DCEAE3] pt-2">
+                          <div className="mb-1 text-[10px] font-black uppercase tracking-[0.08em] text-[#71857B]">
+                            Kebutuhan sesuai BOM
+                          </div>
+
+                          <div className="space-y-1.5">
+                            {(selectedRecipe.items ?? []).map((item) => {
+                              const itemQty = Number(item.qty);
+                              if (!Number.isFinite(itemQty) || itemQty <= 0) return null;
+
+                              const requiredQty = itemQty * batchQty;
+                              const itemName =
+                                item.itemType === "UTILITY"
+                                  ? item.name || "Utility"
+                                  : item.barang?.name || "Bahan";
+                              const itemUnit =
+                                item.unit ||
+                                item.barang?.baseUnit ||
+                                item.barang?.unit ||
+                                "";
+
+                              return (
+                                <div
+                                  key={item.id}
+                                  className="flex items-center justify-between gap-3 rounded-lg bg-white/70 px-2.5 py-1.5"
+                                >
+                                  <span className="min-w-0 truncate font-semibold text-[#4D655B]">
+                                    {itemName}
+                                  </span>
+                                  <span className="shrink-0 font-black text-[#315F51]">
+                                    {formatNumber(requiredQty)} {itemUnit}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </Field>
               </div>
 

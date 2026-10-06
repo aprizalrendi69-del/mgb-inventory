@@ -136,6 +136,14 @@ type Stock = {
   minimumStock: number;
   averageCost: number;
 
+  /*
+   * Harga transaksi IN terakhir yang sudah tercatat/received.
+   * Field ini hanya dipakai di frontend dan tidak mengubah DB.
+   */
+  lastReceivedPrice?: number;
+  lastReceivedDate?: string | null;
+  lastReceivedSource?: string | null;
+
   displayQty?: number;
   displayUnit?: string;
 
@@ -223,6 +231,22 @@ type HistoryRow = {
   description: string | null;
 
   source: string;
+
+  /*
+   * Harga snapshot transaksi.
+   * API history dapat memakai salah satu nama field berikut
+   * tergantung source transaksi, sehingga helper di bawah
+   * membaca semuanya secara tolerant.
+   */
+  price?: number | string | null;
+  unitPrice?: number | string | null;
+  purchasePrice?: number | string | null;
+  costPrice?: number | string | null;
+  averageCost?: number | string | null;
+  harga?: number | string | null;
+  hargaBeli?: number | string | null;
+  transactionPrice?: number | string | null;
+  transactionUnitPrice?: number | string | null;
 
   barang: HistoryBarang | null;
 
@@ -791,6 +815,245 @@ export default function OutletStockPage() {
   }
 
   // =====================================================
+  // LAST RECEIVED TRANSACTION PRICE
+  // =====================================================
+  /*
+   * Harga yang ditampilkan di tabel bukan lagi semata-mata
+   * Barang.purchasePrice.
+   *
+   * Prioritas:
+   *   1. Harga transaksi IN terakhir yang sudah committed/received
+   *      dari SEMUA source history.
+   *   2. Jika transaksi tersebut tidak membawa field harga,
+   *      lanjut mencari transaksi IN berikutnya yang memiliki harga.
+   *   3. Jika tidak ada harga transaksi sama sekali, caller
+   *      menggunakan harga master Barang sebagai fallback.
+   *
+   * History API sengaja dibaca dengan includeAllSources=true
+   * agar Purchase/Receipt, transfer, delivery, manufacture,
+   * adjustment, dan source lain yang memang mengirim harga
+   * tidak terlewat hanya karena source tertentu difilter.
+   */
+
+  function readTransactionPrice(
+    row: HistoryRow
+  ): number {
+    const candidateRow =
+      row as HistoryRow & Record<string, unknown>;
+
+    const candidates: unknown[] = [
+      candidateRow.transactionUnitPrice,
+      candidateRow.unitPrice,
+      candidateRow.price,
+      candidateRow.purchasePrice,
+      candidateRow.costPrice,
+      candidateRow.averageCost,
+      candidateRow.hargaBeli,
+      candidateRow.harga,
+      candidateRow.transactionPrice,
+      (candidateRow as any).itemPrice,
+      (candidateRow as any).receiptPrice,
+      (candidateRow as any).cost,
+      (candidateRow as any).unitCost,
+      (candidateRow as any).purchase?.price,
+      (candidateRow as any).receiptItem?.price,
+      (candidateRow as any).purchaseItem?.price,
+      (candidateRow as any).transferItem?.price,
+      (candidateRow as any).deliveryItem?.price,
+      (candidateRow as any).manufactureItem?.price,
+      (candidateRow as any).item?.price,
+    ];
+
+    for (const candidate of candidates) {
+      if (
+        candidate === null ||
+        candidate === undefined ||
+        candidate === ""
+      ) {
+        continue;
+      }
+
+      const value = Number(candidate);
+
+      if (
+        Number.isFinite(value) &&
+        value > 0
+      ) {
+        return value;
+      }
+    }
+
+    return 0;
+  }
+
+  function isCommittedReceivedMovement(
+    row: HistoryRow
+  ): boolean {
+    const direction = String(
+      row?.direction || ""
+    )
+      .trim()
+      .toUpperCase();
+
+    if (direction !== "IN") {
+      return false;
+    }
+
+    const status = String(
+      row?.status || ""
+    )
+      .trim()
+      .toUpperCase();
+
+    /*
+     * Jika status eksplisit masih draft/pending/cancelled/rejected,
+     * jangan pernah dipakai sebagai harga terakhir.
+     * Status kosong dianggap committed karena row tersebut sudah
+     * menjadi movement IN pada history stock.
+     */
+    if (
+      [
+        "DRAFT",
+        "PENDING",
+        "WAITING",
+        "WAITING_APPROVAL",
+        "CANCELLED",
+        "CANCELED",
+        "REJECTED",
+        "VOID",
+      ].includes(status)
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  async function loadLatestReceivedTransactionPrices(
+    targetOutlet: string
+  ): Promise<Map<number, {
+    price: number;
+    date: string;
+    source: string;
+  }>> {
+    const latest = new Map<
+      number,
+      {
+        price: number;
+        date: string;
+        source: string;
+      }
+    >();
+
+    const params =
+      new URLSearchParams();
+
+    if (targetOutlet) {
+      params.set(
+        "outletId",
+        targetOutlet
+      );
+    }
+
+    params.set(
+      "scope",
+      "ALL"
+    );
+    params.set(
+      "includeAll",
+      "true"
+    );
+    params.set(
+      "includeAllSources",
+      "true"
+    );
+    params.set(
+      "includeAllTypes",
+      "true"
+    );
+    params.set(
+      "direction",
+      "IN"
+    );
+    params.set(
+      "limit",
+      "10000"
+    );
+
+    const res = await fetch(
+      `/api/outlet/stock/history?${params.toString()}`,
+      {
+        cache: "no-store",
+      }
+    );
+
+    const result: HistoryResponse =
+      await res.json();
+
+    if (
+      !res.ok ||
+      !result?.success ||
+      !Array.isArray(result?.data)
+    ) {
+      throw new Error(
+        result?.message ||
+          "Gagal mengambil harga transaksi received outlet"
+      );
+    }
+
+    for (const row of result.data) {
+      if (!isCommittedReceivedMovement(row)) {
+        continue;
+      }
+
+      const barangId = Number(
+        row?.barangId || 0
+      );
+
+      if (barangId <= 0) {
+        continue;
+      }
+
+      const price =
+        readTransactionPrice(row);
+
+      /*
+       * Tidak semua source mempunyai harga.
+       * Contoh transfer/delivery bisa hanya membawa qty.
+       * Row tanpa harga dilewati agar tidak menimpa harga
+       * transaksi terakhir yang valid.
+       */
+      if (price <= 0) {
+        continue;
+      }
+
+      const date = String(
+        row?.date || ""
+      );
+      const existing =
+        latest.get(barangId);
+
+      if (
+        !existing ||
+        new Date(date).getTime() >
+          new Date(existing.date).getTime()
+      ) {
+        latest.set(barangId, {
+          price,
+          date,
+          source: String(
+            row?.source ||
+              row?.type ||
+              "SYSTEM"
+          ),
+        });
+      }
+    }
+
+    return latest;
+  }
+
+  // =====================================================
   // LOAD STOCK
   // =====================================================
 
@@ -898,7 +1161,57 @@ export default function OutletStockPage() {
 
       /*
        * ===================================================
-       * 3. Filter current stock berdasarkan transaksi
+       * 3. Ambil harga transaksi IN terakhir
+       * ===================================================
+       *
+       * Harga dicari dari history yang sudah menjadi movement
+       * IN/received dan mencakup SEMUA source.
+       */
+      let latestReceivedPrices =
+        new Map<number, {
+          price: number;
+          date: string;
+          source: string;
+        }>();
+
+      try {
+        latestReceivedPrices =
+          await loadLatestReceivedTransactionPrices(
+            targetOutlet
+          );
+      } catch (priceError) {
+        /*
+         * Kegagalan lookup harga tidak boleh menghilangkan
+         * stock yang valid. Tabel tetap memakai harga master
+         * sebagai fallback.
+         */
+        console.error(
+          "LOAD LATEST RECEIVED PRICE ERROR:",
+          priceError
+        );
+      }
+
+      const stockRowsWithLatestPrice =
+        stockRows.map((row) => {
+          const latest =
+            latestReceivedPrices.get(
+              Number(row.barangId)
+            );
+
+          return {
+            ...row,
+            lastReceivedPrice:
+              latest?.price || 0,
+            lastReceivedDate:
+              latest?.date || null,
+            lastReceivedSource:
+              latest?.source || null,
+          };
+        });
+
+      /*
+       * ===================================================
+       * 4. Filter current stock berdasarkan transaksi
        * ===================================================
        *
        * Hanya barang yang mempunyai minimal satu transaksi
@@ -906,10 +1219,11 @@ export default function OutletStockPage() {
        */
 
       const activeStockRows =
-        stockRows.filter((item) =>
-          activeBarangIds.has(
-            Number(item.barangId)
-          )
+        stockRowsWithLatestPrice.filter(
+          (item) =>
+            activeBarangIds.has(
+              Number(item.barangId)
+            )
         );
 
       setData(activeStockRows);
@@ -1629,9 +1943,6 @@ export default function OutletStockPage() {
 
       setHistoryLoading(true);
 
-      const params =
-        new URLSearchParams();
-
       const targetOutletId =
         isOutletAdmin(currentUser) &&
         currentUser?.outletId !== null &&
@@ -1642,108 +1953,296 @@ export default function OutletStockPage() {
           : outletId ||
             String(stock.outletId);
 
-      params.set(
-        "outletId",
-        targetOutletId
-      );
+      /*
+       * =====================================================
+       * HISTORY MODAL — ONLY REQUIRED BUSINESS MOVEMENTS
+       * =====================================================
+       *
+       * Modal TIDAK lagi meminta seluruh audit trail.
+       *
+       * Yang dibaca hanya:
+       *   1. BARANG MASUK  -> semua source
+       *   2. BARANG KELUAR -> semua source
+       *   3. STOCK OPNAME  -> hanya APPROVED
+       *
+       * Dengan pemisahan request berdasarkan direction/type,
+       * API hanya mengembalikan data yang memang dibutuhkan
+       * modal sehingga transaksi POS, manufacture, adjustment,
+       * waste, draft/pending, purchase order, dan aktivitas
+       * informational lainnya tidak ikut dibaca sebagai history.
+       *
+       * Semua request tetap dibatasi:
+       *   outletId + barangId
+       *
+       * Jadi data history tetap konsisten dengan stock outlet
+       * dan barang yang sedang dibuka.
+       */
 
-      params.set(
-        "barangId",
-        String(stock.barangId)
-      );
+      async function fetchHistory(
+        extraParams: Record<string, string>
+      ): Promise<HistoryResponse> {
+        const params =
+          new URLSearchParams();
 
-      params.set(
-        "scope",
-        "ALL"
-      );
-
-      params.set(
-        "includeAll",
-        "true"
-      );
-
-      params.set(
-        "includeAllSources",
-        "true"
-      );
-
-      params.set(
-        "includeAllTypes",
-        "true"
-      );
-
-      params.set(
-        "direction",
-        "ALL"
-      );
-
-      params.set(
-        "limit",
-        "1000"
-      );
-
-      const res = await fetch(
-        `/api/outlet/stock/history?${params.toString()}`,
-        {
-          cache: "no-store",
-        }
-      );
-
-      const result: HistoryResponse =
-        await res.json();
-
-      if (
-        !res.ok ||
-        !result.success
-      ) {
-        throw new Error(
-          result.message ||
-            "Gagal mengambil seluruh history stock"
+        params.set(
+          "outletId",
+          targetOutletId
         );
+
+        params.set(
+          "barangId",
+          String(stock.barangId)
+        );
+
+        /*
+         * Scope tetap outlet karena history modal
+         * hanya untuk barang pada outlet yang dipilih.
+         */
+        params.set(
+          "scope",
+          "ALL"
+        );
+
+        /*
+         * Semua source tetap diizinkan.
+         * Pembatasan dilakukan pada direction/type/status,
+         * bukan pada source tertentu.
+         */
+        params.set(
+          "includeAllSources",
+          "true"
+        );
+
+        /*
+         * Jangan meminta seluruh type.
+         * Type hanya ditambahkan oleh caller yang memang
+         * membutuhkan Stock Opname.
+         */
+        params.set(
+          "includeAll",
+          "false"
+        );
+
+        for (
+          const [key, value]
+          of Object.entries(
+            extraParams
+          )
+        ) {
+          params.set(key, value);
+        }
+
+        const res = await fetch(
+          `/api/outlet/stock/history?${params.toString()}`,
+          {
+            cache: "no-store",
+          }
+        );
+
+        const result: HistoryResponse =
+          await res.json();
+
+        if (
+          !res.ok ||
+          !result.success
+        ) {
+          throw new Error(
+            result.message ||
+              "Gagal mengambil history stock"
+          );
+        }
+
+        return result;
       }
 
-      const rows = Array.isArray(
-        result.data
-      )
-        ? result.data
-        : [];
+      /*
+       * =====================================================
+       * 1. BARANG MASUK
+       * =====================================================
+       *
+       * Semua source yang menghasilkan movement IN.
+       */
+      const incomingResult =
+        await fetchHistory({
+          direction: "IN",
+          limit: "1000",
+        });
 
-      const sortedRows = [
-        ...rows,
-      ].sort((a, b) => {
-        const dateA =
-          new Date(a.date).getTime();
+      /*
+       * =====================================================
+       * 2. BARANG KELUAR
+       * =====================================================
+       *
+       * Semua source yang menghasilkan movement OUT.
+       */
+      const outgoingResult =
+        await fetchHistory({
+          direction: "OUT",
+          limit: "1000",
+        });
 
-        const dateB =
-          new Date(b.date).getTime();
+      /*
+       * =====================================================
+       * 3. STOCK OPNAME APPROVED
+       * =====================================================
+       *
+       * Stock opname yang belum APPROVED tidak masuk
+       * history final karena belum menjadi hasil stock
+       * yang sah.
+       *
+       * Type dibatasi STOCK_OPNAME dan status APPROVED.
+       */
+      const opnameResult =
+        await fetchHistory({
+          type: "STOCK_OPNAME",
+          status: "APPROVED",
+          limit: "1000",
+        });
 
-        return dateB - dateA;
-      });
+      const incomingRows =
+        Array.isArray(
+          incomingResult.data
+        )
+          ? incomingResult.data
+          : [];
 
-      setHistoryData(sortedRows);
+      const outgoingRows =
+        Array.isArray(
+          outgoingResult.data
+        )
+          ? outgoingResult.data
+          : [];
+
+      const opnameRows =
+        Array.isArray(
+          opnameResult.data
+        )
+          ? opnameResult.data.filter(
+              (row) =>
+                String(
+                  row?.type || ""
+                )
+                  .trim()
+                  .toUpperCase() ===
+                  "STOCK_OPNAME" &&
+                String(
+                  row?.status || ""
+                )
+                  .trim()
+                  .toUpperCase() ===
+                  "APPROVED"
+            )
+          : [];
+
+      /*
+       * Gabungkan hanya tiga kelompok yang diizinkan.
+       *
+       * Deduplicate berdasarkan id supaya apabila API
+       * mengembalikan row yang sama pada lebih dari satu
+       * query, row tidak tampil dua kali.
+       */
+      const rowMap =
+        new Map<
+          string,
+          HistoryRow
+        >();
+
+      for (
+        const row of [
+          ...incomingRows,
+          ...outgoingRows,
+          ...opnameRows,
+        ]
+      ) {
+        const key =
+          String(
+            row?.id ??
+              `${row?.date}-${row?.type}-${row?.number}-${row?.barangId}-${row?.qty}`
+          );
+
+        if (!rowMap.has(key)) {
+          rowMap.set(
+            key,
+            row
+          );
+        }
+      }
+
+      const sortedRows =
+        Array.from(
+          rowMap.values()
+        ).sort((a, b) => {
+          const dateA =
+            new Date(
+              a.date
+            ).getTime();
+
+          const dateB =
+            new Date(
+              b.date
+            ).getTime();
+
+          return (
+            dateB - dateA
+          );
+        });
+
+      /*
+       * Summary dihitung dari hasil tiga kelompok final,
+       * bukan dari summary API yang masih bisa mengandung
+       * transaksi lain.
+       */
+      const stockIn =
+        sortedRows.reduce(
+          (total, row) =>
+            total +
+            (
+              row.direction ===
+              "IN"
+                ? Number(
+                    row.qty || 0
+                  )
+                : 0
+            ),
+          0
+        );
+
+      const stockOut =
+        sortedRows.reduce(
+          (total, row) =>
+            total +
+            (
+              row.direction ===
+              "OUT"
+                ? Number(
+                    row.qty || 0
+                  )
+                : 0
+            ),
+          0
+        );
+
+      const informational =
+        sortedRows.filter(
+          (row) =>
+            row.direction ===
+            "INFO"
+        ).length;
+
+      setHistoryData(
+        sortedRows
+      );
 
       setHistorySummary({
-        total: Number(
-          result.summary?.total ??
-            sortedRows.length
-        ),
-
-        stockIn: Number(
-          result.summary?.stockIn || 0
-        ),
-
-        stockOut: Number(
-          result.summary?.stockOut || 0
-        ),
-
-        informational: Number(
-          result.summary?.informational ||
-            0
-        ),
+        total:
+          sortedRows.length,
+        stockIn,
+        stockOut,
+        informational,
       });
     } catch (error: any) {
       console.error(
-        "LOAD ALL STOCK HISTORY ERROR:",
+        "LOAD FILTERED STOCK HISTORY ERROR:",
         error
       );
 
@@ -1751,7 +2250,7 @@ export default function OutletStockPage() {
 
       setHistoryError(
         error?.message ||
-          "Gagal mengambil seluruh history stock"
+          "Gagal mengambil history stock masuk, stock keluar, dan stock opname approved"
       );
     } finally {
       setHistoryLoading(false);
@@ -3011,12 +3510,27 @@ export default function OutletStockPage() {
                           1
                       );
 
-                    const lastPurchasePrice =
+                    const transactionPrice =
                       Number(
-                        item.barang
-                          ?.purchasePrice ||
+                        item.lastReceivedPrice ||
                           0
                       );
+
+                    /*
+                     * Harga transaksi received terakhir adalah
+                     * prioritas. Jika source history tidak membawa
+                     * harga atau memang belum ada transaksi berharga,
+                     * fallback ke harga master Barang yang terhubung
+                     * dengan outlet.
+                     */
+                    const lastPurchasePrice =
+                      transactionPrice > 0
+                        ? transactionPrice
+                        : Number(
+                            item.barang
+                              ?.purchasePrice ||
+                              0
+                          );
 
                     const stockValue =
                       Number(
@@ -3235,6 +3749,16 @@ export default function OutletStockPage() {
                               <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-400">
                                 / {mainUnit}
                               </div>
+
+                              {transactionPrice > 0 ? (
+                                <div className="mt-1 text-[8px] font-bold uppercase tracking-wide text-[#497F70]">
+                                  Transaksi Received Terakhir
+                                </div>
+                              ) : (
+                                <div className="mt-1 text-[8px] font-bold uppercase tracking-wide text-gray-400">
+                                  Harga Master Fallback
+                                </div>
+                              )}
 
                             </div>
 
@@ -3700,15 +4224,15 @@ export default function OutletStockPage() {
                       <div className="flex flex-wrap items-center gap-2">
 
                         <h2 className="text-lg font-black tracking-tight md:text-xl">
-                          Semua History Stock
+                          History Pergerakan Stock
                         </h2>
 
                         <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-200">
-                          ALL MOVEMENTS
+                          SELECTED MOVEMENTS
                         </span>
 
                         <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/60">
-                          Audit Trail
+                          Stock Movement
                         </span>
 
                       </div>
@@ -3815,8 +4339,10 @@ export default function OutletStockPage() {
                       {formatCurrency(
                         Number(
                           selectedHistory
-                            .barang
-                            .purchasePrice ||
+                            .lastReceivedPrice ||
+                            selectedHistory
+                              .barang
+                              .purchasePrice ||
                             0
                         )
                       )}
@@ -3894,7 +4420,7 @@ export default function OutletStockPage() {
                 </p>
 
                 <p className="mt-0.5 text-[9px] text-gray-400">
-                  seluruh transaksi
+                  transaksi terpilih
                 </p>
 
               </div>
@@ -3921,7 +4447,7 @@ export default function OutletStockPage() {
                 </p>
 
                 <p className="mt-0.5 text-[9px] text-emerald-600/60">
-                  seluruh barang masuk
+                  barang masuk semua sumber
                 </p>
 
               </div>
@@ -3948,7 +4474,7 @@ export default function OutletStockPage() {
                 </p>
 
                 <p className="mt-0.5 text-[9px] text-red-600/60">
-                  seluruh barang keluar
+                  barang keluar semua sumber
                 </p>
 
               </div>
@@ -3972,7 +4498,7 @@ export default function OutletStockPage() {
                 </p>
 
                 <p className="mt-0.5 text-[9px] text-blue-600/60">
-                  aktivitas tanpa perubahan qty
+                  stock opname APPROVED / info
                 </p>
 
               </div>
@@ -3999,16 +4525,13 @@ export default function OutletStockPage() {
                     </div>
 
                     <p className="text-sm font-bold text-[#35564C]">
-                      Memuat seluruh audit trail
+                      Memuat history stock
                     </p>
 
                     <p className="mt-1 max-w-md text-xs leading-5 text-gray-400">
-                      Mengambil semua pergerakan barang
-                      dari purchase, barang masuk,
-                      gudang pusat, transfer outlet,
-                      adjustment, waste, pemakaian,
-                      POS, manufacture, stock opname,
-                      dan transaksi stock lainnya...
+                      Mengambil hanya barang masuk semua sumber,
+                      barang keluar semua sumber, dan stock opname
+                      yang sudah APPROVED agar data history konsisten.
                     </p>
 
                   </div>
@@ -4073,9 +4596,8 @@ export default function OutletStockPage() {
 
                     <p className="mt-1 text-xs leading-5 text-gray-400">
                       Barang ini belum memiliki
-                      riwayat transaksi stock yang
-                      tercatat dari seluruh sumber
-                      transaksi.
+                      riwayat barang masuk, barang keluar,
+                      atau stock opname APPROVED pada outlet ini.
                     </p>
 
                   </div>
@@ -4585,16 +5107,15 @@ export default function OutletStockPage() {
                 />
 
                 <span>
-                  Full audit trail bersifat
+                  History movement bersifat
                   read-only.
                 </span>
 
                 <span className="hidden h-3 w-px bg-gray-300 md:block" />
 
                 <span>
-                  Semua pergerakan stock
-                  ditampilkan dari sumber
-                  transaksi yang dikirim API.
+                  Hanya barang masuk semua sumber, barang keluar semua sumber,
+                  dan stock opname APPROVED yang ditampilkan.
                 </span>
 
               </div>

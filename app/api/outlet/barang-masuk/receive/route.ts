@@ -139,6 +139,8 @@ IMPORTANT
 - PurchasePayable adalah source of truth hutang.
 - OutletReceipt adalah source of truth dokumen penerimaan
   dan invoice supplier.
+- OutletReceiptItem.qty HARUS sama dengan
+  OutletPurchaseItem.receivedQty.
 - Tidak menghapus data existing.
 - Tidak reset database.
 =============================================================
@@ -454,14 +456,6 @@ function convertReceivedQtyToBase(
   /*
    * Jika unit transaksi sama dengan baseUnit,
    * tidak ada perkalian tambahan.
-   *
-   * Contoh:
-   *
-   * unit     = liter
-   * baseUnit = liter
-   * qty      = 10
-   *
-   * hasil    = 10 liter
    */
 
   if (
@@ -1184,25 +1178,12 @@ export async function POST(
     CALCULATE RECEIVED TOTAL
     =========================================================
 
-    IMPORTANT:
-
     Total transaksi tetap memakai:
 
         receivedQty × purchase price
 
     karena keduanya masih menggunakan
     UNIT TRANSAKSI.
-
-    Contoh:
-
-        4.3 jerigen
-        × Rp130.000 / jerigen
-
-        = Rp559.000
-
-    BUKAN:
-
-        55.9 liter × Rp130.000
     */
 
     const receivedTotalRaw =
@@ -1616,6 +1597,83 @@ export async function POST(
 
           /*
           ===================================================
+          PREPARE RECEIPT ITEMS
+          ===================================================
+
+          IMPORTANT:
+
+          Receipt qty HARUS identik dengan
+          receivedQty yang akan disimpan
+          ke OutletPurchaseItem.
+
+          Keduanya UNIT TRANSAKSI.
+          */
+
+          const receiptItems =
+            currentPurchase.items.map(
+              (item) => {
+                const receivedQty =
+                  receivedQtyMap.get(
+                    item.id
+                  );
+
+                const qty =
+                  receivedQty ??
+                  normalizeQty(
+                    item.qty
+                  );
+
+                if (
+                  !Number.isFinite(
+                    qty
+                  ) ||
+                  qty <= 0
+                ) {
+                  throw new Error(
+                    `Qty diterima barang "${item.barang?.name ?? item.barangId}" tidak valid.`
+                  );
+                }
+
+                const price =
+                  Number(
+                    item.price
+                  );
+
+                if (
+                  !Number.isFinite(
+                    price
+                  ) ||
+                  price < 0
+                ) {
+                  throw new Error(
+                    `Harga barang "${item.barang?.name ?? item.barangId}" tidak valid.`
+                  );
+                }
+
+                const subtotal =
+                  roundMoney(
+                    qty *
+                      price
+                  );
+
+                return {
+                  purchaseItemId:
+                    item.id,
+
+                  barangId:
+                    item.barangId,
+
+                  qty,
+
+                  price,
+
+                  subtotal,
+                };
+              }
+            );
+
+          /*
+          ===================================================
           CREATE OUTLET RECEIPT
           ===================================================
 
@@ -1659,55 +1717,23 @@ export async function POST(
 
                   items: {
                     create:
-                      currentPurchase.items.map(
-                        (item) => {
-                          const receivedQty =
-                            receivedQtyMap.get(
-                              item.id
-                            );
+                      receiptItems.map(
+                        (item) => ({
+                          barangId:
+                            item.barangId,
 
-                          const qty =
-                            receivedQty ??
-                            normalizeQty(
-                              item.qty
-                            );
+                          /*
+                           * TETAP UNIT TRANSAKSI
+                           */
+                          qty:
+                            item.qty,
 
-                          if (
-                            !Number.isFinite(
-                              qty
-                            ) ||
-                            qty <= 0
-                          ) {
-                            throw new Error(
-                              `Qty diterima barang "${item.barang?.name ?? item.barangId}" tidak valid.`
-                            );
-                          }
+                          price:
+                            item.price,
 
-                          const price =
-                            Number(
-                              item.price
-                            );
-
-                          const subtotal =
-                            roundMoney(
-                              qty *
-                                price
-                            );
-
-                          return {
-                            barangId:
-                              item.barangId,
-
-                            /*
-                             * TETAP UNIT TRANSAKSI
-                             */
-                            qty,
-
-                            price,
-
-                            subtotal,
-                          };
-                        }
+                          subtotal:
+                            item.subtotal,
+                        })
                       ),
                   },
                 },
@@ -1717,6 +1743,77 @@ export async function POST(
                 },
               }
             );
+
+          /*
+          ===================================================
+          RECEIPT CONSISTENCY CHECK
+          ===================================================
+
+          Ini sengaja dilakukan setelah Receipt dibuat
+          tetapi masih di dalam transaction.
+
+          Jika ada ketidaksesuaian:
+              transaction otomatis rollback.
+
+          Dengan demikian tidak boleh ada kondisi:
+
+              PurchaseItem.receivedQty = 4
+              ReceiptItem.qty = 0
+
+          untuk transaksi Receive baru.
+          */
+
+          if (
+            receipt.items.length !==
+            receiptItems.length
+          ) {
+            throw new Error(
+              "Jumlah item Outlet Receipt tidak sesuai dengan item Purchase. Transaksi dibatalkan demi keamanan."
+            );
+          }
+
+          for (
+            const expectedItem of
+            receiptItems
+          ) {
+            const actualItem =
+              receipt.items.find(
+                (receiptItem) =>
+                  receiptItem.barangId ===
+                    expectedItem.barangId
+              );
+
+            if (!actualItem) {
+              throw new Error(
+                `Item Receipt untuk barang ID ${expectedItem.barangId} tidak ditemukan. Transaksi dibatalkan demi keamanan.`
+              );
+            }
+
+            const expectedQty =
+              safeRoundQty(
+                Number(
+                  expectedItem.qty
+                )
+              );
+
+            const actualQty =
+              safeRoundQty(
+                Number(
+                  actualItem.qty
+                )
+              );
+
+            if (
+              Math.abs(
+                expectedQty -
+                  actualQty
+              ) > 0.000001
+            ) {
+              throw new Error(
+                `Qty Receipt untuk barang ID ${expectedItem.barangId} tidak konsisten. Expected ${expectedQty}, actual ${actualQty}. Transaksi dibatalkan demi keamanan.`
+              );
+            }
+          }
 
           /*
           ===================================================
@@ -1808,12 +1905,6 @@ export async function POST(
             -------------------------------------------------
             BASE UNIT COST
             -------------------------------------------------
-
-            price:
-                harga / purchase unit
-
-            baseUnitCost:
-                harga / base unit
             */
 
             const baseUnitCost =
@@ -1860,15 +1951,8 @@ export async function POST(
                       item.barangId,
 
                     /*
-                    * STOCK SELALU BASE UNIT.
-                    *
-                    * Contoh:
-                    *
-                    * 4.3 jerigen
-                    * × 13
-                    * = 55.9 liter
-                    */
-
+                     * STOCK SELALU BASE UNIT.
+                     */
                     stock:
                       baseQty,
 
@@ -1880,9 +1964,8 @@ export async function POST(
                       ),
 
                     /*
-                    * averageCost = harga per BASE UNIT.
-                    */
-
+                     * averageCost = harga per BASE UNIT.
+                     */
                     averageCost:
                       baseUnitCost,
                   },
@@ -1898,16 +1981,15 @@ export async function POST(
 
             else {
               /*
-              * IMPORTANT:
-              *
-              * existingStock.stock DIANGGAP SUDAH BASE UNIT.
-              *
-              * JANGAN:
-              *
-              * toBaseQty(existingStock.stock, barang)
-              *
-              * karena akan menyebabkan double conversion.
-              */
+               * existingStock.stock DIANGGAP
+               * SUDAH BASE UNIT.
+               *
+               * Jangan melakukan:
+               *
+               * toBaseQty(existingStock.stock, barang)
+               *
+               * karena menyebabkan double conversion.
+               */
 
               const oldStock =
                 Number(
@@ -1959,7 +2041,7 @@ export async function POST(
 
               /*
               * Weighted average cost
-              * semuanya sudah menggunakan BASE UNIT.
+              * semuanya menggunakan BASE UNIT.
               */
 
               const newAverageCost =
@@ -2001,14 +2083,47 @@ export async function POST(
             receivedQty tetap menyimpan
             UNIT TRANSAKSI.
 
-            Contoh:
-
-                4.3 jerigen
-
-            BUKAN:
-
-                55.9 liter
+            Dan nilainya HARUS sama dengan
+            OutletReceiptItem.qty.
             */
+
+            const matchingReceiptItem =
+              receipt.items.find(
+                (receiptItem) =>
+                  receiptItem.barangId ===
+                  item.barangId
+              );
+
+            if (
+              !matchingReceiptItem
+            ) {
+              throw new Error(
+                `Receipt Item barang "${item.barang.name}" tidak ditemukan. Purchase tidak dapat diselesaikan.`
+              );
+            }
+
+            const receiptQty =
+              safeRoundQty(
+                Number(
+                  matchingReceiptItem.qty
+                )
+              );
+
+            const purchaseReceivedQty =
+              safeRoundQty(
+                Number(qty)
+              );
+
+            if (
+              Math.abs(
+                receiptQty -
+                  purchaseReceivedQty
+              ) > 0.000001
+            ) {
+              throw new Error(
+                `Data penerimaan barang "${item.barang.name}" tidak konsisten. Receipt Qty = ${receiptQty}, Received Qty = ${purchaseReceivedQty}. Transaksi dibatalkan demi keamanan.`
+              );
+            }
 
             await tx.outletPurchaseItem.update(
               {
@@ -2019,10 +2134,120 @@ export async function POST(
 
                 data: {
                   receivedQty:
-                    qty,
+                    purchaseReceivedQty,
                 },
               }
             );
+          }
+
+          /*
+          ===================================================
+          FINAL RECEIPT / PURCHASE CONSISTENCY CHECK
+          ===================================================
+
+          Sebelum Purchase diubah menjadi RECEIVED,
+          lakukan pengecekan terakhir.
+
+          Tujuan:
+          memastikan cancellation nanti dapat membaca:
+
+              OutletReceiptItem.qty
+
+          dan mendapatkan nilai yang sama dengan:
+
+              OutletPurchaseItem.receivedQty
+          */
+
+          const finalPurchaseItems =
+            await tx.outletPurchaseItem.findMany(
+              {
+                where: {
+                  purchaseId:
+                    currentPurchase.id,
+                },
+
+                select: {
+                  id: true,
+                  barangId: true,
+                  receivedQty: true,
+                },
+
+                orderBy: {
+                  id: "asc",
+                },
+              }
+            );
+
+          const finalReceipt =
+            await tx.outletReceipt.findUnique(
+              {
+                where: {
+                  id:
+                    receipt.id,
+                },
+
+                include: {
+                  items: true,
+                },
+              }
+            );
+
+          if (!finalReceipt) {
+            throw new Error(
+              "Outlet Receipt tidak ditemukan setelah proses penerimaan."
+            );
+          }
+
+          if (
+            finalPurchaseItems.length !==
+            finalReceipt.items.length
+          ) {
+            throw new Error(
+              "Jumlah Purchase Item dan Receipt Item tidak konsisten. Transaksi dibatalkan demi keamanan."
+            );
+          }
+
+          for (
+            const purchaseItem of
+            finalPurchaseItems
+          ) {
+            const receiptItem =
+              finalReceipt.items.find(
+                (item) =>
+                  item.barangId ===
+                  purchaseItem.barangId
+              );
+
+            if (!receiptItem) {
+              throw new Error(
+                `Receipt Item untuk barang ID ${purchaseItem.barangId} tidak ditemukan.`
+              );
+            }
+
+            const purchaseReceivedQty =
+              safeRoundQty(
+                Number(
+                  purchaseItem.receivedQty
+                )
+              );
+
+            const receiptQty =
+              safeRoundQty(
+                Number(
+                  receiptItem.qty
+                )
+              );
+
+            if (
+              Math.abs(
+                purchaseReceivedQty -
+                  receiptQty
+              ) > 0.000001
+            ) {
+              throw new Error(
+                `Data penerimaan tidak konsisten untuk barang ID ${purchaseItem.barangId}. Received Qty = ${purchaseReceivedQty}, Receipt Qty = ${receiptQty}. Transaksi dibatalkan demi keamanan.`
+              );
+            }
           }
 
           /*

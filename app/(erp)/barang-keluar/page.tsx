@@ -553,23 +553,31 @@ export default function BarangKeluarPage() {
       (item) => Number(item.id) === Number(id)
     );
 
-    if (request && requestHasInsufficientStock(request)) {
-      const yakin = confirm(
-        "Delivery Request ini memiliki item dengan stock pusat kurang atau kosong.\n\n" +
-          "Anda tetap ingin APPROVE request ini?"
-      );
+    /*
+     * PENTING:
+     * APPROVE DELIVERY REQUEST TIDAK BOLEH DIBLOKIR OLEH STOCK.
+     *
+     * Delivery Request adalah dokumen permintaan/replenishment.
+     * Jadi request tetap dapat di-approve walaupun:
+     * - stock pusat = 0
+     * - stock pusat kurang dari qty request
+     *
+     * Validasi stock tetap berlaku untuk jalur BARANG KELUAR MANUAL
+     * melalui cart/simpan() dan tidak diubah di sini.
+     */
+    const hasInsufficientStock =
+      request && requestHasInsufficientStock(request);
 
-      if (!yakin) {
-        return;
-      }
-    } else {
-      const yakin = confirm(
-        "Approve Delivery Request ini?\n\nApprove tidak akan mengurangi stock pusat."
-      );
+    const confirmMessage = hasInsufficientStock
+      ? "Delivery Request ini memiliki item dengan stock pusat kurang atau kosong.\n\n" +
+        "Request tetap dapat di-APPROVE karena validasi stock tidak digunakan untuk memblokir Delivery Request.\n\n" +
+        "Lanjutkan APPROVE?"
+      : "Approve Delivery Request ini?\n\nApprove tidak akan mengurangi stock pusat.";
 
-      if (!yakin) {
-        return;
-      }
+    const yakin = confirm(confirmMessage);
+
+    if (!yakin) {
+      return;
     }
 
     try {
@@ -611,18 +619,29 @@ export default function BarangKeluarPage() {
       (item) => Number(item.id) === Number(id)
     );
 
-    if (request && requestHasInsufficientStock(request)) {
-      alert(
-        "Delivery Request belum dapat diproses karena stock pusat tidak mencukupi.\n\n" +
-          "Silakan edit qty request terlebih dahulu agar sesuai dengan stock pusat."
-      );
-      return;
-    }
+    /*
+     * PENTING:
+     * PROCESS DELIVERY REQUEST JUGA TIDAK DIBLOKIR OLEH STOCK.
+     *
+     * Request boleh dipindahkan menjadi Delivery Order DRAFT walaupun
+     * stock pusat kosong/kurang. Stock pusat BELUM dikurangi pada tahap
+     * process ini.
+     *
+     * Jalur BARANG KELUAR MANUAL tetap menggunakan validasi stock yang
+     * sudah ada pada tambahKeCart()/simpan() dan tidak disentuh.
+     */
+    const hasInsufficientStock =
+      request && requestHasInsufficientStock(request);
 
-    const yakin = confirm(
-      "Proses Delivery Request ini menjadi Delivery Order DRAFT?\n\n" +
-        "Stock pusat belum akan berkurang."
-    );
+    const confirmMessage = hasInsufficientStock
+      ? "Delivery Request ini memiliki item dengan stock pusat kurang atau kosong.\n\n" +
+        "Request tetap dapat diproses menjadi Delivery Order DRAFT.\n" +
+        "Stock pusat belum akan berkurang pada tahap ini.\n\n" +
+        "Lanjutkan proses Delivery?"
+      : "Proses Delivery Request ini menjadi Delivery Order DRAFT?\n\n" +
+        "Stock pusat belum akan berkurang.";
+
+    const yakin = confirm(confirmMessage);
 
     if (!yakin) {
       return;
@@ -1368,8 +1387,22 @@ export default function BarangKeluarPage() {
     return requests.flatMap((request: any) => {
       const items = Array.isArray(request?.items) ? request.items : [];
 
+      /*
+       * BELUM TERPENUHI berarti stock pusat tidak mampu memenuhi
+       * seluruh qty request:
+       *
+       *   stock <= 0  -> kosong
+       *   stock < qty -> stock terbatas / kurang
+       *
+       * Stock yang cukup tidak masuk ke pesan pengadaan.
+       */
       return items
-        .filter((item: any) => Number(getCentralStock(item) || 0) <= 0)
+        .filter((item: any) => {
+          const stock = Number(getCentralStock(item) || 0);
+          const requested = Number(item?.qty || 0);
+
+          return stock < requested;
+        })
         .map((item: any) => ({
           request,
           item,
@@ -1440,11 +1473,21 @@ export default function BarangKeluarPage() {
       group.requests.get(requestKey)!.items.push(item);
     }
 
+    /*
+     * FORMAT WHATSAPP BELUM TERPENUHI DIKUNCI SESUAI FORMAT USER.
+     *
+     * PENTING:
+     * - Tidak ada baris kosong antar barang.
+     * - Tidak ada separator antar barang.
+     * - Satu barang langsung diikuti baris Max-Price.
+     * - Barang berikutnya langsung berada di bawahnya.
+     * - Struktur outlet / DR tetap rapi dan konsisten.
+     */
     const message: string[] = [
       "🚨 *DELIVERY REQUEST — BELUM TERPENUHI*",
       "*GUDANG PUSAT • STOCK KOSONG*",
       "",
-      "Berikut item request yang belum dapat dipenuhi karena stock Gudang Pusat saat ini tidak tersedia.",
+      "Berikut item request yang belum dapat dipenuhi karena stock Gudang Pusat saat ini tidak tersedia",
       "",
     ];
 
@@ -1453,16 +1496,16 @@ export default function BarangKeluarPage() {
     outletGroups.forEach((group, outletIndex) => {
       message.push(
         "━━━━━━━━━━━━━━━━━━━━",
-        `🏪 *${outletIndex + 1}. ${group.name}*`,
+        `*${outletIndex + 1}. ${group.name}*`,
         "━━━━━━━━━━━━━━━━━━━━"
       );
 
       [...group.requests.values()].forEach(
         ({ request, items }, requestIndex) => {
           message.push(
-            ` *${getRequestNumber(request)}*`,
-            ` Request: ${getWhatsAppRequestDate(request)}`,
-            ` Status pemenuhan: *BELUM TERPENUHI*`,
+            `*${getRequestNumber(request)}*`,
+            `Request: ${getWhatsAppRequestDate(request)}`,
+            `Status pemenuhan: *BELUM TERPENUHI*`,
             ""
           );
 
@@ -1475,21 +1518,21 @@ export default function BarangKeluarPage() {
             const price = getLastPurchasePrice(item);
 
             /*
-             * Format WA dibuat langsung seperti instruksi Gudang Pusat:
+             * BARANG DAN MAX-PRICE HARUS MENJADI SATU BLOK TANPA
+             * BARIS KOSONG DI ANTARA BARANG.
              *
-             * *01. Nama Barang* : *2 pack*
-             * _( Lakukan Pembelian Menggunakan Petty Cash Dengan Max-Price
-             * *Rp 25.000 / pack* )_❌
+             * Contoh hasil:
              *
-             * Harga diambil dari Master Barang Pusat berdasarkan barangId.
+             * - *Tepung Tapioka Cap Gunung 500gr* : 5 pack
+             * *( Lakukan Pembelian Menggunakan Petty Cash Dengan Max-Price *Rp 0* / pack )* ❌
+             * - *Plastik Roll Buah 30x45cm* : *2 pack*
+             * *( Lakukan Pembelian Menggunakan Petty Cash Dengan Max-Price *Rp 79.179,4* / pack )* ❌
              */
             message.push(
-              `*${String(itemIndex + 1).padStart(2, "0")}. ${itemName}* : *${formatNumber(
-                qty
-              )} ${unit}*`,
-              `_( Lakukan Pembelian Menggunakan Petty Cash Dengan Max-Price *${formatWhatsAppPrice(
+              `- *${itemName}* : *${formatNumber(qty)} ${unit}*`,
+              `*( Lakukan Pembelian Menggunakan Petty Cash Dengan Max-Price *${formatWhatsAppPrice(
                 price
-              )} / ${unit}* )_❌`
+              )} / ${unit}* )* ❌`
             );
 
             const note =
@@ -1500,12 +1543,18 @@ export default function BarangKeluarPage() {
             if (note) {
               message.push(`_Catatan: ${note}_`);
             }
-
-            message.push("");
           });
 
+          /*
+           * Antar Delivery Request yang berbeda tetap dipisahkan supaya
+           * nomor DR berikutnya tidak menyatu dengan item sebelumnya.
+           */
           if (requestIndex < group.requests.size - 1) {
-            message.push("────────────────────");
+            message.push(
+              "",
+              "────────────────────",
+              ""
+            );
           }
         }
       );
@@ -1517,13 +1566,14 @@ export default function BarangKeluarPage() {
 
     message.push(
       "",
-      "> 📌 _*Catatan*_",
-      "Harga terakhir diambil dari *Master Barang Pusat* berdasarkan barangId.",
+      "> 📌 Catatan",
+      "",
+      "Harga terakhir diambil dari Master Barang Pusat berdasarkan barangId.",
       "Mohon item yang kosong dapat ditindaklanjuti pada pengadaan / replenishment.",
       "",
       "Terimakasih 🙏🏻",
       "",
-      "✨ _*Pesan Otomatis Dari MGB•ERP*_ ✨"
+      "✨ Pesan Otomatis Dari MGB•ERP ✨"
     );
 
     return message.join("\n");
@@ -1757,7 +1807,7 @@ export default function BarangKeluarPage() {
 
     if (!message) {
       alert(
-        "Tidak ada barang dengan stock pusat kosong pada Delivery Request DRAFT / PENDING."
+        "Tidak ada barang dengan stock pusat kurang dari qty request pada Delivery Request DRAFT / PENDING."
       );
       return;
     }
@@ -1784,7 +1834,7 @@ export default function BarangKeluarPage() {
       alert(
         type === "all"
           ? "Tidak ada Delivery Request DRAFT / PENDING dengan detail barang yang dapat disalin."
-          : "Tidak ada barang dengan stock pusat kosong pada Delivery Request DRAFT / PENDING."
+          : "Tidak ada barang dengan stock pusat kurang dari qty request pada Delivery Request DRAFT / PENDING."
       );
       return;
     }

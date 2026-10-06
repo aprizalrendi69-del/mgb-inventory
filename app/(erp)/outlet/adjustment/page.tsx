@@ -116,7 +116,10 @@ function roleLabel(role: string) {
     return "MANAGER";
   }
 
-  if (value === "OUTLET_ADMIN") {
+  if (
+    value === "OUTLET_ADMIN" ||
+    value === "ADMIN_OUTLET"
+  ) {
     return "OUTLET ADMIN";
   }
 
@@ -192,15 +195,21 @@ export default function OutletAdjustmentPage() {
     role === "ADMIN";
 
   const isOutletAdmin =
-    role === "OUTLET_ADMIN";
+    role === "OUTLET_ADMIN" ||
+    role === "ADMIN_OUTLET";
 
   const canApprove =
     isAdmin;
 
+  /*
+   * Reject tidak melakukan perubahan stock.
+   * Tetap diperbolehkan untuk role yang memang
+   * memiliki akses proses adjustment.
+   */
   const canReject =
     role === "ADMIN" ||
     role === "MANAGER" ||
-    role === "OUTLET_ADMIN";
+    isOutletAdmin;
 
   const selectedOutlet = useMemo(
     () =>
@@ -241,11 +250,18 @@ export default function OutletAdjustmentPage() {
 
     setUser(currentUser);
 
-    if (
+    const currentRole =
       String(
         currentUser.role
-      ).toUpperCase() ===
-        "OUTLET_ADMIN" &&
+      ).toUpperCase();
+
+    if (
+      (
+        currentRole ===
+          "OUTLET_ADMIN" ||
+        currentRole ===
+          "ADMIN_OUTLET"
+      ) &&
       currentUser.outletId
     ) {
       setSelectedOutletId(
@@ -326,17 +342,21 @@ export default function OutletAdjustmentPage() {
         );
       }
 
-      setData(
-        json.data ?? []
-      );
-    } catch (error: any) {
+      const rows =
+        Array.isArray(json.data)
+          ? json.data
+          : [];
+
+      setData(rows);
+    } catch (error: unknown) {
       console.error(error);
 
-      alert(
-        error?.message ||
-          "Gagal mengambil adjustment"
-      );
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Gagal mengambil adjustment";
 
+      alert(message);
       setData([]);
     } finally {
       setLoading(false);
@@ -344,27 +364,39 @@ export default function OutletAdjustmentPage() {
   }
 
   useEffect(() => {
+    let cancelled = false;
+
     (async () => {
       try {
         await loadUser();
         await loadOutlets();
-      } catch (error: any) {
+      } catch (error: unknown) {
+        if (cancelled) return;
+
         console.error(error);
 
-        alert(
-          error?.message ||
-            "Gagal memuat halaman"
-        );
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Gagal memuat halaman";
+
+        alert(message);
+        setLoading(false);
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    if (selectedOutletId) {
-      loadData(
-        selectedOutletId
-      );
+    if (!selectedOutletId) {
+      setData([]);
+      return;
     }
+
+    loadData(selectedOutletId);
   }, [selectedOutletId]);
 
   async function searchBarang(
@@ -372,8 +404,11 @@ export default function OutletAdjustmentPage() {
   ) {
     setBarangSearch(value);
 
+    const keyword =
+      value.trim();
+
     if (
-      value.trim().length < 2 ||
+      keyword.length < 2 ||
       !selectedOutletId
     ) {
       setBarangList([]);
@@ -384,7 +419,7 @@ export default function OutletAdjustmentPage() {
       const response =
         await fetch(
           `/api/master/barang?search=${encodeURIComponent(
-            value.trim()
+            keyword
           )}`,
           {
             cache: "no-store",
@@ -403,7 +438,14 @@ export default function OutletAdjustmentPage() {
       }
 
       const master =
-        (json.data ?? []) as Barang[];
+        Array.isArray(json.data)
+          ? (json.data as Barang[])
+          : [];
+
+      if (master.length === 0) {
+        setBarangList([]);
+        return;
+      }
 
       const stockResponse =
         await fetch(
@@ -419,8 +461,11 @@ export default function OutletAdjustmentPage() {
         await stockResponse.json();
 
       const stockRows =
-        stockJson?.success
-          ? stockJson.data ?? []
+        stockJson?.success &&
+        Array.isArray(
+          stockJson.data
+        )
+          ? stockJson.data
           : [];
 
       const stockMap =
@@ -437,7 +482,6 @@ export default function OutletAdjustmentPage() {
         master.map(
           (barang) => ({
             ...barang,
-
             outletStock:
               stockMap.get(
                 Number(barang.id)
@@ -478,22 +522,16 @@ export default function OutletAdjustmentPage() {
 
     setItems((current) => [
       ...current,
-
       {
         barangId:
           barang.id,
-
         qty: 1,
-
         price:
           Number(
-            barang.purchasePrice ??
-              0
+            barang.purchasePrice ?? 0
           ),
-
         type:
           form.type,
-
         barang,
       },
     ]);
@@ -506,6 +544,23 @@ export default function OutletAdjustmentPage() {
     barangId: number,
     value: string
   ) {
+    if (value === "") {
+      setItems((current) =>
+        current.map(
+          (item) =>
+            item.barangId ===
+            barangId
+              ? {
+                  ...item,
+                  qty: 0,
+                }
+              : item
+        )
+      );
+
+      return;
+    }
+
     const qty =
       Number(value);
 
@@ -540,8 +595,34 @@ export default function OutletAdjustmentPage() {
     );
   }
 
+  function changeAdjustmentType(
+    type: "IN" | "OUT"
+  ) {
+    setForm(
+      (current) => ({
+        ...current,
+        type,
+      })
+    );
+
+    /*
+     * Semua detail mengikuti jenis adjustment
+     * yang sedang dipilih.
+     */
+    setItems(
+      (current) =>
+        current.map(
+          (item) => ({
+            ...item,
+            type,
+          })
+        )
+    );
+  }
+
   function resetForm() {
     setItems([]);
+    setBarangList([]);
     setBarangSearch("");
 
     setForm({
@@ -614,12 +695,10 @@ export default function OutletAdjustmentPage() {
           "/api/outlet/adjustment",
           {
             method: "POST",
-
             headers: {
               "Content-Type":
                 "application/json",
             },
-
             body: JSON.stringify({
               outletId:
                 Number(
@@ -649,13 +728,17 @@ export default function OutletAdjustmentPage() {
                       item.barangId,
 
                     qty:
-                      item.qty,
+                      Number(
+                        item.qty
+                      ),
 
                     price:
-                      item.price,
+                      Number(
+                        item.price || 0
+                      ),
 
                     type:
-                      item.type,
+                      form.type,
                   })
                 ),
             }),
@@ -682,13 +765,15 @@ export default function OutletAdjustmentPage() {
       await loadData(
         selectedOutletId
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
 
-      alert(
-        error?.message ||
-          "Gagal menyimpan adjustment"
-      );
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Gagal menyimpan adjustment";
+
+      alert(message);
     } finally {
       setSaving(false);
     }
@@ -701,10 +786,9 @@ export default function OutletAdjustmentPage() {
       | "REJECT"
   ) {
     /*
-     * SECURITY:
-     * APPROVE hanya boleh dilakukan ADMIN pusat.
-     *
-     * Ini juga harus divalidasi di API.
+     * APPROVE hanya Admin Pusat.
+     * Validasi ini di frontend hanya UX.
+     * API tetap wajib melakukan validasi role.
      */
     if (
       action === "APPROVE" &&
@@ -737,12 +821,10 @@ export default function OutletAdjustmentPage() {
           "/api/outlet/adjustment",
           {
             method: "PATCH",
-
             headers: {
               "Content-Type":
                 "application/json",
             },
-
             body: JSON.stringify({
               id,
               action,
@@ -766,13 +848,15 @@ export default function OutletAdjustmentPage() {
       await loadData(
         selectedOutletId
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
 
-      alert(
-        error?.message ||
-          "Gagal memproses adjustment"
-      );
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Gagal memproses adjustment";
+
+      alert(message);
     } finally {
       setProcessingId(null);
     }
@@ -789,24 +873,34 @@ export default function OutletAdjustmentPage() {
         (row) => {
           const matchesSearch =
             !keyword ||
-            row.number
+            String(
+              row.number ?? ""
+            )
               .toLowerCase()
               .includes(
                 keyword
               ) ||
-            row.reason
-              ?.toLowerCase()
+            String(
+              row.reason ?? ""
+            )
+              .toLowerCase()
               .includes(
                 keyword
               ) ||
             row.items.some(
               (item) =>
-                item.barang.name
+                String(
+                  item.barang?.name ??
+                    ""
+                )
                   .toLowerCase()
                   .includes(
                     keyword
                   ) ||
-                item.barang.code
+                String(
+                  item.barang?.code ??
+                    ""
+                )
                   .toLowerCase()
                   .includes(
                     keyword
@@ -816,7 +910,9 @@ export default function OutletAdjustmentPage() {
           const matchesStatus =
             statusFilter ===
               "ALL" ||
-            row.status ===
+            String(
+              row.status
+            ).toUpperCase() ===
               statusFilter;
 
           return (
@@ -834,21 +930,27 @@ export default function OutletAdjustmentPage() {
   const draftCount =
     data.filter(
       (row) =>
-        row.status ===
+        String(
+          row.status
+        ).toUpperCase() ===
         "DRAFT"
     ).length;
 
   const approvedCount =
     data.filter(
       (row) =>
-        row.status ===
+        String(
+          row.status
+        ).toUpperCase() ===
         "APPROVED"
     ).length;
 
   const rejectedCount =
     data.filter(
       (row) =>
-        row.status ===
+        String(
+          row.status
+        ).toUpperCase() ===
         "REJECTED"
     ).length;
 
@@ -861,56 +963,40 @@ export default function OutletAdjustmentPage() {
     );
 
   const pendingApprovalCount =
-    data.filter(
-      (row) =>
-        row.status ===
-        "DRAFT"
-    ).length;
+    draftCount;
 
   return (
     <div className="min-h-screen bg-[#f6f8fb]">
-
-      {/* TOP ACCENT */}
       <div className="h-1 bg-slate-900" />
 
       <div className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-6 lg:p-8">
 
-        {/* ===================================================== */}
         {/* HEADER */}
-        {/* ===================================================== */}
 
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-
           <div className="relative px-5 py-6 md:px-7">
-
             <div className="absolute right-0 top-0 h-40 w-40 rounded-full bg-slate-100 blur-3xl" />
 
             <div className="relative flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
-
               <div className="flex items-start gap-4">
-
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-lg">
                   <History size={25} />
                 </div>
 
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-
                     <h1 className="text-2xl font-bold tracking-tight text-slate-950">
                       Adjustment Outlet
                     </h1>
 
                     {user && (
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-                        <ShieldCheck
-                          size={13}
-                        />
+                        <ShieldCheck size={13} />
                         {roleLabel(
                           user.role
                         )}
                       </span>
                     )}
-
                   </div>
 
                   <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
@@ -920,7 +1006,6 @@ export default function OutletAdjustmentPage() {
                   </p>
 
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-
                     <span className="inline-flex items-center gap-1.5">
                       <Store size={13} />
                       {selectedOutletName}
@@ -943,16 +1028,12 @@ export default function OutletAdjustmentPage() {
                       <ShieldCheck size={13} />
                       Approval Admin Pusat
                     </span>
-
                   </div>
                 </div>
-
               </div>
 
               <div className="flex flex-col gap-2 sm:flex-row">
-
                 <div className="relative">
-
                   <Store
                     size={16}
                     className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -965,9 +1046,7 @@ export default function OutletAdjustmentPage() {
                     disabled={
                       isOutletAdmin
                     }
-                    onChange={(
-                      event
-                    ) =>
+                    onChange={(event) =>
                       setSelectedOutletId(
                         event.target.value
                       )
@@ -999,7 +1078,6 @@ export default function OutletAdjustmentPage() {
                     size={15}
                     className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
                   />
-
                 </div>
 
                 <button
@@ -1038,21 +1116,14 @@ export default function OutletAdjustmentPage() {
                   <Plus size={17} />
                   Adjustment Baru
                 </button>
-
               </div>
-
             </div>
-
           </div>
-
         </section>
 
-        {/* ===================================================== */}
         {/* KPI */}
-        {/* ===================================================== */}
 
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -1154,21 +1225,13 @@ export default function OutletAdjustmentPage() {
                 : "Approval oleh Admin Pusat"}
             </div>
           </div>
-
         </section>
 
-        {/* ===================================================== */}
         {/* MAIN TABLE */}
-        {/* ===================================================== */}
 
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-
-          {/* TABLE TOOLBAR */}
-
           <div className="border-b border-slate-200 p-4 md:p-5">
-
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-
               <div>
                 <h2 className="text-base font-bold text-slate-950">
                   Riwayat Adjustment
@@ -1182,9 +1245,7 @@ export default function OutletAdjustmentPage() {
               </div>
 
               <div className="flex flex-col gap-2 sm:flex-row">
-
                 <div className="relative min-w-[280px]">
-
                   <Search
                     size={16}
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -1192,9 +1253,7 @@ export default function OutletAdjustmentPage() {
 
                   <input
                     value={search}
-                    onChange={(
-                      event
-                    ) =>
+                    onChange={(event) =>
                       setSearch(
                         event.target.value
                       )
@@ -1202,16 +1261,13 @@ export default function OutletAdjustmentPage() {
                     placeholder="Cari nomor, barang, atau reason..."
                     className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white focus:ring-4 focus:ring-slate-100"
                   />
-
                 </div>
 
                 <select
                   value={
                     statusFilter
                   }
-                  onChange={(
-                    event
-                  ) =>
+                  onChange={(event) =>
                     setStatusFilter(
                       event.target.value
                     )
@@ -1231,22 +1287,18 @@ export default function OutletAdjustmentPage() {
                     Rejected
                   </option>
                 </select>
-
               </div>
-
             </div>
-
           </div>
-
-          {/* ADMIN NOTICE */}
 
           {data.some(
             (row) =>
-              row.status ===
+              String(
+                row.status
+              ).toUpperCase() ===
               "DRAFT"
           ) && (
             <div className="mx-4 mt-4 flex items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 md:mx-5">
-
               <ShieldCheck
                 size={18}
                 className="mt-0.5 shrink-0 text-blue-600"
@@ -1260,19 +1312,16 @@ export default function OutletAdjustmentPage() {
                 setelah di-approve oleh{" "}
                 <span className="font-bold">
                   Admin Pusat
-                </span>.
+                </span>
+                .
               </div>
-
             </div>
           )}
 
           <div className="overflow-x-auto">
-
             <table className="w-full min-w-[1180px] text-sm">
-
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-[11px] uppercase tracking-wider text-slate-400">
-
                   <th className="px-5 py-4 font-bold">
                     Tanggal
                   </th>
@@ -1308,12 +1357,10 @@ export default function OutletAdjustmentPage() {
                   <th className="px-5 py-4 text-right font-bold">
                     Aksi
                   </th>
-
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-100">
-
                 {loading ? (
                   <tr>
                     <td
@@ -1321,7 +1368,6 @@ export default function OutletAdjustmentPage() {
                       className="px-5 py-20"
                     >
                       <div className="flex flex-col items-center justify-center">
-
                         <Loader2
                           size={25}
                           className="animate-spin text-slate-400"
@@ -1334,7 +1380,6 @@ export default function OutletAdjustmentPage() {
                         <div className="mt-1 text-xs text-slate-400">
                           Mengambil data stock outlet
                         </div>
-
                       </div>
                     </td>
                   </tr>
@@ -1346,7 +1391,6 @@ export default function OutletAdjustmentPage() {
                       className="px-5 py-20"
                     >
                       <div className="flex flex-col items-center justify-center">
-
                         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
                           <Package size={25} />
                         </div>
@@ -1360,7 +1404,6 @@ export default function OutletAdjustmentPage() {
                           adjustment untuk outlet dan filter
                           yang dipilih.
                         </div>
-
                       </div>
                     </td>
                   </tr>
@@ -1401,13 +1444,8 @@ export default function OutletAdjustmentPage() {
                           }
                           className="group transition hover:bg-slate-50/70"
                         >
-
-                          {/* DATE */}
-
                           <td className="whitespace-nowrap px-5 py-4">
-
                             <div className="flex items-center gap-2">
-
                               <CalendarDays
                                 size={15}
                                 className="text-slate-400"
@@ -1418,15 +1456,10 @@ export default function OutletAdjustmentPage() {
                                   row.adjustmentDate
                                 )}
                               </span>
-
                             </div>
-
                           </td>
 
-                          {/* NUMBER */}
-
                           <td className="px-5 py-4">
-
                             <div className="font-mono text-xs font-bold text-slate-900">
                               {row.number}
                             </div>
@@ -1434,15 +1467,10 @@ export default function OutletAdjustmentPage() {
                             <div className="mt-1 text-[10px] uppercase tracking-wide text-slate-400">
                               ID #{row.id}
                             </div>
-
                           </td>
 
-                          {/* OUTLET */}
-
                           <td className="px-5 py-4">
-
                             <div className="flex items-center gap-2.5">
-
                               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
                                 <Store size={15} />
                               </div>
@@ -1460,15 +1488,10 @@ export default function OutletAdjustmentPage() {
                                     "-"}
                                 </div>
                               </div>
-
                             </div>
-
                           </td>
 
-                          {/* TYPE */}
-
                           <td className="px-5 py-4">
-
                             <span
                               className={
                                 isIn
@@ -1480,13 +1503,9 @@ export default function OutletAdjustmentPage() {
                                 ? "PLUS / IN"
                                 : "MINUS / OUT"}
                             </span>
-
                           </td>
 
-                          {/* ITEMS */}
-
                           <td className="px-5 py-4">
-
                             <div className="font-bold text-slate-800">
                               {row.items.length}{" "}
                               item
@@ -1500,19 +1519,18 @@ export default function OutletAdjustmentPage() {
                                   ) =>
                                     item
                                       .barang
-                                      .name
+                                      ?.name
+                                )
+                                .filter(
+                                  Boolean
                                 )
                                 .join(
                                   ", "
                                 )}
                             </div>
-
                           </td>
 
-                          {/* QTY */}
-
                           <td className="px-5 py-4">
-
                             <div
                               className={
                                 isIn
@@ -1529,15 +1547,11 @@ export default function OutletAdjustmentPage() {
                             </div>
 
                             <div className="text-[10px] text-slate-400">
-                              Base Unit
+                              Stock Unit
                             </div>
-
                           </td>
 
-                          {/* REASON */}
-
                           <td className="max-w-[220px] px-5 py-4">
-
                             <div className="truncate font-semibold text-slate-700">
                               {row.reason ||
                                 "-"}
@@ -1548,17 +1562,14 @@ export default function OutletAdjustmentPage() {
                                 {row.remarks}
                               </div>
                             )}
-
                           </td>
 
-                          {/* STATUS */}
-
                           <td className="px-5 py-4">
-
-                            {row.status ===
+                            {String(
+                              row.status
+                            ).toUpperCase() ===
                             "APPROVED" ? (
                               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-bold tracking-wide text-emerald-700">
-
                                 <CheckCircle2
                                   size={13}
                                 />
@@ -1566,12 +1577,12 @@ export default function OutletAdjustmentPage() {
                                 {statusLabel(
                                   row.status
                                 )}
-
                               </span>
-                            ) : row.status ===
-                              "REJECTED" ? (
+                            ) : String(
+                                row.status
+                              ).toUpperCase() ===
+                                "REJECTED" ? (
                               <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[10px] font-bold tracking-wide text-rose-700">
-
                                 <XCircle
                                   size={13}
                                 />
@@ -1579,32 +1590,24 @@ export default function OutletAdjustmentPage() {
                                 {statusLabel(
                                   row.status
                                 )}
-
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-[10px] font-bold tracking-wide text-amber-700">
-
                                 <Clock3
                                   size={13}
                                 />
 
                                 DRAFT
-
                               </span>
                             )}
-
                           </td>
 
-                          {/* ACTION */}
-
                           <td className="px-5 py-4">
-
-                            {row.status ===
+                            {String(
+                              row.status
+                            ).toUpperCase() ===
                               "DRAFT" && (
                               <div className="flex justify-end gap-2">
-
-                                {/* APPROVE - ADMIN ONLY */}
-
                                 {canApprove && (
                                   <button
                                     disabled={
@@ -1633,8 +1636,6 @@ export default function OutletAdjustmentPage() {
                                     Approve
                                   </button>
                                 )}
-
-                                {/* REJECT */}
 
                                 {canReject && (
                                   <button
@@ -1665,19 +1666,18 @@ export default function OutletAdjustmentPage() {
                                   </button>
                                 )}
 
-                                {/* NON ADMIN */}
-
                                 {!canApprove &&
                                   !canReject && (
                                     <span className="text-xs text-slate-400">
                                       Menunggu Admin
                                     </span>
                                   )}
-
                               </div>
                             )}
 
-                            {row.status ===
+                            {String(
+                              row.status
+                            ).toUpperCase() ===
                               "APPROVED" && (
                               <div className="flex justify-end">
                                 <span className="text-[11px] font-semibold text-slate-400">
@@ -1686,7 +1686,9 @@ export default function OutletAdjustmentPage() {
                               </div>
                             )}
 
-                            {row.status ===
+                            {String(
+                              row.status
+                            ).toUpperCase() ===
                               "REJECTED" && (
                               <div className="flex justify-end">
                                 <span className="text-[11px] font-semibold text-slate-400">
@@ -1694,44 +1696,31 @@ export default function OutletAdjustmentPage() {
                                 </span>
                               </div>
                             )}
-
                           </td>
-
                         </tr>
                       );
                     }
                   )
                 )}
-
               </tbody>
-
             </table>
-
           </div>
-
         </section>
-
       </div>
 
-      {/* ======================================================= */}
       {/* FORM MODAL */}
-      {/* ======================================================= */}
 
       {openForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm md:p-6">
-
           <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl">
 
             {/* MODAL HEADER */}
 
             <div className="relative overflow-hidden border-b border-slate-200 bg-slate-950 px-5 py-5 text-white md:px-7">
-
               <div className="absolute -right-16 -top-20 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
 
               <div className="relative flex items-center justify-between">
-
                 <div className="flex items-center gap-3">
-
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10">
                     <History size={21} />
                   </div>
@@ -1745,7 +1734,6 @@ export default function OutletAdjustmentPage() {
                       {selectedOutletName}
                     </p>
                   </div>
-
                 </div>
 
                 <button
@@ -1756,29 +1744,23 @@ export default function OutletAdjustmentPage() {
                 >
                   <X size={20} />
                 </button>
-
               </div>
-
             </div>
 
             {/* MODAL BODY */}
 
             <div className="overflow-y-auto bg-[#fafbfc] p-4 md:p-6">
-
               <div className="space-y-5">
 
                 {/* BASIC INFORMATION */}
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">
-
                   <div className="mb-5 flex items-center gap-2">
-
                     <div className="h-1.5 w-1.5 rounded-full bg-slate-900" />
 
                     <h3 className="text-sm font-bold text-slate-900">
                       Informasi Adjustment
                     </h3>
-
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-3">
@@ -1791,7 +1773,6 @@ export default function OutletAdjustmentPage() {
                       </label>
 
                       <div className="relative">
-
                         <CalendarDays
                           size={16}
                           className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -1802,13 +1783,9 @@ export default function OutletAdjustmentPage() {
                           value={
                             form.date
                           }
-                          onChange={(
-                            event
-                          ) =>
+                          onChange={(event) =>
                             setForm(
-                              (
-                                current
-                              ) => ({
+                              (current) => ({
                                 ...current,
                                 date:
                                   event
@@ -1819,7 +1796,6 @@ export default function OutletAdjustmentPage() {
                           }
                           className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-4 focus:ring-slate-100"
                         />
-
                       </div>
                     </div>
 
@@ -1831,14 +1807,12 @@ export default function OutletAdjustmentPage() {
                       </label>
 
                       <div className="flex h-11 items-center rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm font-bold text-slate-700">
-
                         <Store
                           size={16}
                           className="mr-2 text-slate-500"
                         />
 
                         {selectedOutletName}
-
                       </div>
                     </div>
 
@@ -1850,24 +1824,13 @@ export default function OutletAdjustmentPage() {
                       </label>
 
                       <div className="grid grid-cols-2 gap-2">
-
                         <button
                           type="button"
-                          onClick={() => {
-                            setForm(
-                              (
-                                current
-                              ) => ({
-                                ...current,
-                                type:
-                                  "IN",
-                              })
-                            );
-
-                            setItems(
-                              []
-                            );
-                          }}
+                          onClick={() =>
+                            changeAdjustmentType(
+                              "IN"
+                            )
+                          }
                           className={
                             form.type ===
                             "IN"
@@ -1880,21 +1843,11 @@ export default function OutletAdjustmentPage() {
 
                         <button
                           type="button"
-                          onClick={() => {
-                            setForm(
-                              (
-                                current
-                              ) => ({
-                                ...current,
-                                type:
-                                  "OUT",
-                              })
-                            );
-
-                            setItems(
-                              []
-                            );
-                          }}
+                          onClick={() =>
+                            changeAdjustmentType(
+                              "OUT"
+                            )
+                          }
                           className={
                             form.type ===
                             "OUT"
@@ -1904,22 +1857,16 @@ export default function OutletAdjustmentPage() {
                         >
                           MINUS / OUT
                         </button>
-
                       </div>
                     </div>
-
                   </div>
-
                 </div>
 
                 {/* SEARCH BARANG */}
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">
-
                   <div className="mb-4">
-
                     <div className="flex items-center justify-between">
-
                       <div>
                         <h3 className="text-sm font-bold text-slate-900">
                           Pilih Barang
@@ -1931,15 +1878,12 @@ export default function OutletAdjustmentPage() {
                       </div>
 
                       <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                        Base Unit
+                        Stock Unit
                       </span>
-
                     </div>
-
                   </div>
 
                   <div className="relative">
-
                     <Search
                       size={17}
                       className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -1949,9 +1893,7 @@ export default function OutletAdjustmentPage() {
                       value={
                         barangSearch
                       }
-                      onChange={(
-                        event
-                      ) =>
+                      onChange={(event) =>
                         searchBarang(
                           event
                             .target
@@ -1965,16 +1907,11 @@ export default function OutletAdjustmentPage() {
                     {barangList.length >
                       0 && (
                       <div className="absolute left-0 right-0 top-14 z-30 max-h-80 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
-
                         {barangList.map(
-                          (
-                            barang
-                          ) => {
+                          (barang) => {
                             const alreadyAdded =
                               items.some(
-                                (
-                                  item
-                                ) =>
+                                (item) =>
                                   item.barangId ===
                                   barang.id
                               );
@@ -1995,9 +1932,7 @@ export default function OutletAdjustmentPage() {
                                 }
                                 className="flex w-full items-center justify-between border-b border-slate-100 px-4 py-3.5 text-left transition last:border-0 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                               >
-
                                 <div className="flex min-w-0 items-center gap-3">
-
                                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
                                     <Package
                                       size={
@@ -2007,7 +1942,6 @@ export default function OutletAdjustmentPage() {
                                   </div>
 
                                   <div className="min-w-0">
-
                                     <div className="truncate font-bold text-slate-900">
                                       {
                                         barang.name
@@ -2019,16 +1953,18 @@ export default function OutletAdjustmentPage() {
                                         barang.code
                                       }{" "}
                                       ·{" "}
-                                      {barang.baseUnit ||
-                                        barang.unit}
+                                      {
+                                        barang.unit
+                                      }
+                                      {barang.baseUnit &&
+                                        barang.baseUnit !==
+                                          barang.unit &&
+                                        ` → ${barang.baseUnit}`}
                                     </div>
-
                                   </div>
-
                                 </div>
 
                                 <div className="ml-4 shrink-0 text-right">
-
                                   <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
                                     Stock Outlet
                                   </div>
@@ -2038,7 +1974,8 @@ export default function OutletAdjustmentPage() {
                                       stockOf(
                                         barang
                                       )
-                                    )}
+                                    )}{" "}
+                                    {barang.unit}
                                   </div>
 
                                   {alreadyAdded && (
@@ -2046,29 +1983,21 @@ export default function OutletAdjustmentPage() {
                                       Sudah dipilih
                                     </div>
                                   )}
-
                                 </div>
-
                               </button>
                             );
                           }
                         )}
-
                       </div>
                     )}
-
                   </div>
-
                 </div>
 
                 {/* ITEMS */}
 
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-
                   <div className="border-b border-slate-200 px-5 py-4">
-
                     <div className="flex items-center justify-between">
-
                       <div>
                         <h3 className="text-sm font-bold text-slate-900">
                           Detail Barang
@@ -2082,19 +2011,13 @@ export default function OutletAdjustmentPage() {
                       <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500">
                         {items.length} item
                       </span>
-
                     </div>
-
                   </div>
 
                   <div className="overflow-x-auto">
-
                     <table className="w-full min-w-[850px] text-sm">
-
                       <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wider text-slate-400">
-
                         <tr>
-
                           <th className="px-5 py-3 font-bold">
                             Barang
                           </th>
@@ -2114,22 +2037,17 @@ export default function OutletAdjustmentPage() {
                           <th className="px-5 py-3 text-right font-bold">
                             Aksi
                           </th>
-
                         </tr>
-
                       </thead>
 
                       <tbody className="divide-y divide-slate-100">
-
                         {items.length ===
                         0 ? (
                           <tr>
-
                             <td
                               colSpan={5}
                               className="px-5 py-14 text-center"
                             >
-
                               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
                                 <Package size={21} />
                               </div>
@@ -2142,15 +2060,11 @@ export default function OutletAdjustmentPage() {
                                 Gunakan pencarian di atas
                                 untuk menambahkan barang.
                               </div>
-
                             </td>
-
                           </tr>
                         ) : (
                           items.map(
-                            (
-                              item
-                            ) => {
+                            (item) => {
                               const current =
                                 stockOf(
                                   item.barang
@@ -2181,11 +2095,8 @@ export default function OutletAdjustmentPage() {
                                   }
                                   className="hover:bg-slate-50/60"
                                 >
-
                                   <td className="px-5 py-4">
-
                                     <div className="flex items-center gap-3">
-
                                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
                                         <Package
                                           size={
@@ -2210,35 +2121,34 @@ export default function OutletAdjustmentPage() {
                                               .code
                                           }{" "}
                                           ·{" "}
-                                          {item
-                                            .barang
-                                            .baseUnit ||
+                                          {
                                             item
                                               .barang
-                                              .unit}
+                                              .unit
+                                          }
                                         </div>
                                       </div>
-
                                     </div>
-
                                   </td>
 
                                   <td className="px-5 py-4">
-
                                     <div className="font-bold text-slate-800">
                                       {formatNumber(
                                         current
-                                      )}
+                                      )}{" "}
+                                      {
+                                        item
+                                          .barang
+                                          .unit
+                                      }
                                     </div>
 
                                     <div className="text-[10px] uppercase tracking-wide text-slate-400">
                                       Stock Outlet
                                     </div>
-
                                   </td>
 
                                   <td className="px-5 py-4">
-
                                     <input
                                       type="number"
                                       min="0.001"
@@ -2268,11 +2178,9 @@ export default function OutletAdjustmentPage() {
                                         Stock tidak mencukupi
                                       </div>
                                     )}
-
                                   </td>
 
                                   <td className="px-5 py-4">
-
                                     <div
                                       className={
                                         invalid
@@ -2285,17 +2193,20 @@ export default function OutletAdjustmentPage() {
                                     >
                                       {formatNumber(
                                         after
-                                      )}
+                                      )}{" "}
+                                      {
+                                        item
+                                          .barang
+                                          .unit
+                                      }
                                     </div>
 
                                     <div className="text-[10px] uppercase tracking-wide text-slate-400">
                                       Setelah Adjustment
                                     </div>
-
                                   </td>
 
                                   <td className="px-5 py-4 text-right">
-
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -2312,29 +2223,21 @@ export default function OutletAdjustmentPage() {
                                         }
                                       />
                                     </button>
-
                                   </td>
-
                                 </tr>
                               );
                             }
                           )
                         )}
-
                       </tbody>
-
                     </table>
-
                   </div>
-
                 </div>
 
                 {/* REASON + REMARKS */}
 
                 <div className="grid gap-5 md:grid-cols-2">
-
                   <div className="rounded-2xl border border-slate-200 bg-white p-5">
-
                     <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
                       Reason
                     </label>
@@ -2343,13 +2246,9 @@ export default function OutletAdjustmentPage() {
                       value={
                         form.reason
                       }
-                      onChange={(
-                        event
-                      ) =>
+                      onChange={(event) =>
                         setForm(
-                          (
-                            current
-                          ) => ({
+                          (current) => ({
                             ...current,
                             reason:
                               event
@@ -2365,11 +2264,9 @@ export default function OutletAdjustmentPage() {
                     <p className="mt-2 text-[11px] text-slate-400">
                       Wajib diisi untuk audit transaksi.
                     </p>
-
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-5">
-
                     <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
                       Keterangan
                     </label>
@@ -2378,13 +2275,9 @@ export default function OutletAdjustmentPage() {
                       value={
                         form.remarks
                       }
-                      onChange={(
-                        event
-                      ) =>
+                      onChange={(event) =>
                         setForm(
-                          (
-                            current
-                          ) => ({
+                          (current) => ({
                             ...current,
                             remarks:
                               event
@@ -2397,15 +2290,12 @@ export default function OutletAdjustmentPage() {
                       placeholder="Keterangan tambahan (opsional)"
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white focus:ring-4 focus:ring-slate-100"
                     />
-
                   </div>
-
                 </div>
 
                 {/* WARNING */}
 
                 <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-
                   <ShieldCheck
                     size={18}
                     className="mt-0.5 shrink-0 text-amber-600"
@@ -2423,17 +2313,13 @@ export default function OutletAdjustmentPage() {
                       oleh <b>Admin Pusat</b>.
                     </div>
                   </div>
-
                 </div>
-
               </div>
-
             </div>
 
             {/* MODAL FOOTER */}
 
             <div className="flex flex-col gap-3 border-t border-slate-200 bg-white px-5 py-4 md:flex-row md:items-center md:justify-between md:px-6">
-
               <div className="text-xs text-slate-400">
                 {items.length > 0
                   ? `${items.length} barang • ${formatNumber(
@@ -2454,7 +2340,6 @@ export default function OutletAdjustmentPage() {
               </div>
 
               <div className="flex justify-end gap-2">
-
                 <button
                   type="button"
                   onClick={() =>
@@ -2494,16 +2379,11 @@ export default function OutletAdjustmentPage() {
                     </>
                   )}
                 </button>
-
               </div>
-
             </div>
-
           </div>
-
         </div>
       )}
-
     </div>
   );
 }

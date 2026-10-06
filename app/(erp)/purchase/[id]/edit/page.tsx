@@ -39,6 +39,14 @@ type Barang = {
   code: string;
   name: string;
   unit?: string;
+
+  /*
+   * STOCK INFO
+   * Data ini diambil dari response /api/master/barang
+   * apabila tersedia.
+   */
+  stock?: number;
+  minimumStock?: number;
 };
 
 type Supplier = {
@@ -105,6 +113,56 @@ function formatPercent(value: number | string) {
       maximumFractionDigits: 2,
     }
   )}%`;
+}
+
+/* =====================================================
+   STOCK STATUS
+===================================================== */
+
+type StockStatus = {
+  label: "HABIS" | "MENIPIS" | "AMAN";
+  className: string;
+};
+
+function getStockStatus(
+  stockValue: number | undefined,
+  minimumStockValue: number | undefined
+): StockStatus {
+  const stock = Number(stockValue ?? 0);
+
+  const hasMinimumStock =
+    minimumStockValue !== undefined &&
+    minimumStockValue !== null &&
+    Number.isFinite(Number(minimumStockValue));
+
+  const minimumStock = hasMinimumStock
+    ? Number(minimumStockValue)
+    : undefined;
+
+  if (stock <= 0) {
+    return {
+      label: "HABIS",
+      className:
+        "border border-[#F1D0D0] dark:border-[#6B2424] bg-[#FFF1F1] dark:bg-[#501111] text-[#C25555] dark:text-[#CC7070]",
+    };
+  }
+
+  if (
+    minimumStock !== undefined &&
+    stock <= minimumStock
+  ) {
+    return {
+      label: "MENIPIS",
+      className:
+        "border border-[#EBD9A8] dark:border-[#6B5824] bg-[#FFF9E8] dark:bg-[#504011] text-[#A2761D] dark:text-[#E2BF78]",
+    };
+  }
+
+  return {
+    label: "AMAN",
+    className:
+      "border border-[#CBE3D4] dark:border-[#325D42] bg-[#EDF8F1] dark:bg-[#173B24] text-[#3F7D5D] dark:text-[#86C7A6]",
+  };
 }
 
 /* =====================================================
@@ -290,7 +348,7 @@ function BarangSearch({
     const gap = 8;
 
     const desiredWidth =
-      Math.max(rect.width, 420);
+      Math.max(rect.width, 520);
 
     const width = Math.min(
       desiredWidth,
@@ -313,7 +371,7 @@ function BarangSearch({
       left = 12;
     }
 
-    const estimatedHeight = 390;
+    const estimatedHeight = 440;
 
     const spaceBelow =
       viewportHeight -
@@ -506,38 +564,58 @@ function BarangSearch({
           <div
             ref={dropdownRef}
             style={dropdownStyle}
-            className="overflow-hidden rounded-2xl border border-[#D7E3DE] bg-white shadow-[0_22px_55px_rgba(28,58,48,0.20)]"
+            className="overflow-hidden rounded-2xl border border-[#D7E3DE] dark:border-[#3B544A] bg-white dark:bg-[#0D1714] shadow-[0_22px_55px_rgba(28,58,48,0.20)]"
           >
-            <div className="border-b border-[#E9EFEC] bg-[#F7FAF8] px-4 py-3">
-              <div className="flex items-center justify-between">
+            {/* DROPDOWN HEADER */}
+            <div className="border-b border-[#E9EFEC] dark:border-[#3B5447] bg-[#F7FAF8] dark:bg-[#161D18] px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#497F70]">
+                  <div className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#497F70] dark:text-[#79B8A3]">
                     Master Barang
                   </div>
 
-                  <div className="mt-0.5 text-[10px] text-[#96A39E]">
+                  <div className="mt-0.5 text-[10px] text-[#96A39E] dark:text-[#8DB0A2]">
                     Pilih barang untuk Purchase Order
                   </div>
                 </div>
 
-                <span className="rounded-lg border border-[#DFE9E4] bg-white px-2.5 py-1 text-[10px] font-bold text-[#7D8C85]">
+                <span className="shrink-0 rounded-lg border border-[#DFE9E4] dark:border-[#3A5547] bg-white dark:bg-[#0D1714] px-2.5 py-1 text-[10px] font-bold text-[#7D8C85] dark:text-[#8DB09F]">
                   {filteredBarangs.length} hasil
+                </span>
+              </div>
+
+              {/* STATUS LEGEND */}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="text-[9px] font-semibold text-[#899690] dark:text-[#8DB09F]">
+                  Status stock:
+                </span>
+
+                <span className="rounded-md border border-[#F1D0D0] dark:border-[#6B2424] bg-[#FFF1F1] dark:bg-[#501111] px-2 py-1 text-[8px] font-extrabold text-[#C25555] dark:text-[#CC7070]">
+                  HABIS
+                </span>
+
+                <span className="rounded-md border border-[#EBD9A8] dark:border-[#6B5824] bg-[#FFF9E8] dark:bg-[#504011] px-2 py-1 text-[8px] font-extrabold text-[#A2761D] dark:text-[#E2BF78]">
+                  MENIPIS
+                </span>
+
+                <span className="rounded-md border border-[#CBE3D4] dark:border-[#325D42] bg-[#EDF8F1] dark:bg-[#173B24] px-2 py-1 text-[8px] font-extrabold text-[#3F7D5D] dark:text-[#86C7A6]">
+                  AMAN
                 </span>
               </div>
             </div>
 
-            <div className="max-h-72 overflow-y-auto p-1.5">
+            <div className="max-h-[330px] overflow-y-auto p-1.5">
               {filteredBarangs.length === 0 ? (
                 <div className="px-4 py-8 text-center">
-                  <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F1F5F3] text-[#95A29D]">
+                  <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F1F5F3] dark:bg-[#161D19] text-[#95A29D] dark:text-[#8DB0A2]">
                     <Package size={18} />
                   </div>
 
-                  <p className="text-xs font-bold text-[#64736C]">
+                  <p className="text-xs font-bold text-[#64736C] dark:text-[#9FBCAE]">
                     Barang tidak ditemukan
                   </p>
 
-                  <p className="mt-1 text-[10px] text-[#A0ABA6]">
+                  <p className="mt-1 text-[10px] text-[#A0ABA6] dark:text-[#8DB0A0]">
                     Coba gunakan kode atau nama barang lain.
                   </p>
                 </div>
@@ -546,6 +624,27 @@ function BarangSearch({
                   (barang) => {
                     const selected =
                       barang.id === value;
+
+                    const stock =
+                      Number(
+                        barang.stock ?? 0
+                      );
+
+                    const minimumStock =
+                      barang.minimumStock !==
+                        undefined &&
+                      barang.minimumStock !==
+                        null
+                        ? Number(
+                            barang.minimumStock
+                          )
+                        : undefined;
+
+                    const stockStatus =
+                      getStockStatus(
+                        barang.stock,
+                        barang.minimumStock
+                      );
 
                     return (
                       <button
@@ -559,35 +658,70 @@ function BarangSearch({
                             barang
                           )
                         }
-                        className={`flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition-all ${
+                        className={`flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition-all ${
                           selected
-                            ? "bg-[#EAF4EF]"
-                            : "hover:bg-[#F5F8F6]"
+                            ? "bg-[#EAF4EF] dark:bg-[#1B3428]"
+                            : "hover:bg-[#F5F8F6] dark:hover:bg-[#161D18]"
                         }`}
                       >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="rounded-md bg-[#EFF4F1] px-2 py-1 font-mono text-[10px] font-bold text-[#497F70]">
+                        {/* BARANG INFO */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-md bg-[#EFF4F1] dark:bg-[#1E2923] px-2 py-1 font-mono text-[10px] font-bold text-[#497F70] dark:text-[#79B8A3]">
                               {barang.code}
                             </span>
 
                             {barang.unit && (
-                              <span className="text-[10px] font-medium text-[#9AA7A2]">
+                              <span className="text-[10px] font-medium text-[#9AA7A2] dark:text-[#8DB0A2]">
                                 {barang.unit}
                               </span>
                             )}
                           </div>
 
-                          <div className="mt-1.5 truncate text-sm font-bold text-[#29443B]">
+                          <div className="mt-1.5 truncate text-sm font-bold text-[#29443B] dark:text-[#C9DDD5]">
                             {barang.name}
                           </div>
                         </div>
 
-                        {selected && (
-                          <div className="ml-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#497F70] text-white shadow-sm">
-                            <Check size={14} />
+                        {/* STOCK INFO */}
+                        <div className="flex shrink-0 items-center gap-3">
+                          <div className="hidden text-right sm:block">
+                            <div className="text-[8px] font-extrabold uppercase tracking-[0.12em] text-[#98A49F] dark:text-[#8DB0A1]">
+                              Stock
+                            </div>
+
+                            <div className="mt-0.5 text-xs font-extrabold tabular-nums text-[#30473F] dark:text-[#C5D9D1]">
+                              {formatNumber(stock)}
+                              {barang.unit
+                                ? ` ${barang.unit}`
+                                : ""}
+                            </div>
+
+                            {minimumStock !==
+                              undefined && (
+                              <div className="mt-0.5 text-[8px] font-medium text-[#A0AAA6] dark:text-[#8DB0A2]">
+                                Min.{" "}
+                                {formatNumber(
+                                  minimumStock
+                                )}
+                              </div>
+                            )}
                           </div>
-                        )}
+
+                          <div className="flex min-w-[72px] justify-end">
+                            <span
+                              className={`rounded-lg px-2.5 py-1.5 text-[8px] font-extrabold uppercase tracking-[0.08em] ${stockStatus.className}`}
+                            >
+                              {stockStatus.label}
+                            </span>
+                          </div>
+
+                          {selected && (
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#497F70] dark:bg-[#17382F] text-white shadow-sm">
+                              <Check size={14} />
+                            </div>
+                          )}
+                        </div>
                       </button>
                     );
                   }
@@ -608,7 +742,7 @@ function BarangSearch({
         <div className="relative">
           <Search
             size={15}
-            className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-[#91A19A]"
+            className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-[#91A19A] dark:text-[#8DB0A0]"
           />
 
           <input
@@ -619,12 +753,12 @@ function BarangSearch({
             onChange={handleChange}
             placeholder="Cari kode atau nama barang..."
             autoComplete="off"
-            className="h-11 w-full rounded-xl border border-[#D8E3DE] bg-[#FBFCFB] pl-10 pr-10 text-sm font-medium text-[#30473F] outline-none transition-all placeholder:text-[#A7B1AD] hover:border-[#C3D4CC] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+            className="h-11 w-full rounded-xl border border-[#D8E3DE] dark:border-[#3B5449] bg-[#FBFCFB] dark:bg-[#161D16] pl-10 pr-10 text-sm font-medium text-[#30473F] dark:text-[#C5D9D1] outline-none transition-all placeholder:text-[#A7B1AD] dark:placeholder:text-[#8DB0A2] hover:border-[#C3D4CC] dark:hover:border-[#3B5448] focus:border-[#497F70] dark:focus:border-[#3B6F60] focus:bg-white dark:bg-[#0D1714] focus:ring-4 focus:ring-[#497F70]/10 dark:focus:ring-[#17382F]/10"
           />
 
           <ChevronDown
             size={15}
-            className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[#899892] transition-transform ${
+            className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[#899892] dark:text-[#8DB0A2] transition-transform ${
               open ? "rotate-180" : ""
             }`}
           />
@@ -746,7 +880,7 @@ function SupplierSearch({
       <div className="relative">
         <Search
           size={15}
-          className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-[#91A19A]"
+          className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-[#91A19A] dark:text-[#8DB0A0]"
         />
 
         <input
@@ -756,32 +890,32 @@ function SupplierSearch({
           onChange={handleChange}
           placeholder="Ketik nama supplier..."
           autoComplete="off"
-          className="h-11 w-full rounded-xl border border-[#D8E3DE] bg-[#FBFCFB] pl-10 pr-10 text-sm font-medium text-[#30473F] outline-none transition-all placeholder:text-[#A7B1AD] hover:border-[#C3D4CC] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+          className="h-11 w-full rounded-xl border border-[#D8E3DE] dark:border-[#3B5449] bg-[#FBFCFB] dark:bg-[#161D16] pl-10 pr-10 text-sm font-medium text-[#30473F] dark:text-[#C5D9D1] outline-none transition-all placeholder:text-[#A7B1AD] dark:placeholder:text-[#8DB0A2] hover:border-[#C3D4CC] dark:hover:border-[#3B5448] focus:border-[#497F70] dark:focus:border-[#3B6F60] focus:bg-white dark:bg-[#0D1714] focus:ring-4 focus:ring-[#497F70]/10 dark:focus:ring-[#17382F]/10"
         />
 
         <ChevronDown
           size={15}
-          className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[#899892] transition-transform ${
+          className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[#899892] dark:text-[#8DB0A2] transition-transform ${
             open ? "rotate-180" : ""
           }`}
         />
       </div>
 
       {open && (
-        <div className="absolute left-0 top-full z-[100] mt-2 w-full overflow-hidden rounded-2xl border border-[#D7E3DE] bg-white shadow-[0_22px_55px_rgba(28,58,48,0.16)]">
-          <div className="border-b border-[#E9EFEC] bg-[#F7FAF8] px-4 py-3">
+        <div className="absolute left-0 top-full z-[100] mt-2 w-full overflow-hidden rounded-2xl border border-[#D7E3DE] dark:border-[#3B544A] bg-white dark:bg-[#0D1714] shadow-[0_22px_55px_rgba(28,58,48,0.16)]">
+          <div className="border-b border-[#E9EFEC] dark:border-[#3B5447] bg-[#F7FAF8] dark:bg-[#161D18] px-4 py-3">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#497F70]">
+                <div className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#497F70] dark:text-[#79B8A3]">
                   Supplier
                 </div>
 
-                <div className="mt-0.5 text-[10px] text-[#96A39E]">
+                <div className="mt-0.5 text-[10px] text-[#96A39E] dark:text-[#8DB0A2]">
                   Pilih supplier Purchase Order
                 </div>
               </div>
 
-              <span className="rounded-lg border border-[#DFE9E4] bg-white px-2.5 py-1 text-[10px] font-bold text-[#7D8C85]">
+              <span className="rounded-lg border border-[#DFE9E4] dark:border-[#3A5547] bg-white dark:bg-[#0D1714] px-2.5 py-1 text-[10px] font-bold text-[#7D8C85] dark:text-[#8DB09F]">
                 {filteredSuppliers.length} hasil
               </span>
             </div>
@@ -790,15 +924,15 @@ function SupplierSearch({
           <div className="max-h-72 overflow-y-auto p-1.5">
             {filteredSuppliers.length === 0 ? (
               <div className="px-4 py-8 text-center">
-                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F1F5F3] text-[#95A29D]">
+                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F1F5F3] dark:bg-[#161D19] text-[#95A29D] dark:text-[#8DB0A2]">
                   <Package size={18} />
                 </div>
 
-                <p className="text-xs font-bold text-[#64736C]">
+                <p className="text-xs font-bold text-[#64736C] dark:text-[#9FBCAE]">
                   Supplier tidak ditemukan
                 </p>
 
-                <p className="mt-1 text-[10px] text-[#A0ABA6]">
+                <p className="mt-1 text-[10px] text-[#A0ABA6] dark:text-[#8DB0A0]">
                   Coba ketik nama supplier lain.
                 </p>
               </div>
@@ -824,22 +958,22 @@ function SupplierSearch({
                       }
                       className={`flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition-all ${
                         selected
-                          ? "bg-[#EAF4EF]"
-                          : "hover:bg-[#F5F8F6]"
+                          ? "bg-[#EAF4EF] dark:bg-[#1B3428]"
+                          : "hover:bg-[#F5F8F6] dark:hover:bg-[#161D18]"
                       }`}
                     >
                       <div className="flex min-w-0 items-center gap-2.5">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#EFF4F1] text-[#497F70]">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#EFF4F1] dark:bg-[#1E2923] text-[#497F70] dark:text-[#79B8A3]">
                           <Package size={14} />
                         </span>
 
-                        <span className="truncate text-sm font-bold text-[#29443B]">
+                        <span className="truncate text-sm font-bold text-[#29443B] dark:text-[#C9DDD5]">
                           {supplier.name}
                         </span>
                       </div>
 
                       {selected && (
-                        <div className="ml-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#497F70] text-white shadow-sm">
+                        <div className="ml-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#497F70] dark:bg-[#17382F] text-white shadow-sm">
                           <Check size={14} />
                         </div>
                       )}
@@ -874,113 +1008,113 @@ function PriceWarningPanel({
   const theme = isIncrease
     ? {
         panel:
-          "border-[#F0CFC5] bg-gradient-to-r from-[#FFF7F4] via-[#FFF9F7] to-white",
+          "border-[#F0CFC5] dark:border-[#6B3424] bg-gradient-to-r from-[#FFF7F4] dark:from-[#502211] via-[#FFF9F7] dark:via-[#502111] to-white dark:to-[#0D1714]",
 
         icon:
-          "bg-[#FFE7DF] text-[#C45B3D]",
+          "bg-[#FFE7DF] dark:bg-[#502111] text-[#C45B3D] dark:text-[#D2816A]",
 
         title:
-          "text-[#A9472E]",
+          "text-[#A9472E] dark:text-[#DC927F]",
 
         description:
-          "text-[#916F65]",
+          "text-[#916F65] dark:text-[#B0958D]",
 
         badge:
-          "border border-[#F5C9BC] bg-[#FFE8E1] text-[#B84F32]",
+          "border border-[#F5C9BC] dark:border-[#6B3424] bg-[#FFE8E1] dark:bg-[#502011] text-[#B84F32] dark:text-[#D67F67]",
 
         oldBox:
-          "border-[#EBDDD8] bg-white",
+          "border-[#EBDDD8] dark:border-[#5E3D30] bg-white dark:bg-[#0D1714]",
 
         oldLabel:
-          "text-[#9C8178]",
+          "text-[#9C8178] dark:text-[#B0958D]",
 
         oldPrice:
-          "text-[#65534D]",
+          "text-[#65534D] dark:text-[#BCA69F]",
 
         arrow:
-          "text-[#C7A59A]",
+          "text-[#C7A59A] dark:text-[#BA9082]",
 
         newBox:
-          "border-[#F0C8BC] bg-[#FFF8F5]",
+          "border-[#F0C8BC] dark:border-[#6B3424] bg-[#FFF8F5] dark:bg-[#502411]",
 
         newLabel:
-          "text-[#A36C5B]",
+          "text-[#A36C5B] dark:text-[#BA9083]",
 
         newPrice:
-          "text-[#A9472E]",
+          "text-[#A9472E] dark:text-[#DC927F]",
 
         bottom:
-          "border-[#F1DDD7] bg-[#FFF9F7]",
+          "border-[#F1DDD7] dark:border-[#6A3525] bg-[#FFF9F7] dark:bg-[#502111]",
 
         bottomIcon:
-          "text-[#B56B55]",
+          "text-[#B56B55] dark:text-[#C48978]",
 
         bottomText:
-          "text-[#866A61]",
+          "text-[#866A61] dark:text-[#B0958D]",
 
         bottomStrong:
-          "text-[#A9472E]",
+          "text-[#A9472E] dark:text-[#DC927F]",
 
         bottomDivider:
-          "bg-[#E9CFC6]",
+          "bg-[#E9CFC6] dark:bg-[#3C2017]",
 
         bottomBadge:
-          "bg-[#FFE8E1] text-[#B84F32]",
+          "bg-[#FFE8E1] dark:bg-[#502011] text-[#B84F32] dark:text-[#D67F67]",
       }
     : {
         panel:
-          "border-[#C8E2D3] bg-gradient-to-r from-[#F3FBF6] via-[#F8FCF9] to-white",
+          "border-[#C8E2D3] dark:border-[#315E44] bg-gradient-to-r from-[#F3FBF6] dark:from-[#153F25] via-[#F8FCF9] dark:via-[#161D18] to-white dark:to-[#0D1714]",
 
         icon:
-          "bg-[#DDF2E5] text-[#3F8062]",
+          "bg-[#DDF2E5] dark:bg-[#173C25] text-[#3F8062] dark:text-[#86C7A6]",
 
         title:
-          "text-[#397258]",
+          "text-[#397258] dark:text-[#86C5AE]",
 
         description:
-          "text-[#6C897B]",
+          "text-[#6C897B] dark:text-[#8DB09F]",
 
         badge:
-          "border border-[#BFE0CD] bg-[#DFF3E7] text-[#3C795B]",
+          "border border-[#BFE0CD] dark:border-[#2F6044] bg-[#DFF3E7] dark:bg-[#173C26] text-[#3C795B] dark:text-[#92C9AE]",
 
         oldBox:
-          "border-[#DCE8E1] bg-white",
+          "border-[#DCE8E1] dark:border-[#395645] bg-white dark:bg-[#0D1714]",
 
         oldLabel:
-          "text-[#80958B]",
+          "text-[#80958B] dark:text-[#8DB09F]",
 
         oldPrice:
-          "text-[#4F655C]",
+          "text-[#4F655C] dark:text-[#9FBCB0]",
 
         arrow:
-          "text-[#94B5A4]",
+          "text-[#94B5A4] dark:text-[#8CB09E]",
 
         newBox:
-          "border-[#BFDCCB] bg-[#F5FBF7]",
+          "border-[#BFDCCB] dark:border-[#325C44] bg-[#F5FBF7] dark:bg-[#161D18]",
 
         newLabel:
-          "text-[#648977]",
+          "text-[#648977] dark:text-[#8DB09F]",
 
         newPrice:
-          "text-[#397258]",
+          "text-[#397258] dark:text-[#86C5AE]",
 
         bottom:
-          "border-[#D5E8DD] bg-[#F8FCF9]",
+          "border-[#D5E8DD] dark:border-[#335C44] bg-[#F8FCF9] dark:bg-[#161D18]",
 
         bottomIcon:
-          "text-[#4D8469]",
+          "text-[#4D8469] dark:text-[#98C3AE]",
 
         bottomText:
-          "text-[#698276]",
+          "text-[#698276] dark:text-[#8DB09F]",
 
         bottomStrong:
-          "text-[#397258]",
+          "text-[#397258] dark:text-[#86C5AE]",
 
         bottomDivider:
-          "bg-[#CDE2D5]",
+          "bg-[#CDE2D5] dark:bg-[#1D3125]",
 
         bottomBadge:
-          "bg-[#DFF3E7] text-[#3C795B]",
+          "bg-[#DFF3E7] dark:bg-[#173C26] text-[#3C795B] dark:text-[#92C9AE]",
       };
 
   return (
@@ -2008,22 +2142,22 @@ export default function EditPurchasePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.08),transparent_28%),#F3F6F4]">
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.08),transparent_28%),#F3F6F4] dark:bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.16),transparent_28%),#07110E]">
         <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8">
           <div className="mb-6 flex items-center gap-3">
-            <div className="h-11 w-11 animate-pulse rounded-2xl bg-[#DCE7E2]" />
+            <div className="h-11 w-11 animate-pulse rounded-2xl bg-[#DCE7E2] dark:bg-[#1D3027]" />
 
             <div className="space-y-2">
-              <div className="h-3 w-28 animate-pulse rounded bg-[#DCE7E2]" />
+              <div className="h-3 w-28 animate-pulse rounded bg-[#DCE7E2] dark:bg-[#1D3027]" />
 
-              <div className="h-6 w-52 animate-pulse rounded-lg bg-[#DCE7E2]" />
+              <div className="h-6 w-52 animate-pulse rounded-lg bg-[#DCE7E2] dark:bg-[#1D3027]" />
             </div>
           </div>
 
           <div className="space-y-5">
-            <div className="h-64 animate-pulse rounded-[24px] border border-[#DDE7E2] bg-white shadow-sm" />
+            <div className="h-64 animate-pulse rounded-[24px] border border-[#DDE7E2] dark:border-[#3B5447] bg-white dark:bg-[#0D1714] shadow-sm" />
 
-            <div className="h-[520px] animate-pulse rounded-[24px] border border-[#DDE7E2] bg-white shadow-sm" />
+            <div className="h-[520px] animate-pulse rounded-[24px] border border-[#DDE7E2] dark:border-[#3B5447] bg-white dark:bg-[#0D1714] shadow-sm" />
           </div>
         </div>
       </div>
@@ -2036,18 +2170,18 @@ export default function EditPurchasePage() {
 
   if (!purchase) {
     return (
-      <div className="min-h-screen bg-[#F3F6F4] px-5 py-8">
+      <div className="min-h-screen bg-[#F3F6F4] dark:bg-[#07110E] px-5 py-8">
         <div className="mx-auto max-w-5xl">
-          <div className="rounded-[24px] border border-[#DDE7E2] bg-white p-10 text-center shadow-[0_12px_40px_rgba(31,59,50,0.06)]">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[20px] bg-[#F1F5F3] text-[#8A9892]">
+          <div className="rounded-[24px] border border-[#DDE7E2] dark:border-[#3B5447] bg-white dark:bg-[#0D1714] p-10 text-center shadow-[0_12px_40px_rgba(31,59,50,0.06)]">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[20px] bg-[#F1F5F3] dark:bg-[#161D19] text-[#8A9892] dark:text-[#8DB0A1]">
               <FileText size={24} />
             </div>
 
-            <h1 className="mt-5 text-xl font-extrabold tracking-tight text-[#18352D]">
+            <h1 className="mt-5 text-xl font-extrabold tracking-tight text-[#18352D] dark:text-[#D8E8E2]">
               Purchase Order tidak ditemukan
             </h1>
 
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#84918C]">
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#84918C] dark:text-[#8DB0A2]">
               Data Purchase Order yang diminta
               tidak tersedia atau sudah tidak dapat
               diakses.
@@ -2055,7 +2189,7 @@ export default function EditPurchasePage() {
 
             <Link
               href="/purchase"
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#497F70] px-5 py-3 text-xs font-bold text-white shadow-[0_6px_18px_rgba(73,127,112,0.2)] transition-all hover:bg-[#3D6D60]"
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#497F70] dark:bg-[#17382F] px-5 py-3 text-xs font-bold text-white shadow-[0_6px_18px_rgba(73,127,112,0.2)] transition-all hover:bg-[#3D6D60] dark:hover:bg-[#1C322C]"
             >
               <ArrowLeft size={15} />
               Kembali ke Purchase
@@ -2072,21 +2206,21 @@ export default function EditPurchasePage() {
 
   if (purchase.status !== "DRAFT") {
     return (
-      <div className="min-h-screen bg-[#F3F6F4] px-5 py-8 md:px-8">
+      <div className="min-h-screen bg-[#F3F6F4] dark:bg-[#07110E] px-5 py-8 md:px-8">
         <div className="mx-auto max-w-5xl">
-          <div className="overflow-hidden rounded-[24px] border border-[#E6D5D5] bg-white shadow-[0_12px_40px_rgba(80,40,40,0.06)]">
-            <div className="border-b border-[#F0E2E2] bg-gradient-to-r from-[#FFF8F8] to-white px-6 py-6">
+          <div className="overflow-hidden rounded-[24px] border border-[#E6D5D5] dark:border-[#5A3535] bg-white dark:bg-[#0D1714] shadow-[0_12px_40px_rgba(80,40,40,0.06)]">
+            <div className="border-b border-[#F0E2E2] dark:border-[#5E3131] bg-gradient-to-r from-[#FFF8F8] dark:from-[#1D1616] to-white dark:to-[#0D1714] px-6 py-6">
               <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FDECEC] text-[#C85C5C]">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FDECEC] dark:bg-[#4C1010] text-[#C85C5C] dark:text-[#CE6E6E]">
                   <LockKeyhole size={20} />
                 </div>
 
                 <div>
-                  <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#B06A6A]">
+                  <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#B06A6A] dark:text-[#BC8080]">
                     Editing Locked
                   </div>
 
-                  <h1 className="mt-1 text-xl font-extrabold tracking-tight text-[#6B3030]">
+                  <h1 className="mt-1 text-xl font-extrabold tracking-tight text-[#6B3030] dark:text-[#CC8E8E]">
                     Purchase Order tidak dapat diedit
                   </h1>
                 </div>
@@ -2094,13 +2228,13 @@ export default function EditPurchasePage() {
             </div>
 
             <div className="p-6">
-              <p className="text-sm leading-6 text-[#725454]">
+              <p className="text-sm leading-6 text-[#725454] dark:text-[#BC9F9F]">
                 Purchase Order{" "}
-                <strong className="font-bold text-[#5E3535]">
+                <strong className="font-bold text-[#5E3535] dark:text-[#C49797]">
                   {purchase.number}
                 </strong>{" "}
                 sudah berstatus{" "}
-                <span className="rounded-lg bg-[#F8EEEE] px-2.5 py-1 text-[10px] font-extrabold uppercase text-[#A54F4F]">
+                <span className="rounded-lg bg-[#F8EEEE] dark:bg-[#3A1818] px-2.5 py-1 text-[10px] font-extrabold uppercase text-[#A54F4F] dark:text-[#C07C7C]">
                   {purchase.status}
                 </span>
                 .
@@ -2109,7 +2243,7 @@ export default function EditPurchasePage() {
               <div className="mt-6">
                 <Link
                   href={`/purchase/${id}`}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#497F70] px-5 py-3 text-xs font-bold text-white shadow-[0_6px_18px_rgba(73,127,112,0.2)] transition hover:bg-[#3D6D60]"
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#497F70] dark:bg-[#17382F] px-5 py-3 text-xs font-bold text-white shadow-[0_6px_18px_rgba(73,127,112,0.2)] transition hover:bg-[#3D6D60] dark:hover:bg-[#1C322C]"
                 >
                   <ArrowLeft size={15} />
                   Kembali ke Detail
@@ -2127,17 +2261,17 @@ export default function EditPurchasePage() {
   ===================================================== */
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.07),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(24,53,45,0.035),transparent_25%),#F3F6F4] text-[#18352D]">
-      <div className="fixed inset-x-0 top-0 z-[60] h-[2px] bg-gradient-to-r from-transparent via-[#497F70] to-transparent" />
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.07),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(24,53,45,0.035),transparent_25%),#F3F6F4] dark:bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.16),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(73,127,112,0.08),transparent_25%),#07110E] text-[#18352D] dark:text-[#D8E8E2]">
+      <div className="fixed inset-x-0 top-0 z-[60] h-[2px] bg-gradient-to-r from-transparent via-[#497F70] dark:via-[#17382F] to-transparent" />
 
       {/* HEADER */}
-      <header className="sticky top-0 z-50 border-b border-[#DDE7E2] bg-white/95 shadow-[0_4px_24px_rgba(31,59,50,0.045)] backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-[#DDE7E2] dark:border-[#3B5447] bg-white/95 dark:bg-[#0D1714]/95 shadow-[0_4px_24px_rgba(31,59,50,0.045)] backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-5 py-4 lg:px-8">
           <div className="flex items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <Link
                 href={`/purchase/${id}`}
-                className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#D6E2DD] bg-white text-[#687871] shadow-sm transition-all hover:border-[#BFD1C9] hover:bg-[#F4F8F6] hover:text-[#497F70]"
+                className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#D6E2DD] dark:border-[#3B544A] bg-white dark:bg-[#0D1714] text-[#687871] dark:text-[#9FBCAF] shadow-sm transition-all hover:border-[#BFD1C9] dark:hover:border-[#3B5449] hover:bg-[#F4F8F6] dark:hover:bg-[#161D1A] hover:text-[#497F70] dark:hover:text-[#79B8A3]"
                 title="Kembali"
               >
                 <ArrowLeft
@@ -2148,26 +2282,26 @@ export default function EditPurchasePage() {
 
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="hidden text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#497F70] sm:inline">
+                  <span className="hidden text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#497F70] dark:text-[#79B8A3] sm:inline">
                     Procurement
                   </span>
 
-                  <span className="hidden text-[#C5D0CB] sm:inline">
+                  <span className="hidden text-[#C5D0CB] dark:text-[#8DB0A0] sm:inline">
                     /
                   </span>
 
-                  <span className="truncate text-[10px] font-medium text-[#8D9A95] sm:text-xs">
+                  <span className="truncate text-[10px] font-medium text-[#8D9A95] dark:text-[#8DB0A2] sm:text-xs">
                     Edit Purchase Order
                   </span>
                 </div>
 
                 <div className="mt-0.5 flex items-center gap-2.5">
-                  <h1 className="truncate text-lg font-extrabold tracking-tight text-[#18352D] sm:text-xl">
+                  <h1 className="truncate text-lg font-extrabold tracking-tight text-[#18352D] dark:text-[#D8E8E2] sm:text-xl">
                     {purchase.number}
                   </h1>
 
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#D9EAE1] bg-[#EDF7F1] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#497F70]">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#497F70] shadow-[0_0_0_3px_rgba(73,127,112,0.12)]" />
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#D9EAE1] dark:border-[#335C46] bg-[#EDF7F1] dark:bg-[#193825] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#497F70] dark:text-[#79B8A3]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#497F70] dark:bg-[#17382F] shadow-[0_0_0_3px_rgba(73,127,112,0.12)]" />
                     Draft
                   </span>
                 </div>
@@ -2176,7 +2310,7 @@ export default function EditPurchasePage() {
 
             <Link
               href={`/purchase/${id}`}
-              className="hidden items-center gap-2 rounded-xl border border-[#D6E2DD] bg-white px-4 py-2.5 text-xs font-bold text-[#667770] shadow-sm transition hover:border-[#C3D2CB] hover:bg-[#F6F9F7] hover:text-[#497F70] md:inline-flex"
+              className="hidden items-center gap-2 rounded-xl border border-[#D6E2DD] dark:border-[#3B544A] bg-white dark:bg-[#0D1714] px-4 py-2.5 text-xs font-bold text-[#667770] dark:text-[#9FBCB0] shadow-sm transition hover:border-[#C3D2CB] dark:hover:border-[#3B5448] hover:bg-[#F6F9F7] dark:hover:bg-[#161D18] hover:text-[#497F70] dark:hover:text-[#79B8A3] md:inline-flex"
             >
               Batal
             </Link>
@@ -2188,28 +2322,28 @@ export default function EditPurchasePage() {
         <form onSubmit={handleSubmit}>
           <div className="space-y-5">
             {/* INFORMATION */}
-            <section className="overflow-visible rounded-[24px] border border-[#DDE7E2] bg-white shadow-[0_10px_35px_rgba(31,59,50,0.055)]">
-              <div className="flex items-center justify-between border-b border-[#E8EEEB] bg-gradient-to-r from-white via-white to-[#F8FBF9] px-5 py-5 lg:px-6">
+            <section className="overflow-visible rounded-[24px] border border-[#DDE7E2] dark:border-[#3B5447] bg-white dark:bg-[#0D1714] shadow-[0_10px_35px_rgba(31,59,50,0.055)]">
+              <div className="flex items-center justify-between border-b border-[#E8EEEB] dark:border-[#3B5447] bg-gradient-to-r from-white dark:from-[#0D1714] via-white dark:via-[#0D1714] to-[#F8FBF9] dark:to-[#161D18] px-5 py-5 lg:px-6">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAF3EE] text-[#497F70] shadow-[inset_0_0_0_1px_rgba(73,127,112,0.06)]">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAF3EE] dark:bg-[#1C3226] text-[#497F70] dark:text-[#79B8A3] shadow-[inset_0_0_0_1px_rgba(73,127,112,0.06)]">
                     <ClipboardList size={18} />
                   </div>
 
                   <div>
-                    <h2 className="text-sm font-extrabold tracking-tight text-[#18352D]">
+                    <h2 className="text-sm font-extrabold tracking-tight text-[#18352D] dark:text-[#D8E8E2]">
                       Informasi Purchase Order
                     </h2>
 
-                    <p className="mt-0.5 text-[11px] text-[#899690]">
+                    <p className="mt-0.5 text-[11px] text-[#899690] dark:text-[#8DB09F]">
                       Informasi utama dokumen pembelian.
                     </p>
                   </div>
                 </div>
 
-                <div className="hidden items-center gap-2 rounded-xl border border-[#E2EBE6] bg-[#F8FAF9] px-3 py-2 sm:flex">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#497F70]" />
+                <div className="hidden items-center gap-2 rounded-xl border border-[#E2EBE6] dark:border-[#3A5546] bg-[#F8FAF9] dark:bg-[#161D1A] px-3 py-2 sm:flex">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#497F70] dark:bg-[#17382F]" />
 
-                  <span className="text-[9px] font-extrabold uppercase tracking-[0.13em] text-[#718079]">
+                  <span className="text-[9px] font-extrabold uppercase tracking-[0.13em] text-[#718079] dark:text-[#8DB09F]">
                     Editable Draft
                   </span>
                 </div>
@@ -2219,14 +2353,14 @@ export default function EditPurchasePage() {
                 <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
                   {/* PO NUMBER */}
                   <div>
-                    <label className="mb-2 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#687871]">
+                    <label className="mb-2 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#687871] dark:text-[#9FBCAF]">
                       Nomor PO
                     </label>
 
                     <div className="relative">
                       <Hash
                         size={15}
-                        className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9AA7A2]"
+                        className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9AA7A2] dark:text-[#8DB0A2]"
                       />
 
                       <input
@@ -2235,14 +2369,14 @@ export default function EditPurchasePage() {
                           ""
                         }
                         disabled
-                        className="h-11 w-full rounded-xl border border-[#E0E7E4] bg-[#F5F7F6] pl-10 pr-3 text-sm font-bold text-[#7A8782] outline-none"
+                        className="h-11 w-full rounded-xl border border-[#E0E7E4] dark:border-[#3B5449] bg-[#F5F7F6] dark:bg-[#171C1A] pl-10 pr-3 text-sm font-bold text-[#7A8782] dark:text-[#8DB0A2] outline-none"
                       />
                     </div>
                   </div>
 
                   {/* SUPPLIER */}
                   <div>
-                    <label className="mb-2 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#687871]">
+                    <label className="mb-2 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#687871] dark:text-[#9FBCAF]">
                       Supplier
                       <span className="text-red-500">
                         *
@@ -2260,7 +2394,7 @@ export default function EditPurchasePage() {
 
                   {/* PAYMENT */}
                   <div>
-                    <label className="mb-2 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#687871]">
+                    <label className="mb-2 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#687871] dark:text-[#9FBCAF]">
                       Metode Pembayaran
                       <span className="text-red-500">
                         *
@@ -2270,7 +2404,7 @@ export default function EditPurchasePage() {
                     <div className="relative">
                       <CreditCard
                         size={15}
-                        className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-[#9AA7A2]"
+                        className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-[#9AA7A2] dark:text-[#8DB0A2]"
                       />
 
                       <select
@@ -2283,7 +2417,7 @@ export default function EditPurchasePage() {
                           )
                         }
                         required
-                        className="h-11 w-full appearance-none rounded-xl border border-[#D8E3DE] bg-[#FBFCFB] pl-10 pr-10 text-sm font-medium text-[#30473F] outline-none transition-all hover:border-[#C3D4CC] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                        className="h-11 w-full appearance-none rounded-xl border border-[#D8E3DE] dark:border-[#3B5449] bg-[#FBFCFB] dark:bg-[#161D16] pl-10 pr-10 text-sm font-medium text-[#30473F] dark:text-[#C5D9D1] outline-none transition-all hover:border-[#C3D4CC] dark:hover:border-[#3B5448] focus:border-[#497F70] dark:focus:border-[#3B6F60] focus:bg-white dark:bg-[#0D1714] focus:ring-4 focus:ring-[#497F70]/10 dark:focus:ring-[#17382F]/10"
                       >
                         <option value="">
                           Pilih Metode Pembayaran
@@ -2307,28 +2441,28 @@ export default function EditPurchasePage() {
 
                       <ChevronDown
                         size={15}
-                        className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[#899791]"
+                        className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[#899791] dark:text-[#8DB0A1]"
                       />
                     </div>
                   </div>
 
                   {/* STATUS */}
                   <div>
-                    <label className="mb-2 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#687871]">
+                    <label className="mb-2 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#687871] dark:text-[#9FBCAF]">
                       Status Dokumen
                     </label>
 
-                    <div className="flex h-11 items-center gap-2.5 rounded-xl border border-[#DDE8E2] bg-[#F7FAF8] px-3.5">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#E6F1EB] text-[#497F70]">
+                    <div className="flex h-11 items-center gap-2.5 rounded-xl border border-[#DDE8E2] dark:border-[#3A5546] bg-[#F7FAF8] dark:bg-[#161D18] px-3.5">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#E6F1EB] dark:bg-[#1C3226] text-[#497F70] dark:text-[#79B8A3]">
                         <Check size={14} />
                       </span>
 
                       <div>
-                        <div className="text-xs font-extrabold text-[#3D6256]">
+                        <div className="text-xs font-extrabold text-[#3D6256] dark:text-[#9AC0B4]">
                           DRAFT
                         </div>
 
-                        <div className="text-[9px] text-[#8B9893]">
+                        <div className="text-[9px] text-[#8B9893] dark:text-[#8DB0A2]">
                           Dapat diedit
                         </div>
                       </div>
@@ -2337,9 +2471,9 @@ export default function EditPurchasePage() {
 
                   {/* REMARKS */}
                   <div className="lg:col-span-4">
-                    <label className="mb-2 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#687871]">
+                    <label className="mb-2 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#687871] dark:text-[#9FBCAF]">
                       Keterangan
-                      <span className="font-normal normal-case tracking-normal text-[#A0AAA6]">
+                      <span className="font-normal normal-case tracking-normal text-[#A0AAA6] dark:text-[#8DB0A2]">
                         Opsional
                       </span>
                     </label>
@@ -2347,7 +2481,7 @@ export default function EditPurchasePage() {
                     <div className="relative">
                       <FileText
                         size={15}
-                        className="pointer-events-none absolute left-3.5 top-3.5 text-[#9AA7A2]"
+                        className="pointer-events-none absolute left-3.5 top-3.5 text-[#9AA7A2] dark:text-[#8DB0A2]"
                       />
 
                       <textarea
@@ -2359,7 +2493,7 @@ export default function EditPurchasePage() {
                         }
                         rows={3}
                         placeholder="Tambahkan keterangan atau catatan Purchase Order..."
-                        className="w-full resize-none rounded-xl border border-[#D8E3DE] bg-[#FBFCFB] px-10 py-3 text-sm leading-6 text-[#30473F] outline-none transition-all placeholder:text-[#A3ADA9] hover:border-[#C3D4CC] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                        className="w-full resize-none rounded-xl border border-[#D8E3DE] dark:border-[#3B5449] bg-[#FBFCFB] dark:bg-[#161D16] px-10 py-3 text-sm leading-6 text-[#30473F] dark:text-[#C5D9D1] outline-none transition-all placeholder:text-[#A3ADA9] dark:placeholder:text-[#8DB0A2] hover:border-[#C3D4CC] dark:hover:border-[#3B5448] focus:border-[#497F70] dark:focus:border-[#3B6F60] focus:bg-white dark:bg-[#0D1714] focus:ring-4 focus:ring-[#497F70]/10 dark:focus:ring-[#17382F]/10"
                       />
                     </div>
                   </div>
@@ -2368,19 +2502,19 @@ export default function EditPurchasePage() {
             </section>
 
             {/* ITEMS */}
-            <section className="overflow-visible rounded-[24px] border border-[#DDE7E2] bg-white shadow-[0_10px_35px_rgba(31,59,50,0.055)]">
-              <div className="flex flex-col gap-4 border-b border-[#E8EEEB] bg-gradient-to-r from-white via-white to-[#F8FBF9] px-5 py-5 sm:flex-row sm:items-center sm:justify-between lg:px-6">
+            <section className="overflow-visible rounded-[24px] border border-[#DDE7E2] dark:border-[#3B5447] bg-white dark:bg-[#0D1714] shadow-[0_10px_35px_rgba(31,59,50,0.055)]">
+              <div className="flex flex-col gap-4 border-b border-[#E8EEEB] dark:border-[#3B5447] bg-gradient-to-r from-white dark:from-[#0D1714] via-white dark:via-[#0D1714] to-[#F8FBF9] dark:to-[#161D18] px-5 py-5 sm:flex-row sm:items-center sm:justify-between lg:px-6">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAF3EE] text-[#497F70]">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAF3EE] dark:bg-[#1C3226] text-[#497F70] dark:text-[#79B8A3]">
                     <Package size={18} />
                   </div>
 
                   <div>
-                    <h2 className="text-sm font-extrabold tracking-tight text-[#18352D]">
+                    <h2 className="text-sm font-extrabold tracking-tight text-[#18352D] dark:text-[#D8E8E2]">
                       Detail Barang
                     </h2>
 
-                    <p className="mt-0.5 text-[11px] text-[#899690]">
+                    <p className="mt-0.5 text-[11px] text-[#899690] dark:text-[#8DB09F]">
                       Kelola barang, qty, dan harga pembelian.
                     </p>
                   </div>
@@ -2388,13 +2522,13 @@ export default function EditPurchasePage() {
 
                 <div className="flex flex-wrap items-center gap-2">
                   {warningCount > 0 && (
-                    <div className="inline-flex items-center gap-1.5 rounded-xl border border-[#E9DDBE] bg-[#FFFCF3] px-3 py-2 text-[9px] font-extrabold text-[#8A6A28]">
+                    <div className="inline-flex items-center gap-1.5 rounded-xl border border-[#E9DDBE] dark:border-[#6B5724] bg-[#FFFCF3] dark:bg-[#504011] px-3 py-2 text-[9px] font-extrabold text-[#8A6A28] dark:text-[#DABD80]">
                       <ShieldAlert size={12} />
                       {warningCount} harga perlu ditinjau
                     </div>
                   )}
 
-                  <div className="rounded-xl border border-[#E2EAE6] bg-[#F8FAF9] px-3 py-2 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#718079]">
+                  <div className="rounded-xl border border-[#E2EAE6] dark:border-[#3B5447] bg-[#F8FAF9] dark:bg-[#161D1A] px-3 py-2 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#718079] dark:text-[#8DB09F]">
                     {items.length}{" "}
                     {items.length === 1
                       ? "Item"
@@ -2404,7 +2538,7 @@ export default function EditPurchasePage() {
                   <button
                     type="button"
                     onClick={addItem}
-                    className="group inline-flex items-center gap-2 rounded-xl bg-[#497F70] px-4 py-2.5 text-xs font-extrabold text-white shadow-[0_6px_16px_rgba(73,127,112,0.2)] transition-all hover:bg-[#3D6D60] hover:shadow-[0_8px_20px_rgba(73,127,112,0.26)] active:scale-[0.98]"
+                    className="group inline-flex items-center gap-2 rounded-xl bg-[#497F70] dark:bg-[#17382F] px-4 py-2.5 text-xs font-extrabold text-white shadow-[0_6px_16px_rgba(73,127,112,0.2)] transition-all hover:bg-[#3D6D60] dark:hover:bg-[#1C322C] hover:shadow-[0_8px_20px_rgba(73,127,112,0.26)] active:scale-[0.98]"
                   >
                     <Plus
                       size={15}
@@ -2416,31 +2550,31 @@ export default function EditPurchasePage() {
               </div>
 
               <div className="p-5 lg:p-6">
-                <div className="overflow-x-auto rounded-[20px] border border-[#E0E9E4] shadow-[0_4px_18px_rgba(31,59,50,0.025)]">
+                <div className="overflow-x-auto rounded-[20px] border border-[#E0E9E4] dark:border-[#3B5446] shadow-[0_4px_18px_rgba(31,59,50,0.025)]">
                   <table className="min-w-[1080px] w-full text-sm">
-                    <thead className="bg-[#F7F9F8]">
-                      <tr className="border-b border-[#E1E9E5]">
-                        <th className="w-16 px-4 py-3.5 text-center text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#899690]">
+                    <thead className="bg-[#F7F9F8] dark:bg-[#161D1A]">
+                      <tr className="border-b border-[#E1E9E5] dark:border-[#3B5447]">
+                        <th className="w-16 px-4 py-3.5 text-center text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#899690] dark:text-[#8DB09F]">
                           No
                         </th>
 
-                        <th className="px-4 py-3.5 text-left text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#899690]">
+                        <th className="px-4 py-3.5 text-left text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#899690] dark:text-[#8DB09F]">
                           Barang
                         </th>
 
-                        <th className="w-36 px-4 py-3.5 text-center text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#899690]">
+                        <th className="w-36 px-4 py-3.5 text-center text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#899690] dark:text-[#8DB09F]">
                           Qty
                         </th>
 
-                        <th className="w-52 px-4 py-3.5 text-right text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#899690]">
+                        <th className="w-52 px-4 py-3.5 text-right text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#899690] dark:text-[#8DB09F]">
                           Harga Satuan
                         </th>
 
-                        <th className="w-52 px-4 py-3.5 text-right text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#899690]">
+                        <th className="w-52 px-4 py-3.5 text-right text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#899690] dark:text-[#8DB09F]">
                           Subtotal
                         </th>
 
-                        <th className="w-20 px-4 py-3.5 text-center text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#899690]">
+                        <th className="w-20 px-4 py-3.5 text-center text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#899690] dark:text-[#8DB09F]">
                           Aksi
                         </th>
                       </tr>
@@ -2493,14 +2627,14 @@ export default function EditPurchasePage() {
                               }
                             >
                               <tr
-                                className={`group border-b border-[#EDF1EF] transition-all ${
+                                className={`group border-b border-[#EDF1EF] dark:border-[#3B5447] transition-all ${
                                   warning
-                                    ? "bg-[#FFFDF8]"
-                                    : "bg-white hover:bg-[#FCFDFC]"
+                                    ? "bg-[#FFFDF8] dark:bg-[#1D1B16]"
+                                    : "bg-white dark:bg-[#0D1714] hover:bg-[#FCFDFC] dark:hover:bg-[#161D16]"
                                 }`}
                               >
                                 <td className="px-4 py-5 text-center align-top">
-                                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-[#F2F6F4] text-[10px] font-extrabold text-[#7F8D87]">
+                                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-[#F2F6F4] dark:bg-[#161D1A] text-[10px] font-extrabold text-[#7F8D87] dark:text-[#8DB0A1]">
                                     {String(
                                       index + 1
                                     ).padStart(
@@ -2549,13 +2683,13 @@ export default function EditPurchasePage() {
                                         value
                                       )
                                     }
-                                    className="h-11 w-full rounded-xl border border-[#D8E3DE] bg-[#FBFCFB] px-3 text-center text-sm font-extrabold tabular-nums text-[#30473F] outline-none transition-all hover:border-[#C3D4CC] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10"
+                                    className="h-11 w-full rounded-xl border border-[#D8E3DE] dark:border-[#3B5449] bg-[#FBFCFB] dark:bg-[#161D16] px-3 text-center text-sm font-extrabold tabular-nums text-[#30473F] dark:text-[#C5D9D1] outline-none transition-all hover:border-[#C3D4CC] dark:hover:border-[#3B5448] focus:border-[#497F70] dark:focus:border-[#3B6F60] focus:bg-white dark:bg-[#0D1714] focus:ring-4 focus:ring-[#497F70]/10 dark:focus:ring-[#17382F]/10"
                                   />
                                 </td>
 
                                 <td className="px-4 py-5 align-top">
                                   <div className="relative">
-                                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[10px] font-extrabold text-[#98A49F]">
+                                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[10px] font-extrabold text-[#98A49F] dark:text-[#8DB0A1]">
                                       Rp
                                     </span>
 
@@ -2563,7 +2697,7 @@ export default function EditPurchasePage() {
                                       <div className="pointer-events-none absolute right-3.5 top-1/2 z-10 -translate-y-1/2">
                                         <Loader2
                                           size={14}
-                                          className="animate-spin text-[#497F70]"
+                                          className="animate-spin text-[#497F70] dark:text-[#79B8A3]"
                                         />
                                       </div>
                                     )}
@@ -2592,14 +2726,14 @@ export default function EditPurchasePage() {
                                           value
                                         )
                                       }
-                                      className={`h-11 w-full rounded-xl border bg-[#FBFCFB] pl-9 pr-9 text-right text-sm font-extrabold tabular-nums text-[#30473F] outline-none transition-all hover:border-[#C3D4CC] focus:border-[#497F70] focus:bg-white focus:ring-4 focus:ring-[#497F70]/10 ${
+                                      className={`h-11 w-full rounded-xl border bg-[#FBFCFB] dark:bg-[#161D16] pl-9 pr-9 text-right text-sm font-extrabold tabular-nums text-[#30473F] dark:text-[#C5D9D1] outline-none transition-all hover:border-[#C3D4CC] dark:hover:border-[#3B5448] focus:border-[#497F70] dark:focus:border-[#3B6F60] focus:bg-white dark:bg-[#0D1714] focus:ring-4 focus:ring-[#497F70]/10 dark:focus:ring-[#17382F]/10 ${
                                         warning
                                           ? isIncreaseWarning(
                                               warning
                                             )
-                                              ? "border-[#E3A28D] bg-[#FFF7F4] focus:border-[#C45B3D] focus:ring-[#C45B3D]/10"
-                                              : "border-[#9BC8AE] bg-[#F4FBF7] focus:border-[#3F8062] focus:ring-[#3F8062]/10"
-                                          : "border-[#D8E3DE]"
+                                              ? "border-[#E3A28D] dark:border-[#6B3524] bg-[#FFF7F4] dark:bg-[#502211] focus:border-[#C45B3D] dark:focus:border-[#6B3424] focus:ring-[#C45B3D]/10 dark:focus:ring-[#411E14]/10"
+                                              : "border-[#9BC8AE] dark:border-[#335C44] bg-[#F4FBF7] dark:bg-[#161D19] focus:border-[#3F8062] dark:focus:border-[#2F6049] focus:ring-[#3F8062]/10 dark:focus:ring-[#1A3629]/10"
+                                          : "border-[#D8E3DE] dark:border-[#3B5449]"
                                       }`}
                                     />
                                   </div>
@@ -2608,8 +2742,8 @@ export default function EditPurchasePage() {
                                     "success" &&
                                     !isLoadingPrice &&
                                     !warning && (
-                                      <div className="mt-2 flex items-center justify-end gap-1.5 text-[9px] font-bold text-[#497F70]">
-                                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#EAF4EF]">
+                                      <div className="mt-2 flex items-center justify-end gap-1.5 text-[9px] font-bold text-[#497F70] dark:text-[#79B8A3]">
+                                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#EAF4EF] dark:bg-[#1B3428]">
                                           <Check
                                             size={
                                               9
@@ -2624,7 +2758,7 @@ export default function EditPurchasePage() {
                                   {lookupStatus ===
                                     "empty" &&
                                     !isLoadingPrice && (
-                                      <div className="mt-2 flex items-center justify-end gap-1 text-[9px] font-semibold text-[#A17A28]">
+                                      <div className="mt-2 flex items-center justify-end gap-1 text-[9px] font-semibold text-[#A17A28] dark:text-[#DFBF7C]">
                                         <Info
                                           size={
                                             10
@@ -2638,7 +2772,7 @@ export default function EditPurchasePage() {
                                   {lookupStatus ===
                                     "error" &&
                                     !isLoadingPrice && (
-                                      <div className="mt-2 flex items-center justify-end gap-1 text-[9px] font-semibold text-[#B56752]">
+                                      <div className="mt-2 flex items-center justify-end gap-1 text-[9px] font-semibold text-[#B56752] dark:text-[#C58877]">
                                         <Info
                                           size={
                                             10
@@ -2659,7 +2793,7 @@ export default function EditPurchasePage() {
                                     item.barangId &&
                                     item.price >
                                       0 && (
-                                      <div className="mt-2 flex items-center justify-end gap-1 text-[9px] font-medium text-[#9AA7A2]">
+                                      <div className="mt-2 flex items-center justify-end gap-1 text-[9px] font-medium text-[#9AA7A2] dark:text-[#8DB0A2]">
                                         <Info
                                           size={
                                             10
@@ -2671,14 +2805,14 @@ export default function EditPurchasePage() {
                                 </td>
 
                                 <td className="px-4 py-5 text-right align-top">
-                                  <div className="rounded-xl bg-[#F8FAF9] px-3.5 py-2.5">
-                                    <div className="text-sm font-extrabold tabular-nums text-[#18352D]">
+                                  <div className="rounded-xl bg-[#F8FAF9] dark:bg-[#161D1A] px-3.5 py-2.5">
+                                    <div className="text-sm font-extrabold tabular-nums text-[#18352D] dark:text-[#D8E8E2]">
                                       {formatRupiah(
                                         subtotal
                                       )}
                                     </div>
 
-                                    <div className="mt-1 text-[9px] font-medium text-[#9AA7A2]">
+                                    <div className="mt-1 text-[9px] font-medium text-[#9AA7A2] dark:text-[#8DB0A2]">
                                       {formatNumber(
                                         item.qty
                                       )}{" "}
@@ -2698,7 +2832,7 @@ export default function EditPurchasePage() {
                                         index
                                       )
                                     }
-                                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#F0DADA] bg-[#FFF9F9] text-[#C65D5D] transition-all hover:border-[#E7BABA] hover:bg-[#FFF1F1] active:scale-95"
+                                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#F0DADA] dark:border-[#662929] bg-[#FFF9F9] dark:bg-[#1D1616] text-[#C65D5D] dark:text-[#CD7070] transition-all hover:border-[#E7BABA] dark:hover:border-[#6A2525] hover:bg-[#FFF1F1] dark:hover:bg-[#501111] active:scale-95"
                                     title="Hapus barang"
                                   >
                                     <Trash2
@@ -2709,7 +2843,7 @@ export default function EditPurchasePage() {
                               </tr>
 
                               {warning && (
-                                <tr className="border-b border-[#EEE6D5] bg-[#FFFDF8]">
+                                <tr className="border-b border-[#EEE6D5] dark:border-[#665229] bg-[#FFFDF8] dark:bg-[#1D1B16]">
                                   <td
                                     colSpan={6}
                                     className="px-4 pb-4 pt-0"
@@ -2731,18 +2865,18 @@ export default function EditPurchasePage() {
                 </div>
 
                 {items.length === 0 && (
-                  <div className="mt-4 rounded-2xl border border-[#EAD9A8] bg-[#FFFCF2] p-4">
+                  <div className="mt-4 rounded-2xl border border-[#EAD9A8] dark:border-[#6B5924] bg-[#FFFCF2] dark:bg-[#504111] p-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FFF3C8] text-[#B88924]">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FFF3C8] dark:bg-[#504211] text-[#B88924] dark:text-[#E2C178]">
                         <Sparkles size={16} />
                       </div>
 
                       <div>
-                        <p className="text-xs font-extrabold text-[#80621F]">
+                        <p className="text-xs font-extrabold text-[#80621F] dark:text-[#DFC07C]">
                           Belum ada barang
                         </p>
 
-                        <p className="mt-0.5 text-[10px] leading-5 text-[#9A8655]">
+                        <p className="mt-0.5 text-[10px] leading-5 text-[#9A8655] dark:text-[#BAAA82]">
                           Tambahkan barang untuk mulai
                           menyusun Purchase Order.
                         </p>
@@ -2753,7 +2887,7 @@ export default function EditPurchasePage() {
                         onClick={
                           addItem
                         }
-                        className="ml-auto hidden rounded-xl bg-[#497F70] px-3 py-2 text-[10px] font-bold text-white sm:inline-flex"
+                        className="ml-auto hidden rounded-xl bg-[#497F70] dark:bg-[#17382F] px-3 py-2 text-[10px] font-bold text-white sm:inline-flex"
                       >
                         Tambah
                       </button>
@@ -2762,19 +2896,19 @@ export default function EditPurchasePage() {
                 )}
 
                 {/* SUMMARY */}
-                <div className="mt-6 grid gap-4 border-t border-[#E8EEEB] pt-6 lg:grid-cols-[1fr_auto] lg:items-center">
+                <div className="mt-6 grid gap-4 border-t border-[#E8EEEB] dark:border-[#3B5447] pt-6 lg:grid-cols-[1fr_auto] lg:items-center">
                   <div>
                     <div className="flex items-center gap-2">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EAF3EE] text-[#497F70]">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EAF3EE] dark:bg-[#1C3226] text-[#497F70] dark:text-[#79B8A3]">
                         <ClipboardList size={14} />
                       </div>
 
                       <div>
-                        <div className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#8D9A95]">
+                        <div className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#8D9A95] dark:text-[#8DB0A2]">
                           Ringkasan Pembelian
                         </div>
 
-                        <div className="mt-0.5 text-xs font-semibold text-[#596A63]">
+                        <div className="mt-0.5 text-xs font-semibold text-[#596A63] dark:text-[#9FBCB0]">
                           {items.length}{" "}
                           {items.length ===
                           1
@@ -2787,13 +2921,13 @@ export default function EditPurchasePage() {
 
                     {warningCount >
                       0 && (
-                      <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-[#E9DDBE] bg-[#FFFCF3] px-3 py-2">
+                      <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-[#E9DDBE] dark:border-[#6B5724] bg-[#FFFCF3] dark:bg-[#504011] px-3 py-2">
                         <ShieldAlert
                           size={13}
-                          className="text-[#B27D1F]"
+                          className="text-[#B27D1F] dark:text-[#E2BC78]"
                         />
 
-                        <span className="text-[9px] font-bold text-[#80621F]">
+                        <span className="text-[9px] font-bold text-[#80621F] dark:text-[#DFC07C]">
                           {warningCount} item memiliki
                           perubahan harga yang perlu ditinjau.
                         </span>
@@ -2801,26 +2935,26 @@ export default function EditPurchasePage() {
                     )}
                   </div>
 
-                  <div className="relative overflow-hidden rounded-[20px] border border-[#D5E4DD] bg-gradient-to-br from-[#F7FBF8] via-[#F3F9F5] to-white px-5 py-4 shadow-[0_8px_25px_rgba(31,59,50,0.045)] sm:min-w-[390px]">
-                    <div className="absolute -right-8 -top-10 h-24 w-24 rounded-full bg-[#497F70]/[0.07]" />
+                  <div className="relative overflow-hidden rounded-[20px] border border-[#D5E4DD] dark:border-[#385748] bg-gradient-to-br from-[#F7FBF8] dark:from-[#161D18] via-[#F3F9F5] dark:via-[#161D18] to-white dark:to-[#0D1714] px-5 py-4 shadow-[0_8px_25px_rgba(31,59,50,0.045)] sm:min-w-[390px]">
+                    <div className="absolute -right-8 -top-10 h-24 w-24 rounded-full bg-[#497F70]/[0.07] dark:bg-[#17382F]/[0.07]" />
 
                     <div className="relative flex items-center justify-between gap-8">
                       <div>
-                        <div className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#84938C]">
+                        <div className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#84938C] dark:text-[#8DB09F]">
                           Total Purchase
                         </div>
 
-                        <div className="mt-1 text-[10px] text-[#75837D]">
+                        <div className="mt-1 text-[10px] text-[#75837D] dark:text-[#8DB0A1]">
                           Nilai keseluruhan PO
                         </div>
                       </div>
 
                       <div className="text-right">
-                        <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#9AA7A2]">
+                        <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#9AA7A2] dark:text-[#8DB0A2]">
                           Grand Total
                         </div>
 
-                        <div className="mt-0.5 text-2xl font-black tracking-tight text-[#18352D]">
+                        <div className="mt-0.5 text-2xl font-black tracking-tight text-[#18352D] dark:text-[#D8E8E2]">
                           {formatRupiah(
                             total
                           )}
@@ -2836,37 +2970,37 @@ export default function EditPurchasePage() {
       </main>
 
       {/* STICKY ACTION BAR */}
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#DDE7E2] bg-white/95 shadow-[0_-10px_35px_rgba(31,59,50,0.09)] backdrop-blur-xl">
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#DDE7E2] dark:border-[#3B5447] bg-white/95 dark:bg-[#0D1714]/95 shadow-[0_-10px_35px_rgba(31,59,50,0.09)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3.5 lg:px-8">
           <div className="hidden min-w-0 sm:block">
             {warningCount > 0 ? (
               <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#FFF3D1] text-[#B27D1F]">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#FFF3D1] dark:bg-[#504011] text-[#B27D1F] dark:text-[#E2BC78]">
                   <ShieldAlert size={14} />
                 </span>
 
                 <div>
-                  <div className="text-[9px] font-extrabold uppercase tracking-[0.13em] text-[#9B7A36]">
+                  <div className="text-[9px] font-extrabold uppercase tracking-[0.13em] text-[#9B7A36] dark:text-[#D5BB86]">
                     Perlu ditinjau
                   </div>
 
-                  <div className="text-xs font-bold text-[#5E5545]">
+                  <div className="text-xs font-bold text-[#5E5545] dark:text-[#BCB29F]">
                     {warningCount} perubahan harga
                   </div>
                 </div>
               </div>
             ) : (
               <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EAF3EE] text-[#497F70]">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EAF3EE] dark:bg-[#1C3226] text-[#497F70] dark:text-[#79B8A3]">
                   <Check size={14} />
                 </span>
 
                 <div>
-                  <div className="text-[9px] font-extrabold uppercase tracking-[0.13em] text-[#8B9993]">
+                  <div className="text-[9px] font-extrabold uppercase tracking-[0.13em] text-[#8B9993] dark:text-[#8DB0A1]">
                     Siap disimpan
                   </div>
 
-                  <div className="text-xs font-bold text-[#4A5D55]">
+                  <div className="text-xs font-bold text-[#4A5D55] dark:text-[#9FBCB0]">
                     {items.length}{" "}
                     {items.length ===
                     1
@@ -2881,7 +3015,7 @@ export default function EditPurchasePage() {
           <div className="flex w-full gap-2 sm:w-auto">
             <Link
               href={`/purchase/${id}`}
-              className="flex flex-1 items-center justify-center rounded-xl border border-[#D6E2DD] bg-white px-5 py-2.5 text-xs font-extrabold text-[#697871] transition-all hover:border-[#C3D2CB] hover:bg-[#F5F8F6] hover:text-[#497F70] sm:flex-none"
+              className="flex flex-1 items-center justify-center rounded-xl border border-[#D6E2DD] dark:border-[#3B544A] bg-white dark:bg-[#0D1714] px-5 py-2.5 text-xs font-extrabold text-[#697871] dark:text-[#9FBCAE] transition-all hover:border-[#C3D2CB] dark:hover:border-[#3B5448] hover:bg-[#F5F8F6] dark:hover:bg-[#161D18] hover:text-[#497F70] dark:hover:text-[#79B8A3] sm:flex-none"
             >
               Batal
             </Link>
@@ -2897,7 +3031,7 @@ export default function EditPurchasePage() {
                 form?.requestSubmit();
               }}
               disabled={saving}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#497F70] px-6 py-2.5 text-xs font-extrabold text-white shadow-[0_6px_18px_rgba(73,127,112,0.22)] transition-all hover:bg-[#3D6D60] hover:shadow-[0_8px_22px_rgba(73,127,112,0.28)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#497F70] dark:bg-[#17382F] px-6 py-2.5 text-xs font-extrabold text-white shadow-[0_6px_18px_rgba(73,127,112,0.22)] transition-all hover:bg-[#3D6D60] dark:hover:bg-[#1C322C] hover:shadow-[0_8px_22px_rgba(73,127,112,0.28)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
             >
               {saving ? (
                 <>

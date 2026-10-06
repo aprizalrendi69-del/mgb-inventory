@@ -18,6 +18,7 @@ import {
   MoreHorizontal,
   Search,
   Send,
+  Smile,
   ShieldCheck,
   Sparkles,
   Users,
@@ -468,6 +469,61 @@ function UserAvatar({
   );
 }
 
+const CHAT_EMOJIS = [
+  // Smileys
+  "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣",
+  "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰",
+  "😘", "😗", "😙", "😚", "😋", "😛", "😝", "😜",
+  "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳", "😏",
+  "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣",
+  "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠",
+  "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨",
+  "😰", "😥", "😓", "🫣", "🤗", "🤭", "🫢", "🫡",
+  "🤔", "🫠", "🤫", "🤥", "😶", "🫥", "😐", "😑",
+  "😬", "🙄", "😯", "😦", "😧", "😮", "😲", "🥱",
+  "😴", "🤤", "😪", "😵", "🤐", "🤢", "🤮", "🤧",
+  "😷", "🤒", "🤕", "💩", "👻", "💀", "☠️", "👽",
+  "🤖", "😺", "😸", "😹", "😻", "😼", "😽", "🙀",
+  "😿", "😾",
+
+  // Gestures & reactions
+  "👍", "👎", "👌", "✌️", "🤞", "🤟", "🤘", "🤙",
+  "👈", "👉", "👆", "👇", "☝️", "✋", "🤚", "🖐️",
+  "🖖", "👋", "🤏", "💪", "🙏", "👏", "🙌", "🫶",
+  "🤝", "💅", "👊", "✊", "🤜", "🤛", "👐", "🤲",
+  "👀", "👁️", "🧠",
+
+  // Hearts & symbols
+  "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍",
+  "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖",
+  "💘", "💝", "💟", "💯", "💥", "💫", "✨", "⭐",
+  "🌟", "⚡", "🔥", "🎯", "💡", "✅", "❌", "❗",
+  "❓", "‼️", "⁉️", "✔️", "☑️", "⭕", "🚫", "⚠️",
+
+  // Celebration & work
+  "🎉", "🎊", "🥂", "🍾", "🎂", "🎁", "🎈", "🎆",
+  "🎇", "🧨", "🏆", "🥇", "🥈", "🥉", "🏅", "🎖️",
+  "🎵", "🎶", "🎤", "🎸", "🎹", "📌", "📍", "📎",
+  "📝", "📋", "📄", "📁", "📦", "📤", "📥", "📞",
+  "☎️", "💻", "🖥️", "📱", "⌨️", "🖨️", "🔑", "🔒",
+  "🔓", "🔔", "🔕", "⏰", "⌛", "💰", "💵", "💳",
+  "🛒", "🚚", "🏪", "🏢", "📊",
+
+  // Food & drinks
+  "🍔", "🍟", "🍕", "🌭", "🌮", "🌯", "🍜", "🍝",
+  "🍣", "🍱", "🍗", "🍖", "🥩", "🍚", "🍙", "🥟",
+  "🍤", "🥘", "🍳", "🥚", "🍞", "🥐", "🧀", "🥗",
+  "🍎", "🍊", "🍋", "🍉", "🍇", "🍓", "🍌", "🍍",
+  "🥭", "☕", "🧋", "🥤", "🍵", "🍺", "🍻", "🍹",
+];
+
+function appendEmoji(
+  current: string,
+  emoji: string,
+) {
+  return `${current}${emoji}`;
+}
+
 export default function GlobalChat() {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] =
@@ -504,6 +560,9 @@ export default function GlobalChat() {
 
   const [messageInput, setMessageInput] =
     useState("");
+
+  const [showEmojiPicker, setShowEmojiPicker] =
+    useState(false);
 
   const [search, setSearch] =
     useState("");
@@ -1006,6 +1065,7 @@ export default function GlobalChat() {
         setSelectedConversationId(
           conversationId,
         );
+        setShowEmojiPicker(false);
 
         await loadMessages(
           conversationId,
@@ -1194,6 +1254,7 @@ export default function GlobalChat() {
         ]);
 
         setMessageInput("");
+        setShowEmojiPicker(false);
 
         await loadConversations(true);
 
@@ -1334,6 +1395,7 @@ export default function GlobalChat() {
       setMessages([]);
       setMessageInput("");
       setSearch("");
+      setShowEmojiPicker(false);
     }
   }, [open]);
 
@@ -2299,7 +2361,8 @@ export default function GlobalChat() {
 
                         <div
                           className={`
-                            rounded-[17px]
+                            relative
+                            rounded-[18px]
                             px-3.5
                             py-2.5
                             text-[12px]
@@ -2315,43 +2378,62 @@ export default function GlobalChat() {
                           <div className="whitespace-pre-wrap break-words">
                             {message.message}
                           </div>
-                        </div>
 
-                        <div
-                          className={`
-                            mt-1
-                            flex
-                            items-center
-                            gap-1
-                            px-1
-                            text-[8px]
-                            font-medium
-                            ${
-                              mine
-                                ? "text-[#829A90]"
-                                : "text-[#9AA8A2]"
-                            }
-                          `}
-                        >
-                          <span>
-                            {formatTime(
-                              message.createdAt,
+                          <div
+                            className={`
+                              mt-1.5
+                              flex
+                              items-center
+                              justify-end
+                              gap-1.5
+                              text-[8px]
+                              ${
+                                mine
+                                  ? "text-white/70"
+                                  : "text-[#A0ADA7]"
+                              }
+                            `}
+                          >
+                            <span>
+                              {formatTime(
+                                message.createdAt,
+                              )}
+                            </span>
+
+                            {mine && (
+                              <span
+                                className="inline-flex items-center gap-0.5"
+                                title={
+                                  message.readAt
+                                    ? "Sudah dibaca"
+                                    : "Terkirim"
+                                }
+                              >
+                                {message.readAt ? (
+                                  <CheckCheck
+                                    className="h-3.5 w-3.5 text-[#9FF0C8]"
+                                    strokeWidth={2.15}
+                                  />
+                                ) : (
+                                  <Check
+                                    className="h-3.5 w-3.5 text-white/65"
+                                    strokeWidth={2}
+                                  />
+                                )}
+                              </span>
                             )}
-                          </span>
-
-                          {mine &&
-                            (message.readAt ? (
-                              <CheckCheck
-                                className="h-3 w-3 text-[#3DAA7B]"
-                                strokeWidth={2}
-                              />
-                            ) : (
-                              <Check
-                                className="h-3 w-3 text-[#9AA9A2]"
-                                strokeWidth={2}
-                              />
-                            ))}
+                          </div>
                         </div>
+
+                        {mine && message.readAt && (
+                          <span className="mt-1 mr-1 flex items-center gap-1 text-[8px] font-semibold text-[#3D8C6C]">
+                            <CheckCheck
+                              className="h-3 w-3"
+                              strokeWidth={2.15}
+                            />
+                            Sudah dibaca
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -2374,6 +2456,42 @@ export default function GlobalChat() {
                 shadow-[0_-6px_20px_rgba(25,62,48,0.025)]
               "
             >
+              {showEmojiPicker && (
+                <div className="mb-2 rounded-[16px] border border-[#DDE8E3] bg-white p-2.5 shadow-[0_12px_30px_rgba(31,65,53,0.10)]">
+                  <div className="mb-2 flex items-center justify-between px-1">
+                    <span className="text-[9px] font-black uppercase tracking-[0.14em] text-[#71847B]">
+                      Emoji
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowEmojiPicker(false)}
+                      className="rounded-full px-2 py-1 text-[9px] font-bold text-[#9AA8A2] transition hover:bg-[#F3F7F5] hover:text-[#4A655A]"
+                    >
+                      Tutup
+                    </button>
+                  </div>
+
+                  <div className="grid max-h-[210px] grid-cols-8 gap-1 overflow-y-auto pr-1 [scrollbar-color:#C9D8D1_transparent] [scrollbar-width:thin]">
+                    {CHAT_EMOJIS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => {
+                          setMessageInput((current) =>
+                            appendEmoji(current, emoji),
+                          );
+                          inputRef.current?.focus();
+                        }}
+                        className="flex h-8 w-8 items-center justify-center rounded-[9px] text-[18px] transition hover:bg-[#EFF7F3] active:scale-90"
+                        aria-label={`Tambah emoji ${emoji}`}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div
                 className="
                   flex
@@ -2392,6 +2510,36 @@ export default function GlobalChat() {
                   focus-within:shadow-[0_0_0_3px_rgba(48,128,95,0.06),0_5px_18px_rgba(31,90,67,0.04)]
                 "
               >
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowEmojiPicker((current) => !current)
+                  }
+                  aria-label="Pilih emoji"
+                  aria-expanded={showEmojiPicker}
+                  className={`
+                    flex
+                    h-9
+                    w-9
+                    shrink-0
+                    items-center
+                    justify-center
+                    rounded-[11px]
+                    transition-all
+                    active:scale-95
+                    ${
+                      showEmojiPicker
+                        ? "bg-[#E7F5EE] text-[#2E805F]"
+                        : "text-[#82938B] hover:bg-[#EEF5F1] hover:text-[#34785B]"
+                    }
+                  `}
+                >
+                  <Smile
+                    className="h-[18px] w-[18px]"
+                    strokeWidth={1.8}
+                  />
+                </button>
+
                 <input
                   ref={inputRef}
                   type="text"
@@ -2771,30 +2919,81 @@ export default function GlobalChat() {
                             </div>
 
                             <div className="mt-1 flex items-center justify-between gap-2">
-                              <span
-                                className={`
-                                  truncate
-                                  text-[9px]
-                                  leading-4
-                                  ${
-                                    unread
-                                      ? "font-bold text-[#65766E]"
-                                      : "font-medium text-[#9AA59F]"
-                                  }
-                                `}
-                              >
-                                {conversation
-                                  .lastMessage
-                                  ?.senderId ===
-                                currentUser?.id
-                                  ? "Anda: "
-                                  : ""}
+                              <div className="min-w-0 flex-1 truncate">
+                                <span
+                                  className={`
+                                    truncate
+                                    text-[9px]
+                                    leading-4
+                                    ${
+                                      unread
+                                        ? "font-bold text-[#65766E]"
+                                        : "font-medium text-[#9AA59F]"
+                                    }
+                                  `}
+                                >
+                                  {conversation
+                                    .lastMessage
+                                    ?.senderId ===
+                                  currentUser?.id
+                                    ? "Anda: "
+                                    : ""}
 
-                                {conversation
-                                  .lastMessage
-                                  ?.message ||
-                                  "Belum ada pesan"}
-                              </span>
+                                  {conversation
+                                    .lastMessage
+                                    ?.message ||
+                                    "Belum ada pesan"}
+                                </span>
+                              </div>
+
+                              {conversation.lastMessage &&
+                                conversation.lastMessage.senderId ===
+                                  currentUser?.id && (
+                                  <span
+                                    className={`
+                                      ml-2
+                                      flex
+                                      shrink-0
+                                      items-center
+                                      gap-1
+                                      rounded-full
+                                      border
+                                      px-1.5
+                                      py-0.5
+                                      text-[7px]
+                                      font-bold
+                                      whitespace-nowrap
+                                      ${
+                                        conversation.lastMessage.readAt
+                                          ? "border-[#CDE9DB] bg-[#EDF9F2] text-[#348363]"
+                                          : "border-[#E5EBE8] bg-[#F7F9F8] text-[#8A9992]"
+                                      }
+                                    `}
+                                    title={
+                                      conversation.lastMessage.readAt
+                                        ? "Pesan terakhir sudah dibaca"
+                                        : "Pesan terakhir terkirim"
+                                    }
+                                  >
+                                    {conversation.lastMessage.readAt ? (
+                                      <>
+                                        <CheckCheck
+                                          className="h-3 w-3"
+                                          strokeWidth={2.2}
+                                        />
+                                        Sudah dibaca
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Check
+                                          className="h-3 w-3"
+                                          strokeWidth={2.1}
+                                        />
+                                        Terkirim
+                                      </>
+                                    )}
+                                  </span>
+                                )}
 
                               {unread && (
                                 <span

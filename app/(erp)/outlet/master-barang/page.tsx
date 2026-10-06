@@ -24,6 +24,7 @@ import {
   Power,
   AlertCircle,
   Sparkles,
+  Droplets,
 } from "lucide-react";
 
 type Outlet = {
@@ -85,6 +86,15 @@ type FormState = {
   outletId: string;
   barangIds: string[];
   harga: string;
+};
+
+type AirROFormState = {
+  outletId: string;
+  barangId: number | null;
+  barangName: string;
+  currentStock: number;
+  unit: string;
+  qty: string;
 };
 
 function formatNumber(value: number | null | undefined) {
@@ -261,6 +271,18 @@ function normalizeOutletBarang(
   };
 }
 
+function isAirRO(barang: Barang | null | undefined) {
+  if (!barang) {
+    return false;
+  }
+
+  return (
+    String(barang.name ?? "")
+      .trim()
+      .toLowerCase() === "air ro"
+  );
+}
+
 export default function OutletMasterBarangPage() {
   const [data, setData] = useState<OutletBarang[]>([]);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
@@ -286,6 +308,22 @@ export default function OutletMasterBarangPage() {
     barangIds: [],
     harga: "",
   });
+
+  const [showAirROForm, setShowAirROForm] =
+    useState(false);
+
+  const [airROForm, setAirROForm] =
+    useState<AirROFormState>({
+      outletId: "",
+      barangId: null,
+      barangName: "Air RO",
+      currentStock: 0,
+      unit: "ml",
+      qty: "",
+    });
+
+  const [savingAirRO, setSavingAirRO] =
+    useState(false);
 
   useEffect(() => {
     void loadUser();
@@ -805,6 +843,208 @@ export default function OutletMasterBarangPage() {
           String(item.id)
         )
     );
+  }
+
+  function openAirROForm(
+    item: OutletBarang
+  ) {
+    if (!isAirRO(item.barang)) {
+      return;
+    }
+
+    const effectiveOutletId =
+      user?.role === "OUTLET_ADMIN"
+        ? user.outletId
+        : item.outlet?.id ??
+          (outletId
+            ? Number(outletId)
+            : null);
+
+    if (!effectiveOutletId) {
+      alert(
+        "Outlet tidak ditemukan. Pilih outlet terlebih dahulu."
+      );
+      return;
+    }
+
+    const currentStock = Number(
+      item.outletStock?.stock ?? 0
+    );
+
+    setAirROForm({
+      outletId: String(
+        effectiveOutletId
+      ),
+      barangId: Number(
+        item.barang.id
+      ),
+      barangName:
+        item.barang.name,
+      currentStock:
+        Number.isFinite(
+          currentStock
+        )
+          ? currentStock
+          : 0,
+      unit:
+        item.barang.baseUnit ||
+        item.barang.unit ||
+        "ml",
+      qty: "",
+    });
+
+    setShowAirROForm(true);
+  }
+
+  function closeAirROForm() {
+    if (savingAirRO) {
+      return;
+    }
+
+    setShowAirROForm(false);
+
+    setAirROForm({
+      outletId: "",
+      barangId: null,
+      barangName: "Air RO",
+      currentStock: 0,
+      unit: "ml",
+      qty: "",
+    });
+  }
+
+  async function handleAirROSubmit(
+    e: FormEvent<HTMLFormElement>
+  ) {
+    e.preventDefault();
+
+    if (savingAirRO) {
+      return;
+    }
+
+    const selectedOutlet =
+      user?.role === "OUTLET_ADMIN"
+        ? user.outletId
+        : Number(airROForm.outletId);
+
+    if (!selectedOutlet) {
+      alert(
+        "Outlet tidak ditemukan."
+      );
+      return;
+    }
+
+    if (
+      !airROForm.barangId ||
+      !Number.isInteger(
+        Number(airROForm.barangId)
+      ) ||
+      Number(airROForm.barangId) <= 0
+    ) {
+      alert(
+        "Barang Air RO tidak valid."
+      );
+      return;
+    }
+
+    const qty = Number(
+      airROForm.qty
+    );
+
+    if (
+      !Number.isFinite(qty) ||
+      qty <= 0
+    ) {
+      alert(
+        "Jumlah stock Air RO harus lebih dari 0."
+      );
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `Tambah stock Air RO?\n\n` +
+          `Stock saat ini: ${formatNumber(
+            airROForm.currentStock
+          )} ${airROForm.unit}\n` +
+          `Penambahan: ${formatNumber(
+            qty
+          )} ${airROForm.unit}\n` +
+          `Stock setelah input: ${formatNumber(
+            airROForm.currentStock + qty
+          )} ${airROForm.unit}`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setSavingAirRO(true);
+
+    try {
+      const payload = {
+        action:
+          "MANUAL_STOCK_AIR_RO",
+        outletId: String(
+          selectedOutlet
+        ),
+        barangId:
+          Number(
+            airROForm.barangId
+          ),
+        qty,
+      };
+
+      const res = await fetch(
+        "/api/outlet/master-barang",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify(
+            payload
+          ),
+        }
+      );
+
+      const json =
+        await res.json();
+
+      if (
+        !res.ok ||
+        !json.success
+      ) {
+        alert(
+          json.message ||
+            "Gagal menambahkan stock Air RO."
+        );
+        return;
+      }
+
+      alert(
+        json.message ||
+          `Stock Air RO berhasil ditambahkan ${formatNumber(
+            qty
+          )} ${airROForm.unit}.`
+      );
+
+      closeAirROForm();
+
+      await loadData();
+    } catch (error) {
+      console.error(
+        "MANUAL STOCK AIR RO ERROR:",
+        error
+      );
+
+      alert(
+        "Terjadi kesalahan saat menambahkan stock Air RO."
+      );
+    } finally {
+      setSavingAirRO(false);
+    }
   }
 
   async function handleSubmit(
@@ -1516,7 +1756,7 @@ export default function OutletMasterBarangPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1350px] text-sm">
+            <table className="w-full min-w-[1450px] text-sm">
               <thead className="bg-[#F5F8F6]">
                 <tr className="border-b border-gray-100">
                   <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-wide text-gray-500">
@@ -1550,7 +1790,13 @@ export default function OutletMasterBarangPage() {
                     Harga
                   </th>
                   <th className="px-4 py-3.5 text-center text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                    Stock
+                  </th>
+                  <th className="px-4 py-3.5 text-center text-[11px] font-bold uppercase tracking-wide text-gray-500">
                     Status
+                  </th>
+                  <th className="px-4 py-3.5 text-center text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                    Action
                   </th>
                 </tr>
               </thead>
@@ -1559,7 +1805,7 @@ export default function OutletMasterBarangPage() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={13}
                       className="py-16 text-center"
                     >
                       <RefreshCw
@@ -1582,7 +1828,7 @@ export default function OutletMasterBarangPage() {
                   0 ? (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={13}
                       className="py-16 text-center"
                     >
                       <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F1F5F3] text-gray-300">
@@ -1689,10 +1935,25 @@ export default function OutletMasterBarangPage() {
                           ? outletId
                           : "central");
 
+                      const airRO =
+                        isAirRO(
+                          item.barang
+                        );
+
+                      const stockUnit =
+                        item.barang
+                          .baseUnit ||
+                        item.barang.unit ||
+                        "";
+
                       return (
                         <tr
                           key={`${item.barang.id}-${rowScope}`}
-                          className="border-b border-gray-50 transition hover:bg-[#FAFCFB]"
+                          className={`border-b border-gray-50 transition ${
+                            airRO
+                              ? "bg-[#FAFCFB] hover:bg-[#F1F8F4]"
+                              : "hover:bg-[#FAFCFB]"
+                          }`}
                         >
                           <td className="px-4 py-4 text-xs font-medium text-gray-400">
                             {String(
@@ -1776,21 +2037,43 @@ export default function OutletMasterBarangPage() {
 
                           <td className="px-4 py-4">
                             <div className="flex items-start gap-3">
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#EEF5F1] text-[#29483A]">
-                                <Package
-                                  size={
-                                    17
-                                  }
-                                />
+                              <div
+                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                                  airRO
+                                    ? "bg-[#E7F3ED] text-[#497F70]"
+                                    : "bg-[#EEF5F1] text-[#29483A]"
+                                }`}
+                              >
+                                {airRO ? (
+                                  <Droplets
+                                    size={
+                                      17
+                                    }
+                                  />
+                                ) : (
+                                  <Package
+                                    size={
+                                      17
+                                    }
+                                  />
+                                )}
                               </div>
 
                               <div className="min-w-0">
-                                <div className="font-bold text-[#263D33]">
-                                  {
-                                    item
-                                      .barang
-                                      .name
-                                  }
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-bold text-[#263D33]">
+                                    {
+                                      item
+                                        .barang
+                                        .name
+                                    }
+                                  </span>
+
+                                  {airRO && (
+                                    <span className="rounded-full bg-[#E4F2EB] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#497F70]">
+                                      Internal
+                                    </span>
+                                  )}
                                 </div>
 
                                 <div className="mt-1 flex items-center gap-2">
@@ -1966,20 +2249,32 @@ export default function OutletMasterBarangPage() {
                                     ""}
                                 </div>
                               )}
+                          </td>
 
-                            {stock > 0 && (
-                              <div className="mt-1 text-[10px] text-gray-400">
-                                Stock:{" "}
+                          <td className="px-4 py-4 text-center">
+                            <div
+                              className={`inline-flex min-w-[110px] flex-col items-center rounded-xl px-3 py-2 ${
+                                airRO
+                                  ? "border border-[#CFE3D8] bg-[#F1F8F4]"
+                                  : "bg-[#F7F9F8]"
+                              }`}
+                            >
+                              <span
+                                className={`text-sm font-bold ${
+                                  airRO
+                                    ? "text-[#29483A]"
+                                    : "text-gray-700"
+                                }`}
+                              >
                                 {formatNumber(
                                   stock
-                                )}{" "}
-                                {
-                                  item
-                                    .barang
-                                    .baseUnit
-                                }
-                              </div>
-                            )}
+                                )}
+                              </span>
+
+                              <span className="mt-0.5 text-[10px] font-medium text-gray-400">
+                                {stockUnit}
+                              </span>
+                            </div>
                           </td>
 
                           <td className="px-4 py-4 text-center">
@@ -2002,6 +2297,36 @@ export default function OutletMasterBarangPage() {
                                 ? "Aktif"
                                 : "Nonaktif"}
                             </span>
+                          </td>
+
+                          <td className="px-4 py-4 text-center">
+                            {airRO ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openAirROForm(
+                                    item
+                                  )
+                                }
+                                disabled={
+                                  !item.aktif ||
+                                  !displayOutlet
+                                }
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-[#497F70] px-3 py-2 text-[11px] font-bold text-white shadow-sm transition hover:bg-[#3D6F62] hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                <Plus
+                                  size={
+                                    14
+                                  }
+                                />
+
+                                Isi Stock
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-gray-300">
+                                —
+                              </span>
+                            )}
                           </td>
                         </tr>
                       );
@@ -2715,6 +3040,251 @@ export default function OutletMasterBarangPage() {
                     )}
                   </button>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showAirROForm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#102019]/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_30px_90px_rgba(25,55,43,0.28)]">
+            <div className="relative overflow-hidden border-b border-[#DDEAE3] bg-gradient-to-br from-[#EEF7F2] via-white to-[#E4F1EB] px-6 py-5">
+              <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-[#CFE5DA]/70 blur-2xl" />
+
+              <div className="relative flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#497F70] text-white shadow-sm">
+                    <Droplets size={20} />
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#527A6B]">
+                      Internal Production
+                    </span>
+
+                    <h2 className="mt-1 text-lg font-bold text-[#20372D]">
+                      Isi Stock Air RO
+                    </h2>
+
+                    <p className="mt-1 text-xs leading-5 text-gray-500">
+                      Input ini akan
+                      <b className="text-[#29483A]">
+                        {" "}
+                        menambah stock
+                      </b>
+                      , bukan mengganti
+                      stock yang sudah ada.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={
+                    closeAirROForm
+                  }
+                  disabled={
+                    savingAirRO
+                  }
+                  className="rounded-xl p-2 text-gray-400 transition hover:bg-white hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <X size={19} />
+                </button>
+              </div>
+            </div>
+
+            <form
+              onSubmit={
+                handleAirROSubmit
+              }
+            >
+              <div className="space-y-4 p-6">
+                <div className="rounded-2xl border border-[#CFE3D8] bg-[#F4F9F6] p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">
+                        Barang
+                      </p>
+
+                      <div className="mt-1 flex items-center gap-2">
+                        <Droplets
+                          size={16}
+                          className="text-[#497F70]"
+                        />
+
+                        <span className="font-bold text-[#29483A]">
+                          {
+                            airROForm.barangName
+                          }
+                        </span>
+                      </div>
+                    </div>
+
+                    <span className="rounded-full bg-[#E1F0E8] px-2.5 py-1 text-[10px] font-bold text-[#497F70]">
+                      Internal
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                      Stock Saat Ini
+                    </p>
+
+                    <p className="mt-2 text-xl font-bold text-[#29483A]">
+                      {formatNumber(
+                        airROForm.currentStock
+                      )}
+                    </p>
+
+                    <p className="mt-0.5 text-[10px] text-gray-400">
+                      {
+                        airROForm.unit
+                      }
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#DDEAE3] bg-white p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                      Setelah Input
+                    </p>
+
+                    <p className="mt-2 text-xl font-bold text-[#497F70]">
+                      {formatNumber(
+                        airROForm.currentStock +
+                          (Number(
+                            airROForm.qty
+                          ) || 0)
+                      )}
+                    </p>
+
+                    <p className="mt-0.5 text-[10px] text-gray-400">
+                      {
+                        airROForm.unit
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">
+                    Jumlah Penambahan
+                  </label>
+
+                  <div className="relative">
+                    <input
+                      autoFocus
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={
+                        airROForm.qty
+                      }
+                      onChange={(e) =>
+                        setAirROForm(
+                          (prev) => ({
+                            ...prev,
+                            qty:
+                              e.target
+                                .value,
+                          })
+                        )
+                      }
+                      placeholder="Contoh: 5000"
+                      className="w-full rounded-2xl border border-gray-300 bg-white py-4 pl-4 pr-16 text-lg font-bold text-[#29483A] outline-none transition focus:border-[#497F70] focus:ring-4 focus:ring-[#497F70]/10"
+                    />
+
+                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">
+                      {
+                        airROForm.unit
+                      }
+                    </span>
+                  </div>
+
+                  <p className="mt-2 text-[11px] leading-5 text-gray-400">
+                    Masukkan jumlah Air RO
+                    yang baru diproduksi dan
+                    siap digunakan.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+                  <div className="flex items-start gap-3">
+                    <Plus
+                      size={17}
+                      className="mt-0.5 shrink-0 text-emerald-600"
+                    />
+
+                    <div>
+                      <p className="text-xs font-bold text-emerald-800">
+                        Stock bersifat
+                        incremental
+                      </p>
+
+                      <p className="mt-1 text-[11px] leading-5 text-emerald-700">
+                        Stock saat ini{" "}
+                        <b>
+                          {formatNumber(
+                            airROForm.currentStock
+                          )}{" "}
+                          {
+                            airROForm.unit
+                          }
+                        </b>{" "}
+                        akan ditambah dengan
+                        jumlah yang kamu input.
+                        Stock lama tidak
+                        ditimpa.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-gray-100 bg-[#FBFCFB] px-6 py-4">
+                <button
+                  type="button"
+                  onClick={
+                    closeAirROForm
+                  }
+                  disabled={
+                    savingAirRO
+                  }
+                  className="rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={
+                    savingAirRO ||
+                    !airROForm.qty ||
+                    Number(
+                      airROForm.qty
+                    ) <= 0
+                  }
+                  className="flex items-center gap-2 rounded-xl bg-[#497F70] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#3D6F62] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingAirRO ? (
+                    <>
+                      <RefreshCw
+                        size={16}
+                        className="animate-spin"
+                      />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    <>
+                      <Plus
+                        size={16}
+                      />
+                      Tambah Stock
+                    </>
+                  )}
+                </button>
               </div>
             </form>
           </div>

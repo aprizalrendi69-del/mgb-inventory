@@ -172,6 +172,7 @@ export default function OutletBarangMasukDetailPage() {
   const [data, setData] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
   const [receiving, setReceiving] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const [role, setRole] = useState("");
   const [userOutletId, setUserOutletId] =
@@ -1461,6 +1462,19 @@ export default function OutletBarangMasukDetailPage() {
   const invoiceNumberTrimmed =
     invoiceNumber.trim();
 
+  const isCancelledPurchase =
+    isPurchase &&
+    (purchaseStatus === "CANCELLED" ||
+      purchaseStatus === "CANCELED" ||
+      normalizedStatus === "CANCELLED" ||
+      normalizedStatus === "CANCELED");
+
+  const canCancelPurchase =
+    isPurchase &&
+    role === "ADMIN" &&
+    purchaseStatus === "RECEIVED" &&
+    !isCancelledPurchase;
+
   const invoiceRequired =
     isTempoPurchase && !purchasePayable;
 
@@ -1469,10 +1483,11 @@ export default function OutletBarangMasukDetailPage() {
     invoiceNumberTrimmed.length > 0;
 
   const alreadyReceived =
-    (isPurchase &&
+    !isCancelledPurchase &&
+    ((isPurchase &&
       purchaseStatus === "RECEIVED") ||
-    normalizedStatus === "RECEIVED" ||
-    normalizedStatus === "SELESAI";
+      normalizedStatus === "RECEIVED" ||
+      normalizedStatus === "SELESAI");
 
   const isPartial =
     normalizedStatus === "PARTIAL";
@@ -1949,6 +1964,77 @@ export default function OutletBarangMasukDetailPage() {
   };
 
   // =====================================================
+  // CANCEL PURCHASE SUPPLIER
+  // =====================================================
+
+  const executeCancelPurchase = async () => {
+    if (!data || cancelling || !canCancelPurchase) return;
+
+    const confirmed = window.confirm(
+      `Batalkan Purchase Supplier ${data.nomor}?\n\n` +
+        "Transaksi sudah RECEIVED. API cancellation akan melakukan reversal stock outlet, mengembalikan receivedQty menjadi 0, dan mencatat StockMutation serta History.\n\n" +
+        "Data Purchase, Receipt, ReceiptItem, dan Payment tidak akan dihapus."
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setCancelling(true);
+
+      const response = await fetch(
+        `/api/outlet/purchase/${encodeURIComponent(
+          String(data.sourceId)
+        )}/cancel`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            source: "PURCHASE",
+          }),
+        }
+      );
+
+      const result = await response
+        .json()
+        .catch(() => ({}));
+
+      if (!response.ok || result?.success !== true) {
+        throw new Error(
+          result?.message ||
+            "Gagal membatalkan Purchase Supplier."
+        );
+      }
+
+      showFeedback(
+        "success",
+        "Purchase Berhasil Di-cancel",
+        result?.message ||
+          "Purchase Supplier berhasil dibatalkan dan stock outlet berhasil direversal."
+      );
+
+      await loadData();
+    } catch (error) {
+      console.error(
+        "CANCEL PURCHASE SUPPLIER ERROR:",
+        error
+      );
+
+      showFeedback(
+        "error",
+        "Cancel Purchase Gagal",
+        error instanceof Error
+          ? error.message
+          : "Gagal membatalkan Purchase Supplier."
+      );
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  // =====================================================
   // PREMIUM RECEIVE BUTTON
   // =====================================================
 
@@ -2066,6 +2152,19 @@ export default function OutletBarangMasukDetailPage() {
 
   const statusBadge = () => {
     if (
+      isCancelledPurchase ||
+      normalizedStatus === "CANCELLED" ||
+      normalizedStatus === "CANCELED"
+    ) {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-red-700">
+          <Ban size={12} />
+          CANCELLED
+        </span>
+      );
+    }
+
+    if (
       normalizedStatus ===
         "RECEIVED" ||
       normalizedStatus ===
@@ -2126,6 +2225,18 @@ export default function OutletBarangMasukDetailPage() {
   };
 
   const purchaseStatusBadge = () => {
+    if (
+      purchaseStatus === "CANCELLED" ||
+      purchaseStatus === "CANCELED"
+    ) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-wider text-red-700">
+          <Ban size={11} />
+          CANCELLED
+        </span>
+      );
+    }
+
     if (
       purchaseStatus === "APPROVED"
     ) {
@@ -2370,12 +2481,44 @@ export default function OutletBarangMasukDetailPage() {
                   "hero"
                 )}
 
+                {canCancelPurchase && (
+                  <button
+                    type="button"
+                    onClick={executeCancelPurchase}
+                    disabled={cancelling || receiving}
+                    className="group relative inline-flex min-w-[190px] items-center justify-center gap-3 overflow-hidden rounded-2xl border border-red-200 bg-white px-5 py-3.5 text-left text-red-700 shadow-[0_12px_30px_rgba(0,0,0,0.12)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-red-50 hover:shadow-[0_16px_38px_rgba(0,0,0,0.16)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+                  >
+                    <span className="absolute inset-0 bg-gradient-to-r from-transparent via-red-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                    <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600">
+                      {cancelling ? (
+                        <RefreshCw
+                          size={18}
+                          className="animate-spin"
+                        />
+                      ) : (
+                        <Ban size={18} />
+                      )}
+                    </span>
+                    <span className="relative min-w-0">
+                      <span className="block text-sm font-extrabold">
+                        {cancelling
+                          ? "Membatalkan..."
+                          : "Cancel Purchase"}
+                      </span>
+                      <span className="mt-0.5 block text-[10px] font-semibold text-red-400">
+                        Admin Pusat · RECEIVED
+                      </span>
+                    </span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={loadData}
                   disabled={
                     loading ||
-                    receiving
+                    receiving ||
+                    cancelling
                   }
                   className="inline-flex h-[66px] items-center justify-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 text-sm font-bold text-white backdrop-blur transition-all duration-300 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -3326,6 +3469,24 @@ export default function OutletBarangMasukDetailPage() {
                   Transaksi ini sudah selesai
                   diproses dan tidak dapat diterima
                   kembali.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isCancelledPurchase && (
+          <div className="mb-6 rounded-[22px] border border-red-200 bg-red-50/80 p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600">
+                <Ban size={19} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-red-800">
+                  Purchase Supplier dibatalkan
+                </p>
+                <p className="mt-1 text-xs leading-5 text-red-700/80">
+                  Purchase ini berstatus CANCELLED. Proses penerimaan tidak dapat dilanjutkan. Receipt dan riwayat transaksi tetap dipertahankan sesuai data sistem.
                 </p>
               </div>
             </div>

@@ -518,7 +518,24 @@ export async function POST(
             }
 
             // ----------------------------------------------
-            // STOCK HANYA DIVALIDASI
+            // STOCK TIDAK BOLEH MEMBLOK APPROVE
+            // ----------------------------------------------
+            //
+            // Delivery Request adalah dokumen PERMINTAAN.
+            // APPROVE hanya mengubah status menjadi APPROVED.
+            //
+            // Jika stock pusat:
+            // - 0
+            // - kurang dari qty request
+            //
+            // APPROVE TETAP DIPERBOLEHKAN.
+            //
+            // Stock TIDAK dikurangi di sini.
+            // Validasi stock yang wajib tetap ketat dilakukan
+            // ketika Delivery benar-benar RELEASE/KIRIM.
+            //
+            // Manual Barang Keluar tetap menggunakan validasi
+            // stock-nya sendiri dan tidak terpengaruh oleh route ini.
             // ----------------------------------------------
 
             const currentStock =
@@ -526,11 +543,19 @@ export async function POST(
                 item.barang.stock ?? 0
               );
 
-            if (
-              currentStock < qty
-            ) {
-              throw new Error(
-                `Stock ${item.barang.code} - ${item.barang.name} tidak mencukupi. Stock pusat: ${currentStock}, request: ${qty}`
+            if (currentStock < qty) {
+              console.warn(
+                "DELIVERY REQUEST APPROVE - STOCK KURANG:",
+                {
+                  requestId: request.id,
+                  requestNumber: request.number,
+                  barangId: item.barang.id,
+                  barangCode: item.barang.code,
+                  barangName: item.barang.name,
+                  stockPusat: currentStock,
+                  requestedQty: qty,
+                  shortageQty: qty - currentStock,
+                }
               );
             }
           }

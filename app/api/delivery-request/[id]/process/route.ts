@@ -302,10 +302,6 @@ export async function POST(
               // ------------------------------------------------
               // CUSTOMER
               // ------------------------------------------------
-              //
-              // Customer harus berasal dari Delivery Request.
-              //
-              // ------------------------------------------------
 
               customer: {
                 select: {
@@ -380,17 +376,6 @@ export async function POST(
         // ====================================================
         // VALIDASI REQUEST DATE
         // ====================================================
-        //
-        // Tanggal Delivery WAJIB berasal dari:
-        //
-        // DeliveryRequest.requestDate
-        //
-        // BUKAN dari new Date().
-        //
-        // Ini memastikan tanggal yang dipilih Admin Outlet
-        // tetap menjadi tanggal transaksi delivery.
-        //
-        // ====================================================
 
         if (!request.requestDate) {
           throw new Error(
@@ -439,14 +424,6 @@ export async function POST(
 
         // ====================================================
         // CUSTOMER WAJIB ADA
-        // ====================================================
-        //
-        // Sumber customer:
-        //
-        // DeliveryRequest.customerId
-        //
-        // BUKAN customer milik Admin Pusat.
-        //
         // ====================================================
 
         if (!request.customerId) {
@@ -538,6 +515,10 @@ export async function POST(
         for (const item of request.items) {
           const qty = Number(item.qty);
 
+          // --------------------------------------------------
+          // QTY TETAP WAJIB VALID
+          // --------------------------------------------------
+
           if (
             !Number.isFinite(qty) ||
             qty <= 0
@@ -547,6 +528,10 @@ export async function POST(
             );
           }
 
+          // --------------------------------------------------
+          // BARANG TETAP WAJIB AKTIF
+          // --------------------------------------------------
+
           if (!item.barang.active) {
             throw new Error(
               `Barang ${item.barang.code} - ${item.barang.name} sudah tidak aktif`
@@ -554,13 +539,31 @@ export async function POST(
           }
 
           // --------------------------------------------------
-          // VALIDASI STOCK
+          // STOCK TIDAK MEMBLOKIR PROCESS
           // --------------------------------------------------
           //
-          // Hanya validasi.
+          // PENTING:
           //
-          // Stock BELUM dikurangi.
+          // PROCESS Delivery Request hanya membuat
+          // Delivery DRAFT.
           //
+          // Pada tahap ini:
+          //
+          // - Barang.stock TIDAK dikurangi
+          // - OutletStock TIDAK berubah
+          // - StockCard TIDAK dibuat
+          // - StockMutation TIDAK dibuat
+          //
+          // Karena itu stock pusat kosong/kurang TIDAK BOLEH
+          // menggagalkan PROCESS.
+          //
+          // Validasi stock yang bersifat wajib dilakukan
+          // ketika Delivery benar-benar RELEASE/KIRIM.
+          //
+          // Manual Barang Keluar tetap menggunakan validasi
+          // stock-nya sendiri dan tidak terpengaruh route ini.
+          //
+          // Jika stock kurang, hanya dicatat sebagai WARNING.
           // --------------------------------------------------
 
           const currentStock =
@@ -569,24 +572,45 @@ export async function POST(
             );
 
           if (currentStock < qty) {
-            throw new Error(
-              `Stock ${item.barang.code} - ${item.barang.name} tidak mencukupi. Stock pusat: ${currentStock}, request: ${qty}`
+            console.warn(
+              "PROCESS DELIVERY REQUEST STOCK WARNING:",
+              {
+                requestId:
+                  request.id,
+
+                requestNumber:
+                  request.number,
+
+                barangId:
+                  item.barang.id,
+
+                barangCode:
+                  item.barang.code,
+
+                barangName:
+                  item.barang.name,
+
+                stockPusat:
+                  currentStock,
+
+                requestQty:
+                  qty,
+
+                shortfall:
+                  qty - currentStock,
+              }
             );
           }
+
+          // --------------------------------------------------
+          // TOTAL QTY TETAP MENGGUNAKAN QTY REQUEST
+          // --------------------------------------------------
 
           totalQty += qty;
         }
 
         // ====================================================
         // GENERATE DELIVERY NUMBER
-        // ====================================================
-        //
-        // Contoh:
-        //
-        // DR-00002
-        //     ↓
-        // DO-DR-00002
-        //
         // ====================================================
 
         const deliveryNumber =
@@ -618,18 +642,6 @@ export async function POST(
         // ====================================================
         // CREATE DELIVERY DRAFT
         // ====================================================
-        //
-        // PENTING:
-        //
-        // customerId = request.customerId
-        // outletId   = request.outletId
-        //
-        // deliveryDate = request.requestDate
-        //
-        // Jadi tanggal yang dipilih saat membuat Delivery
-        // Request diteruskan otomatis ke Delivery.
-        //
-        // ====================================================
 
         const delivery =
           await tx.delivery.create({
@@ -653,13 +665,6 @@ export async function POST(
 
               // ------------------------------------------------
               // DELIVERY DATE
-              // ------------------------------------------------
-              //
-              // JANGAN menggunakan new Date().
-              //
-              // Gunakan tanggal yang sudah ditetapkan pada
-              // Delivery Request.
-              //
               // ------------------------------------------------
 
               deliveryDate:
@@ -789,20 +794,6 @@ export async function POST(
         // ====================================================
         // UPDATE DELIVERY REQUEST
         // ====================================================
-        //
-        // APPROVED
-        //    ↓
-        // PROCESSING
-        //
-        // deliveryId disimpan supaya:
-        //
-        // DeliveryRequest
-        //       ↕
-        // Delivery
-        //
-        // selalu terhubung.
-        //
-        // ====================================================
 
         const updatedRequest =
           await tx.deliveryRequest.update({
@@ -895,19 +886,12 @@ export async function POST(
                   number: true,
                   status: true,
 
-                  // PENTING:
-                  // Customer dan Outlet sekarang bisa diverifikasi
-                  // langsung dari response.
-
+                  // Customer dan Outlet
                   customerId: true,
                   outletId: true,
 
-                  // =================================================
-                  // TANGGAL DELIVERY
-                  // =================================================
-                  //
-                  // Harus sama dengan DeliveryRequest.requestDate.
-                  //
+                  // Tanggal Delivery harus sama dengan
+                  // DeliveryRequest.requestDate.
                   deliveryDate: true,
 
                   totalQty: true,

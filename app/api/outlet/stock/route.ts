@@ -84,22 +84,31 @@ import { cookies } from "next/headers";
  * PRICE
  * =========================================================
  *
- * Harga transaksi terakhir:
+ * Harga outlet menggunakan prioritas:
  *
- *     ReceiptItem.price
+ * 1. OutletReceiptItem.price dari transaksi outlet TERAKHIR
+ *    berdasarkan kombinasi:
  *
- * Berdasarkan:
+ *       outletId + barangId
  *
- *     Receipt.receiptDate DESC
- *     ReceiptItem.id DESC
+ * 2. Jika belum ada transaksi outlet:
  *
- * Jika belum pernah ada transaksi Barang Masuk:
+ *       OutletBarang.harga
  *
- *     latestPurchasePrice = null
+ * 3. Jika keduanya tidak tersedia:
+ *
+ *       null
+ *
+ * PENTING:
+ *
+ * Barang.purchasePrice TIDAK digunakan sebagai fallback
+ * harga outlet.
  *
  * Barang.purchasePrice tetap dikirim sebagai:
  *
  *     masterPurchasePrice
+ *
+ * hanya sebagai informasi master barang.
  *
  * =========================================================
  */
@@ -120,6 +129,7 @@ type BarangUnitInfo = {
 
 type LatestPriceInfo = {
   barangId: number;
+  outletId: number;
 
   latestPurchasePrice: number | null;
 
@@ -138,9 +148,9 @@ type LatestPriceInfo = {
   } | null;
 
   source:
-    | "ReceiptItem.price"
-    | "Barang.purchasePrice"
-    | "NO_TRANSACTION";
+    | "OutletReceiptItem.price"
+    | "OutletBarang.harga"
+    | "NO_PRICE";
 
   hasTransaction: boolean;
 };
@@ -560,6 +570,13 @@ export async function GET(
         role
       );
 
+    /*
+     * Variabel tetap dipertahankan untuk kompatibilitas
+     * dengan logic role existing.
+     */
+
+    void outletAdmin;
+
     const allowedRoles = [
       "ADMIN",
       "MANAGER",
@@ -957,18 +974,52 @@ export async function GET(
 
     /*
      * =====================================================
-     * 12. GET LAST RECEIPT PRICE
+     * 12. GET LAST OUTLET RECEIPT PRICE
      * =====================================================
+     *
+     * PENTING:
+     *
+     * Harga transaksi harus spesifik berdasarkan:
+     *
+     *     outletId + barangId
+     *
+     * BUKAN hanya barangId.
+     *
+     * Sumber:
+     *
+     *     OutletReceiptItem.price
+     *
+     * Relasi:
+     *
+     *     OutletReceiptItem.receipt
+     *
+     * Urutan:
+     *
+     *     OutletReceipt.receiptDate DESC
+     *     OutletReceiptItem.id DESC
+     *
+     * Jika outletId null, berarti ADMIN/MANAGER melihat
+     * semua outlet. Karena harga bersifat outlet-specific,
+     * hasil transaksi dipetakan berdasarkan kombinasi
+     * outletId + barangId.
      */
 
-    const latestReceiptItems =
+    const latestOutletReceiptItems =
       barangIds.length > 0
-        ? await prisma.receiptItem.findMany(
+        ? await prisma.outletReceiptItem.findMany(
             {
               where: {
                 barangId: {
                   in: barangIds,
                 },
+
+                ...(outletId !== null
+                  ? {
+                      receipt: {
+                        outletId,
+                      },
+                    }
+                  : {}),
               },
 
               select: {
@@ -987,6 +1038,8 @@ export async function GET(
                     number: true,
 
                     receiptDate: true,
+
+                    outletId: true,
 
                     supplierId: true,
 
@@ -1018,22 +1071,51 @@ export async function GET(
 
     /*
      * =====================================================
-     * 13. MAP LAST PRICE
+     * 13. MAP LAST OUTLET PRICE
      * =====================================================
+     *
+     * Key:
+     *
+     *     outletId-barangId
+     *
+     * Dengan begitu barang yang sama di outlet berbeda
+     * tidak akan memakai harga transaksi outlet lain.
      */
 
-    const latestPriceByBarang =
+    const latestPriceByOutletBarang =
       new Map<
-        number,
+        string,
         LatestPriceInfo
       >();
 
     for (
-      const item of latestReceiptItems
+      const item of latestOutletReceiptItems
     ) {
+      const itemOutletId =
+        Number(
+          item.receipt?.outletId
+        );
+
       if (
-        latestPriceByBarang.has(
-          item.barangId
+        !Number.isInteger(
+          itemOutletId
+        ) ||
+        itemOutletId <= 0
+      ) {
+        continue;
+      }
+
+      const key =
+        `${itemOutletId}-${item.barangId}`;
+
+      /*
+       * Karena data sudah diurutkan DESC,
+       * item pertama adalah transaksi terakhir.
+       */
+
+      if (
+        latestPriceByOutletBarang.has(
+          key
         )
       ) {
         continue;
@@ -1044,18 +1126,26 @@ export async function GET(
           item.price
         );
 
+      /*
+       * Price yang tidak valid dianggap null,
+       * bukan dipaksakan menjadi harga master Barang.
+       */
+
       const safePrice =
         Number.isFinite(
           rawPrice
         )
           ? rawPrice
-          : 0;
+          : null;
 
-      latestPriceByBarang.set(
-        item.barangId,
+      latestPriceByOutletBarang.set(
+        key,
         {
           barangId:
             item.barangId,
+
+          outletId:
+            itemOutletId,
 
           latestPurchasePrice:
             safePrice,
@@ -1100,7 +1190,7 @@ export async function GET(
               : null,
 
           source:
-            "ReceiptItem.price",
+            "OutletReceiptItem.price",
 
           hasTransaction:
             true,
@@ -1110,7 +1200,98 @@ export async function GET(
 
     /*
      * =====================================================
-     * 14. STOCK OPNAME
+     * 14. GET OUTLET BARANG MASTER
+     * =====================================================
+     *
+     * OutletBarang merupakan mapping barang ke outlet.
+     *
+     * Unique:
+     *
+     *     outletId + barangId
+     *
+     * Harga:
+     *
+     *     OutletBarang.harga
+     *
+     * Ini menjadi FALLBACK jika belum ada transaksi
+     * OutletReceiptItem untuk outlet + barang tersebut.
+     */
+
+    const outletBarangList =
+      stocks.length > 0
+        ? await prisma.outletBarang.findMany(
+            {
+              where: {
+                OR: stocks.map(
+                  (stock) => ({
+                    outletId:
+                      stock.outletId,
+
+                    barangId:
+                      stock.barangId,
+                  })
+                ),
+              },
+
+              select: {
+                id: true,
+
+                outletId: true,
+
+                barangId: true,
+
+                harga: true,
+
+                aktif: true,
+              },
+            }
+          )
+        : [];
+
+    /*
+     * =====================================================
+     * 15. MAP OUTLET BARANG PRICE
+     * =====================================================
+     */
+
+    const outletBarangPriceByKey =
+      new Map<
+        string,
+        number | null
+      >();
+
+    for (
+      const outletBarang
+      of outletBarangList
+    ) {
+      const key =
+        `${outletBarang.outletId}-${outletBarang.barangId}`;
+
+      const rawHarga =
+        outletBarang.harga === null ||
+        outletBarang.harga === undefined
+          ? null
+          : Number(
+              outletBarang.harga
+            );
+
+      const safeHarga =
+        rawHarga !== null &&
+        Number.isFinite(
+          rawHarga
+        )
+          ? rawHarga
+          : null;
+
+      outletBarangPriceByKey.set(
+        key,
+        safeHarga
+      );
+    }
+
+    /*
+     * =====================================================
+     * 16. STOCK OPNAME
      * =====================================================
      *
      * Stock opname di endpoint ini hanya INFORMASI.
@@ -1207,7 +1388,7 @@ export async function GET(
 
     /*
      * =====================================================
-     * 15. OPNAME HISTORY TYPE
+     * 17. OPNAME HISTORY TYPE
      * =====================================================
      */
 
@@ -1238,7 +1419,7 @@ export async function GET(
 
     /*
      * =====================================================
-     * 16. OPNAME HISTORY MAP
+     * 18. OPNAME HISTORY MAP
      * =====================================================
      */
 
@@ -1250,7 +1431,7 @@ export async function GET(
 
     /*
      * =====================================================
-     * 17. BUILD OPNAME HISTORY
+     * 19. BUILD OPNAME HISTORY
      * =====================================================
      */
 
@@ -1366,7 +1547,7 @@ export async function GET(
 
     /*
      * =====================================================
-     * 18. COMBINE STOCK + PRICE + OPNAME
+     * 20. COMBINE STOCK + PRICE + OPNAME
      * =====================================================
      */
 
@@ -1463,20 +1644,97 @@ export async function GET(
 
           /*
            * =================================================
-           * LAST PRICE
+           * LAST OUTLET PRICE
            * =================================================
+           *
+           * PRIORITAS:
+           *
+           * 1. OutletReceiptItem.price
+           * 2. OutletBarang.harga
+           * 3. null
+           *
+           * Tidak pernah mengambil Barang.purchasePrice
+           * sebagai fallback harga outlet.
            */
 
           const transactionPrice =
-            latestPriceByBarang.get(
-              stock.barangId
+            latestPriceByOutletBarang.get(
+              key
             );
 
-          const price: LatestPriceInfo =
-            transactionPrice ??
-            {
+          const outletMasterPrice =
+            outletBarangPriceByKey.get(
+              key
+            );
+
+          let price:
+            LatestPriceInfo;
+
+          if (
+            transactionPrice
+          ) {
+            /*
+             * Harga transaksi outlet terakhir.
+             */
+
+            price =
+              transactionPrice;
+          } else if (
+            outletMasterPrice !==
+              undefined &&
+            outletMasterPrice !==
+              null
+          ) {
+            /*
+             * Belum ada transaksi.
+             * Gunakan harga mapping OutletBarang.
+             */
+
+            price = {
               barangId:
                 stock.barangId,
+
+              outletId:
+                stock.outletId,
+
+              latestPurchasePrice:
+                outletMasterPrice,
+
+              latestPurchasePriceFormatted:
+                formatRupiah(
+                  outletMasterPrice
+                ),
+
+              latestTransactionDate:
+                null,
+
+              latestReceiptNumber:
+                null,
+
+              latestSupplierId:
+                null,
+
+              latestSupplier:
+                null,
+
+              source:
+                "OutletBarang.harga",
+
+              hasTransaction:
+                false,
+            };
+          } else {
+            /*
+             * Tidak ada transaksi dan tidak ada
+             * harga OutletBarang.
+             */
+
+            price = {
+              barangId:
+                stock.barangId,
+
+              outletId:
+                stock.outletId,
 
               latestPurchasePrice:
                 null,
@@ -1497,16 +1755,21 @@ export async function GET(
                 null,
 
               source:
-                "NO_TRANSACTION",
+                "NO_PRICE",
 
               hasTransaction:
                 false,
             };
+          }
 
           /*
            * =================================================
            * MASTER PURCHASE PRICE
            * =================================================
+           *
+           * Tetap disediakan sebagai informasi master Barang.
+           *
+           * TIDAK digunakan sebagai harga outlet.
            */
 
           const masterPurchasePrice =
@@ -1651,6 +1914,8 @@ export async function GET(
 
               /*
                * Master price tetap terpisah.
+               *
+               * Ini BUKAN fallback harga outlet.
                */
 
               masterPurchasePrice,
@@ -1737,7 +2002,7 @@ export async function GET(
 
     /*
      * =====================================================
-     * 19. PRICE SUMMARY
+     * 21. PRICE SUMMARY
      * =====================================================
      */
 
@@ -1745,17 +2010,37 @@ export async function GET(
       data.filter(
         (item) =>
           item.price
-            ?.hasTransaction ===
-          true
+            ?.latestPurchasePrice !==
+          null
+      ).length;
+
+    const itemsWithTransactionPrice =
+      data.filter(
+        (item) =>
+          item.price
+            ?.source ===
+          "OutletReceiptItem.price"
+      ).length;
+
+    const itemsWithOutletMasterPrice =
+      data.filter(
+        (item) =>
+          item.price
+            ?.source ===
+          "OutletBarang.harga"
       ).length;
 
     const itemsWithoutLatestPrice =
-      data.length -
-      itemsWithLatestPrice;
+      data.filter(
+        (item) =>
+          item.price
+            ?.latestPurchasePrice ===
+          null
+      ).length;
 
     /*
      * =====================================================
-     * 20. STOCK SUMMARY
+     * 22. STOCK SUMMARY
      * =====================================================
      */
 
@@ -1798,7 +2083,7 @@ export async function GET(
 
     /*
      * =====================================================
-     * 21. OPNAME SUMMARY
+     * 23. OPNAME SUMMARY
      * =====================================================
      */
 
@@ -1827,7 +2112,7 @@ export async function GET(
 
     /*
      * =====================================================
-     * 22. CATEGORY SUMMARY
+     * 24. CATEGORY SUMMARY
      * =====================================================
      */
 
@@ -1861,7 +2146,7 @@ export async function GET(
 
     /*
      * =====================================================
-     * 23. CATEGORY SUMMARY COUNT
+     * 25. CATEGORY SUMMARY COUNT
      * =====================================================
      */
 
@@ -1919,7 +2204,7 @@ export async function GET(
 
     /*
      * =====================================================
-     * 24. RESPONSE
+     * 26. RESPONSE
      * =====================================================
      */
 
@@ -2031,23 +2316,36 @@ export async function GET(
 
       priceTable: {
         source:
-          "ReceiptItem.price",
+          "OutletReceiptItem.price",
+
+        fallbackSource:
+          "OutletBarang.harga",
 
         dateSource:
-          "Receipt.receiptDate",
+          "OutletReceipt.receiptDate",
 
         order:
-          "Receipt.receiptDate DESC, ReceiptItem.id DESC",
+          "OutletReceipt.receiptDate DESC, OutletReceiptItem.id DESC",
+
+        lookupKey:
+          "outletId + barangId",
 
         description:
-          "Harga terakhir diambil dari transaksi Barang Masuk terakhir untuk masing-masing barang.",
+          "Harga terakhir diambil dari transaksi Barang Masuk outlet terakhir untuk kombinasi outlet dan barang. Jika belum ada transaksi outlet, digunakan harga OutletBarang.harga.",
 
         itemsWithLatestPrice,
+
+        itemsWithTransactionPrice,
+
+        itemsWithOutletMasterPrice,
 
         itemsWithoutLatestPrice,
 
         fallbackMasterPrice:
-          "Barang.purchasePrice",
+          "OutletBarang.harga",
+
+        barangPurchasePriceUsedAsFallback:
+          false,
       },
 
       /*
@@ -2077,10 +2375,17 @@ export async function GET(
 
         itemsWithLatestPrice,
 
+        itemsWithTransactionPrice,
+
+        itemsWithOutletMasterPrice,
+
         itemsWithoutLatestPrice,
 
         latestPriceTransactionsLoaded:
-          latestReceiptItems.length,
+          latestOutletReceiptItems.length,
+
+        outletBarangPriceMappingsLoaded:
+          outletBarangList.length,
 
         totalCategories:
           categories.length,
@@ -2144,28 +2449,40 @@ export async function GET(
 
         price: {
           source:
-            "ReceiptItem.price",
+            "OutletReceiptItem.price",
 
           transactionSource:
-            "Receipt",
+            "OutletReceipt",
 
           dateField:
-            "Receipt.receiptDate",
+            "OutletReceipt.receiptDate",
 
           receiptNumberField:
-            "Receipt.number",
+            "OutletReceipt.number",
 
           supplierSource:
-            "Receipt.supplier",
+            "OutletReceipt.supplier",
+
+          lookupKey:
+            "outletId + barangId",
 
           latestPriceRule:
-            "Untuk setiap barang, gunakan harga ReceiptItem.price dari Receipt dengan receiptDate paling baru.",
+            "Untuk setiap kombinasi outlet dan barang, gunakan harga OutletReceiptItem.price dari OutletReceipt dengan receiptDate paling baru.",
 
-          masterPriceFallback:
-            "Barang.purchasePrice",
+          outletMasterFallback:
+            "OutletBarang.harga",
+
+          barangPurchasePriceFallback:
+            false,
 
           transactionPriceIsAuthoritative:
             true,
+
+          fallbackOrder: [
+            "OutletReceiptItem.price",
+            "OutletBarang.harga",
+            "NO_PRICE",
+          ],
         },
 
         /*

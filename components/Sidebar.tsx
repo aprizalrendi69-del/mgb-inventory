@@ -38,15 +38,31 @@ import {
   Utensils,
   X,
   Search,
+  Sparkles,
 } from "lucide-react";
+
+/*
+ * =========================================================
+ * ROLE
+ * =========================================================
+ *
+ * STAFF_OUTLET ditambahkan karena digunakan pada menu
+ * Manufacture.
+ *
+ * ADMIN_PUSAT juga disiapkan sebagai alias defensif apabila
+ * backend mengembalikan role tersebut.
+ * =========================================================
+ */
 
 type Role =
   | "ADMIN"
+  | "ADMIN_PUSAT"
   | "MANAGER"
   | "PURCHASING"
   | "GUDANG"
   | "OUTLET_ADMIN"
-  | "KASIR";
+  | "KASIR"
+  | "STAFF_OUTLET";
 
 interface User {
   id?: number;
@@ -114,6 +130,12 @@ const EMPTY_PENDING_COUNTS: PendingCounts = {
   approvalWasteOutlet: 0,
   approvalStockOpname: 0,
 };
+
+/*
+ * =========================================================
+ * ICON TONES
+ * =========================================================
+ */
 
 const ICON_TONES: Record<
   IconTone,
@@ -213,14 +235,21 @@ const ICON_TONES: Record<
   },
 };
 
+/*
+ * =========================================================
+ * MENUS
+ * =========================================================
+ */
+
 const menus: Menu[] = [
   {
     title: "Dashboard",
     url: "/dashboard",
-    roles: ["ADMIN", "MANAGER", "PURCHASING", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "PURCHASING", "GUDANG"],
     icon: LayoutDashboard,
     iconTone: "emerald",
   },
+
   {
     title: "Dashboard Outlet",
     url: "/outlet/dashboard",
@@ -229,28 +258,31 @@ const menus: Menu[] = [
     iconTone: "teal",
   },
 
-    {
+  {
     title: "FINANCE",
     header: true,
   },
+
   {
     title: "Payment",
     url: "/payment",
-    roles: ["ADMIN", "MANAGER"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER"],
     icon: CreditCard,
     iconTone: "sky",
   },
+
   {
     title: "Purchase Payable / Hutang",
     url: "/purchase-payable",
-    roles: ["ADMIN", "MANAGER", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "OUTLET_ADMIN"],
     icon: FileClock,
     iconTone: "amber",
   },
+
   {
     title: "Petty Cash",
     url: "/petty-cash",
-    roles: ["ADMIN", "MANAGER", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "OUTLET_ADMIN"],
     icon: WalletCards,
     iconTone: "emerald",
   },
@@ -259,117 +291,133 @@ const menus: Menu[] = [
     title: "PURCHASE & DELIVERY CENTRAL",
     header: true,
   },
+
   {
     title: "Purchase Order",
     url: "/purchase",
-    roles: ["ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT"],
     icon: ShoppingCart,
     iconTone: "emerald",
   },
+
   {
     title: "Master Harga",
     url: "/master-harga",
-    roles: ["ADMIN", "MANAGER", "PURCHASING"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "PURCHASING"],
     icon: Tag,
     iconTone: "amber",
   },
+
   {
     title: "Approval Purchase",
     url: "/purchase/approve",
-    roles: ["ADMIN", "MANAGER", "PURCHASING"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "PURCHASING"],
     icon: ClipboardCheck,
     iconTone: "violet",
     badgeKey: "approvalPurchase",
   },
+
   {
     title: "Barang Masuk",
     url: "/barang-masuk",
-    roles: ["ADMIN", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "GUDANG"],
     icon: ArrowDownToLine,
     iconTone: "teal",
     badgeKey: "barangMasuk",
   },
+
   {
     title: "Barang Keluar Pusat & Delivery Request",
     url: "/barang-keluar",
-    roles: ["ADMIN", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "GUDANG"],
     icon: PackageMinus,
     iconTone: "orange",
     badgeKey: "deliveryRequest",
   },
-    {
+
+  {
     title: "Delivery Order",
     url: "/pengiriman",
-    roles: ["ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT"],
     icon: Send,
     iconTone: "cyan",
     badgeKey: "deliveryOrder",
   },
+
   {
     title: "Surat Jalan",
     url: "/surat-jalan",
-    roles: ["ADMIN", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "GUDANG"],
     icon: FileText,
     iconTone: "sky",
     badgeKey: "suratJalan",
   },
+
   {
     title: "PUSAT/CENTRAL",
     header: true,
   },
+
   {
     title: "Stock Pusat",
     url: "/stock",
-    roles: ["ADMIN", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "GUDANG"],
     icon: Warehouse,
     iconTone: "emerald",
   },
-    {
+
+  {
     title: "Cost Item Stock Pusat",
     url: "/inventory",
-    roles: ["ADMIN", "MANAGER", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "GUDANG"],
     icon: Boxes,
     iconTone: "emerald",
   },
+
   {
     title: "Expired Barang Pusat",
     url: "/expired",
-    roles: ["ADMIN", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "GUDANG"],
     icon: Package,
     iconTone: "rose",
   },
+
   {
     title: "Stock Opname Pusat",
     url: "/stock-opname",
-    roles: ["ADMIN", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "GUDANG"],
     icon: ClipboardList,
     iconTone: "violet",
   },
+
   {
     title: "Adjustment Stock Pusat",
     url: "/adjustment",
-    roles: ["ADMIN", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "GUDANG"],
     icon: SlidersHorizontal,
     iconTone: "amber",
   },
+
   {
     title: "History Stock Pusat",
     url: "/history",
-    roles: ["ADMIN", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "GUDANG"],
     icon: FileClock,
     iconTone: "slate",
   },
+
   {
     title: "Waste Pusat",
     url: "/waste",
-    roles: ["ADMIN", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "GUDANG"],
     icon: Trash2,
     iconTone: "rose",
   },
+
   {
     title: "Approval Waste Pusat",
     url: "/waste/approval",
-    roles: ["ADMIN", "MANAGER"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER"],
     icon: ClipboardCheck,
     iconTone: "violet",
     badgeKey: "approvalWastePusat",
@@ -379,17 +427,26 @@ const menus: Menu[] = [
     title: "MANUFACTURING",
     header: true,
   },
+
   {
     title: "Menu & BOM",
     url: "/menu",
-    roles: ["ADMIN", "MANAGER"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER"],
     icon: Utensils,
     iconTone: "amber",
   },
+
   {
     title: "Manufacture",
     url: "/manufacture",
-    roles: ["ADMIN", "MANAGER", "GUDANG", "OUTLET_ADMIN", "STAFF_OUTLET"],
+    roles: [
+      "ADMIN",
+      "ADMIN_PUSAT",
+      "MANAGER",
+      "GUDANG",
+      "OUTLET_ADMIN",
+      "STAFF_OUTLET",
+    ],
     icon: Factory,
     iconTone: "orange",
   },
@@ -398,10 +455,11 @@ const menus: Menu[] = [
     title: "COST CONTROL OUTLET",
     header: true,
   },
+
   {
     title: "Cost Control",
     url: "/cost-control",
-    roles: ["ADMIN", "MANAGER", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "OUTLET_ADMIN"],
     icon: TrendingUp,
     iconTone: "teal",
   },
@@ -410,24 +468,27 @@ const menus: Menu[] = [
     title: "PURCHASE OUTLET & MASTER",
     header: true,
   },
+
   {
     title: "Master Barang Outlet",
     url: "/outlet/master-barang",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: Package,
     iconTone: "teal",
   },
+
   {
     title: "Purchase Outlet",
     url: "/outlet/purchase",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: ShoppingCart,
     iconTone: "emerald",
   },
+
   {
     title: "Transfer Outlet",
     url: "/outlet/transfer",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: ArrowLeftRight,
     iconTone: "indigo",
   },
@@ -437,89 +498,112 @@ const menus: Menu[] = [
     header: true,
   },
   {
-    title: "Stock Outlet",
-    url: "/outlet/stock",
+    title: "Inventory Outlet",
+    url: "/outlet/inventory",
     roles: ["ADMIN", "OUTLET_ADMIN"],
     icon: Boxes,
     iconTone: "emerald",
   },
   {
+    title: "Stock Outlet",
+    url: "/outlet/stock",
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
+    icon: Boxes,
+    iconTone: "emerald",
+  },
+
+  {
     title: "Barang Masuk Outlet",
     url: "/outlet/barang-masuk",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: ArrowDownToLine,
     iconTone: "teal",
     badgeKey: "barangMasukOutlet",
   },
+
   {
     title: "Delivery Request To Gudang Pusat",
     url: "/outlet/delivery-request",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: Truck,
     iconTone: "cyan",
   },
+
   {
     title: "Barang Keluar Outlet",
     url: "/outlet/barang-keluar",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: ArrowDownCircle,
     iconTone: "orange",
   },
+
   {
     title: "POS Outlet",
     url: "/outlet/pos",
-    roles: ["ADMIN", "KASIR"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "KASIR"],
     icon: ShoppingCart,
     iconTone: "violet",
   },
+
   {
     title: "Waste Outlet",
     url: "/outlet/waste",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: Trash2,
     iconTone: "rose",
   },
+
   {
     title: "Approval Waste Outlet",
     url: "/outlet/waste/approval",
-    roles: ["ADMIN", "MANAGER"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER"],
     icon: ClipboardCheck,
     iconTone: "violet",
     badgeKey: "approvalWasteOutlet",
   },
+
   {
     title: "History Stock Outlet",
     url: "/outlet/history-stock",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: FileClock,
     iconTone: "slate",
   },
+
   {
     title: "Stock Awal Outlet",
     url: "/outlet/stock-awal",
-    roles: ["ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT"],
     icon: Warehouse,
     iconTone: "amber",
   },
+
   {
     title: "Stock Opname Outlet",
     url: "/outlet/stock-opname",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: ClipboardList,
     iconTone: "violet",
   },
+
   {
     title: "Approval Stock Opname",
     url: "/outlet/stock-opname/approval",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: ClipboardCheck,
     iconTone: "cyan",
     badgeKey: "approvalStockOpname",
   },
+
   {
     title: "Adjustment Outlet",
     url: "/outlet/adjustment",
-    roles: ["ADMIN", "MANAGER", "OUTLET_ADMIN"],
+    roles: [
+      "ADMIN",
+      "ADMIN_PUSAT",
+      "MANAGER",
+      "OUTLET_ADMIN",
+    ],
     icon: SlidersHorizontal,
     iconTone: "amber",
   },
@@ -528,92 +612,104 @@ const menus: Menu[] = [
     title: "LAPORAN OUTLET",
     header: true,
   },
+
   {
     title: "Laporan Barang Masuk Outlet",
     url: "/outlet/laporan/barang-masuk",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: FileText,
     iconTone: "teal",
   },
+
   {
     title: "Laporan Purchase Outlet",
     url: "/outlet/laporan/purchase",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: FileText,
     iconTone: "emerald",
   },
+
   {
     title: "Laporan Barang Keluar Outlet",
     url: "/outlet/laporan/barang-keluar",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: PackageMinus,
     iconTone: "orange",
   },
+
   {
     title: "Laporan Delivery Outlet",
     url: "/outlet/laporan/delivery",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: FileText,
     iconTone: "cyan",
   },
+
   {
     title: "Laporan Stock Outlet",
     url: "/outlet/laporan/stock",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: FileText,
     iconTone: "violet",
   },
 
-    {
+  {
     title: "MASTER DATA PUSAT",
     header: true,
   },
+
   {
     title: "Master Barang",
     url: "/master-barang",
-    roles: ["ADMIN", "PURCHASING"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "PURCHASING"],
     icon: Package,
     iconTone: "emerald",
   },
+
   {
     title: "Master Supplier",
     url: "/supplier",
-    roles: ["ADMIN", "PURCHASING"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "PURCHASING"],
     icon: Truck,
     iconTone: "cyan",
   },
+
   {
     title: "Master Customer",
     url: "/customer",
-    roles: ["ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT"],
     icon: Users,
     iconTone: "violet",
   },
+
   {
     title: "Master User",
     url: "/master/user",
-    roles: ["ADMIN", "OUTLET_ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],
     icon: UserCog,
     iconTone: "indigo",
   },
+
   {
     title: "Master Outlet",
     url: "/master/outlet",
-    roles: ["ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT"],
     icon: Warehouse,
     iconTone: "amber",
   },
+
   {
     title: "Master Karyawan",
     url: "/employee",
-    roles: ["ADMIN", "MANAGER"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER"],
     icon: UserRound,
     iconTone: "rose",
   },
-    {
+
+  {
     title: "Master Account",
     url: "/petty-cash/accounts",
-    roles: ["ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT"],
     icon: WalletCards,
     iconTone: "violet",
   },
@@ -622,59 +718,67 @@ const menus: Menu[] = [
     title: "LAPORAN PUSAT",
     header: true,
   },
+
   {
     title: "Laporan Purchase",
     url: "/laporan/purchase",
-    roles: ["ADMIN", "MANAGER", "PURCHASING"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "PURCHASING"],
     icon: FileText,
     iconTone: "emerald",
   },
+
   {
     title: "Laporan Barang Masuk",
     url: "/laporan/barang-masuk",
-    roles: ["ADMIN", "MANAGER", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "GUDANG"],
     icon: FileText,
     iconTone: "teal",
   },
+
   {
     title: "Laporan Barang Keluar",
     url: "/laporan/barang-keluar",
-    roles: ["ADMIN", "MANAGER", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "GUDANG"],
     icon: FileText,
     iconTone: "orange",
   },
+
   {
     title: "Laporan Inventory",
     url: "/laporan/inventory",
-    roles: ["ADMIN", "MANAGER"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER"],
     icon: FileText,
     iconTone: "emerald",
   },
+
   {
     title: "Laporan Supplier",
     url: "/laporan/supplier",
-    roles: ["ADMIN", "MANAGER", "PURCHASING"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "PURCHASING"],
     icon: FileText,
     iconTone: "cyan",
   },
+
   {
     title: "Laporan Customer",
     url: "/laporan/customer",
-    roles: ["ADMIN", "MANAGER", "PURCHASING"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "PURCHASING"],
     icon: FileText,
     iconTone: "violet",
   },
+
   {
     title: "Laporan Attendance",
     url: "/laporan/attendance",
-    roles: ["ADMIN", "MANAGER"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER"],
     icon: FileText,
     iconTone: "sky",
   },
+
   {
     title: "Laporan Stock Opname",
     url: "/laporan/stock-opname",
-    roles: ["ADMIN", "MANAGER", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "GUDANG"],
     icon: FileText,
     iconTone: "amber",
   },
@@ -683,28 +787,37 @@ const menus: Menu[] = [
     title: "SETTING",
     header: true,
   },
-    {
+
+  {
     title: "Attendance",
     url: "/attendance",
-    roles: ["ADMIN", "MANAGER", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "GUDANG"],
     icon: CalendarCheck,
     iconTone: "sky",
   },
+
   {
     title: "Riwayat Absensi",
     url: "/attendance/history",
-    roles: ["ADMIN", "MANAGER", "GUDANG"],
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "GUDANG"],
     icon: History,
     iconTone: "violet",
   },
+
   {
     title: "Pengaturan",
     url: "/pengaturan",
-    roles: ["ADMIN"],
+    roles: ["ADMIN", "ADMIN_PUSAT"],
     icon: Settings,
     iconTone: "slate",
   },
 ];
+
+/*
+ * =========================================================
+ * PROPS
+ * =========================================================
+ */
 
 interface SidebarProps {
   user: User | null;
@@ -712,22 +825,34 @@ interface SidebarProps {
   onClose: () => void;
 }
 
+/*
+ * =========================================================
+ * SIDEBAR
+ * =========================================================
+ */
+
 export default function Sidebar({
   user,
   open,
   onClose,
 }: SidebarProps) {
   const pathname = usePathname();
+
   const role = user?.role;
 
   const [pendingCounts, setPendingCounts] =
     useState<PendingCounts>(EMPTY_PENDING_COUNTS);
 
-  const [menuSearch, setMenuSearch] =
-    useState("");
+  const [menuSearch, setMenuSearch] = useState("");
 
   const searchInputRef =
     useRef<HTMLInputElement>(null);
+
+  /*
+   * =====================================================
+   * NORMALIZE BADGE COUNT
+   * =====================================================
+   */
 
   const normalizeCount = (value: unknown) => {
     const numberValue = Number(value ?? 0);
@@ -741,6 +866,12 @@ export default function Sidebar({
 
     return Math.floor(numberValue);
   };
+
+  /*
+   * =====================================================
+   * LOAD PENDING COUNTS
+   * =====================================================
+   */
 
   const loadPendingCounts = useCallback(async () => {
     if (!user?.id) {
@@ -819,6 +950,12 @@ export default function Sidebar({
     }
   }, [user?.id]);
 
+  /*
+   * =====================================================
+   * AUTO REFRESH PENDING COUNTS
+   * =====================================================
+   */
+
   useEffect(() => {
     if (!user?.id) {
       setPendingCounts(EMPTY_PENDING_COUNTS);
@@ -841,6 +978,12 @@ export default function Sidebar({
     loadPendingCounts,
   ]);
 
+  /*
+   * =====================================================
+   * GLOBAL SIDEBAR REFRESH EVENT
+   * =====================================================
+   */
+
   useEffect(() => {
     const handleRefresh = () => {
       void loadPendingCounts();
@@ -858,6 +1001,12 @@ export default function Sidebar({
       );
     };
   }, [loadPendingCounts]);
+
+  /*
+   * =====================================================
+   * REFRESH WHEN TAB BECOMES VISIBLE
+   * =====================================================
+   */
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -909,8 +1058,8 @@ export default function Sidebar({
    * =====================================================
    * SEARCH FILTER
    *
-   * Header hanya ditampilkan apabila memiliki minimal
-   * satu menu yang cocok dengan keyword pencarian.
+   * Header hanya ditampilkan apabila section tersebut
+   * memiliki minimal satu menu yang cocok.
    * =====================================================
    */
 
@@ -985,11 +1134,16 @@ export default function Sidebar({
     flushSection();
 
     return result;
-  }, [menuSearch, roleFilteredMenus]);
+  }, [
+    menuSearch,
+    roleFilteredMenus,
+  ]);
 
   /*
    * =====================================================
-   * SEARCH KEYBOARD
+   * KEYBOARD SHORTCUT
+   *
+   * Ctrl + K / Cmd + K
    * =====================================================
    */
 
@@ -1004,10 +1158,6 @@ export default function Sidebar({
         }
       }
 
-      /*
-       * Ctrl + K / Cmd + K
-       * fokus langsung ke pencarian sidebar.
-       */
       if (
         (event.ctrlKey || event.metaKey) &&
         event.key.toLowerCase() === "k"
@@ -1033,14 +1183,22 @@ export default function Sidebar({
   }, [menuSearch]);
 
   /*
-   * Saat sidebar ditutup, kosongkan pencarian
-   * agar ketika dibuka kembali kondisi awal.
+   * =====================================================
+   * CLEAR SEARCH WHEN SIDEBAR CLOSED
+   * =====================================================
    */
+
   useEffect(() => {
     if (!open) {
       setMenuSearch("");
     }
   }, [open]);
+
+  /*
+   * =====================================================
+   * USER DISPLAY
+   * =====================================================
+   */
 
   const displayName =
     user?.fullname ||
@@ -1057,6 +1215,38 @@ export default function Sidebar({
       )
       .join("")
       .toUpperCase() || "U";
+
+  /*
+   * =====================================================
+   * ROLE LABEL
+   * =====================================================
+   */
+
+  const roleLabel = useMemo(() => {
+    if (!role) {
+      return "USER";
+    }
+
+    if (role === "ADMIN_PUSAT") {
+      return "ADMIN PUSAT";
+    }
+
+    if (role === "OUTLET_ADMIN") {
+      return "ADMIN OUTLET";
+    }
+
+    if (role === "STAFF_OUTLET") {
+      return "STAFF OUTLET";
+    }
+
+    return role;
+  }, [role]);
+
+  /*
+   * =====================================================
+   * BADGE
+   * =====================================================
+   */
 
   const getBadgeValue = (
     badgeKey?: Menu["badgeKey"]
@@ -1087,8 +1277,18 @@ export default function Sidebar({
       (menu) => !menu.header
     ).length;
 
+  /*
+   * =====================================================
+   * RENDER
+   * =====================================================
+   */
+
   return (
     <>
+      {/* =================================================
+          MOBILE OVERLAY
+          ================================================= */}
+
       {open && (
         <button
           type="button"
@@ -1099,11 +1299,17 @@ export default function Sidebar({
             inset-0
             z-40
             cursor-default
-            bg-slate-950/55
-            backdrop-blur-[5px]
+            bg-slate-950/65
+            backdrop-blur-[6px]
+            transition-opacity
+            duration-300
           "
         />
       )}
+
+      {/* =================================================
+          SIDEBAR
+          ================================================= */}
 
       <aside
         className={`
@@ -1113,18 +1319,24 @@ export default function Sidebar({
           z-50
           flex
           h-screen
-          w-[286px]
+          w-[292px]
           shrink-0
           flex-col
           overflow-hidden
+
           border-r
           border-white/[0.075]
+
           bg-[#041c17]
+
           text-white
-          shadow-[20px_0_80px_rgba(0,0,0,0.38)]
+
+          shadow-[24px_0_90px_rgba(0,0,0,0.42)]
+
           transition-transform
           duration-300
-          ease-out
+          ease-[cubic-bezier(0.22,1,0.36,1)]
+
           ${
             open
               ? "translate-x-0"
@@ -1132,69 +1344,89 @@ export default function Sidebar({
           }
         `}
       >
-        {/* PREMIUM ATMOSPHERE */}
+        {/* =================================================
+            PREMIUM ATMOSPHERE
+            ================================================= */}
 
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          {/* top emerald glow */}
           <div
             className="
               absolute
-              -left-40
-              -top-36
-              h-[420px]
-              w-[420px]
+              -left-44
+              -top-40
+              h-[470px]
+              w-[470px]
               rounded-full
               bg-emerald-400/[0.085]
+              blur-[135px]
+            "
+          />
+
+          {/* center teal glow */}
+          <div
+            className="
+              absolute
+              -right-40
+              top-[28%]
+              h-[390px]
+              w-[390px]
+              rounded-full
+              bg-teal-300/[0.045]
               blur-[125px]
             "
           />
 
+          {/* bottom glow */}
           <div
             className="
               absolute
-              -right-36
-              top-[30%]
-              h-[350px]
-              w-[350px]
-              rounded-full
-              bg-teal-300/[0.045]
-              blur-[115px]
-            "
-          />
-
-          <div
-            className="
-              absolute
-              -bottom-44
-              -left-28
-              h-[420px]
-              w-[420px]
+              -bottom-48
+              -left-32
+              h-[440px]
+              w-[440px]
               rounded-full
               bg-emerald-500/[0.045]
-              blur-[130px]
+              blur-[135px]
             "
           />
 
+          {/* radial highlight */}
           <div
             className="
               absolute
               inset-0
-              bg-[radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.055),transparent_26%)]
+              bg-[radial-gradient(circle_at_78%_0%,rgba(255,255,255,0.055),transparent_27%)]
             "
           />
 
+          {/* vertical depth */}
           <div
             className="
               absolute
               inset-0
               bg-gradient-to-b
-              from-emerald-950/[0.18]
+              from-emerald-950/[0.20]
               via-transparent
-              to-black/[0.12]
+              to-black/[0.14]
+            "
+          />
+
+          {/* subtle grid */}
+          <div
+            className="
+              absolute
+              inset-0
+              opacity-[0.018]
+              [background-image:linear-gradient(rgba(255,255,255,0.4)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.4)_1px,transparent_1px)]
+              [background-size:32px_32px]
             "
           />
         </div>
 
-        {/* BRAND */}
+        {/* =================================================
+            HEADER
+            ================================================= */}
 
         <div
           className="
@@ -1207,6 +1439,8 @@ export default function Sidebar({
             pt-5
           "
         >
+          {/* BRAND */}
+
           <div className="flex items-start gap-3">
             <div
               className="
@@ -1220,19 +1454,19 @@ export default function Sidebar({
                 overflow-hidden
                 rounded-[14px]
                 border
-                border-emerald-200/[0.12]
+                border-emerald-200/[0.13]
                 bg-gradient-to-br
-                from-emerald-300/[0.14]
+                from-emerald-300/[0.15]
                 via-white/[0.045]
                 to-transparent
-                shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_10px_30px_rgba(0,0,0,0.18)]
+                shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_12px_34px_rgba(0,0,0,0.20)]
               "
             >
               <div
                 className="
                   absolute
                   inset-0
-                  bg-[radial-gradient(circle_at_30%_20%,rgba(110,231,183,0.20),transparent_45%)]
+                  bg-[radial-gradient(circle_at_30%_20%,rgba(110,231,183,0.20),transparent_48%)]
                 "
               />
 
@@ -1241,8 +1475,8 @@ export default function Sidebar({
                   absolute
                   bottom-0
                   right-0
-                  h-6
-                  w-6
+                  h-7
+                  w-7
                   rounded-full
                   bg-emerald-400/[0.08]
                   blur-xl
@@ -1254,7 +1488,7 @@ export default function Sidebar({
                   relative
                   text-[10px]
                   font-black
-                  tracking-[-0.07em]
+                  tracking-[-0.08em]
                   text-white
                 "
               >
@@ -1267,8 +1501,8 @@ export default function Sidebar({
                 className="
                   text-[20px]
                   font-bold
-                  leading-[1.18]
-                  tracking-[-0.035em]
+                  leading-[1.15]
+                  tracking-[-0.04em]
                   text-white
                 "
               >
@@ -1316,6 +1550,8 @@ export default function Sidebar({
               </div>
             </div>
 
+            {/* CLOSE */}
+
             <button
               type="button"
               onClick={onClose}
@@ -1351,13 +1587,14 @@ export default function Sidebar({
                   transition-transform
                   duration-200
                   group-hover:scale-110
-                  group-active:rotate-12
                 "
               />
             </button>
           </div>
 
-          {/* USER PROFILE */}
+          {/* =================================================
+              USER PROFILE
+              ================================================= */}
 
           <div
             className="
@@ -1370,11 +1607,11 @@ export default function Sidebar({
               border-white/[0.075]
               bg-white/[0.035]
               p-3
-              shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_14px_34px_rgba(0,0,0,0.12)]
+              shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_14px_34px_rgba(0,0,0,0.13)]
               backdrop-blur-xl
               transition-all
               duration-300
-              hover:border-emerald-200/[0.10]
+              hover:border-emerald-200/[0.11]
               hover:bg-white/[0.045]
             "
           >
@@ -1401,12 +1638,14 @@ export default function Sidebar({
                 h-px
                 bg-gradient-to-r
                 from-transparent
-                via-emerald-300/[0.10]
+                via-emerald-300/[0.11]
                 to-transparent
               "
             />
 
             <div className="relative flex items-center gap-3">
+              {/* AVATAR */}
+
               <div className="relative h-10 w-10 shrink-0">
                 <div
                   className="
@@ -1469,6 +1708,8 @@ export default function Sidebar({
                 />
               </div>
 
+              {/* USER INFO */}
+
               <div className="min-w-0 flex-1">
                 <p
                   className="
@@ -1495,10 +1736,12 @@ export default function Sidebar({
                       text-slate-500
                     "
                   >
-                    {user?.role || "USER"}
+                    {roleLabel}
                   </p>
                 </div>
               </div>
+
+              {/* ONLINE */}
 
               <div
                 className="
@@ -1553,7 +1796,9 @@ export default function Sidebar({
             </div>
           </div>
 
-          {/* SIDEBAR SEARCH */}
+          {/* =================================================
+              SEARCH
+              ================================================= */}
 
           <div className="relative mt-3.5">
             <div
@@ -1561,7 +1806,7 @@ export default function Sidebar({
                 group
                 relative
                 flex
-                h-[40px]
+                h-[41px]
                 items-center
                 overflow-hidden
                 rounded-xl
@@ -1569,6 +1814,7 @@ export default function Sidebar({
                 bg-black/[0.12]
                 transition-all
                 duration-200
+
                 ${
                   hasSearch
                     ? `
@@ -1594,6 +1840,7 @@ export default function Sidebar({
                   justify-center
                   transition-colors
                   duration-200
+
                   ${
                     hasSearch
                       ? "text-emerald-300"
@@ -1738,15 +1985,19 @@ export default function Sidebar({
           </div>
         </div>
 
-        {/* NAVIGATION */}
+        {/* =================================================
+            NAVIGATION
+            ================================================= */}
 
         <nav
+          aria-label="Navigasi utama"
           className="
             relative
             flex-1
             overflow-y-auto
             px-3.5
             py-3.5
+
             [&::-webkit-scrollbar]:w-1
             [&::-webkit-scrollbar-track]:bg-transparent
             [&::-webkit-scrollbar-thumb]:rounded-full
@@ -1754,11 +2005,29 @@ export default function Sidebar({
             hover:[&::-webkit-scrollbar-thumb]:bg-white/[0.12]
           "
         >
+          {/* TOP FADE */}
+
+          <div
+            className="
+              pointer-events-none
+              sticky
+              left-0
+              right-0
+              top-[-14px]
+              z-20
+              -mb-1
+              h-3
+              bg-gradient-to-b
+              from-[#041c17]
+              to-transparent
+            "
+          />
+
           {filteredMenus.length === 0 ? (
             <div
               className="
                 flex
-                min-h-[180px]
+                min-h-[210px]
                 flex-col
                 items-center
                 justify-center
@@ -1768,9 +2037,10 @@ export default function Sidebar({
             >
               <div
                 className="
+                  relative
                   flex
-                  h-11
-                  w-11
+                  h-12
+                  w-12
                   items-center
                   justify-center
                   rounded-2xl
@@ -1781,9 +2051,20 @@ export default function Sidebar({
                   shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]
                 "
               >
+                <div
+                  className="
+                    absolute
+                    inset-0
+                    rounded-2xl
+                    bg-emerald-400/[0.035]
+                    blur-xl
+                  "
+                />
+
                 <Search
                   size={18}
                   strokeWidth={1.6}
+                  className="relative"
                 />
               </div>
 
@@ -1801,14 +2082,14 @@ export default function Sidebar({
               <p
                 className="
                   mt-1
-                  max-w-[180px]
+                  max-w-[190px]
                   text-[7px]
                   leading-relaxed
                   text-slate-600
                 "
               >
                 Tidak ada menu yang cocok dengan
-                pencarian "{menuSearch.trim()}".
+                pencarian "{menuSearch.trim()}"."
               </p>
 
               <button
@@ -1842,6 +2123,12 @@ export default function Sidebar({
           ) : (
             filteredMenus.map(
               (menu, index) => {
+                /*
+                 * =========================================
+                 * SECTION HEADER
+                 * =========================================
+                 */
+
                 if (menu.header) {
                   return (
                     <div
@@ -1861,7 +2148,7 @@ export default function Sidebar({
                           h-px
                           w-3
                           bg-gradient-to-r
-                          from-emerald-400/[0.38]
+                          from-emerald-400/[0.40]
                           to-transparent
                         "
                       />
@@ -1952,23 +2239,25 @@ export default function Sidebar({
                       overflow-hidden
                       rounded-xl
                       px-2.5
+
+                      border
+
                       transition-all
                       duration-200
+                      ease-out
 
                       ${
                         active
                           ? `
-                            border
-                            border-emerald-200/[0.09]
+                            border-emerald-200/[0.10]
                             bg-gradient-to-r
                             from-white/[0.085]
                             via-emerald-400/[0.065]
                             to-transparent
                             text-white
-                            shadow-[0_8px_25px_rgba(0,0,0,0.12)]
+                            shadow-[0_8px_25px_rgba(0,0,0,0.13)]
                           `
                           : `
-                            border
                             border-transparent
                             text-slate-400
                             hover:border-white/[0.055]
@@ -1978,6 +2267,8 @@ export default function Sidebar({
                       }
                     `}
                   >
+                    {/* ACTIVE INDICATOR */}
+
                     {active && (
                       <>
                         <span
@@ -2025,6 +2316,8 @@ export default function Sidebar({
                       </>
                     )}
 
+                    {/* ICON */}
+
                     <span
                       className={`
                         relative
@@ -2037,6 +2330,7 @@ export default function Sidebar({
                         overflow-hidden
                         rounded-lg
                         border
+
                         transition-all
                         duration-300
                         ease-out
@@ -2044,6 +2338,7 @@ export default function Sidebar({
                         group-hover:scale-[1.055]
                         group-hover:-translate-y-0.5
                         group-hover:shadow-[0_6px_18px_rgba(0,0,0,0.14)]
+
                         group-active:scale-90
                         group-active:translate-y-0
                         group-active:rotate-1
@@ -2134,6 +2429,8 @@ export default function Sidebar({
                       />
                     </span>
 
+                    {/* TITLE */}
+
                     <span
                       className={`
                         relative
@@ -2145,6 +2442,7 @@ export default function Sidebar({
                         leading-none
                         transition-transform
                         duration-200
+
                         ${
                           active
                             ? "font-bold text-white group-hover:translate-x-0.5"
@@ -2154,6 +2452,8 @@ export default function Sidebar({
                     >
                       {menu.title}
                     </span>
+
+                    {/* BADGE */}
 
                     {hasBadge && (
                       <span
@@ -2205,6 +2505,8 @@ export default function Sidebar({
                       </span>
                     )}
 
+                    {/* CHEVRON */}
+
                     <span
                       className={`
                         relative
@@ -2246,9 +2548,29 @@ export default function Sidebar({
               }
             )
           )}
+
+          {/* BOTTOM FADE */}
+
+          <div
+            className="
+              pointer-events-none
+              sticky
+              bottom-[-14px]
+              left-0
+              right-0
+              z-20
+              -mt-4
+              h-5
+              bg-gradient-to-t
+              from-[#041c17]
+              to-transparent
+            "
+          />
         </nav>
 
-        {/* FOOTER */}
+        {/* =================================================
+            FOOTER
+            ================================================= */}
 
         <div
           className="
@@ -2275,6 +2597,8 @@ export default function Sidebar({
           />
 
           <div className="flex items-center justify-between">
+            {/* BRAND STATUS */}
+
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span
@@ -2314,6 +2638,8 @@ export default function Sidebar({
               </p>
             </div>
 
+            {/* LIVE STATUS */}
+
             <div
               className="
                 flex
@@ -2329,13 +2655,34 @@ export default function Sidebar({
             >
               <span
                 className="
+                  relative
+                  flex
                   h-1.5
                   w-1.5
-                  rounded-full
-                  bg-emerald-400
-                  shadow-[0_0_7px_rgba(52,211,153,0.75)]
                 "
-              />
+              >
+                <span
+                  className="
+                    absolute
+                    inset-0
+                    animate-ping
+                    rounded-full
+                    bg-emerald-400
+                    opacity-20
+                  "
+                />
+
+                <span
+                  className="
+                    relative
+                    h-1.5
+                    w-1.5
+                    rounded-full
+                    bg-emerald-400
+                    shadow-[0_0_7px_rgba(52,211,153,0.75)]
+                  "
+                />
+              </span>
 
               <span
                 className="
@@ -2349,6 +2696,39 @@ export default function Sidebar({
                 ONLINE
               </span>
             </div>
+          </div>
+
+          {/* MICRO BRAND LINE */}
+
+          <div className="mt-3 flex items-center gap-2">
+            <div className="h-px flex-1 bg-white/[0.035]" />
+
+            <div
+              className="
+                flex
+                items-center
+                gap-1
+                text-slate-700
+              "
+            >
+              <Sparkles
+                size={8}
+                strokeWidth={1.7}
+              />
+
+              <span
+                className="
+                  text-[5.5px]
+                  font-semibold
+                  uppercase
+                  tracking-[0.16em]
+                "
+              >
+                Premium ERP
+              </span>
+            </div>
+
+            <div className="h-px flex-1 bg-white/[0.035]" />
           </div>
         </div>
       </aside>

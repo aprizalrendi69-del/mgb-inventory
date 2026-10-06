@@ -60,20 +60,62 @@ export const dynamic = "force-dynamic";
  * MANUFACTURE / BOM
  * ------------------------------------------------------------
  *
- * BOM dan ManufactureOrderItem.plannedQty menggunakan
- * BASE UNIT.
+ * ManufactureOrder.plannedQty:
  *
- * Contoh:
- *
- *   BOM = 30 ml
- *
- * Maka kebutuhan bahan adalah:
- *
- *   30 ml
+ *   JUMLAH BATCH / RECEIVED
  *
  * BUKAN:
  *
- *   30 botol
+ *   kg output
+ *   base unit output
+ *
+ * Contoh BOM:
+ *
+ *   1 batch / 1 received
+ *   menghasilkan 39,92 kg
+ *
+ * Maka:
+ *
+ *   plannedQty = 1
+ *   outputQty  = 39,92 kg
+ *
+ * Jika:
+ *
+ *   plannedQty = 2
+ *
+ * maka:
+ *
+ *   output = 2 × 39,92
+ *          = 79,84 kg
+ *
+ * ------------------------------------------------------------
+ * MATERIAL BOM
+ * ------------------------------------------------------------
+ *
+ * RecipeItem.qty:
+ *
+ *   SUDAH merupakan kebutuhan BASE UNIT untuk
+ *   1 batch / 1 received.
+ *
+ * Contoh:
+ *
+ *   1 batch menggunakan Monggo Jin Soy Sauce = 8,4 liter
+ *
+ * Maka:
+ *
+ *   RecipeItem.qty = 8,4
+ *
+ * Jika:
+ *
+ *   plannedQty = 10 batch
+ *
+ * maka:
+ *
+ *   ManufactureOrderItem.plannedQty
+ *   = 8,4 × 10
+ *   = 84 liter
+ *
+ * Jadi RecipeItem.qty TIDAK dikonversi lagi.
  *
  * ------------------------------------------------------------
  * SAAT CONSUME
@@ -144,18 +186,24 @@ export const dynamic = "force-dynamic";
  * 2. Validasi outlet
  * 3. Validasi status
  * 4. Validasi output
- * 5. Validasi semua bahan
- * 6. Konversi OutletStock UNIT → BASE UNIT
- * 7. Kurangi bahan dalam BASE UNIT
- * 8. Konversi hasil kembali BASE UNIT → UNIT
- * 9. Catat StockCard bahan
- * 10. Catat StockMutation bahan
- * 11. Update actualQty
- * 12. Tambah output dalam BASE UNIT
- * 13. Konversi output kembali ke UNIT
- * 14. Catat StockCard output
- * 15. Catat StockMutation output
- * 16. Set order COMPLETED
+ * 5. Validasi jumlah batch
+ * 6. Validasi output per batch dari BOM
+ * 7. Hitung total output:
+ *
+ *      plannedQty × recipe.outputQty
+ *
+ * 8. Validasi semua bahan
+ * 9. Konversi OutletStock UNIT → BASE UNIT
+ * 10. Kurangi bahan dalam BASE UNIT
+ * 11. Konversi hasil kembali BASE UNIT → UNIT
+ * 12. Catat StockCard bahan
+ * 13. Catat StockMutation bahan
+ * 14. Update actualQty
+ * 15. Tambah output dalam BASE UNIT
+ * 16. Konversi output kembali ke UNIT
+ * 17. Catat StockCard output
+ * 18. Catat StockMutation output
+ * 19. Set order COMPLETED
  *
  * ============================================================
  */
@@ -823,21 +871,32 @@ export async function POST(
 
           /*
            * ==================================================
-           * QTY PRODUKSI
+           * JUMLAH BATCH PRODUKSI
            * ==================================================
            *
-           * plannedQty pada ManufactureOrder
-           * dianggap BASE UNIT.
+           * PENTING:
            *
-           * Jadi:
+           * ManufactureOrder.plannedQty
+           * = JUMLAH BATCH / RECEIVED
            *
-           *   plannedQty = 650 ml
+           * BUKAN jumlah kg output.
            *
-           * tidak dikalikan conversionRate lagi.
+           * Contoh:
+           *
+           *   1 received
+           *   = 1 batch
+           *
+           * Jika:
+           *
+           *   plannedQty = 10
+           *
+           * maka:
+           *
+           *   10 batch produksi.
            * ==================================================
            */
 
-          const qtyProduced =
+          const plannedBatchQty =
             normalizeBaseQty(
               finiteNumber(
                 order.plannedQty,
@@ -845,16 +904,35 @@ export async function POST(
             );
 
           if (
-            qtyProduced <= 0
+            plannedBatchQty <= 0
           ) {
             throw new Error(
-              "Qty produksi tidak valid.",
+              "Jumlah batch produksi tidak valid.",
             );
           }
 
           /*
            * ==================================================
-           * OUTPUT QTY BOM
+           * OUTPUT QTY BOM PER BATCH
+           * ==================================================
+           *
+           * Recipe.outputQty:
+           *
+           *   hasil produksi untuk 1 batch.
+           *
+           * Contoh:
+           *
+           *   1 batch = 39,92 kg
+           *
+           * maka:
+           *
+           *   recipe.outputQty = 39,92
+           *
+           * Jika plannedBatchQty = 10:
+           *
+           *   total output
+           *   = 10 × 39,92
+           *   = 399,2 kg
            * ==================================================
            */
 
@@ -870,7 +948,50 @@ export async function POST(
             outputQtyBom <= 0
           ) {
             throw new Error(
-              "Qty output BOM tidak valid.",
+              "Qty output BOM per batch tidak valid.",
+            );
+          }
+
+          /*
+           * ==================================================
+           * TOTAL QTY PRODUKSI
+           * ==================================================
+           *
+           * Ini adalah hasil produksi TOTAL.
+           *
+           * Formula:
+           *
+           *   jumlah batch × output per batch
+           *
+           * Contoh:
+           *
+           *   plannedBatchQty = 1
+           *   outputQtyBom   = 39,92 kg
+           *
+           *   qtyProduced = 1 × 39,92
+           *               = 39,92 kg
+           *
+           * Contoh:
+           *
+           *   plannedBatchQty = 10
+           *   outputQtyBom   = 39,92 kg
+           *
+           *   qtyProduced = 10 × 39,92
+           *               = 399,2 kg
+           * ==================================================
+           */
+
+          const qtyProduced =
+            normalizeBaseQty(
+              plannedBatchQty *
+                outputQtyBom,
+            );
+
+          if (
+            qtyProduced <= 0
+          ) {
+            throw new Error(
+              "Qty hasil produksi tidak valid.",
             );
           }
 
@@ -880,16 +1001,26 @@ export async function POST(
            * ==================================================
            *
            * ManufactureOrderItem.plannedQty
-           * = BASE UNIT.
+           * = TOTAL KEBUTUHAN BAHAN
+           *   DALAM BASE UNIT.
            *
-           * OutletStock.stock
-           * = UNIT BARANG.
+           * Nilai ini sudah dihitung saat CREATE MO:
            *
-           * Karena itu stock harus dikonversi:
+           *   RecipeItem.qty × plannedBatchQty
            *
-           *   stockUnit × conversionRate
+           * Contoh:
            *
-           * sebelum dibandingkan dengan qty BOM.
+           *   1 batch:
+           *   Soy Sauce = 8,4 liter
+           *
+           *   plannedBatchQty = 10
+           *
+           *   ManufactureOrderItem.plannedQty
+           *   = 84 liter
+           *
+           * Jadi di COMPLETE:
+           *
+           *   JANGAN dikalikan plannedBatchQty lagi.
            * ==================================================
            */
 
@@ -1099,10 +1230,14 @@ export async function POST(
           ) {
             /*
              * ------------------------------------------------
-             * QTY BOM
+             * QTY BAHAN
              * ------------------------------------------------
              *
-             * plannedQty = BASE UNIT.
+             * ManufactureOrderItem.plannedQty
+             * SUDAH merupakan TOTAL kebutuhan bahan
+             * dalam BASE UNIT.
+             *
+             * Jangan dikalikan plannedBatchQty lagi.
              */
 
             const qty =
@@ -1584,9 +1719,23 @@ export async function POST(
            * OUTPUT STOCK
            * ==================================================
            *
-           * qtyProduced = BASE UNIT.
+           * qtyProduced:
            *
-           * OutletStock = UNIT BARANG.
+           *   TOTAL HASIL PRODUKSI
+           *   dalam BASE UNIT.
+           *
+           * Formula:
+           *
+           *   plannedBatchQty × outputQtyBom
+           *
+           * Contoh:
+           *
+           *   1 batch × 39,92 kg
+           *   = 39,92 kg
+           *
+           * OutletStock:
+           *
+           *   UNIT BARANG.
            *
            * Jadi:
            *
@@ -1721,7 +1870,7 @@ export async function POST(
                   ),
 
                 note:
-                  `Hasil Manufacture ${order.number} • Outlet ${order.outlet.name} • ${qtyProduced} ${outputBaseUnit} • Stock ${beforeOutputUnit} ${outputUnit} → ${afterOutputUnit} ${outputUnit}`,
+                  `Hasil Manufacture ${order.number} • Outlet ${order.outlet.name} • ${qtyProduced} ${outputBaseUnit} • ${plannedBatchQty} batch × ${outputQtyBom} ${outputBaseUnit} • Stock ${beforeOutputUnit} ${outputUnit} → ${afterOutputUnit} ${outputUnit}`,
               },
             },
           );
@@ -1758,13 +1907,24 @@ export async function POST(
                 order.number,
 
               description:
-                `Output Manufacture ${order.number} • Outlet ${order.outlet.name} • ${qtyProduced} ${outputBaseUnit} • Stock ${beforeOutputUnit} ${outputUnit} → ${afterOutputUnit} ${outputUnit}`,
+                `Output Manufacture ${order.number} • Outlet ${order.outlet.name} • ${qtyProduced} ${outputBaseUnit} • ${plannedBatchQty} batch × ${outputQtyBom} ${outputBaseUnit} • Stock ${beforeOutputUnit} ${outputUnit} → ${afterOutputUnit} ${outputUnit}`,
             },
           });
 
           /*
            * ==================================================
            * COMPLETE ORDER
+           * ==================================================
+           *
+           * producedQty menyimpan TOTAL HASIL PRODUKSI,
+           * bukan jumlah batch.
+           *
+           * Contoh:
+           *
+           *   plannedQty  = 1 batch
+           *   outputQty   = 39,92 kg
+           *
+           *   producedQty = 39,92 kg
            * ==================================================
            */
 
@@ -1850,17 +2010,38 @@ export async function POST(
               name:
                 outputStock.barang.name,
 
-              stockBefore:
-                beforeOutputUnit,
+              /*
+               * Jumlah batch yang diproses.
+               */
 
-              stockBeforeBase:
-                beforeOutputBase,
+              plannedBatchQty:
+                plannedBatchQty,
+
+              /*
+               * Hasil output per 1 batch.
+               */
+
+              outputQtyPerBatch:
+                outputQtyBom,
+
+              outputQtyPerBatchUnit:
+                outputBaseUnit,
+
+              /*
+               * Total hasil produksi.
+               */
 
               produced:
                 qtyProduced,
 
               producedUnit:
                 outputBaseUnit,
+
+              stockBefore:
+                beforeOutputUnit,
+
+              stockBeforeBase:
+                beforeOutputBase,
 
               stockAfter:
                 afterOutputUnit,
