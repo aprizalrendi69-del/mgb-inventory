@@ -4550,10 +4550,6 @@ export default function PaymentPage() {
                           Transfer
                         </option>
 
-                        <option value="PETTY_CASH">
-                          Petty Cash
-                        </option>
-
                         <option value="CASH">
                           Cash
                         </option>

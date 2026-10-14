@@ -79,6 +79,17 @@ const [approving, setApproving] = useState(false);
 const [showApproveModal, setShowApproveModal] = useState(false);
 const [canDelete, setCanDelete] = useState(false);
 
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const syncTheme = () => setIsDarkMode(root.classList.contains("dark"));
+    syncTheme();
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
 /*
 
 - =======================================================
@@ -1101,22 +1112,22 @@ status: string
 ) {
 switch (status) {
 case "DRAFT":
-return "bg-amber-950/35 text-amber-300 border-amber-800/60";
+return "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/35 dark:text-amber-300 dark:border-amber-800/60";
 
   case "APPROVED":
     return "bg-blue-950/40 text-blue-300 border-blue-800/60";
 
   case "RECEIVED":
-    return "bg-emerald-950/35 text-emerald-300 border-emerald-800/60";
+    return "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-300 dark:border-emerald-800/60";
 
   case "COMPLETED":
-    return "bg-purple-950/35 text-purple-300 border-purple-800/60";
+    return "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/35 dark:text-purple-300 dark:border-purple-800/60";
 
   case "CANCELLED":
-    return "bg-red-950/35 text-red-300 border-red-800/60";
+    return "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/35 dark:text-red-300 dark:border-red-800/60";
 
   default:
-    return "bg-[#121D19] text-gray-200 border-[#29483F]";
+    return "bg-[#F7FAF9] dark:bg-[#121D19] text-gray-200 border-[#D5E3DE] dark:border-[#29483F]";
 }
 
 }
@@ -1998,17 +2009,17 @@ priceChangeItems.length;
 
 if (loading) {
 return (
-<div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.10),transparent_30%),#0B1210]">
+<div className={`${isDarkMode ? "dark" : ""} dark-theme-scope min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.10),transparent_30%),#0B1210]`}>
 <div className="flex min-h-screen items-center justify-center p-6">
-<div className="w-full max-w-sm rounded-[28px] border border-[#29483F] bg-[#101815] p-8 text-center shadow-[0_20px_60px_rgba(24,53,45,0.08)]">
-<div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#19332B]">
+<div className="w-full max-w-sm rounded-[28px] border border-[#D5E3DE] dark:border-[#29483F] bg-[white] dark:bg-[#101815] p-8 text-center shadow-[0_20px_60px_rgba(24,53,45,0.08)]">
+<div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#E3F0EB] dark:bg-[#19332B]">
 <Loader2
 size={28}
-className="animate-spin text-[#5FA18E]"
+className="animate-spin text-[#3E806D] dark:text-[#5FA18E]"
 />
 </div>
 
-        <h2 className="mt-5 text-lg font-bold text-[#E8F2EE]">
+        <h2 className="mt-5 text-lg font-bold text-[#18352D] dark:text-[#E8F2EE]">
           Memuat Purchase Order
         </h2>
 
@@ -2016,7 +2027,7 @@ className="animate-spin text-[#5FA18E]"
           Menyiapkan detail transaksi...
         </p>
 
-        <div className="mx-auto mt-6 h-1.5 w-32 overflow-hidden rounded-full bg-[#243A33]">
+        <div className="mx-auto mt-6 h-1.5 w-32 overflow-hidden rounded-full bg-[#DCE8E3] dark:bg-[#243A33]">
           <div className="h-full w-1/2 animate-pulse rounded-full bg-[#5FA18E]" />
         </div>
       </div>
@@ -2032,14 +2043,14 @@ className="animate-spin text-[#5FA18E]"
 
 if (!purchase) {
 return (
-<div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.10),transparent_30%),#0B1210] p-6 md:p-8">
+<div className={`${isDarkMode ? "dark" : ""} dark-theme-scope min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.10),transparent_30%),#0B1210] p-6 md:p-8`}>
 <div className="flex min-h-[70vh] items-center justify-center">
-<div className="w-full max-w-lg rounded-[30px] border border-[#29483F] bg-[#101815] p-10 text-center shadow-[0_20px_60px_rgba(24,53,45,0.08)]">
-<div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#182722] text-gray-400">
+<div className="w-full max-w-lg rounded-[30px] border border-[#D5E3DE] dark:border-[#29483F] bg-[white] dark:bg-[#101815] p-10 text-center shadow-[0_20px_60px_rgba(24,53,45,0.08)]">
+<div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EAF2EF] dark:bg-[#182722] text-gray-400">
 <FileText size={30} />
 </div>
 
-        <h2 className="mt-5 text-xl font-bold text-[#E8F2EE]">
+        <h2 className="mt-5 text-xl font-bold text-[#18352D] dark:text-[#E8F2EE]">
           Purchase Order tidak ditemukan
         </h2>
 
@@ -2126,7 +2137,7 @@ purchase.status
 );
 
 return (
-<div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.10),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(24,53,45,0.05),transparent_25%),#0B1210]">
+<div className={`${isDarkMode ? "dark" : ""} dark-theme-scope min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.10),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(24,53,45,0.05),transparent_25%),#0B1210]`}>
 
   <div className="h-1 w-full bg-gradient-to-r from-[#183A31] via-[#5FA18E] to-[#8EB8A9]" />
 
@@ -2136,7 +2147,7 @@ return (
       <button
         type="button"
         onClick={() => router.push("/purchase")}
-        className="inline-flex items-center gap-2 rounded-xl border border-[#29483F] bg-[#14221E] px-4 py-2.5 text-sm font-bold text-[#D9E9E3] shadow-[0_8px_24px_rgba(0,0,0,0.18)] transition hover:border-[#5FA18E] hover:bg-[#1A2D27] hover:text-white"
+        className="inline-flex items-center gap-2 rounded-xl border border-[#D5E3DE] dark:border-[#29483F] bg-[#14221E] px-4 py-2.5 text-sm font-bold text-[#24483E] dark:text-[#D9E9E3] shadow-[0_8px_24px_rgba(0,0,0,0.18)] transition hover:border-[#5FA18E] hover:bg-[#1A2D27] hover:text-white"
       >
         <ArrowLeft size={17} />
         Kembali
@@ -2147,7 +2158,7 @@ return (
         HEADER
     ===================================================== */}
 
-    <div className="mb-6 overflow-hidden rounded-[28px] border border-[#29483F] bg-[#101815] shadow-[0_16px_50px_rgba(24,53,45,0.07)]">
+    <div className="mb-6 overflow-hidden rounded-[28px] border border-[#D5E3DE] dark:border-[#29483F] bg-[white] dark:bg-[#101815] shadow-[0_16px_50px_rgba(24,53,45,0.07)]">
       <div className="relative overflow-hidden">
 
         <div className="absolute -right-24 -top-32 h-72 w-72 rounded-full bg-[#5FA18E]/8 blur-3xl" />
@@ -2175,7 +2186,7 @@ return (
 
                 <div className="flex flex-wrap items-center gap-2">
 
-                  <h1 className="text-xl font-black tracking-tight text-[#E8F2EE] sm:text-2xl lg:text-3xl">
+                  <h1 className="text-xl font-black tracking-tight text-[#18352D] dark:text-[#E8F2EE] sm:text-2xl lg:text-3xl">
                     Detail Purchase Order
                   </h1>
 
@@ -2194,7 +2205,7 @@ return (
 
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-400">
 
-                  <span className="font-semibold text-[#5FA18E]">
+                  <span className="font-semibold text-[#3E806D] dark:text-[#5FA18E]">
                     {purchase.number}
                   </span>
 
@@ -2243,7 +2254,7 @@ return (
                 >
                   <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 transition duration-500 group-hover:translate-x-full group-hover:opacity-100" />
 
-                  <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#101815]/10 ring-1 ring-white/15">
+                  <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[white] dark:bg-[#101815]/10 ring-1 ring-white/15">
                     {approving ? (
                       <Loader2
                         size={17}
@@ -2324,7 +2335,7 @@ return (
                 className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
                   whatsappCopied
                     ? "border-emerald-800/60 bg-emerald-950/35 text-emerald-300"
-                    : "border-[#315A4E] bg-[#101815] text-[#9AC8B7] hover:border-[#5FA18E] hover:bg-[#182722]"
+                    : "border-[#315A4E] bg-[white] dark:bg-[#101815] text-[#3D7565] dark:text-[#9AC8B7] hover:border-[#5FA18E] hover:bg-[#EAF2EF] dark:bg-[#182722]"
                 }`}
               >
                 {whatsappCopied ? (
@@ -2345,7 +2356,7 @@ return (
                     purchase
                   )
                 }
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-800/60 bg-[#101815] px-4 py-2.5 text-sm font-bold text-red-400 transition hover:bg-red-950/35"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-800/60 bg-[white] dark:bg-[#101815] px-4 py-2.5 text-sm font-bold text-red-400 transition hover:bg-red-950/35"
               >
                 <FileText
                   size={16}
@@ -2359,7 +2370,7 @@ return (
                     purchase
                   )
                 }
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-800/60 bg-[#101815] px-4 py-2.5 text-sm font-bold text-emerald-300 transition hover:bg-emerald-950/35"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-800/60 bg-[white] dark:bg-[#101815] px-4 py-2.5 text-sm font-bold text-emerald-300 transition hover:bg-emerald-950/35"
               >
                 <FileSpreadsheet
                   size={16}
@@ -2371,7 +2382,7 @@ return (
                 href={`/purchase/print?id=${purchase.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-800/60 bg-[#101815] px-4 py-2.5 text-sm font-bold text-blue-300 transition hover:bg-blue-950/40"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-800/60 bg-[white] dark:bg-[#101815] px-4 py-2.5 text-sm font-bold text-blue-300 transition hover:bg-blue-950/40"
               >
                 <Printer
                   size={16}
@@ -2383,35 +2394,35 @@ return (
 
           </div>
 
-          <div className="grid grid-cols-1 gap-3 border-t border-[#243A33] pt-5 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 border-t border-[#DCE8E3] dark:border-[#243A33] pt-5 sm:grid-cols-3">
 
-            <div className="rounded-2xl bg-[#121D19] p-4">
+            <div className="rounded-2xl bg-[#F7FAF9] dark:bg-[#121D19] p-4">
               <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
                 Supplier
               </p>
 
-              <p className="mt-1 truncate text-sm font-bold text-[#E8F2EE]">
+              <p className="mt-1 truncate text-sm font-bold text-[#18352D] dark:text-[#E8F2EE]">
                 {supplier}
               </p>
             </div>
 
-            <div className="rounded-2xl bg-[#121D19] p-4">
+            <div className="rounded-2xl bg-[#F7FAF9] dark:bg-[#121D19] p-4">
               <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
                 Payment
               </p>
 
-              <p className="mt-1 text-sm font-bold text-[#E8F2EE]">
+              <p className="mt-1 text-sm font-bold text-[#18352D] dark:text-[#E8F2EE]">
                 {purchasePaymentMethod ||
                   "-"}
               </p>
             </div>
 
             <div className="rounded-2xl bg-[#142820] p-4">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-[#5FA18E]">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[#3E806D] dark:text-[#5FA18E]">
                 Total Purchase
               </p>
 
-              <p className="mt-1 text-lg font-black text-[#E8F2EE]">
+              <p className="mt-1 text-lg font-black text-[#18352D] dark:text-[#E8F2EE]">
                 Rp{" "}
                 {formatRupiah(
                   totalNilai
@@ -2474,24 +2485,24 @@ return (
     ===================================================== */}
 
     {purchasePaymentMethod && (
-      <div className="mb-6 overflow-hidden rounded-[24px] border border-[#315A4E] bg-[#101815] shadow-sm">
+      <div className="mb-6 overflow-hidden rounded-[24px] border border-[#315A4E] bg-[white] dark:bg-[#101815] shadow-sm">
 
         <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
 
           <div className="flex items-center gap-4">
 
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#19332B] text-[#5FA18E]">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#E3F0EB] dark:bg-[#19332B] text-[#3E806D] dark:text-[#5FA18E]">
               <CreditCard
                 size={21}
               />
             </div>
 
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-[#5FA18E]">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[#3E806D] dark:text-[#5FA18E]">
                 Metode Pembayaran
               </p>
 
-              <p className="mt-1 text-lg font-black text-[#E8F2EE]">
+              <p className="mt-1 text-lg font-black text-[#18352D] dark:text-[#E8F2EE]">
                 {purchasePaymentMethod}
               </p>
             </div>
@@ -2500,7 +2511,7 @@ return (
 
           {isTempoPurchase &&
             hasPayable && (
-              <div className="rounded-2xl bg-[#121D19] px-5 py-3 sm:text-right">
+              <div className="rounded-2xl bg-[#F7FAF9] dark:bg-[#121D19] px-5 py-3 sm:text-right">
 
                 <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
                   Status Hutang
@@ -2682,9 +2693,9 @@ return (
         STATUS TIMELINE
     ===================================================== */}
 
-    <div className="mb-6 overflow-hidden rounded-[28px] border border-[#29483F] bg-[#101815] shadow-[0_12px_40px_rgba(24,53,45,0.05)]">
+    <div className="mb-6 overflow-hidden rounded-[28px] border border-[#D5E3DE] dark:border-[#29483F] bg-[white] dark:bg-[#101815] shadow-[0_12px_40px_rgba(24,53,45,0.05)]">
 
-      <div className="border-b border-[#243A33] px-5 py-5 md:px-7">
+      <div className="border-b border-[#DCE8E3] dark:border-[#243A33] px-5 py-5 md:px-7">
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
@@ -2692,7 +2703,7 @@ return (
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-[#5FA18E]" />
 
-              <h2 className="text-lg font-black text-[#E8F2EE]">
+              <h2 className="text-lg font-black text-[#18352D] dark:text-[#E8F2EE]">
                 Status Purchase Order
               </h2>
             </div>
@@ -2771,7 +2782,7 @@ return (
                           ? "bg-transparent"
                           : active
                           ? "bg-[#5FA18E]"
-                          : "bg-[#182722]"
+                          : "bg-[#EAF2EF] dark:bg-[#182722]"
                       }`}
                     />
 
@@ -2779,7 +2790,7 @@ return (
                       className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-4 border-white text-sm font-bold shadow-md ${
                         active
                           ? "bg-[#5FA18E] text-white shadow-[#5FA18E]/20"
-                          : "bg-[#182722] text-gray-400 shadow-none"
+                          : "bg-[#EAF2EF] dark:bg-[#182722] text-gray-400 shadow-none"
                       }`}
                     >
                       {active ? (
@@ -2800,7 +2811,7 @@ return (
                           ? "bg-transparent"
                           : completed
                           ? "bg-[#5FA18E]"
-                          : "bg-[#182722]"
+                          : "bg-[#EAF2EF] dark:bg-[#182722]"
                       }`}
                     />
 
@@ -2811,7 +2822,7 @@ return (
                     <p
                       className={`text-sm font-bold ${
                         active
-                          ? "text-[#E8F2EE]"
+                          ? "text-[#18352D] dark:text-[#E8F2EE]"
                           : "text-gray-400"
                       }`}
                     >
@@ -2821,7 +2832,7 @@ return (
                     <p
                       className={`mt-1 text-[10px] font-medium uppercase tracking-wider ${
                         active
-                          ? "text-[#5FA18E]"
+                          ? "text-[#3E806D] dark:text-[#5FA18E]"
                           : "text-gray-300"
                       }`}
                     >
@@ -2979,9 +2990,9 @@ return (
         DETAIL BARANG
     ===================================================== */}
 
-    <div className="mb-6 overflow-hidden rounded-[28px] border border-[#29483F] bg-[#101815] shadow-[0_12px_40px_rgba(24,53,45,0.05)]">
+    <div className="mb-6 overflow-hidden rounded-[28px] border border-[#D5E3DE] dark:border-[#29483F] bg-[white] dark:bg-[#101815] shadow-[0_12px_40px_rgba(24,53,45,0.05)]">
 
-      <div className="relative overflow-hidden border-b border-[#243A33] bg-gradient-to-r from-[#101815] via-white to-[#182722] px-5 py-6 md:px-7">
+      <div className="relative overflow-hidden border-b border-[#DCE8E3] dark:border-[#243A33] bg-gradient-to-r from-[#101815] via-white to-[#182722] px-5 py-6 md:px-7">
 
         <div className="absolute -right-20 -top-20 h-48 w-48 rounded-full bg-[#5FA18E]/6 blur-3xl" />
 
@@ -2989,14 +3000,14 @@ return (
 
           <div className="flex items-center gap-4">
 
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#19332B] text-[#5FA18E]">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#E3F0EB] dark:bg-[#19332B] text-[#3E806D] dark:text-[#5FA18E]">
               <PackageCheck
                 size={22}
               />
             </div>
 
             <div>
-              <h2 className="text-lg font-black text-[#E8F2EE]">
+              <h2 className="text-lg font-black text-[#18352D] dark:text-[#E8F2EE]">
                 Detail Barang Purchase
               </h2>
 
@@ -3039,13 +3050,13 @@ return (
               </div>
             )}
 
-            <div className="rounded-2xl border border-[#29483F] bg-[#101815] px-5 py-3 shadow-sm">
+            <div className="rounded-2xl border border-[#D5E3DE] dark:border-[#29483F] bg-[white] dark:bg-[#101815] px-5 py-3 shadow-sm">
 
               <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
                 Total Nilai Barang
               </p>
 
-              <p className="mt-1 text-lg font-black text-[#E8F2EE]">
+              <p className="mt-1 text-lg font-black text-[#18352D] dark:text-[#E8F2EE]">
                 Rp{" "}
                 {formatRupiah(
                   totalNilai
@@ -3107,35 +3118,35 @@ return (
 
         <table className="min-w-[1250px] w-full text-sm">
 
-          <thead className="bg-[#121D19]">
+          <thead className="bg-[#F7FAF9] dark:bg-[#121D19]">
 
             <tr className="border-b border-[#E5ECE9]">
 
-              <th className="w-16 px-5 py-4 text-center text-[11px] font-black uppercase tracking-wider text-[#527268]">
+              <th className="w-16 px-5 py-4 text-center text-[11px] font-black uppercase tracking-wider text-[#607B72] dark:text-[#527268]">
                 No
               </th>
 
-              <th className="px-5 py-4 text-left text-[11px] font-black uppercase tracking-wider text-[#527268]">
+              <th className="px-5 py-4 text-left text-[11px] font-black uppercase tracking-wider text-[#607B72] dark:text-[#527268]">
                 Nama Barang
               </th>
 
-              <th className="px-5 py-4 text-left text-[11px] font-black uppercase tracking-wider text-[#527268]">
+              <th className="px-5 py-4 text-left text-[11px] font-black uppercase tracking-wider text-[#607B72] dark:text-[#527268]">
                 Kode
               </th>
 
-              <th className="px-5 py-4 text-center text-[11px] font-black uppercase tracking-wider text-[#527268]">
+              <th className="px-5 py-4 text-center text-[11px] font-black uppercase tracking-wider text-[#607B72] dark:text-[#527268]">
                 Satuan
               </th>
 
-              <th className="px-5 py-4 text-right text-[11px] font-black uppercase tracking-wider text-[#527268]">
+              <th className="px-5 py-4 text-right text-[11px] font-black uppercase tracking-wider text-[#607B72] dark:text-[#527268]">
                 Qty
               </th>
 
-              <th className="px-5 py-4 text-right text-[11px] font-black uppercase tracking-wider text-[#527268]">
+              <th className="px-5 py-4 text-right text-[11px] font-black uppercase tracking-wider text-[#607B72] dark:text-[#527268]">
                 Harga Purchase
               </th>
 
-              <th className="px-5 py-4 text-right text-[11px] font-black uppercase tracking-wider text-[#527268]">
+              <th className="px-5 py-4 text-right text-[11px] font-black uppercase tracking-wider text-[#607B72] dark:text-[#527268]">
                 Subtotal
               </th>
 
@@ -3211,7 +3222,7 @@ return (
                           "UP"
                           ? "border-red-100 bg-red-950/35/30 hover:bg-red-950/35/55"
                           : "border-emerald-100 bg-emerald-950/35/25 hover:bg-emerald-950/35/45"
-                        : "border-[#22362F] hover:bg-[#FAFCFB]"
+                        : "border-[#E2EBE7] dark:border-[#22362F] hover:bg-[#FAFCFB] dark:bg-[#FAFCFB]"
                     }`}
                   >
 
@@ -3224,7 +3235,7 @@ return (
                               "UP"
                               ? "bg-red-100 text-red-300"
                               : "bg-emerald-900/50 text-emerald-300"
-                            : "bg-[#F3F6F4] text-gray-400"
+                            : "bg-[#F3F6F4] dark:bg-[#F3F6F4] text-gray-400"
                         }`}
                       >
                         {index +
@@ -3244,7 +3255,7 @@ return (
                                 "UP"
                                 ? "border-red-800/60 bg-red-100 text-red-300 group-hover:bg-red-200"
                                 : "border-emerald-800/60 bg-emerald-900/50 text-emerald-300 group-hover:bg-emerald-200"
-                              : "border-[#29483F] bg-[#F1F7F4] text-[#5FA18E] group-hover:bg-[#19332B]"
+                              : "border-[#D5E3DE] dark:border-[#29483F] bg-[#F1F7F4] dark:bg-[#F1F7F4] text-[#3E806D] dark:text-[#5FA18E] group-hover:bg-[#E3F0EB] dark:bg-[#19332B]"
                           }`}
                         >
                           <PackageCheck
@@ -3256,12 +3267,12 @@ return (
 
                           <div className="flex flex-wrap items-center gap-2">
 
-                            <p className="font-bold leading-5 text-[#E8F2EE]">
+                            <p className="font-bold leading-5 text-[#18352D] dark:text-[#E8F2EE]">
                               {itemName}
                             </p>
 
                             {priceLoading && (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-[#29483F] bg-[#101815] px-2 py-0.5 text-[9px] font-bold text-gray-400">
+                              <span className="inline-flex items-center gap-1 rounded-full border border-[#D5E3DE] dark:border-[#29483F] bg-[white] dark:bg-[#101815] px-2 py-0.5 text-[9px] font-bold text-gray-400">
                                 <Loader2
                                   size={10}
                                   className="animate-spin"
@@ -3314,7 +3325,7 @@ return (
 
                     <td className="px-5 py-5 align-middle">
 
-                      <span className="inline-flex rounded-lg border border-[#2B4039] bg-[#121D19] px-3 py-1.5 font-mono text-xs font-bold text-gray-300">
+                      <span className="inline-flex rounded-lg border border-[#2B4039] bg-[#F7FAF9] dark:bg-[#121D19] px-3 py-1.5 font-mono text-xs font-bold text-gray-300">
                         {itemCode}
                       </span>
 
@@ -3322,7 +3333,7 @@ return (
 
                     <td className="px-5 py-5 text-center align-middle">
 
-                      <span className="inline-flex rounded-lg bg-[#182722] px-3 py-1.5 text-xs font-bold text-gray-300">
+                      <span className="inline-flex rounded-lg bg-[#EAF2EF] dark:bg-[#182722] px-3 py-1.5 text-xs font-bold text-gray-300">
                         {itemUnit}
                       </span>
 
@@ -3332,7 +3343,7 @@ return (
 
                       <div className="inline-flex flex-col items-end">
 
-                        <span className="text-base font-black text-[#E8F2EE]">
+                        <span className="text-base font-black text-[#18352D] dark:text-[#E8F2EE]">
                           {formatRupiah(
                             qty
                           )}
@@ -3352,7 +3363,7 @@ return (
 
                         <div className="flex items-center gap-2">
 
-                          <span className="text-base font-black text-[#E8F2EE]">
+                          <span className="text-base font-black text-[#18352D] dark:text-[#E8F2EE]">
                             Rp{" "}
                             {formatRupiah(
                               price
@@ -3406,7 +3417,7 @@ return (
 
                         {priceInfo.changed && (
                           <div
-                            className={`mt-3 w-full min-w-[270px] rounded-xl border bg-[#101815] p-3 text-left shadow-sm ${
+                            className={`mt-3 w-full min-w-[270px] rounded-xl border bg-[white] dark:bg-[#101815] p-3 text-left shadow-sm ${
                               priceInfo.direction ===
                               "UP"
                                 ? "border-red-800/60"
@@ -3420,7 +3431,7 @@ return (
                                 Harga Terakhir
                               </span>
 
-                              <span className="text-xs font-black text-[#E8F2EE]">
+                              <span className="text-xs font-black text-[#18352D] dark:text-[#E8F2EE]">
                                 Rp{" "}
                                 {formatRupiah(
                                   priceInfo.hargaLama
@@ -3429,13 +3440,13 @@ return (
 
                             </div>
 
-                            <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#22362F] pt-2">
+                            <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#E2EBE7] dark:border-[#22362F] pt-2">
 
                               <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
                                 Harga PO
                               </span>
 
-                              <span className="text-xs font-black text-[#E8F2EE]">
+                              <span className="text-xs font-black text-[#18352D] dark:text-[#E8F2EE]">
                                 Rp{" "}
                                 {formatRupiah(
                                   priceInfo.hargaBaru
@@ -3444,7 +3455,7 @@ return (
 
                             </div>
 
-                            <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#22362F] pt-2">
+                            <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#E2EBE7] dark:border-[#22362F] pt-2">
 
                               <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
                                 Selisih
@@ -3465,7 +3476,7 @@ return (
 
                             </div>
 
-                            <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#22362F] pt-2">
+                            <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#E2EBE7] dark:border-[#22362F] pt-2">
 
                               <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
                                 Perubahan
@@ -3487,13 +3498,13 @@ return (
                             </div>
 
                             {priceInfo.supplier && (
-                              <div className="mt-2 border-t border-[#22362F] pt-2">
+                              <div className="mt-2 border-t border-[#E2EBE7] dark:border-[#22362F] pt-2">
 
                                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
                                   Supplier Harga Terakhir
                                 </p>
 
-                                <p className="mt-1 truncate text-xs font-bold text-[#5FA18E]">
+                                <p className="mt-1 truncate text-xs font-bold text-[#3E806D] dark:text-[#5FA18E]">
                                   {priceInfo.supplier}
                                 </p>
 
@@ -3519,7 +3530,7 @@ return (
 
                       <div className="inline-flex flex-col items-end">
 
-                        <span className="text-base font-black text-[#E8F2EE]">
+                        <span className="text-base font-black text-[#18352D] dark:text-[#E8F2EE]">
                           Rp{" "}
                           {formatRupiah(
                             subtotal
@@ -3554,7 +3565,7 @@ return (
                   colSpan={7}
                   className="px-5 py-16 text-center"
                 >
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#182722] text-gray-400">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EAF2EF] dark:bg-[#182722] text-gray-400">
                     <PackageCheck
                       size={25}
                     />
@@ -3576,18 +3587,18 @@ return (
 
           <tfoot>
 
-            <tr className="border-t-2 border-[#29483F] bg-[#182722]">
+            <tr className="border-t-2 border-[#D5E3DE] dark:border-[#29483F] bg-[#EAF2EF] dark:bg-[#182722]">
 
               <td
                 colSpan={4}
-                className="px-5 py-5 text-right text-xs font-black uppercase tracking-wider text-[#527268]"
+                className="px-5 py-5 text-right text-xs font-black uppercase tracking-wider text-[#607B72] dark:text-[#527268]"
               >
                 Total
               </td>
 
               <td className="px-5 py-5 text-right">
 
-                <span className="text-base font-black text-[#E8F2EE]">
+                <span className="text-base font-black text-[#18352D] dark:text-[#E8F2EE]">
                   {formatRupiah(
                     totalQty
                   )}
@@ -3605,7 +3616,7 @@ return (
 
               <td className="px-5 py-5 text-right">
 
-                <span className="text-lg font-black text-[#E8F2EE]">
+                <span className="text-lg font-black text-[#18352D] dark:text-[#E8F2EE]">
                   Rp{" "}
                   {formatRupiah(
                     totalNilai
@@ -3645,20 +3656,20 @@ return (
         BOTTOM ACTION
     ===================================================== */}
 
-    <div className="mb-8 overflow-hidden rounded-[24px] border border-[#29483F] bg-[#101815] p-4 shadow-[0_12px_40px_rgba(24,53,45,0.05)]">
+    <div className="mb-8 overflow-hidden rounded-[24px] border border-[#D5E3DE] dark:border-[#29483F] bg-[white] dark:bg-[#101815] p-4 shadow-[0_12px_40px_rgba(24,53,45,0.05)]">
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
         <div className="flex items-center gap-3">
 
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#19332B] text-[#5FA18E]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E3F0EB] dark:bg-[#19332B] text-[#3E806D] dark:text-[#5FA18E]">
             <ShieldCheck
               size={19}
             />
           </div>
 
           <div>
-            <p className="text-sm font-bold text-[#E8F2EE]">
+            <p className="text-sm font-bold text-[#18352D] dark:text-[#E8F2EE]">
               {purchase.status ===
               "COMPLETED"
                 ? "Purchase Order selesai diproses"
@@ -3693,14 +3704,14 @@ return (
         }
       }}
     >
-      <div className="relative w-full max-w-md overflow-hidden rounded-[30px] border border-[#29483F] bg-[#101815] shadow-[0_30px_100px_rgba(8,32,25,0.30)]">
+      <div className="relative w-full max-w-md overflow-hidden rounded-[30px] border border-[#D5E3DE] dark:border-[#29483F] bg-[white] dark:bg-[#101815] shadow-[0_30px_100px_rgba(8,32,25,0.30)]">
         <div className="relative overflow-hidden bg-gradient-to-br from-[#183A31] via-[#21483D] to-[#102A23] px-6 pb-7 pt-6 text-white">
           <div className="absolute -right-16 -top-20 h-52 w-52 rounded-full bg-emerald-300/10 blur-3xl" />
-          <div className="absolute -bottom-20 left-1/3 h-40 w-40 rounded-full bg-[#101815]/5 blur-3xl" />
+          <div className="absolute -bottom-20 left-1/3 h-40 w-40 rounded-full bg-[white] dark:bg-[#101815]/5 blur-3xl" />
 
           <div className="relative flex items-start justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#101815]/10 ring-1 ring-white/15 shadow-inner">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[white] dark:bg-[#101815]/10 ring-1 ring-white/15 shadow-inner">
                 <ShieldCheck size={27} />
               </div>
 
@@ -3718,7 +3729,7 @@ return (
               type="button"
               onClick={() => setShowApproveModal(false)}
               disabled={approving}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#101815]/10 text-white/60 transition hover:bg-[#101815]/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[white] dark:bg-[#101815]/10 text-white/60 transition hover:bg-[white] dark:bg-[#101815]/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               <X size={18} />
             </button>
@@ -3726,31 +3737,31 @@ return (
         </div>
 
         <div className="px-6 py-6">
-          <div className="rounded-2xl border border-[#DCEAE4] bg-[#121D19] p-4">
+          <div className="rounded-2xl border border-[#DCEAE4] bg-[#F7FAF9] dark:bg-[#121D19] p-4">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
                   Nomor PO
                 </p>
-                <p className="mt-1 text-sm font-black text-[#E8F2EE]">
+                <p className="mt-1 text-sm font-black text-[#18352D] dark:text-[#E8F2EE]">
                   {purchase.number}
                 </p>
               </div>
 
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#19332B] text-[#9AC8B7]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#E3F0EB] dark:bg-[#19332B] text-[#3D7565] dark:text-[#9AC8B7]">
                 <CheckCircle2 size={19} />
               </div>
             </div>
           </div>
 
           <div className="mt-5">
-            <p className="text-sm font-bold text-[#E8F2EE]">
+            <p className="text-sm font-bold text-[#18352D] dark:text-[#E8F2EE]">
               Anda yakin ingin approve Purchase Order ini?
             </p>
 
             <p className="mt-2 text-sm leading-6 text-gray-400">
               Setelah disetujui, PO akan berubah menjadi{" "}
-              <span className="font-bold text-[#9AC8B7]">
+              <span className="font-bold text-[#3D7565] dark:text-[#9AC8B7]">
                 APPROVED
               </span>{" "}
               dan tidak dapat diedit atau dihapus lagi.
@@ -3773,7 +3784,7 @@ return (
               type="button"
               onClick={() => setShowApproveModal(false)}
               disabled={approving}
-              className="rounded-2xl border border-[#D8E4DF] bg-[#101815] px-4 py-3 text-sm font-bold text-gray-300 transition hover:bg-[#F6F9F7] disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-2xl border border-[#D8E4DF] bg-[white] dark:bg-[#101815] px-4 py-3 text-sm font-bold text-gray-300 transition hover:bg-[#F6F9F7] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Batal
             </button>
@@ -3809,19 +3820,19 @@ return (
   {showPaymentModal && (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#10251F]/65 p-3 backdrop-blur-md sm:p-5">
 
-      <div className="relative flex max-h-[94vh] w-full max-w-xl flex-col overflow-hidden rounded-[30px] border border-[#29483F] bg-[#101815] shadow-[0_30px_100px_rgba(0,0,0,0.25)]">
+      <div className="relative flex max-h-[94vh] w-full max-w-xl flex-col overflow-hidden rounded-[30px] border border-[#D5E3DE] dark:border-[#29483F] bg-[white] dark:bg-[#101815] shadow-[0_30px_100px_rgba(0,0,0,0.25)]">
 
         <div className="relative overflow-hidden bg-[#E8F2EE] px-6 py-6 text-white">
 
           <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[#5FA18E]/30 blur-3xl" />
 
-          <div className="absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-[#101815]/5 blur-3xl" />
+          <div className="absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-[white] dark:bg-[#101815]/5 blur-3xl" />
 
           <div className="relative flex items-start justify-between gap-4">
 
             <div className="flex min-w-0 items-center gap-4">
 
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#101815]/10 ring-1 ring-white/15">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[white] dark:bg-[#101815]/10 ring-1 ring-white/15">
                 <CreditCard
                   size={22}
                 />
@@ -3865,7 +3876,7 @@ return (
               disabled={
                 processingPayment
               }
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#101815]/10 text-white/70 transition hover:bg-[#101815]/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[white] dark:bg-[#101815]/10 text-white/70 transition hover:bg-[white] dark:bg-[#101815]/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               <X size={19} />
             </button>
@@ -3874,7 +3885,7 @@ return (
 
           <div className="relative mt-6 grid grid-cols-2 gap-3">
 
-            <div className="rounded-2xl border border-white/10 bg-[#101815]/8 px-4 py-3">
+            <div className="rounded-2xl border border-white/10 bg-[white] dark:bg-[#101815]/8 px-4 py-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">
                 Metode
               </p>
@@ -3885,7 +3896,7 @@ return (
               </p>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-[#101815]/8 px-4 py-3">
+            <div className="rounded-2xl border border-white/10 bg-[white] dark:bg-[#101815]/8 px-4 py-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">
                 Nilai
               </p>
@@ -3902,12 +3913,12 @@ return (
 
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-[#121D19] p-5 sm:p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-[#F7FAF9] dark:bg-[#121D19] p-5 sm:p-6">
 
           <div className="space-y-5">
 
             {isSettlementModal && (
-              <div className="overflow-hidden rounded-[22px] border border-orange-800/60 bg-[#101815] shadow-sm">
+              <div className="overflow-hidden rounded-[22px] border border-orange-800/60 bg-[white] dark:bg-[#101815] shadow-sm">
 
                 <div className="flex items-center gap-3 border-b border-orange-100 bg-orange-950/35 px-5 py-4">
 
@@ -3936,7 +3947,7 @@ return (
                       Total Hutang
                     </p>
 
-                    <p className="mt-1 text-base font-black text-[#E8F2EE]">
+                    <p className="mt-1 text-base font-black text-[#18352D] dark:text-[#E8F2EE]">
                       Rp{" "}
                       {formatRupiah(
                         payableAmount
@@ -3959,7 +3970,7 @@ return (
 
                 </div>
 
-                <div className="border-t border-[#243A33] bg-[#121D19] px-5 py-4">
+                <div className="border-t border-[#DCE8E3] dark:border-[#243A33] bg-[#F7FAF9] dark:bg-[#121D19] px-5 py-4">
 
                   <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
                     Outstanding
@@ -4010,7 +4021,7 @@ return (
             )}
 
             {!isSettlementModal && (
-              <div className="rounded-[22px] border border-[#29483F] bg-[#101815] p-5 shadow-sm">
+              <div className="rounded-[22px] border border-[#D5E3DE] dark:border-[#29483F] bg-[white] dark:bg-[#101815] p-5 shadow-sm">
 
                 <div className="flex items-center justify-between gap-4">
 
@@ -4024,7 +4035,7 @@ return (
                     </p>
                   </div>
 
-                  <p className="text-xl font-black text-[#E8F2EE]">
+                  <p className="text-xl font-black text-[#18352D] dark:text-[#E8F2EE]">
                     Rp{" "}
                     {formatRupiah(
                       purchase.total
@@ -4064,7 +4075,7 @@ return (
                   disabled={
                     processingPayment
                   }
-                  className="w-full appearance-none rounded-xl border border-orange-800/60 bg-orange-950/35 px-4 py-3 text-sm font-bold text-orange-800 outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:bg-[#182722]"
+                  className="w-full appearance-none rounded-xl border border-orange-800/60 bg-orange-950/35 px-4 py-3 text-sm font-bold text-orange-800 outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:bg-[#EAF2EF] dark:bg-[#182722]"
                 >
 
                   {settlementMethods.map(
@@ -4167,7 +4178,7 @@ return (
                   disabled={
                     processingPayment
                   }
-                  className="w-full rounded-xl border border-[#30473F] bg-[#101815] py-3.5 pl-12 pr-4 text-base font-bold text-[#E8F2EE] outline-none transition placeholder:text-gray-300 focus:border-[#5FA18E] focus:ring-4 focus:ring-[#5FA18E]/10 disabled:cursor-not-allowed disabled:bg-[#182722]"
+                  className="w-full rounded-xl border border-[#D0DED8] dark:border-[#30473F] bg-[white] dark:bg-[#101815] py-3.5 pl-12 pr-4 text-base font-bold text-[#18352D] dark:text-[#E8F2EE] outline-none transition placeholder:text-gray-300 focus:border-[#5FA18E] focus:ring-4 focus:ring-[#5FA18E]/10 disabled:cursor-not-allowed disabled:bg-[#EAF2EF] dark:bg-[#182722]"
                 />
 
               </div>
@@ -4191,7 +4202,7 @@ return (
                         )
                       )
                     }
-                    className="font-bold text-[#5FA18E] hover:text-[#4D8D7B] disabled:opacity-50"
+                    className="font-bold text-[#3E806D] dark:text-[#5FA18E] hover:text-[#4D8D7B] disabled:opacity-50"
                   >
                     Rp{" "}
                     {formatRupiah(
@@ -4233,7 +4244,7 @@ return (
                 disabled={
                   processingPayment
                 }
-                className="w-full rounded-xl border border-[#30473F] bg-[#101815] px-4 py-3.5 text-sm font-semibold text-[#E8F2EE] outline-none transition focus:border-[#5FA18E] focus:ring-4 focus:ring-[#5FA18E]/10 disabled:cursor-not-allowed disabled:bg-[#182722]"
+                className="w-full rounded-xl border border-[#D0DED8] dark:border-[#30473F] bg-[white] dark:bg-[#101815] px-4 py-3.5 text-sm font-semibold text-[#18352D] dark:text-[#E8F2EE] outline-none transition focus:border-[#5FA18E] focus:ring-4 focus:ring-[#5FA18E]/10 disabled:cursor-not-allowed disabled:bg-[#EAF2EF] dark:bg-[#182722]"
               />
 
             </PaymentField>
@@ -4266,7 +4277,7 @@ return (
                   disabled={
                     processingPayment
                   }
-                  className="w-full rounded-xl border border-[#30473F] bg-[#101815] px-4 py-3.5 text-sm font-semibold text-[#E8F2EE] outline-none transition placeholder:font-normal placeholder:text-gray-300 focus:border-[#5FA18E] focus:ring-4 focus:ring-[#5FA18E]/10 disabled:cursor-not-allowed disabled:bg-[#182722]"
+                  className="w-full rounded-xl border border-[#D0DED8] dark:border-[#30473F] bg-[white] dark:bg-[#101815] px-4 py-3.5 text-sm font-semibold text-[#18352D] dark:text-[#E8F2EE] outline-none transition placeholder:font-normal placeholder:text-gray-300 focus:border-[#5FA18E] focus:ring-4 focus:ring-[#5FA18E]/10 disabled:cursor-not-allowed disabled:bg-[#EAF2EF] dark:bg-[#182722]"
                 />
 
               </PaymentField>
@@ -4301,7 +4312,7 @@ return (
                 disabled={
                   processingPayment
                 }
-                className="w-full resize-none rounded-xl border border-[#30473F] bg-[#101815] px-4 py-3.5 text-sm text-[#E8F2EE] outline-none transition placeholder:text-gray-300 focus:border-[#5FA18E] focus:ring-4 focus:ring-[#5FA18E]/10 disabled:cursor-not-allowed disabled:bg-[#182722]"
+                className="w-full resize-none rounded-xl border border-[#D0DED8] dark:border-[#30473F] bg-[white] dark:bg-[#101815] px-4 py-3.5 text-sm text-[#18352D] dark:text-[#E8F2EE] outline-none transition placeholder:text-gray-300 focus:border-[#5FA18E] focus:ring-4 focus:ring-[#5FA18E]/10 disabled:cursor-not-allowed disabled:bg-[#EAF2EF] dark:bg-[#182722]"
               />
 
             </PaymentField>
@@ -4355,7 +4366,7 @@ return (
 
         </div>
 
-        <div className="border-t border-[#263D35] bg-[#101815] p-4 sm:p-5">
+        <div className="border-t border-[#D5E3DE] dark:border-[#263D35] bg-[white] dark:bg-[#101815] p-4 sm:p-5">
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
 
@@ -4367,7 +4378,7 @@ return (
               disabled={
                 processingPayment
               }
-              className="inline-flex items-center justify-center rounded-xl border border-[#30473F] bg-[#101815] px-5 py-3 text-sm font-bold text-gray-200 transition hover:bg-[#182722] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center rounded-xl border border-[#D0DED8] dark:border-[#30473F] bg-[white] dark:bg-[#101815] px-5 py-3 text-sm font-bold text-gray-200 transition hover:bg-[#EAF2EF] dark:bg-[#182722] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Batal
             </button>
@@ -4446,7 +4457,7 @@ emphasis?: boolean;
 }) {
 const toneMap = {
 green: {
-box: "bg-[#19332B] text-[#5FA18E]",
+box: "bg-[#E3F0EB] dark:bg-[#19332B] text-[#3E806D] dark:text-[#5FA18E]",
 dot: "bg-[#5FA18E]",
 },
 blue: {
@@ -4467,7 +4478,7 @@ const current =
 toneMap[tone];
 
 return (
-<div className="group rounded-[24px] border border-[#29483F] bg-[#101815] p-5 shadow-[0_8px_30px_rgba(24,53,45,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_38px_rgba(24,53,45,0.07)]">
+<div className="group rounded-[24px] border border-[#D5E3DE] dark:border-[#29483F] bg-[white] dark:bg-[#101815] p-5 shadow-[0_8px_30px_rgba(24,53,45,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_38px_rgba(24,53,45,0.07)]">
 
   <div className="flex items-start justify-between gap-4">
 
@@ -4490,7 +4501,7 @@ return (
           emphasis
             ? "text-xl"
             : "text-lg"
-        } font-black text-[#E8F2EE]`}
+        } font-black text-[#18352D] dark:text-[#E8F2EE]`}
       >
         {value}
       </p>
@@ -4610,16 +4621,16 @@ icon: ReactNode;
 children: ReactNode;
 }) {
 return (
-<div className="overflow-hidden rounded-[26px] border border-[#29483F] bg-[#101815] shadow-[0_10px_35px_rgba(24,53,45,0.04)]">
+<div className="overflow-hidden rounded-[26px] border border-[#D5E3DE] dark:border-[#29483F] bg-[white] dark:bg-[#101815] shadow-[0_10px_35px_rgba(24,53,45,0.04)]">
 
-  <div className="flex items-center gap-3 border-b border-[#243A33] bg-[#111B18] px-5 py-5 md:px-6">
+  <div className="flex items-center gap-3 border-b border-[#DCE8E3] dark:border-[#243A33] bg-[#111B18] px-5 py-5 md:px-6">
 
-    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#19332B] text-[#5FA18E]">
+    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E3F0EB] dark:bg-[#19332B] text-[#3E806D] dark:text-[#5FA18E]">
       {icon}
     </div>
 
     <div>
-      <h2 className="text-base font-black text-[#E8F2EE]">
+      <h2 className="text-base font-black text-[#18352D] dark:text-[#E8F2EE]">
         {title}
       </h2>
 
@@ -4666,11 +4677,11 @@ return (
   <span
     className={`min-w-0 text-sm ${
       strong
-        ? "font-bold text-[#E8F2EE]"
+        ? "font-bold text-[#18352D] dark:text-[#E8F2EE]"
         : "text-gray-300"
     } ${
       highlight
-        ? "text-base font-black text-[#5FA18E]"
+        ? "text-base font-black text-[#3E806D] dark:text-[#5FA18E]"
         : ""
     } ${
       breakWord
@@ -4704,10 +4715,10 @@ children: ReactNode;
 return (
 <div>
 
-  <label className="mb-2.5 flex items-center gap-2 text-sm font-bold text-[#E8F2EE]">
+  <label className="mb-2.5 flex items-center gap-2 text-sm font-bold text-[#18352D] dark:text-[#E8F2EE]">
 
     {icon && (
-      <span className="text-[#5FA18E]">
+      <span className="text-[#3E806D] dark:text-[#5FA18E]">
         {icon}
       </span>
     )}

@@ -567,7 +567,7 @@ function BarangSearch({
             className="overflow-hidden rounded-2xl border border-[#D7E3DE] dark:border-[#3B544A] bg-white dark:bg-[#0D1714] shadow-[0_22px_55px_rgba(28,58,48,0.20)]"
           >
             {/* DROPDOWN HEADER */}
-            <div className="border-b border-[#E9EFEC] dark:border-[#3B5447] bg-[#F7FAF8] dark:bg-[#161D18] px-4 py-3">
+            <div className="border-b border-[#E9EFEC] dark:border-[#3B5447] bg-[#FAFCFB] dark:bg-[#161D18] px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#497F70] dark:text-[#79B8A3]">
@@ -903,7 +903,7 @@ function SupplierSearch({
 
       {open && (
         <div className="absolute left-0 top-full z-[100] mt-2 w-full overflow-hidden rounded-2xl border border-[#D7E3DE] dark:border-[#3B544A] bg-white dark:bg-[#0D1714] shadow-[0_22px_55px_rgba(28,58,48,0.16)]">
-          <div className="border-b border-[#E9EFEC] dark:border-[#3B5447] bg-[#F7FAF8] dark:bg-[#161D18] px-4 py-3">
+          <div className="border-b border-[#E9EFEC] dark:border-[#3B5447] bg-[#FAFCFB] dark:bg-[#161D18] px-4 py-3">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#497F70] dark:text-[#79B8A3]">
@@ -1269,14 +1269,90 @@ function PriceWarningPanel({
             : "↓ Biaya menurun"}
         </div>
       </div>
-    </div>
+      </div>
   );
+}
+
+/* =====================================================
+   DATE HELPERS
+===================================================== */
+
+function toDateInputValue(value: unknown) {
+  if (!value) return "";
+
+  const raw = String(value).trim();
+  if (!raw) return "";
+
+  // Sudah format YYYY-MM-DD.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 /* =====================================================
    PAGE
 ===================================================== */
 
+/* =====================================================
+   THEME SAFETY
+   -----------------------------------------------------
+   Beberapa environment Tailwind dapat menerapkan `dark:`
+   berdasarkan prefers-color-scheme. Page ini memakai theme
+   class dari root HTML, sehingga light mode harus benar-benar
+   menggunakan surface terang.
+===================================================== */
+
+function PurchaseThemeGuard() {
+  useEffect(() => {
+    const root = document.documentElement;
+
+    function syncColorScheme() {
+      const isDark =
+        root.classList.contains("dark") ||
+        root.dataset.theme === "dark" ||
+        root.getAttribute("data-theme") === "dark";
+
+      root.style.colorScheme = isDark ? "dark" : "light";
+    }
+
+    syncColorScheme();
+
+    const observer = new MutationObserver(syncColorScheme);
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return null;
+}
+
+
+const PURCHASE_LIGHT_MODE_CSS = `
+  html:not(.dark):not([data-theme="dark"]) .purchase-edit-light-root {
+    color-scheme: light;
+  }
+
+  html:not(.dark):not([data-theme="dark"]) .purchase-edit-light-root input,
+  html:not(.dark):not([data-theme="dark"]) .purchase-edit-light-root textarea,
+  html:not(.dark):not([data-theme="dark"]) .purchase-edit-light-root select,
+  html:not(.dark):not([data-theme="dark"]) .purchase-edit-light-root button {
+    color-scheme: light;
+  }
+`;
 export default function EditPurchasePage() {
   const params = useParams();
   const router = useRouter();
@@ -1296,6 +1372,10 @@ export default function EditPurchasePage() {
     useState("");
 
   const [paymentMethod, setPaymentMethod] =
+    useState("");
+
+  // Tanggal PO editable dan disimpan kembali ke database melalui API purchase.
+  const [purchaseDate, setPurchaseDate] =
     useState("");
 
   const [remarks, setRemarks] =
@@ -1393,6 +1473,19 @@ export default function EditPurchasePage() {
         String(
           data.paymentMethod ?? ""
         ).toUpperCase()
+      );
+
+      // Gunakan tanggal PO yang tersimpan, bukan tanggal hari ini.
+      // Beberapa versi API memakai nama field yang berbeda, sehingga
+      // pembacaan dibuat kompatibel tanpa mengubah data lain.
+      setPurchaseDate(
+        toDateInputValue(
+          data.purchaseDate ??
+            data.date ??
+            data.orderDate ??
+            data.tanggal ??
+            data.createdAt
+        )
       );
 
       setRemarks(
@@ -2005,6 +2098,22 @@ export default function EditPurchasePage() {
       return;
     }
 
+    if (!purchaseDate) {
+      alert(
+        "Tanggal Purchase Order wajib diisi."
+      );
+
+      return;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(purchaseDate)) {
+      alert(
+        "Format tanggal Purchase Order tidak valid."
+      );
+
+      return;
+    }
+
     if (items.length === 0) {
       alert(
         "Barang belum dipilih"
@@ -2068,6 +2177,10 @@ export default function EditPurchasePage() {
 
             paymentMethod:
               paymentMethod,
+
+            // Tanggal ini adalah tanggal PO yang dipilih user.
+            // Jangan diganti otomatis dengan tanggal hari ini.
+            purchaseDate,
 
             remarks,
 
@@ -2142,7 +2255,7 @@ export default function EditPurchasePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.08),transparent_28%),#F3F6F4] dark:bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.16),transparent_28%),#07110E]">
+      <div className="purchase-edit-light-root min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.06),transparent_28%),#F8FBF9] dark:bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.16),transparent_28%),#07110E]">
         <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8">
           <div className="mb-6 flex items-center gap-3">
             <div className="h-11 w-11 animate-pulse rounded-2xl bg-[#DCE7E2] dark:bg-[#1D3027]" />
@@ -2170,7 +2283,7 @@ export default function EditPurchasePage() {
 
   if (!purchase) {
     return (
-      <div className="min-h-screen bg-[#F3F6F4] dark:bg-[#07110E] px-5 py-8">
+      <div className="min-h-screen bg-[#F8FBF9] dark:bg-[#07110E] px-5 py-8">
         <div className="mx-auto max-w-5xl">
           <div className="rounded-[24px] border border-[#DDE7E2] dark:border-[#3B5447] bg-white dark:bg-[#0D1714] p-10 text-center shadow-[0_12px_40px_rgba(31,59,50,0.06)]">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[20px] bg-[#F1F5F3] dark:bg-[#161D19] text-[#8A9892] dark:text-[#8DB0A1]">
@@ -2206,7 +2319,7 @@ export default function EditPurchasePage() {
 
   if (purchase.status !== "DRAFT") {
     return (
-      <div className="min-h-screen bg-[#F3F6F4] dark:bg-[#07110E] px-5 py-8 md:px-8">
+      <div className="min-h-screen bg-[#F8FBF9] dark:bg-[#07110E] px-5 py-8 md:px-8">
         <div className="mx-auto max-w-5xl">
           <div className="overflow-hidden rounded-[24px] border border-[#E6D5D5] dark:border-[#5A3535] bg-white dark:bg-[#0D1714] shadow-[0_12px_40px_rgba(80,40,40,0.06)]">
             <div className="border-b border-[#F0E2E2] dark:border-[#5E3131] bg-gradient-to-r from-[#FFF8F8] dark:from-[#1D1616] to-white dark:to-[#0D1714] px-6 py-6">
@@ -2261,7 +2374,10 @@ export default function EditPurchasePage() {
   ===================================================== */
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.07),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(24,53,45,0.035),transparent_25%),#F3F6F4] dark:bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.16),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(73,127,112,0.08),transparent_25%),#07110E] text-[#18352D] dark:text-[#D8E8E2]">
+    <>
+      <PurchaseThemeGuard />
+      <style dangerouslySetInnerHTML={{ __html: PURCHASE_LIGHT_MODE_CSS }} />
+      <div className="purchase-edit-light-root min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.055),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(24,53,45,0.02),transparent_25%),#F8FBF9] dark:bg-[radial-gradient(circle_at_top_right,rgba(73,127,112,0.16),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(73,127,112,0.08),transparent_25%),#07110E] text-[#18352D] dark:text-[#D8E8E2]">
       <div className="fixed inset-x-0 top-0 z-[60] h-[2px] bg-gradient-to-r from-transparent via-[#497F70] dark:via-[#17382F] to-transparent" />
 
       {/* HEADER */}
@@ -2340,7 +2456,7 @@ export default function EditPurchasePage() {
                   </div>
                 </div>
 
-                <div className="hidden items-center gap-2 rounded-xl border border-[#E2EBE6] dark:border-[#3A5546] bg-[#F8FAF9] dark:bg-[#161D1A] px-3 py-2 sm:flex">
+                <div className="hidden items-center gap-2 rounded-xl border border-[#E2EBE6] dark:border-[#3A5546] bg-[#FBFDFC] dark:bg-[#161D1A] px-3 py-2 sm:flex">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#497F70] dark:bg-[#17382F]" />
 
                   <span className="text-[9px] font-extrabold uppercase tracking-[0.13em] text-[#718079] dark:text-[#8DB09F]">
@@ -2350,7 +2466,7 @@ export default function EditPurchasePage() {
               </div>
 
               <div className="p-5 lg:p-6">
-                <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-5">
                   {/* PO NUMBER */}
                   <div>
                     <label className="mb-2 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#687871] dark:text-[#9FBCAF]">
@@ -2369,9 +2485,31 @@ export default function EditPurchasePage() {
                           ""
                         }
                         disabled
-                        className="h-11 w-full rounded-xl border border-[#E0E7E4] dark:border-[#3B5449] bg-[#F5F7F6] dark:bg-[#171C1A] pl-10 pr-3 text-sm font-bold text-[#7A8782] dark:text-[#8DB0A2] outline-none"
+                        className="h-11 w-full rounded-xl border border-[#E0E7E4] dark:border-[#3B5449] bg-[#F8FAF9] dark:bg-[#171C1A] pl-10 pr-3 text-sm font-bold text-[#7A8782] dark:text-[#8DB0A2] outline-none"
                       />
                     </div>
+                  </div>
+
+                  {/* TANGGAL PO */}
+                  <div>
+                    <label className="mb-2 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#687871] dark:text-[#9FBCAF]">
+                      Tanggal PO
+                      <span className="text-red-500">*</span>
+                    </label>
+
+                    <input
+                      type="date"
+                      value={purchaseDate}
+                      onChange={(e) =>
+                        setPurchaseDate(e.target.value)
+                      }
+                      required
+                      className="h-11 w-full rounded-xl border border-[#D8E3DE] dark:border-[#3B5449] bg-[#FBFCFB] dark:bg-[#161D16] px-3 text-sm font-bold text-[#30473F] dark:text-[#C5D9D1] outline-none transition-all hover:border-[#C3D4CC] dark:hover:border-[#3B5448] focus:border-[#497F70] dark:focus:border-[#3B6F60] focus:bg-white dark:focus:bg-[#0D1714] focus:ring-4 focus:ring-[#497F70]/10 dark:focus:ring-[#17382F]/10"
+                    />
+
+                    <p className="mt-1.5 text-[9px] font-medium text-[#8E9A95] dark:text-[#8DB0A2]">
+                      Tanggal ini akan menjadi tanggal PO saat disimpan.
+                    </p>
                   </div>
 
                   {/* SUPPLIER */}
@@ -2452,7 +2590,7 @@ export default function EditPurchasePage() {
                       Status Dokumen
                     </label>
 
-                    <div className="flex h-11 items-center gap-2.5 rounded-xl border border-[#DDE8E2] dark:border-[#3A5546] bg-[#F7FAF8] dark:bg-[#161D18] px-3.5">
+                    <div className="flex h-11 items-center gap-2.5 rounded-xl border border-[#DDE8E2] dark:border-[#3A5546] bg-[#FAFCFB] dark:bg-[#161D18] px-3.5">
                       <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#E6F1EB] dark:bg-[#1C3226] text-[#497F70] dark:text-[#79B8A3]">
                         <Check size={14} />
                       </span>
@@ -2470,7 +2608,7 @@ export default function EditPurchasePage() {
                   </div>
 
                   {/* REMARKS */}
-                  <div className="lg:col-span-4">
+                  <div className="lg:col-span-5">
                     <label className="mb-2 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#687871] dark:text-[#9FBCAF]">
                       Keterangan
                       <span className="font-normal normal-case tracking-normal text-[#A0AAA6] dark:text-[#8DB0A2]">
@@ -2528,7 +2666,7 @@ export default function EditPurchasePage() {
                     </div>
                   )}
 
-                  <div className="rounded-xl border border-[#E2EAE6] dark:border-[#3B5447] bg-[#F8FAF9] dark:bg-[#161D1A] px-3 py-2 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#718079] dark:text-[#8DB09F]">
+                  <div className="rounded-xl border border-[#E2EAE6] dark:border-[#3B5447] bg-[#FBFDFC] dark:bg-[#161D1A] px-3 py-2 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#718079] dark:text-[#8DB09F]">
                     {items.length}{" "}
                     {items.length === 1
                       ? "Item"
@@ -2552,7 +2690,7 @@ export default function EditPurchasePage() {
               <div className="p-5 lg:p-6">
                 <div className="overflow-x-auto rounded-[20px] border border-[#E0E9E4] dark:border-[#3B5446] shadow-[0_4px_18px_rgba(31,59,50,0.025)]">
                   <table className="min-w-[1080px] w-full text-sm">
-                    <thead className="bg-[#F7F9F8] dark:bg-[#161D1A]">
+                    <thead className="bg-[#FAFCFB] dark:bg-[#161D1A]">
                       <tr className="border-b border-[#E1E9E5] dark:border-[#3B5447]">
                         <th className="w-16 px-4 py-3.5 text-center text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#899690] dark:text-[#8DB09F]">
                           No
@@ -2805,7 +2943,7 @@ export default function EditPurchasePage() {
                                 </td>
 
                                 <td className="px-4 py-5 text-right align-top">
-                                  <div className="rounded-xl bg-[#F8FAF9] dark:bg-[#161D1A] px-3.5 py-2.5">
+                                  <div className="rounded-xl bg-[#FBFDFC] dark:bg-[#161D1A] px-3.5 py-2.5">
                                     <div className="text-sm font-extrabold tabular-nums text-[#18352D] dark:text-[#D8E8E2]">
                                       {formatRupiah(
                                         subtotal
@@ -3051,7 +3189,8 @@ export default function EditPurchasePage() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 

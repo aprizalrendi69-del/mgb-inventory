@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import {
   PaymentMethod,
   PaymentStatus,
+  PettyCashStatus,
+  PettyCashType,
   Role,
 } from "@prisma/client";
 
@@ -558,6 +560,49 @@ async function generatePaymentNumber(
     String(
       document.lastNumber
     ).padStart(5, "0")
+  );
+}
+
+
+/*
+===========================================================
+GENERATE PETTY CASH NUMBER
+===========================================================
+*/
+
+async function generatePettyCashNumber(
+  tx: any,
+  trxDate: Date
+) {
+  const year = trxDate.getFullYear();
+  const month = String(
+    trxDate.getMonth() + 1
+  ).padStart(2, "0");
+  const period = `${year}${month}`;
+
+  const document = await tx.documentNumber.upsert({
+    where: {
+      type_period: {
+        type: "PETTY_CASH",
+        period,
+      },
+    },
+    create: {
+      type: "PETTY_CASH",
+      prefix: `PC-${period}`,
+      period,
+      lastNumber: 1,
+    },
+    update: {
+      lastNumber: {
+        increment: 1,
+      },
+    },
+  });
+
+  return (
+    `${document.prefix}-` +
+    String(document.lastNumber).padStart(5, "0")
   );
 }
 
@@ -2318,6 +2363,57 @@ export async function POST(
                   },
                 }
               );
+
+              /*
+              ------------------------------------------------
+              POST KE BUKU PETTY CASH
+              ------------------------------------------------
+              Saldo dan transaksi buku kas disimpan atomik.
+              Jika pencatatan gagal, seluruh transaksi rollback.
+              ------------------------------------------------
+              */
+
+              const pettyCashNumber =
+                await generatePettyCashNumber(
+                  tx,
+                  settlementPaymentDate
+                );
+
+              const sourceNumber =
+                currentPayable.purchase?.number ??
+                currentPayable.outletPurchase?.number ??
+                currentPayable.invoiceNumber ??
+                "-";
+
+              const invoiceLabel =
+                currentPayable.invoiceNumber ??
+                sourceNumber;
+
+              const supplierName =
+                currentPayable.purchase?.supplier?.name ??
+                currentPayable.outletPurchase?.supplier?.name ??
+                "Supplier";
+
+              await tx.pettyCash.create({
+                data: {
+                  number: pettyCashNumber,
+                  trxDate: settlementPaymentDate,
+                  type: PettyCashType.OUT,
+                  category: "PEMBAYARAN SUPPLIER",
+                  description:
+                    `Pembayaran supplier ${supplierName}; referensi ${invoiceLabel}; Payment ${payment.number}; metode ${settlementMethod}.`,
+                  amount: settlementAmount,
+                  balanceBefore: currentBalance,
+                  balanceAfter: newBalance,
+                  accountId: account.id,
+                  paymentId: payment.id,
+                  outletId: account.outletId,
+                  createdBy: user.id,
+                  approvedBy: user.id,
+                  status: PettyCashStatus.APPROVED,
+                  approvedAt: new Date(),
+                },
+              });
             }
 
 

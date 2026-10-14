@@ -8,6 +8,7 @@ import {
   RefreshCw,
   ShoppingCart,
   Eye,
+  Pencil,
   ChevronDown,
   CreditCard,
   Store,
@@ -2103,6 +2104,29 @@ export default function OutletPurchasePage() {
                             </span>
 
                           </button>
+
+                          {/* EDIT PURCHASE: DRAFT / APPROVED */}
+
+                          {(item.status === "DRAFT" ||
+                            item.status === "APPROVED") && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                router.push(
+                                  `/outlet/purchase/${item.id}/edit?source=OUTLET`
+                                )
+                              }
+                              className="group/action inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#C7DED4] bg-[#EAF3EF] px-3 text-[10px] font-extrabold text-[#285D4D] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#91B9A8] hover:bg-[#DCECE5] hover:shadow-md dark:border-[#315B4D] dark:bg-[#18352D] dark:text-[#CDE8DC] dark:hover:bg-[#21483B]"
+                              title={
+                                item.status === "APPROVED"
+                                  ? "Edit qty dan harga Purchase Approved"
+                                  : "Edit Purchase Draft"
+                              }
+                            >
+                              <Pencil size={14} className="transition-transform group-hover/action:scale-110" />
+                              <span>Edit</span>
+                            </button>
+                          )}
 
                           {/* PAYMENT */}
 

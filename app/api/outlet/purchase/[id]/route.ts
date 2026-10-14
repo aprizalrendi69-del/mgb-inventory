@@ -1403,23 +1403,45 @@ export async function PATCH(
     }
 
     // =================================================
-    // HANYA DRAFT
+    // STATUS EDIT
+    // =================================================
+    // DRAFT: boleh mengubah detail Purchase.
+    // APPROVED: boleh mengubah qty/harga sebelum diterima.
+    // RECEIVED/CANCELLED: dikunci karena sudah berdampak
+    // pada stok, receipt, atau pembatalan.
     // =================================================
 
     if (
-      existing.status !==
-      "DRAFT"
+      existing.status !== "DRAFT" &&
+      existing.status !== "APPROVED"
     ) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Purchase Outlet hanya dapat diedit jika status masih DRAFT",
+            `Purchase Outlet berstatus ${existing.status} dan tidak dapat diedit. Qty/harga hanya dapat diedit saat DRAFT atau APPROVED sebelum penerimaan.`,
         },
         {
           status: 400,
         }
       );
+    }
+
+    if (existing.status === "APPROVED") {
+      const receiptCount = await prisma.outletReceipt.count({
+        where: { purchaseId },
+      });
+
+      if (receiptCount > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Purchase sudah memiliki penerimaan barang sehingga tidak dapat diedit.",
+          },
+          { status: 400 }
+        );
+      }
     }
 
     // =================================================
@@ -1771,16 +1793,29 @@ export async function PATCH(
           }
 
           // ===========================================
-          // STATUS
+          // STATUS - CEK ULANG DALAM TRANSAKSI
           // ===========================================
 
           if (
-            current.status !==
-            "DRAFT"
+            current.status !== "DRAFT" &&
+            current.status !== "APPROVED"
           ) {
             throw new Error(
-              "Purchase Outlet sudah diproses dan tidak dapat diedit"
+              `Purchase Outlet berstatus ${current.status} dan tidak dapat diedit`
             );
+          }
+
+          if (current.status === "APPROVED") {
+            const receipt = await tx.outletReceipt.findFirst({
+              where: { purchaseId },
+              select: { id: true, number: true },
+            });
+
+            if (receipt) {
+              throw new Error(
+                `Purchase sudah memiliki Receipt ${receipt.number} dan tidak dapat diedit`
+              );
+            }
           }
 
           // ===========================================

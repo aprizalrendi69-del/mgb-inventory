@@ -84,7 +84,14 @@ async function getCurrentUser() {
 // - menggunakan PettyCashAccount Outlet
 //
 // TOP UP:
-// - ADMIN / MANAGER saja
+// - ADMIN / MANAGER
+//   -> boleh Top Up Pusat maupun outlet
+//
+// - OUTLET_ADMIN
+//   -> hanya boleh Top Up outlet miliknya sendiri
+//   -> tidak boleh Top Up Pusat
+//   -> tidak boleh menggunakan account outlet lain
+//
 // - langsung APPROVED
 // - langsung menambah currentBalance account
 //
@@ -132,16 +139,58 @@ export async function POST(
     // ===================================================
     // ACCESS
     // ===================================================
+    //
+    // ADMIN
+    // MANAGER
+    // OUTLET_ADMIN
+    //
+    // OUTLET_ADMIN diperbolehkan masuk ke endpoint,
+    // tetapi outlet-nya akan dikunci ke outlet dari session.
+    // ===================================================
 
     if (
       user.role !== Role.ADMIN &&
-      user.role !== Role.MANAGER
+      user.role !== Role.MANAGER &&
+      user.role !== Role.OUTLET_ADMIN
     ) {
       return NextResponse.json(
         {
           success: false,
           message:
             "Tidak memiliki akses Top Up Petty Cash",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    // ===================================================
+    // KHUSUS OUTLET_ADMIN
+    // ===================================================
+    //
+    // OUTLET_ADMIN wajib mempunyai outletId.
+    //
+    // Jika tidak mempunyai outlet:
+    // - tidak boleh melakukan Top Up
+    // - tidak boleh membuat transaksi Pusat
+    // ===================================================
+
+    if (
+      user.role === Role.OUTLET_ADMIN &&
+      (
+        !user.outletId ||
+        !Number.isInteger(
+          Number(user.outletId)
+        ) ||
+        Number(user.outletId) <= 0
+      )
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Outlet user tidak ditemukan. OUTLET_ADMIN harus memiliki outlet yang valid",
         },
         {
           status: 403,
@@ -161,7 +210,7 @@ export async function POST(
         Number(body.amount)
       );
 
-    const requestedOutletId =
+    let requestedOutletId =
       body.outletId === null ||
       body.outletId === undefined ||
       body.outletId === ""
@@ -198,6 +247,71 @@ export async function POST(
         : String(
             body.remarks
           ).trim();
+
+    // ===================================================
+    // OUTLET_ADMIN -> OUTLET HARUS SESUAI SESSION
+    // ===================================================
+    //
+    // Jangan percaya outletId dari frontend.
+    //
+    // Contoh:
+    //
+    // Session:
+    // user.outletId = 3
+    //
+    // Request:
+    // outletId = 5
+    //
+    // Maka request ditolak.
+    //
+    // Jika request tidak mengirim outletId:
+    // otomatis menggunakan outletId session.
+    // ===================================================
+
+    if (user.role === Role.OUTLET_ADMIN) {
+      const ownOutletId =
+        Number(user.outletId);
+
+      if (
+        !Number.isInteger(
+          ownOutletId
+        ) ||
+        ownOutletId <= 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Outlet user tidak valid",
+          },
+          {
+            status: 403,
+          }
+        );
+      }
+
+      // Jika frontend mengirim outletId,
+      // harus sama dengan outlet user.
+      if (
+        requestedOutletId !== null &&
+        requestedOutletId !== ownOutletId
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "OUTLET_ADMIN hanya dapat Top Up Petty Cash untuk outlet miliknya sendiri",
+          },
+          {
+            status: 403,
+          }
+        );
+      }
+
+      // Paksa outlet menggunakan outlet dari session.
+      requestedOutletId =
+        ownOutletId;
+    }
 
     // ===================================================
     // VALIDATE AMOUNT
@@ -314,6 +428,38 @@ export async function POST(
 
             outletName =
               outlet.name;
+
+            // =========================================
+            // EXTRA SECURITY OUTLET_ADMIN
+            // =========================================
+            //
+            // Walaupun requestedOutletId sudah dipaksa
+            // menggunakan session, validasi kembali
+            // di dalam transaction.
+            // =========================================
+
+            if (
+              user.role === Role.OUTLET_ADMIN &&
+              outlet.id !==
+                Number(user.outletId)
+            ) {
+              throw new Error(
+                "OUTLET_ADMIN hanya dapat Top Up Petty Cash untuk outlet miliknya sendiri"
+              );
+            }
+          }
+
+          // =============================================
+          // OUTLET_ADMIN TIDAK BOLEH TOP UP PUSAT
+          // =============================================
+
+          if (
+            user.role === Role.OUTLET_ADMIN &&
+            requestedOutletId === null
+          ) {
+            throw new Error(
+              "OUTLET_ADMIN tidak dapat Top Up Petty Cash Pusat"
+            );
           }
 
           // =============================================
@@ -361,6 +507,24 @@ export async function POST(
                   : "Akun Petty Cash Outlet tidak sesuai dengan outlet transaksi"
               );
             }
+
+            // -------------------------------------------
+            // EXTRA SECURITY OUTLET_ADMIN
+            // -------------------------------------------
+            //
+            // Account harus benar-benar milik outlet
+            // yang ada di session user.
+            // -------------------------------------------
+
+            if (
+              user.role === Role.OUTLET_ADMIN &&
+              account.outletId !==
+                Number(user.outletId)
+            ) {
+              throw new Error(
+                "OUTLET_ADMIN hanya dapat menggunakan akun Petty Cash outlet miliknya sendiri"
+              );
+            }
           } else {
             // ===========================================
             // ACCOUNT TIDAK DIPILIH
@@ -390,6 +554,59 @@ export async function POST(
                   : "Akun Petty Cash Outlet belum tersedia"
               );
             }
+
+            // -------------------------------------------
+            // EXTRA SECURITY OUTLET_ADMIN
+            // -------------------------------------------
+
+            if (
+              user.role === Role.OUTLET_ADMIN &&
+              account.outletId !==
+                Number(user.outletId)
+            ) {
+              throw new Error(
+                "OUTLET_ADMIN hanya dapat menggunakan akun Petty Cash outlet miliknya sendiri"
+              );
+            }
+          }
+
+          // =============================================
+          // FINAL ACCOUNT SECURITY
+          // =============================================
+          //
+          // Ini menjadi lapisan terakhir sebelum saldo
+          // diubah.
+          //
+          // Untuk OUTLET_ADMIN:
+          // account.outletId harus sama dengan session.
+          //
+          // Untuk ADMIN/MANAGER:
+          // account.outletId harus sama dengan requestedOutletId.
+          // =============================================
+
+          if (!account) {
+            throw new Error(
+              "Akun Petty Cash tidak ditemukan"
+            );
+          }
+
+          if (
+            account.outletId !==
+            requestedOutletId
+          ) {
+            throw new Error(
+              "Akun Petty Cash tidak sesuai dengan outlet transaksi"
+            );
+          }
+
+          if (
+            user.role === Role.OUTLET_ADMIN &&
+            account.outletId !==
+              Number(user.outletId)
+          ) {
+            throw new Error(
+              "OUTLET_ADMIN hanya dapat menggunakan akun Petty Cash outlet miliknya sendiri"
+            );
           }
 
           // =============================================

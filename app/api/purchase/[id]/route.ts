@@ -132,6 +132,148 @@ async function getCurrentUser() {
 
 /*
  * =========================================================
+ * PARSE PURCHASE DATE
+ * =========================================================
+ *
+ * IMPORTANT
+ *
+ * Jangan menggunakan:
+ *
+ * new Date("YYYY-MM-DD")
+ *
+ * secara langsung untuk kebutuhan tanggal PO,
+ * karena JavaScript dapat memperlakukannya sebagai
+ * UTC dan tanggal dapat bergeser ketika ditampilkan
+ * pada timezone Indonesia.
+ *
+ * Untuk input HTML:
+ *
+ * YYYY-MM-DD
+ *
+ * kita simpan sebagai:
+ *
+ * YYYY-MM-DDT00:00:00
+ *
+ * pada local/server timezone.
+ *
+ * =========================================================
+ */
+
+function parsePurchaseDate(
+  value: unknown
+): Date | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const raw = value.trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  /*
+   * =======================================================
+   * FORMAT UTAMA HTML DATE
+   * =======================================================
+   *
+   * YYYY-MM-DD
+   *
+   * =======================================================
+   */
+
+  const dateOnlyMatch =
+    /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+
+  if (dateOnlyMatch) {
+    const year = Number(dateOnlyMatch[1]);
+    const month = Number(dateOnlyMatch[2]);
+    const day = Number(dateOnlyMatch[3]);
+
+    /*
+     * Validasi range dasar.
+     */
+
+    if (
+      year < 1900 ||
+      year > 9999 ||
+      month < 1 ||
+      month > 12 ||
+      day < 1 ||
+      day > 31
+    ) {
+      return null;
+    }
+
+    /*
+     * Buat tanggal local.
+     *
+     * Month pada JavaScript dimulai dari 0.
+     */
+
+    const date = new Date(
+      year,
+      month - 1,
+      day,
+      0,
+      0,
+      0,
+      0
+    );
+
+    /*
+     * Validasi tanggal sebenarnya.
+     *
+     * Contoh:
+     * 2026-02-31
+     *
+     * harus ditolak, bukan diubah otomatis
+     * menjadi tanggal Maret.
+     */
+
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return null;
+    }
+
+    return date;
+  }
+
+  /*
+   * =======================================================
+   * FORMAT DATETIME
+   * =======================================================
+   *
+   * Tetap mendukung frontend yang mengirim ISO string,
+   * misalnya:
+   *
+   * 2026-10-07T00:00:00.000Z
+   *
+   * atau:
+   *
+   * 2026-10-07T00:00:00
+   *
+   * =======================================================
+   */
+
+  const parsed = new Date(raw);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+}
+
+/*
+ * =========================================================
  * GET PURCHASE DETAIL
  * =========================================================
  *
@@ -186,25 +328,6 @@ export async function GET(
     /*
      * =====================================================
      * GET PURCHASE
-     * =====================================================
-     *
-     * PAYABLE WAJIB DI-INCLUDE
-     *
-     * Supaya halaman:
-     *
-     * /purchase/[id]/payment
-     *
-     * dapat membaca:
-     *
-     * payable.invoiceNumber
-     * payable.invoiceDate
-     * payable.dueDate
-     * payable.amount
-     * payable.paidAmount
-     * payable.outstanding
-     * payable.status
-     * payable.payments
-     *
      * =====================================================
      */
 
@@ -288,15 +411,6 @@ export async function GET(
     /*
      * =====================================================
      * NORMALIZE PAYABLE
-     * =====================================================
-     *
-     * Kita kirim payable secara eksplisit agar frontend
-     * mendapatkan struktur yang stabil.
-     *
-     * Jika belum ada payable:
-     *
-     * payable = null
-     *
      * =====================================================
      */
 
@@ -417,6 +531,14 @@ export async function GET(
      * =====================================================
      * RESPONSE
      * =====================================================
+     *
+     * purchase.purchaseDate berasal langsung dari DB.
+     *
+     * Jadi setelah frontend menyimpan tanggal baru,
+     * GET berikutnya akan selalu membaca tanggal PO
+     * yang benar-benar tersimpan.
+     *
+     * =====================================================
      */
 
     return NextResponse.json({
@@ -424,6 +546,9 @@ export async function GET(
 
       data: {
         ...purchase,
+
+        purchaseDate:
+          purchase.purchaseDate,
 
         payable,
       },
@@ -617,41 +742,13 @@ export async function PUT(
 
     /*
      * =====================================================
-     * VALIDASI TANGGAL
-     * =====================================================
-     */
-
-    let finalPurchaseDate: Date;
-
-    if (purchaseDate) {
-      const parsedDate =
-        new Date(purchaseDate);
-
-      if (
-        Number.isNaN(
-          parsedDate.getTime()
-        )
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Tanggal Purchase Order tidak valid",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-
-      finalPurchaseDate = parsedDate;
-    } else {
-      finalPurchaseDate = new Date();
-    }
-
-    /*
-     * =====================================================
      * CARI PURCHASE
+     * =====================================================
+     *
+     * Purchase harus dicari SEBELUM menentukan
+     * tanggal final karena apabila purchaseDate
+     * tidak dikirim, kita harus mempertahankan
+     * tanggal PO yang sudah tersimpan.
      * =====================================================
      */
 
@@ -695,6 +792,61 @@ export async function PUT(
           status: 400,
         }
       );
+    }
+
+    /*
+     * =====================================================
+     * VALIDASI TANGGAL PO
+     * =====================================================
+     *
+     * Ada 3 kondisi:
+     *
+     * 1. purchaseDate tidak ada di body
+     *    -> pertahankan tanggal lama.
+     *
+     * 2. purchaseDate ada dan valid
+     *    -> simpan tanggal baru.
+     *
+     * 3. purchaseDate ada tetapi kosong/tidak valid
+     *    -> tolak request.
+     *
+     * Tidak boleh menggunakan new Date() sebagai fallback
+     * karena itu dapat mengubah tanggal PO secara tidak
+     * sengaja menjadi tanggal hari ini.
+     *
+     * =====================================================
+     */
+
+    const hasPurchaseDateField =
+      Object.prototype.hasOwnProperty.call(
+        body,
+        "purchaseDate"
+      );
+
+    let finalPurchaseDate =
+      purchase.purchaseDate;
+
+    if (hasPurchaseDateField) {
+      const parsedPurchaseDate =
+        parsePurchaseDate(
+          purchaseDate
+        );
+
+      if (!parsedPurchaseDate) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Tanggal Purchase Order tidak valid. Gunakan format YYYY-MM-DD.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      finalPurchaseDate =
+        parsedPurchaseDate;
     }
 
     /*
@@ -743,9 +895,13 @@ export async function PUT(
         item?.barangId
       );
 
-      const qty = Number(item?.qty);
+      const qty = Number(
+        item?.qty
+      );
 
-      const price = Number(item?.price);
+      const price = Number(
+        item?.price
+      );
 
       /*
        * ===================================================
@@ -827,7 +983,8 @@ export async function PUT(
         );
       }
 
-      const subtotal = qty * price;
+      const subtotal =
+        qty * price;
 
       if (
         !Number.isFinite(subtotal)
@@ -915,16 +1072,23 @@ export async function PUT(
                   parsedSupplierId,
 
                 /*
+                 * =================================================
                  * TANGGAL PO
+                 * =================================================
                  *
-                 * Jika purchaseDate tidak dikirim,
-                 * tanggal lama tetap dipertahankan.
+                 * finalPurchaseDate selalu berasal dari:
+                 *
+                 * - tanggal baru yang sudah divalidasi, atau
+                 * - tanggal lama dari database.
+                 *
+                 * Tidak pernah menggunakan new Date()
+                 * sebagai fallback.
+                 *
+                 * =================================================
                  */
 
                 purchaseDate:
-                  purchaseDate
-                    ? finalPurchaseDate
-                    : purchase.purchaseDate,
+                  finalPurchaseDate,
 
                 /*
                  * PAYMENT METHOD
@@ -959,9 +1123,11 @@ export async function PUT(
                         barangId:
                           item.barangId,
 
-                        qty: item.qty,
+                        qty:
+                          item.qty,
 
-                        price: item.price,
+                        price:
+                          item.price,
 
                         subtotal:
                           item.subtotal,
@@ -1009,6 +1175,10 @@ export async function PUT(
      * =====================================================
      * RESPONSE
      * =====================================================
+     *
+     * purchaseDate di sini adalah nilai hasil UPDATE
+     * yang sudah dibaca kembali dari database.
+     * =====================================================
      */
 
     return NextResponse.json({
@@ -1017,7 +1187,12 @@ export async function PUT(
       message:
         "Purchase Order berhasil diubah",
 
-      data: result,
+      data: {
+        ...result,
+
+        purchaseDate:
+          result.purchaseDate,
+      },
     });
   } catch (error: any) {
     console.error(

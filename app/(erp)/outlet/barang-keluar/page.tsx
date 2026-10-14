@@ -120,6 +120,9 @@ export default function OutletBarangKeluarPage() {
   const [qtyProcessed, setQtyProcessed] = useState("");
   const [wasteQty, setWasteQty] = useState("");
   const [note, setNote] = useState("");
+  // Tanggal transaksi barang keluar yang dipilih user.
+  // Disimpan terpisah dari tanggal filter laporan.
+  const [trxDate, setTrxDate] = useState(() => getLocalDateInput());
 
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -467,6 +470,11 @@ export default function OutletBarangKeluarPage() {
       return;
     }
 
+    if (!trxDate || !/^\d{4}-\d{2}-\d{2}$/.test(trxDate)) {
+      setError("Silakan pilih tanggal barang keluar yang valid");
+      return;
+    }
+
     if (!barangId) {
       setError("Silakan pilih barang");
       return;
@@ -537,6 +545,10 @@ export default function OutletBarangKeluarPage() {
               transactionType === "WASTE"
                 ? processed
                 : Number(wasteQty) || 0,
+
+            // API POST harus menyimpan nilai ini sebagai tanggal transaksi.
+            trxDate,
+            date: trxDate,
 
             note,
           }),
@@ -1064,6 +1076,36 @@ export default function OutletBarangKeluarPage() {
                     </div>
                   </div>
                 )}
+
+              {/* TANGGAL TRANSAKSI */}
+
+              <FormSection
+                number={role === "ADMIN" ? "02" : "01"}
+                title="Tanggal Barang Keluar"
+                description="Pilih tanggal kejadian barang keluar. Tanggal ini ikut dikirim saat transaksi disimpan."
+              >
+                <div>
+                  <label
+                    htmlFor="trxDate"
+                    className="mb-2 block text-xs font-semibold text-slate-600"
+                  >
+                    Tanggal transaksi
+                  </label>
+                  <input
+                    id="trxDate"
+                    type="date"
+                    value={trxDate}
+                    onChange={(e) => setTrxDate(e.target.value)}
+                    required
+                    disabled={saving}
+                    className="premium-input"
+                  />
+                  <p className="mt-2 text-xs text-slate-400">
+                    Tanggal yang dipilih akan digunakan sebagai tanggal barang keluar,
+                    bukan otomatis tanggal saat tombol Simpan ditekan.
+                  </p>
+                </div>
+              </FormSection>
 
               {/* TYPE */}
 
@@ -2700,6 +2742,16 @@ function SummaryRow({
 // =====================================================
 // FORMAT DATE
 // =====================================================
+
+// Menggunakan tanggal lokal browser, bukan UTC, agar tanggal Indonesia
+// tidak bergeser ke hari sebelumnya.
+function getLocalDateInput() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString(

@@ -28,6 +28,7 @@ import {
   SlidersHorizontal,
   Truck,
   Wallet,
+  Trash2,
   X,
 } from "lucide-react";
 
@@ -571,6 +572,9 @@ export default function PettyCashPage() {
   const [rejectingId, setRejectingId] =
     useState<number | null>(null);
 
+  const [deletingId, setDeletingId] =
+    useState<number | null>(null);
+
   /*
   =========================================================
   LOAD USER
@@ -826,7 +830,7 @@ export default function PettyCashPage() {
     isOutletRole(user?.role);
 
   const canTopUp =
-    isCentralAdmin;
+    isCentralAdmin || isOutletAdmin;
 
   const canCreateTransaction =
     Boolean(user);
@@ -1202,6 +1206,12 @@ export default function PettyCashPage() {
       return;
     }
 
+    // Outlet admin hanya boleh mengajukan top up untuk outlet miliknya.
+    if (isOutletAdmin && (!user?.outletId || selectedLocationId !== user.outletId)) {
+      alert("Anda hanya dapat melakukan Top Up untuk outlet sendiri.");
+      return;
+    }
+
     setTopUpAmount("");
     setTopUpDate(
       getTodayInput()
@@ -1272,6 +1282,8 @@ export default function PettyCashPage() {
                 null,
               outletId:
                 selectedLocationId,
+              // Transaksi manual langsung diposting tanpa approval.
+              status: "APPROVED",
             }),
           }
         );
@@ -1312,7 +1324,7 @@ export default function PettyCashPage() {
       await loadPettyCash();
 
       alert(
-        "Transaksi keluar berhasil dibuat dan menunggu approval."
+        "Transaksi manual berhasil dibuat dan langsung diposting ke Petty Cash."
       );
     } catch (error) {
       console.error(
@@ -1345,6 +1357,11 @@ export default function PettyCashPage() {
       alert(
         "Anda tidak memiliki akses Top Up."
       );
+      return;
+    }
+
+    if (isOutletAdmin && (!user?.outletId || selectedLocationId !== user.outletId)) {
+      alert("Anda hanya dapat melakukan Top Up untuk outlet sendiri.");
       return;
     }
 
@@ -1419,9 +1436,9 @@ export default function PettyCashPage() {
                 topUpDescription.trim() ||
                 null,
               outletId:
-                selectedLocationId,
-              status:
-                "APPROVED",
+                isOutletAdmin ? user?.outletId : selectedLocationId,
+              // Semua transaksi Top Up langsung diposting tanpa approval.
+              status: "APPROVED",
             }),
           }
         );
@@ -1462,7 +1479,7 @@ export default function PettyCashPage() {
       await loadPettyCash();
 
       alert(
-        "Top Up berhasil dan saldo telah ditambahkan."
+        "Top Up berhasil dan saldo Petty Cash telah ditambahkan."
       );
     } catch (error) {
       console.error(
@@ -1677,6 +1694,77 @@ export default function PettyCashPage() {
       setRejectingId(null);
     }
   }
+
+/*
+=========================================================
+DELETE MANUAL / TOP UP
+=========================================================
+*/
+
+function isManualOrTopUpTransaction(transaction: PettyCashTransaction) {
+  if (transaction.paymentId !== null && transaction.paymentId !== undefined) {
+    return false;
+  }
+
+  const category = String(transaction.category || "").trim().toUpperCase();
+  const manualCategories = new Set([
+    "LALAMOVE",
+    "OPERASIONAL",
+    "TRANSPORTASI",
+    "ATK",
+    "KAS KECIL",
+    "LAINNYA",
+  ]);
+
+  return category === "TOP UP" || (transaction.type === "OUT" && manualCategories.has(category));
+}
+
+async function deleteManualOrTopUpTransaction(transaction: PettyCashTransaction) {
+  if (!user || !isManualOrTopUpTransaction(transaction)) return;
+  if (deletingId !== null || approvingId !== null || rejectingId !== null) return;
+
+  const amount = formatRupiahSigned(transaction.amount);
+  const isTopUp = String(transaction.category || "").trim().toUpperCase() === "TOP UP";
+  const refundMessage = transaction.status === "APPROVED"
+    ? (isTopUp
+        ? `Saldo Petty Cash akan dikurangi kembali sebesar ${amount}.`
+        : `Saldo Petty Cash akan dikembalikan sebesar ${amount}.`)
+    : "Transaksi belum memengaruhi saldo.";
+
+  const confirmed = window.confirm(
+    `Hapus transaksi ${transaction.number}?\n\n${refundMessage}\n\nTindakan ini hanya tersedia untuk transaksi manual dan Top Up, bukan transaksi dari Payment.`
+  );
+  if (!confirmed) return;
+
+  try {
+    setDeletingId(transaction.id);
+    const res = await fetch(`/api/petty-cash/${transaction.id}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const contentType = res.headers.get("content-type") || "";
+    let json: any;
+    if (contentType.includes("application/json")) {
+      json = await res.json();
+    } else {
+      const body = await res.text();
+      throw new Error(`Server mengembalikan response bukan JSON (${res.status}). ${body}`);
+    }
+
+    if (!res.ok || json?.success === false) {
+      throw new Error(json?.message || json?.error || "Gagal menghapus transaksi Petty Cash.");
+    }
+
+    await loadPettyCash();
+    alert("Transaksi berhasil dihapus dan saldo Petty Cash telah disesuaikan.");
+  } catch (error) {
+    console.error("DELETE PETTY CASH TRANSACTION ERROR:", error);
+    alert(error instanceof Error ? error.message : "Gagal menghapus transaksi.");
+  } finally {
+    setDeletingId(null);
+  }
+}
 
 /*
 =========================================================
@@ -2176,7 +2264,7 @@ function exportPettyCashPDF() {
   */
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,_rgba(0,82,156,0.08),_transparent_28%),linear-gradient(180deg,#F7FAFC_0%,#EEF4F8_100%)] text-[#173D59]">
+    <div className="petty-cash-page min-h-screen bg-[radial-gradient(circle_at_top_right,_rgba(0,82,156,0.08),_transparent_28%),linear-gradient(180deg,#F7FAFC_0%,#EEF4F8_100%)] text-[#173D59]">
 
       {/* =================================================
           TOP HEADER
@@ -3130,6 +3218,12 @@ function exportPettyCashPDF() {
                         rejectingId ===
                         transaction.id;
 
+                      const isDeleting =
+                        deletingId === transaction.id;
+
+                      const canDeleteManualOrTopUp =
+                        isManualOrTopUpTransaction(transaction);
+
                       const transactionBalance =
                         Number(
                           transaction.balanceAfter ??
@@ -3466,71 +3560,45 @@ function exportPettyCashPDF() {
 
                           <td className="px-4 py-4 text-center align-middle">
 
-                            {canApprove &&
-                            isPending ? (
-                              <div className="flex items-center justify-center gap-1.5">
+                            {canDeleteManualOrTopUp || (canApprove && isPending) ? (
+                              <div className="flex flex-wrap items-center justify-center gap-1.5">
 
+                                {canApprove && isPending && (
+                                  <>
                                 <button
                                   type="button"
-                                  disabled={
-                                    isApproving ||
-                                    isRejecting
-                                  }
-                                  onClick={() =>
-                                    approveTransaction(
-                                      transaction
-                                    )
-                                  }
+                                  disabled={isApproving || isRejecting || isDeleting}
+                                  onClick={() => approveTransaction(transaction)}
                                   className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00529C] px-2.5 text-[8px] font-extrabold text-white shadow-sm transition hover:bg-[#005596] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-
-                                  {isApproving ? (
-                                    <RefreshCw
-                                      size={10}
-                                      className="animate-spin"
-                                    />
-                                  ) : (
-                                    <Check
-                                      size={10}
-                                    />
-                                  )}
-
-                                  {isApproving
-                                    ? "..."
-                                    : "Approve"}
-
+                                  {isApproving ? <RefreshCw size={10} className="animate-spin" /> : <Check size={10} />}
+                                  {isApproving ? "..." : "Approve"}
                                 </button>
 
                                 <button
                                   type="button"
-                                  disabled={
-                                    isApproving ||
-                                    isRejecting
-                                  }
-                                  onClick={() =>
-                                    rejectTransaction(
-                                      transaction
-                                    )
-                                  }
+                                  disabled={isApproving || isRejecting || isDeleting}
+                                  onClick={() => rejectTransaction(transaction)}
                                   className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#E3CACA] bg-white px-2.5 text-[8px] font-extrabold text-[#C62828] transition hover:bg-[#FFF4F4] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-
-                                  {isRejecting ? (
-                                    <RefreshCw
-                                      size={10}
-                                      className="animate-spin"
-                                    />
-                                  ) : (
-                                    <CircleX
-                                      size={10}
-                                    />
-                                  )}
-
-                                  {isRejecting
-                                    ? "..."
-                                    : "Reject"}
-
+                                  {isRejecting ? <RefreshCw size={10} className="animate-spin" /> : <CircleX size={10} />}
+                                  {isRejecting ? "..." : "Reject"}
                                 </button>
+                                  </>
+                                )}
+
+                                {canDeleteManualOrTopUp && (
+                                  <button
+                                    type="button"
+                                    disabled={isApproving || isRejecting || isDeleting}
+                                    onClick={() => deleteManualOrTopUpTransaction(transaction)}
+                                    title="Hapus transaksi manual / Top Up"
+                                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#E3CACA] bg-white px-2.5 text-[8px] font-extrabold text-[#C62828] transition hover:bg-[#FFF4F4] disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {isDeleting ? <RefreshCw size={10} className="animate-spin" /> : <Trash2 size={10} />}
+                                    {isDeleting ? "..." : "Hapus"}
+                                  </button>
+                                )}
 
                               </div>
                             ) : (
@@ -3538,7 +3606,6 @@ function exportPettyCashPDF() {
                                 —
                               </span>
                             )}
-
                           </td>
 
                         </tr>
@@ -3731,7 +3798,7 @@ function exportPettyCashPDF() {
                     </div>
 
                     <div className="mt-0.5 text-[8px] text-[#78909F]">
-                      Saldo berkurang setelah transaksi di-approve
+                      Saldo langsung berkurang saat transaksi disimpan
                     </div>
 
                   </div>
@@ -4323,13 +4390,13 @@ function exportPettyCashPDF() {
                 <div className="text-[9px] leading-5 text-[#637B70]">
 
                   <span className="font-extrabold text-[#006BBA]">
-                    Top Up langsung approved.
+                    {isCentralAdmin ? "Top Up langsung approved." : "Menunggu approval Admin Pusat."}
                   </span>{" "}
-                  Transaksi akan dibuat sebagai{" "}
-                  <span className="font-bold text-[#006BBA]">
-                    IN / APPROVED
-                  </span>{" "}
-                  dan menambah saldo rekening Petty Cash.
+                  {isCentralAdmin ? (
+                    <>Transaksi akan dibuat sebagai <span className="font-bold text-[#006BBA]">IN / APPROVED</span> dan langsung menambah saldo rekening Petty Cash.</>
+                  ) : (
+                    <>Pengajuan akan dibuat sebagai <span className="font-bold text-amber-600">IN / PENDING</span>. Saldo outlet belum berubah sampai disetujui Admin Pusat.</>
+                  )}
 
                 </div>
 
@@ -4379,7 +4446,9 @@ function exportPettyCashPDF() {
 
                 {savingTopUp
                   ? "Memproses..."
-                  : "Top Up Sekarang"}
+                  : isCentralAdmin
+                    ? "Top Up Sekarang"
+                    : "Ajukan Top Up"}
 
               </button>
 
@@ -4389,6 +4458,56 @@ function exportPettyCashPDF() {
 
         </div>
       )}
+
+      <style jsx global>{`
+        .dark .petty-cash-page {
+          background: radial-gradient(circle at top right, rgba(73,127,112,.12), transparent 28%), linear-gradient(180deg, #101916 0%, #0b1210 100%) !important;
+          color: #e2e8e5 !important;
+        }
+        .dark .petty-cash-page header,
+        .dark .petty-cash-page section,
+        .dark .petty-cash-page [class*="bg-white"],
+        .dark .petty-cash-page [class*="bg-[#F"],
+        .dark .petty-cash-page [class*="bg-[#E"],
+        .dark .petty-cash-page [class*="bg-[#D"] {
+          background-color: #151f1b !important;
+        }
+        .dark .petty-cash-page header { border-color: #2b3b34 !important; }
+        .dark .petty-cash-page [class*="border-[#"] { border-color: #304239 !important; }
+        .dark .petty-cash-page [class*="text-[#1"],
+        .dark .petty-cash-page [class*="text-[#2"],
+        .dark .petty-cash-page [class*="text-[#3"],
+        .dark .petty-cash-page [class*="text-[#4"],
+        .dark .petty-cash-page [class*="text-[#5"],
+        .dark .petty-cash-page [class*="text-[#6"],
+        .dark .petty-cash-page [class*="text-[#7"],
+        .dark .petty-cash-page [class*="text-[#8"],
+        .dark .petty-cash-page [class*="text-[#9"] { color: #c1cec7 !important; }
+        .dark .petty-cash-page input,
+        .dark .petty-cash-page textarea,
+        .dark .petty-cash-page select,
+        .dark .petty-cash-page option {
+          background-color: #101814 !important;
+          color: #e2e8e5 !important;
+          border-color: #3a4c42 !important;
+          color-scheme: dark;
+        }
+        .dark .petty-cash-page table tbody tr,
+        .dark .petty-cash-page table tbody td { border-color: #2b3b34 !important; }
+        .dark .petty-cash-page [class*="hover:bg-[#"]:hover { background-color: #202d26 !important; }
+        .dark .petty-cash-page [class*="bg-gradient-to-br from-[#F"],
+        .dark .petty-cash-page [class*="bg-gradient-to-r from-[#F"] { background-image: linear-gradient(135deg, #17251e, #111a15) !important; }
+        .dark .petty-cash-page [class*="bg-[#FFF"],
+        .dark .petty-cash-page [class*="bg-[#EFF"],
+        .dark .petty-cash-page [class*="bg-[#F0"],
+        .dark .petty-cash-page [class*="bg-[#F1"],
+        .dark .petty-cash-page [class*="bg-[#F2"],
+        .dark .petty-cash-page [class*="bg-[#F4"],
+        .dark .petty-cash-page [class*="bg-[#F5"],
+        .dark .petty-cash-page [class*="bg-[#F7"],
+        .dark .petty-cash-page [class*="bg-[#F8"] { background-color: #18241e !important; }
+        .dark .petty-cash-page [class*="text-[#00529C"] { color: #83c8ad !important; }
+      `}</style>
 
     </div>
   );

@@ -614,6 +614,14 @@ const menus: Menu[] = [
   },
 
   {
+    title: "Laporan Pemakaian Bahan Outlet",
+    url: "/outlet/laporan/pemakaian",
+    roles: ["ADMIN", "ADMIN_PUSAT", "MANAGER", "OUTLET_ADMIN"],
+    icon: TrendingUp,
+    iconTone: "teal",
+  },
+
+  {
     title: "Laporan Barang Masuk Outlet",
     url: "/outlet/laporan/barang-masuk",
     roles: ["ADMIN", "ADMIN_PUSAT", "OUTLET_ADMIN"],

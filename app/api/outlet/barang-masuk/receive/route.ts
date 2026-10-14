@@ -1824,19 +1824,15 @@ export async function POST(
 
           receivedQty = UNIT TRANSAKSI
 
-          OutletStock.stock = BASE UNIT
+          OutletStock.stock = UNIT BARANG (main/display unit)
 
           Jadi:
 
-              receivedQty
-                  ↓
-              toBaseQty()
-                  ↓
-              baseQty
-                  ↓
-              OutletStock.stock
+              receivedQty (unit transaksi = Barang.unit)
+                  ├─> OutletStock.stock (unit Barang.unit)
+                  └─> toBaseQty() → StockCard/StockMutation (base unit)
 
-          KONVERSI HANYA SEKALI DI SINI.
+          Base conversion hanya untuk ledger/kartu stok; OutletStock tidak menyimpan baseQty.
           ===================================================
           */
 
@@ -1914,6 +1910,16 @@ export async function POST(
               );
 
             /*
+             * STANDAR OUTLET STOCK:
+             * OutletStock.stock disimpan dalam unit barang (main/display unit),
+             * sedangkan StockCard/StockMutation transaksi tetap memakai baseQty.
+             * Karena qty receipt adalah unit transaksi Barang.unit, jangan
+             * menyimpan baseQty langsung ke OutletStock (double/mixed unit).
+             */
+            const stockUnitQty = safeRoundQty(qty);
+            const stockUnitCost = Number(price);
+
+            /*
             -------------------------------------------------
             FIND OUTLET STOCK
             -------------------------------------------------
@@ -1951,10 +1957,10 @@ export async function POST(
                       item.barangId,
 
                     /*
-                     * STOCK SELALU BASE UNIT.
+                     * OutletStock.stock memakai unit barang (main/display unit).
                      */
                     stock:
-                      baseQty,
+                      stockUnitQty,
 
                     minimumStock:
                       Number(
@@ -1964,10 +1970,10 @@ export async function POST(
                       ),
 
                     /*
-                     * averageCost = harga per BASE UNIT.
+                     * averageCost = harga per unit barang (main/display unit).
                      */
                     averageCost:
-                      baseUnitCost,
+                      stockUnitCost,
                   },
                 }
               );
@@ -2036,7 +2042,7 @@ export async function POST(
               const newStock =
                 safeRoundQty(
                   oldStock +
-                    baseQty
+                    stockUnitQty
                 );
 
               /*
@@ -2049,8 +2055,8 @@ export async function POST(
                   ? (
                       oldStock *
                         oldAverageCost +
-                      baseQty *
-                        baseUnitCost
+                      stockUnitQty *
+                        stockUnitCost
                     ) /
                     newStock
                   : baseUnitCost;
