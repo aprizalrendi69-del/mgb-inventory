@@ -1,0 +1,11 @@
+ALTER TABLE "Attendance" ADD COLUMN "shiftName" TEXT;
+ALTER TABLE "Attendance" ADD COLUMN "scheduledIn" DATETIME;
+ALTER TABLE "Attendance" ADD COLUMN "expectedCheckout" DATETIME;
+ALTER TABLE "Attendance" ADD COLUMN "attendanceStatus" TEXT;
+CREATE TABLE "EmployeeWorkSchedule" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "employeeId" INTEGER NOT NULL, "workDate" DATETIME NOT NULL, "shiftName" TEXT NOT NULL, "startTime" TEXT NOT NULL, "endTime" TEXT, "workHours" REAL NOT NULL DEFAULT 9, "note" TEXT, "createdBy" INTEGER, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME NOT NULL, CONSTRAINT "EmployeeWorkSchedule_employeeId_fkey" FOREIGN KEY ("employeeId") REFERENCES "Employee" ("id") ON DELETE CASCADE ON UPDATE CASCADE);
+CREATE UNIQUE INDEX "EmployeeWorkSchedule_employeeId_workDate_key" ON "EmployeeWorkSchedule"("employeeId", "workDate");
+CREATE INDEX "EmployeeWorkSchedule_workDate_idx" ON "EmployeeWorkSchedule"("workDate");
+CREATE INDEX "EmployeeWorkSchedule_employeeId_workDate_idx" ON "EmployeeWorkSchedule"("employeeId", "workDate");
+CREATE TABLE "AttendanceRequest" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "employeeId" INTEGER NOT NULL, "type" TEXT NOT NULL, "startDate" DATETIME NOT NULL, "endDate" DATETIME NOT NULL, "reason" TEXT NOT NULL, "status" TEXT NOT NULL DEFAULT 'PENDING', "requestedHours" REAL, "decisionNote" TEXT, "reviewedBy" INTEGER, "reviewedAt" DATETIME, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME NOT NULL, CONSTRAINT "AttendanceRequest_employeeId_fkey" FOREIGN KEY ("employeeId") REFERENCES "Employee" ("id") ON DELETE CASCADE ON UPDATE CASCADE);
+CREATE INDEX "AttendanceRequest_employeeId_startDate_idx" ON "AttendanceRequest"("employeeId", "startDate");
+CREATE INDEX "AttendanceRequest_status_type_idx" ON "AttendanceRequest"("status", "type");

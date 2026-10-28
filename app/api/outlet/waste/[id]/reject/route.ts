@@ -203,58 +203,102 @@ export async function PUT(
         : "";
 
     /*
-     * =======================================================
-     * REJECT
-     * =======================================================
-     *
-     * PENTING:
-     *
-     * Tidak ada perubahan:
-     * - OutletStock
-     * - Barang.stock
-     * - BatchStock
-     *
-     * Karena transaksi stock sudah diproses
-     * ketika Waste dibuat.
-     *
-     * Reject hanya membuat transaksi tidak masuk
-     * ke laporan Waste / Cost Control karena
-     * laporan hanya mengambil status APPROVED.
-     *
-     * Schema saat ini tidak memiliki:
-     * rejectedBy
-     * rejectedAt
-     *
-     * sehingga kita tidak membuat field baru di sini.
+     * Reject transaksi baru tidak mengubah stok karena Waste PENDING
+     * belum diposting. Untuk transaksi legacy yang sudah memotong stok
+     * ketika dibuat, StockCard lama menjadi penanda bahwa stok perlu dibalik.
+     * Semua aksi dibungkus satu transaksi agar status dan saldo tetap sinkron.
      */
-
     const updatedNote = reason
       ? waste.note
         ? `${waste.note}\nAlasan Reject: ${reason}`
         : `Alasan Reject: ${reason}`
       : waste.note;
 
-    const result =
-      await prisma.outletStockOut.update({
+    const result = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.outletStockOut.updateMany({
+        where: { id: waste.id, status: "PENDING" },
+        data: { status: "REJECTED", note: updatedNote },
+      });
+      if (claimed.count !== 1) {
+        throw new Error("Waste sudah diproses atau statusnya sudah berubah.");
+      }
+
+      const legacyPostedCard = await tx.stockCard.findFirst({
         where: {
-          id: waste.id,
+          referenceId: waste.id,
+          trxNumber: waste.number,
+          trxType: "OUTLET_STOCK_OUT",
         },
+        select: { id: true },
+      });
 
-        data: {
-          status: "REJECTED",
-
-          note: updatedNote,
-        },
-
-        include: {
-          outlet: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
+      if (legacyPostedCard) {
+        const stock = await tx.outletStock.findUnique({
+          where: {
+            outletId_barangId: {
+              outletId: waste.outletId,
+              barangId: waste.barangId,
             },
           },
+          include: {
+            barang: { select: { id: true, name: true, unit: true } },
+            outlet: { select: { id: true, code: true, name: true } },
+          },
+        });
 
+        if (!stock) {
+          throw new Error("Saldo barang outlet tidak ditemukan untuk membalik Waste legacy.");
+        }
+
+        const stockBefore = Number(stock.stock);
+        const qty = Number(waste.qtyProcessed);
+        const stockAfter = stockBefore + qty;
+        const unitCost = Number(waste.unitCost ?? stock.averageCost ?? 0);
+
+        if (!Number.isFinite(stockBefore) || !Number.isFinite(qty) || qty <= 0) {
+          throw new Error("Saldo atau kuantitas Waste legacy tidak valid.");
+        }
+
+        await tx.outletStock.update({
+          where: { id: stock.id },
+          data: { stock: stockAfter },
+        });
+
+        await tx.stockMutation.create({
+          data: {
+            outletId: waste.outletId,
+            barangId: waste.barangId,
+            type: "WASTE_REJECT_IN",
+            qty,
+            stockBefore,
+            stockAfter,
+            reference: `${waste.number}-REJECT`,
+            description: `Pembalikan Waste ditolak ${waste.number} • ${qty} ${stock.barang.unit}`,
+          },
+        });
+
+        await tx.stockCard.create({
+          data: {
+            barangId: waste.barangId,
+            trxDate: new Date(),
+            trxType: "WASTE_REJECT_IN",
+            trxNumber: `${waste.number}-REJECT`,
+            referenceId: waste.id,
+            warehouse: `OUTLET:${stock.outlet.code}`,
+            qtyIn: qty,
+            qtyOut: 0,
+            balance: stockAfter,
+            unitPrice: unitCost,
+            totalValue: qty * unitCost,
+            note: `Pembalikan otomatis karena Waste ${waste.number} ditolak.`,
+          },
+        });
+      }
+
+      const rejected = await tx.outletStockOut.findUnique({
+        where: { id: waste.id },
+        include: {
+          outlet: { select: { id: true, code: true, name: true } },
           barang: {
             select: {
               id: true,
@@ -264,16 +308,12 @@ export async function PUT(
               unit: true,
             },
           },
-
-          user: {
-            select: {
-              id: true,
-              username: true,
-              fullname: true,
-            },
-          },
+          user: { select: { id: true, username: true, fullname: true } },
         },
       });
+      if (!rejected) throw new Error("Data Waste tidak ditemukan setelah reject.");
+      return rejected;
+    });
 
     /*
      * =======================================================

@@ -39,6 +39,7 @@ import {
   MessageSquare,
   MessageCircle,
   AtSign,
+  ImagePlus,
   Check,
   Copy,
   Send,
@@ -5260,6 +5261,20 @@ function PurchaseOutletCommentSection({
   const [comment, setComment] =
     useState("");
 
+  const [commentPhoto, setCommentPhoto] =
+    useState<{ url: string; name: string } | null>(null);
+
+  // Foto komentar dibuka di modal aplikasi, bukan tab/browser baru.
+  const [selectedPhoto, setSelectedPhoto] =
+    useState<{ url: string; name: string } | null>(null);
+
+  const [commentPhotoLoading, setCommentPhotoLoading] =
+    useState(false);
+    useState(false);
+
+  const commentPhotoInputRef =
+    useRef<HTMLInputElement | null>(null);
+
   const [loading, setLoading] =
     useState(true);
 
@@ -6314,6 +6329,8 @@ function PurchaseOutletCommentSection({
     const candidates = [
       item?.photo,
       item?.photoUrl,
+      (item as any)?.photo_url,
+      (item as any)?.image_url,
       item?.imageUrl,
       item?.attachmentUrl,
       item?.image,
@@ -6365,6 +6382,103 @@ function PurchaseOutletCommentSection({
     return /\.(jpg|jpeg|png|gif|webp|bmp|svg|avif)$/i.test(
       cleanUrl
     );
+  }
+
+  // =====================================================
+  // COMMENT PHOTO UPLOAD (mengikuti pola halaman Barang Masuk)
+  // =====================================================
+
+  async function compressCommentPhoto(file: File): Promise<File> {
+    if (!file.type.startsWith("image/")) {
+      throw new Error("File yang dipilih harus berupa gambar.");
+    }
+
+    if (typeof createImageBitmap !== "function") {
+      // Browser lama: upload file asli, backend tetap memvalidasi tipe/ukuran.
+      return file;
+    }
+
+    const bitmap = await createImageBitmap(file);
+    const maxDimension = 1600;
+    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      bitmap.close();
+      throw new Error("Browser tidak mendukung pemrosesan gambar.");
+    }
+
+    context.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => result ? resolve(result) : reject(new Error("Gagal memproses foto.")),
+        "image/jpeg",
+        0.82
+      );
+    });
+    canvas.width = 1;
+    canvas.height = 1;
+    return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+  }
+
+  async function uploadCommentPhoto(file: File): Promise<string> {
+    const compressedFile = await compressCommentPhoto(file);
+    const formData = new FormData();
+    formData.append("file", compressedFile);
+
+    // Endpoint upload dipisah dari endpoint komentar, seperti halaman Barang Masuk.
+    const response = await fetch(
+      `/api/outlet/purchase/${encodeURIComponent(id)}/comment/image`,
+      { method: "POST", credentials: "include", body: formData }
+    );
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || json?.success === false) {
+      throw new Error(json?.message || json?.error || "Gagal mengunggah foto komentar.");
+    }
+
+    const payload = json?.data ?? json?.file ?? json?.image ?? json;
+    const url = payload?.url ?? payload?.imageUrl ?? payload?.image_url ??
+      payload?.photoUrl ?? payload?.photo_url ?? payload?.fileUrl ??
+      payload?.filePath ?? payload?.path ?? payload?.photo ??
+      json?.url ?? json?.imageUrl ?? json?.photoUrl ?? json?.fileUrl ?? json?.path;
+
+    if (typeof url !== "string" || !url.trim()) {
+      throw new Error("Foto berhasil diproses, tetapi URL foto tidak ditemukan dari respons API.");
+    }
+    return url.trim();
+  }
+
+  async function handleCommentPhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("File yang dipilih harus berupa gambar.");
+      event.target.value = "";
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      alert("Ukuran foto maksimal 15 MB.");
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      setCommentPhotoLoading(true);
+      const url = await uploadCommentPhoto(file);
+      setCommentPhoto({ url, name: file.name });
+    } catch (error) {
+      console.error("UPLOAD PURCHASE COMMENT PHOTO ERROR:", error);
+      alert(error instanceof Error ? error.message : "Gagal mengunggah foto komentar.");
+      event.target.value = "";
+    } finally {
+      setCommentPhotoLoading(false);
+    }
   }
 
   // =====================================================
@@ -6451,11 +6565,8 @@ function PurchaseOutletCommentSection({
     const value =
       comment.trim();
 
-    if (!value) {
-      alert(
-        "Komentar tidak boleh kosong"
-      );
-
+    if (!value && !commentPhoto) {
+      alert("Tulis komentar atau lampirkan foto terlebih dahulu.");
       return;
     }
 
@@ -6469,7 +6580,7 @@ function PurchaseOutletCommentSection({
       return;
     }
 
-    if (sending) {
+    if (sending || commentPhotoLoading) {
       return;
     }
 
@@ -6495,6 +6606,10 @@ function PurchaseOutletCommentSection({
             },
             body: JSON.stringify({
               comment: value,
+              // Field foto dikirim terpisah dari teks; dua nama field
+              // disediakan untuk kompatibilitas API yang sudah ada.
+              photo: commentPhoto?.url ?? null,
+              photoUrl: commentPhoto?.url ?? null,
               mentionedUserIds,
             }),
           }
@@ -6534,6 +6649,7 @@ function PurchaseOutletCommentSection({
             photo:
               json.data.photo ??
               json.data.photoUrl ??
+              commentPhoto?.url ??
               json.data.imageUrl ??
               json.data.attachmentUrl ??
               json.data.image ??
@@ -6542,6 +6658,7 @@ function PurchaseOutletCommentSection({
               null,
             photoUrl:
               json.data.photoUrl ??
+              commentPhoto?.url ??
               null,
             imageUrl:
               json.data.imageUrl ??
@@ -6562,6 +6679,10 @@ function PurchaseOutletCommentSection({
       }
 
       setComment("");
+      setCommentPhoto(null);
+      if (commentPhotoInputRef.current) {
+        commentPhotoInputRef.current.value = "";
+      }
 
       setSelectedMentions(
         []
@@ -6898,16 +7019,21 @@ function PurchaseOutletCommentSection({
                   }
 
                   return (
-                    <a
-                      href={photoUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="group mt-3 block w-fit max-w-full overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white shadow-sm transition hover:border-[#BFD3CA] hover:shadow-md"
-                      title="Buka foto komentar"
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedPhoto({
+                          url: photoUrl,
+                          name: "Foto komentar",
+                        })
+                      }
+                      className="group mt-3 block w-fit max-w-full overflow-hidden rounded-2xl border border-[#DDE9E4] bg-white text-left shadow-sm transition hover:border-[#BFD3CA] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#497F70] focus:ring-offset-2"
+                      title="Lihat foto komentar"
+                      aria-label="Buka foto komentar dalam modal"
                     >
                       <img
                         src={photoUrl}
-                        alt="Foto komentar"
+                        alt="Foto komentar — klik untuk memperbesar"
                         className="block max-h-[360px] max-w-full object-contain transition duration-200 group-hover:scale-[1.01]"
                         loading="lazy"
                         onError={(e) => {
@@ -6920,7 +7046,7 @@ function PurchaseOutletCommentSection({
                           }
                         }}
                       />
-                    </a>
+                    </button>
                   );
                 })()}
 
@@ -6977,6 +7103,33 @@ function PurchaseOutletCommentSection({
     <label className="mb-2 block text-sm font-semibold text-gray-700">
       Tambahkan Komentar
     </label>
+
+    <input
+      ref={commentPhotoInputRef}
+      type="file"
+      accept="image/*"
+      onChange={handleCommentPhotoChange}
+      className="hidden"
+    />
+
+    {commentPhoto && (
+      <div className="mb-3 flex items-start gap-3 rounded-xl border border-[#D5E5DC] bg-white p-3">
+        <button
+          type="button"
+          onClick={() => setSelectedPhoto(commentPhoto)}
+          className="block h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-[#DDE9E4] bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#497F70] focus:ring-offset-2"
+          title="Perbesar foto"
+          aria-label="Lihat foto yang akan dikirim"
+        >
+          <img src={commentPhoto.url} alt="Foto komentar yang akan dikirim" className="h-full w-full object-cover" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-[#18352D]">Foto terlampir</p>
+          <p className="mt-1 truncate text-xs text-gray-500">{commentPhoto.name}</p>
+          <button type="button" onClick={() => { setCommentPhoto(null); if (commentPhotoInputRef.current) commentPhotoInputRef.current.value = ""; }} disabled={sending} className="mt-2 text-xs font-semibold text-red-600 disabled:opacity-50">Hapus foto</button>
+        </div>
+      </div>
+    )}
 
     {/* SELECTED MENTIONS */}
 
@@ -7202,6 +7355,16 @@ function PurchaseOutletCommentSection({
         </div>
       </div>
 
+      <div className="flex shrink-0 items-center gap-2">
+      <button
+        type="button"
+        onClick={() => commentPhotoInputRef.current?.click()}
+        disabled={sending || commentPhotoLoading}
+        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#D5E5DC] bg-white px-3 text-sm font-semibold text-[#497F70] transition hover:bg-[#F2F7F4] disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {commentPhotoLoading ? <RefreshCw size={16} className="animate-spin" /> : <ImagePlus size={16} />}
+        {commentPhotoLoading ? "Memproses..." : "Foto"}
+      </button>
       <button
         type="button"
         onClick={() =>
@@ -7209,7 +7372,8 @@ function PurchaseOutletCommentSection({
         }
         disabled={
           sending ||
-          !comment.trim()
+          commentPhotoLoading ||
+          (!comment.trim() && !commentPhoto)
         }
         className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#497F70] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3D6D60] disabled:cursor-not-allowed disabled:opacity-50"
       >
@@ -7230,8 +7394,69 @@ function PurchaseOutletCommentSection({
           </>
         )}
       </button>
+      </div>
     </div>
   </div>
+
+  {/* MODAL PREVIEW FOTO KOMENTAR */}
+  {selectedPhoto && (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/85 p-3 backdrop-blur-sm sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Pratinjau foto komentar"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          setSelectedPhoto(null);
+        }
+      }}
+    >
+      <div className="relative flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#101820] shadow-2xl sm:rounded-3xl">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300">
+              <ImagePlus size={18} />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-white">
+                {selectedPhoto.name || "Foto komentar"}
+              </p>
+              <p className="text-xs text-slate-400">Pratinjau foto</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedPhoto(null)}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            aria-label="Tutup pratinjau foto"
+            title="Tutup"
+          >
+            <X size={21} />
+          </button>
+        </div>
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-2 sm:p-5">
+          <img
+            src={selectedPhoto.url}
+            alt={selectedPhoto.name || "Foto komentar"}
+            className="max-h-[calc(94vh-110px)] max-w-full rounded-lg object-contain"
+            onError={(event) => {
+              event.currentTarget.alt = "Foto tidak dapat dimuat";
+            }}
+          />
+        </div>
+        <div className="flex shrink-0 items-center justify-between border-t border-white/10 px-4 py-3">
+          <p className="text-xs text-slate-400">Klik area gelap atau tombol X untuk menutup</p>
+          <button
+            type="button"
+            onClick={() => setSelectedPhoto(null)}
+            className="rounded-xl bg-[#497F70] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#3D6D60]"
+          >
+            Selesai
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
 </div>
   );
 

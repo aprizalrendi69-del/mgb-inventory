@@ -3,120 +3,278 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
 /*
- * =========================================================
- * MANUFACTURE ORDERS API
- * =========================================================
- *
- * ATURAN UNIT MANUFACTURE
- * =========================================================
- *
- * RecipeItem.qty:
- *   - SUDAH merupakan qty BASE UNIT.
- *   - TIDAK boleh dikonversi lagi.
- *
- * ManufactureOrderItem.plannedQty:
- *   - Selalu BASE UNIT.
- *
- * Contoh:
- *
- * Barang:
- *   unit           = botol
- *   baseUnit       = ml
- *   conversionRate = 650
- *
- * BOM:
- *   qty  = 0.03
- *   unit = ml
- *
- * Manufacture:
- *   plannedQty = 1
- *
- * Maka:
- *
- *   ManufactureOrderItem.plannedQty = 0.03
- *
- * BUKAN:
- *
- *   19.5
- *   30
- *   650
- *
- * =========================================================
- *
- * PENTING:
- *
- * plannedQty pada Manufacture Order diperlakukan sebagai
- * JUMLAH PRODUKSI / JUMLAH BATCH.
- *
- * Jadi:
- *
- *   BOM 0.03 × produksi 1  = 0.03
- *   BOM 0.03 × produksi 10 = 0.30
- *
- * recipe.outputQty TIDAK dipakai untuk mengubah kebutuhan
- * bahan karena RecipeItem.qty sudah merupakan kebutuhan
- * BASE UNIT per 1 unit/batch produksi yang dibuat.
- *
- * =========================================================
- *
- * KONVERSI
- * =========================================================
- *
- * Konversi purchase unit -> base unit hanya dilakukan
- * pada saat STOCK MASUK.
- *
- * Manufacture TIDAK melakukan konversi lagi.
- *
- * Alur:
- *
- * Purchase Unit
- *      ↓
- * Barang Masuk / Receive
- *      ↓
- * Base Stock
- *      ↓
- * OutletStock
- *
- * Sedangkan:
- *
- * Recipe/BOM
- *      ↓
- * Manufacture Order
- *      ↓
- * Manufacture Complete
- *
- * menggunakan qty base unit apa adanya.
- *
- * =========================================================
- *
- * STOCK MANUFACTURE
- * =========================================================
- *
- * Manufacture hanya menggunakan:
- *
- *   OutletStock
- *
- * Tidak menyentuh:
- *
- *   Barang.stock
- *   Inventory.stock pusat
- *
- * Create Manufacture Order:
- *   TIDAK mengubah stock.
- *
- * Complete Manufacture:
- *   baru mengurangi/menambah OutletStock.
- *
- * =========================================================
- */
+
+=========================================================
+
+MANUFACTURE ORDERS API
+
+=========================================================
+
+
+
+ATURAN UNIT MANUFACTURE
+
+=========================================================
+
+
+
+RecipeItem.qty:
+
+
+
+SUDAH merupakan qty BASE UNIT.
+
+
+
+TIDAK boleh dikonversi lagi.
+
+
+
+ManufactureOrderItem.plannedQty:
+
+
+
+Selalu BASE UNIT.
+
+
+
+Contoh:
+
+
+
+Barang:
+
+unit           = botol
+
+baseUnit       = ml
+
+conversionRate = 650
+
+
+
+BOM:
+
+qty  = 0.03
+
+unit = ml
+
+
+
+Manufacture:
+
+plannedQty = 1
+
+
+
+Maka:
+
+
+
+ManufactureOrderItem.plannedQty = 0.03
+
+
+
+BUKAN:
+
+
+
+19.5
+
+30
+
+650
+
+
+
+=========================================================
+
+
+
+PENTING:
+
+
+
+plannedQty pada Manufacture Order diperlakukan sebagai
+
+JUMLAH PRODUKSI / JUMLAH BATCH.
+
+
+
+Jadi:
+
+
+
+BOM 0.03 × produksi 1  = 0.03
+
+BOM 0.03 × produksi 10 = 0.30
+
+
+
+recipe.outputQty TIDAK dipakai untuk mengubah kebutuhan
+
+bahan karena RecipeItem.qty sudah merupakan kebutuhan
+
+BASE UNIT per 1 unit/batch produksi yang dibuat.
+
+
+
+=========================================================
+
+
+
+KONVERSI
+
+=========================================================
+
+
+
+Konversi purchase unit -> base unit hanya dilakukan
+
+pada saat STOCK MASUK.
+
+
+
+Manufacture TIDAK melakukan konversi lagi.
+
+
+
+Alur:
+
+
+
+Purchase Unit
+
+
+
+ ↓
+
+Barang Masuk / Receive
+
+
+
+ ↓
+
+Base Stock
+
+
+
+ ↓
+
+OutletStock
+
+
+
+Sedangkan:
+
+
+
+Recipe/BOM
+
+
+
+ ↓
+
+Manufacture Order
+
+
+
+ ↓
+
+Manufacture Complete
+
+
+
+menggunakan qty base unit apa adanya.
+
+
+
+=========================================================
+
+
+
+STOCK MANUFACTURE
+
+=========================================================
+
+
+
+Manufacture hanya menggunakan:
+
+
+
+OutletStock
+
+
+
+Tidak menyentuh:
+
+
+
+Barang.stock
+
+Inventory.stock pusat
+
+
+
+Create Manufacture Order:
+
+TIDAK mengubah stock.
+
+
+
+Complete Manufacture:
+
+baru mengurangi/menambah OutletStock.
+
+
+
+=========================================================
+
+
+
+TANGGAL MANUFACTURE
+
+=========================================================
+
+
+
+productionDate:
+
+
+
+Wajib dikirim dari frontend.
+
+
+
+Format YYYY-MM-DD.
+
+
+
+Harus merupakan tanggal kalender yang valid.
+
+
+
+Disimpan pada pukul 12:00 UTC untuk membantu
+
+
+
+menjaga tanggal kalender pada zona waktu Indonesia.
+
+
+
+=========================================================
+*/
 
 export const dynamic = "force-dynamic";
 
 /*
- * =========================================================
- * ROLE HELPERS
- * =========================================================
- */
+
+=========================================================
+
+ROLE HELPERS
+
+=========================================================
+*/
 
 const ROLE_ADMIN = "ADMIN";
 const ROLE_MANAGER = "MANAGER";
@@ -124,1225 +282,571 @@ const ROLE_OUTLET_ADMIN = "OUTLET_ADMIN";
 const ROLE_STAFF_OUTLET = "STAFF_OUTLET";
 
 function roleOf(value: unknown) {
-  return String(value ?? "")
-    .trim()
-    .toUpperCase();
+return String(value ?? "")
+.trim()
+.toUpperCase();
 }
 
 function isOutletScopedRole(role: unknown) {
-  const normalizedRole = roleOf(role);
+const normalizedRole = roleOf(role);
 
-  return (
-    normalizedRole === ROLE_OUTLET_ADMIN ||
-    normalizedRole === ROLE_STAFF_OUTLET
-  );
+return (
+normalizedRole === ROLE_OUTLET_ADMIN ||
+normalizedRole === ROLE_STAFF_OUTLET
+);
 }
 
 /*
- * =========================================================
- * CURRENT USER
- * =========================================================
- */
+
+=========================================================
+
+CURRENT USER
+
+=========================================================
+*/
 
 async function getCurrentUser() {
-  const cookieStore = await cookies();
+const cookieStore = await cookies();
 
-  const session =
-    cookieStore.get("erp-session") ||
-    cookieStore.get("session");
+const session =
+cookieStore.get("erp-session") ||
+cookieStore.get("session");
 
-  if (!session?.value) {
-    return null;
-  }
-
-  /*
-   * =======================================================
-   * SESSION TOKEN
-   * =======================================================
-   */
-
-  try {
-    const userBySession =
-      await prisma.user.findFirst({
-        where: {
-          sessions: {
-            some: {
-              token: session.value,
-              expiresAt: {
-                gt: new Date(),
-              },
-            },
-          },
-        },
-
-        include: {
-          outlet: true,
-        },
-      });
-
-    if (
-      userBySession &&
-      userBySession.active
-    ) {
-      return userBySession;
-    }
-  } catch {
-    // Lanjut mencoba JSON session.
-  }
-
-  /*
-   * =======================================================
-   * JSON SESSION
-   * =======================================================
-   */
-
-  try {
-    const sessionData =
-      JSON.parse(session.value);
-
-    const userId = Number(
-      sessionData?.user?.id ??
-        sessionData?.id ??
-        0
-    );
-
-    if (
-      !Number.isInteger(userId) ||
-      userId <= 0
-    ) {
-      return null;
-    }
-
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
-
-        include: {
-          outlet: true,
-        },
-      });
-
-    if (
-      !user ||
-      !user.active
-    ) {
-      return null;
-    }
-
-    return user;
-  } catch {
-    return null;
-  }
+if (!session?.value) {
+return null;
 }
 
 /*
- * =========================================================
- * ROLE
- * =========================================================
- */
+
+=======================================================
+
+SESSION TOKEN
+
+=======================================================
+*/
+
+try {
+const userBySession =
+await prisma.user.findFirst({
+where: {
+sessions: {
+some: {
+token: session.value,
+expiresAt: {
+gt: new Date(),
+},
+},
+},
+},
+
+    include: {
+      outlet: true,
+    },
+  });
+
+if (
+  userBySession &&
+  userBySession.active
+) {
+  return userBySession;
+}
+
+} catch {
+// Lanjut mencoba JSON session.
+}
+
+/*
+
+=======================================================
+
+JSON SESSION
+
+=======================================================
+*/
+
+try {
+const sessionData =
+JSON.parse(session.value);
+
+const userId = Number(
+  sessionData?.user?.id ??
+    sessionData?.id ??
+    0
+);
+
+if (
+  !Number.isInteger(userId) ||
+  userId <= 0
+) {
+  return null;
+}
+
+const user =
+  await prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+
+    include: {
+      outlet: true,
+    },
+  });
+
+if (
+  !user ||
+  !user.active
+) {
+  return null;
+}
+
+return user;
+
+} catch {
+return null;
+}
+}
+
+/*
+
+=========================================================
+
+ROLE
+
+=========================================================
+*/
 
 function canManufacture(
-  role: string
+role: string
 ) {
-  return (
-    role === ROLE_ADMIN ||
-    role === ROLE_MANAGER ||
-    role === ROLE_OUTLET_ADMIN ||
-    role === ROLE_STAFF_OUTLET
-  );
+return (
+role === ROLE_ADMIN ||
+role === ROLE_MANAGER ||
+role === ROLE_OUTLET_ADMIN ||
+role === ROLE_STAFF_OUTLET
+);
 }
 
 /*
- * =========================================================
- * RECIPE ITEM QTY
- * =========================================================
- *
- * RecipeItem.qty dianggap SUDAH BASE UNIT.
- *
- * SANGAT PENTING:
- *
- * Tidak ada:
- *
- *   toBaseQty()
- *
- * Tidak ada:
- *
- *   conversionRate
- *
- * Tidak ada:
- *
- *   purchase unit conversion
- *
- * Tidak ada:
- *
- *   recipe.outputQty scaling
- *
- * di sini.
- *
- * Nilai RecipeItem.qty dipakai langsung sebagai qty base.
- *
- * =========================================================
- */
+
+=========================================================
+
+RECIPE ITEM QTY
+
+=========================================================
+
+
+
+RecipeItem.qty dianggap SUDAH BASE UNIT.
+
+
+
+SANGAT PENTING:
+
+
+
+Tidak ada:
+
+
+
+toBaseQty()
+
+
+
+Tidak ada:
+
+
+
+conversionRate
+
+
+
+Tidak ada:
+
+
+
+purchase unit conversion
+
+
+
+Tidak ada:
+
+
+
+recipe.outputQty scaling
+
+
+
+di sini.
+
+
+
+Nilai RecipeItem.qty dipakai langsung sebagai qty base.
+
+
+
+=========================================================
+*/
 
 function getRecipeItemBaseQty(
-  item: any
+item: any
 ) {
-  const qty = Number(
-    item?.qty ?? 0
-  );
+const qty = Number(
+item?.qty ?? 0
+);
 
-  if (
-    !Number.isFinite(qty)
-  ) {
-    throw new Error(
-      `Qty bahan Recipe tidak valid untuk ${
-        item?.barang?.name ||
-        "barang"
-      }.`
-    );
-  }
+if (
+!Number.isFinite(qty)
+) {
+throw new Error(
+        `Qty bahan Recipe tidak valid untuk ${
+          item?.barang?.name || "barang"
+        }.`
+      );
+}
 
-  if (qty <= 0) {
-    throw new Error(
-      `Qty bahan Recipe harus lebih besar dari 0 untuk ${
-        item?.barang?.name ||
-        "barang"
-      }.`
-    );
-  }
+if (qty <= 0) {
+throw new Error(
+        `Qty bahan Recipe harus lebih besar dari 0 untuk ${
+          item?.barang?.name || "barang"
+        }.`
+      );
+}
 
-  return qty;
+return qty;
 }
 
 /*
- * =========================================================
- * POST
- * =========================================================
- *
- * Membuat Manufacture Order.
- *
- * IMPORTANT:
- *
- * POST ini TIDAK mengubah stock.
- *
- * Stock hanya berubah ketika:
- *
- * /api/manufacture/orders/[id]/complete
- *
- * =========================================================
- */
+
+=========================================================
+
+POST
+
+=========================================================
+
+
+
+Membuat Manufacture Order.
+
+
+
+IMPORTANT:
+
+
+
+POST ini TIDAK mengubah stock.
+
+
+
+Stock hanya berubah ketika:
+
+
+
+/api/manufacture/orders/[id]/complete
+
+
+
+=========================================================
+*/
 
 export async function POST(
-  req: NextRequest
+req: NextRequest
 ) {
-  try {
-    /*
-     * =======================================================
-     * AUTH
-     * =======================================================
-     */
+try {
+/*
+* =======================================================
+* AUTH
+* =======================================================
+*/
 
-    const user =
-      await getCurrentUser();
+const user =
+  await getCurrentUser();
 
-    if (
-      !user ||
-      !user.active
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Tidak login.",
-        },
-        {
-          status: 401,
-        }
-      );
+if (
+  !user ||
+  !user.active
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      message:
+        "Tidak login.",
+    },
+    {
+      status: 401,
     }
-
-    /*
-     * =======================================================
-     * ROLE
-     * =======================================================
-     */
-
-    const role =
-      roleOf(user.role);
-
-    if (
-      !canManufacture(role)
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Tidak memiliki akses Manufacture.",
-        },
-        {
-          status: 403,
-        }
-      );
-    }
-
-    /*
-     * =======================================================
-     * REQUEST BODY
-     * =======================================================
-     */
-
-    const body =
-      await req
-        .json()
-        .catch(() => ({}));
-
-    const requestedOutletId =
-      Number(
-        body?.outletId || 0
-      );
-
-    /*
-     * OUTLET_ADMIN / STAFF_OUTLET:
-     * hanya boleh menggunakan outlet sendiri.
-     *
-     * ADMIN / MANAGER:
-     * menggunakan outletId dari request.
-     */
-
-    const outletId =
-      isOutletScopedRole(role)
-        ? Number(
-            user.outletId || 0
-          )
-        : requestedOutletId;
-
-    /*
-     * User outlet wajib memiliki outlet.
-     */
-    if (
-      !Number.isInteger(
-        outletId
-      ) ||
-      outletId <= 0
-    ) {
-      throw new Error(
-        isOutletScopedRole(role)
-          ? role === ROLE_STAFF_OUTLET
-            ? "User Staff Outlet belum terhubung dengan outlet."
-            : "User Outlet Admin belum terhubung dengan outlet."
-          : "Outlet produksi wajib dipilih."
-      );
-    }
-
-    /*
-     * OUTLET_ADMIN / STAFF_OUTLET
-     * tidak boleh menggunakan outlet lain.
-     *
-     * Walaupun body mengirim:
-     *
-     * outletId: 99
-     *
-     * nilai yang digunakan tetap user.outletId.
-     *
-     * Jika outletId user tidak sama dengan outlet target,
-     * akses ditolak.
-     */
-    if (
-      isOutletScopedRole(role) &&
-      Number(
-        user.outletId
-      ) !== outletId
-    ) {
-      throw new Error(
-        "Akses outlet ditolak."
-      );
-    }
-
-    /*
-     * =======================================================
-     * RECIPE ID
-     * =======================================================
-     */
-
-    const recipeId =
-      Number(
-        body?.recipeId || 0
-      );
-
-    if (
-      !Number.isInteger(
-        recipeId
-      ) ||
-      recipeId <= 0
-    ) {
-      throw new Error(
-        "Recipe ID tidak valid."
-      );
-    }
-
-    /*
-     * =======================================================
-     * PLANNED PRODUCTION QTY
-     * =======================================================
-     *
-     * plannedQty = jumlah produksi / batch.
-     *
-     * Contoh:
-     *
-     * BOM Cuka = 0.03 ml
-     *
-     * plannedQty 1:
-     *   0.03 × 1 = 0.03
-     *
-     * plannedQty 10:
-     *   0.03 × 10 = 0.30
-     *
-     * =======================================================
-     */
-
-    const plannedQty =
-      Number(
-        body?.plannedQty || 0
-      );
-
-    if (
-      !Number.isFinite(
-        plannedQty
-      ) ||
-      plannedQty <= 0
-    ) {
-      throw new Error(
-        "Qty produksi harus lebih besar dari 0."
-      );
-    }
-
-    /*
-     * =======================================================
-     * TRANSACTION
-     * =======================================================
-     */
-
-    const result =
-      await prisma.$transaction(
-        async (tx) => {
-          /*
-           * =================================================
-           * OUTLET
-           * =================================================
-           */
-
-          const outlet =
-            await tx.outlet.findUnique({
-              where: {
-                id: outletId,
-              },
-
-              select: {
-                id: true,
-                code: true,
-                name: true,
-                active: true,
-              },
-            });
-
-          if (
-            !outlet ||
-            !outlet.active
-          ) {
-            throw new Error(
-              "Outlet produksi tidak ditemukan atau tidak aktif."
-            );
-          }
-
-          /*
-           * =================================================
-           * RECIPE / BOM
-           * =================================================
-           */
-
-          const recipe =
-            await tx.recipe.findUnique({
-              where: {
-                id: recipeId,
-              },
-
-              include: {
-                items: {
-                  include: {
-                    barang: true,
-                  },
-
-                  orderBy: {
-                    id: "asc",
-                  },
-                },
-
-                outputBarang: true,
-
-                productCk: true,
-              },
-            });
-
-          if (
-            !recipe ||
-            !recipe.active
-          ) {
-            throw new Error(
-              "Recipe / BOM tidak ditemukan atau tidak aktif."
-            );
-          }
-
-          /*
-           * Manufacture Recipe tidak boleh
-           * berasal dari Menu POS.
-           */
-
-          if (
-            recipe.menuId !== null
-          ) {
-            throw new Error(
-              "Recipe Manufacture tidak boleh menggunakan Menu POS."
-            );
-          }
-
-          /*
-           * Jika Recipe memiliki outlet,
-           * harus sesuai outlet produksi.
-           *
-           * Untuk STAFF_OUTLET / OUTLET_ADMIN,
-           * outlet produksi sudah dipaksa ke user.outletId.
-           */
-          if (
-            recipe.outletId &&
-            recipe.outletId !==
-              outletId
-          ) {
-            throw new Error(
-              "Recipe / BOM bukan milik outlet tersebut."
-            );
-          }
-
-          /*
-           * =================================================
-           * OUTPUT BARANG
-           * =================================================
-           */
-
-          if (
-            !recipe.outputBarangId ||
-            !recipe.outputBarang?.active
-          ) {
-            throw new Error(
-              "Barang output Recipe tidak valid."
-            );
-          }
-
-          /*
-           * =================================================
-           * RECIPE ITEMS
-           * =================================================
-           */
-
-          if (
-            !recipe.items.length
-          ) {
-            throw new Error(
-              "Recipe / BOM belum memiliki bahan."
-            );
-          }
-
-          /*
-           * =================================================
-           * IMPORTANT UNIT POLICY
-           * =================================================
-           *
-           * recipe.outputQty SENGAJA TIDAK digunakan
-           * untuk menghitung kebutuhan bahan.
-           *
-           * RecipeItem.qty sudah disimpan sebagai BASE UNIT.
-           *
-           * Dengan demikian:
-           *
-           * RecipeItem:
-           *   qty = 0.03
-           *   unit = ml
-           *
-           * Manufacture:
-           *   plannedQty = 1
-           *
-           * kebutuhan:
-           *   0.03 × 1 = 0.03
-           *
-           * Tidak ada lagi:
-           *
-           *   plannedQty / recipe.outputQty
-           *
-           * karena itu dapat membuat:
-           *
-           * 0.03 -> 30
-           *
-           * apabila outputQty lama tersimpan 0.001.
-           * =================================================
-           */
-
-          /*
-           * =================================================
-           * BUILD REQUIREMENTS
-           * =================================================
-           */
-
-          const requirements =
-            recipe.items.map(
-              (item) => {
-                /*
-                 * RecipeItem.qty SUDAH BASE UNIT.
-                 *
-                 * Tidak ada konversi lagi.
-                 */
-
-                const recipeQtyBase =
-                  getRecipeItemBaseQty(
-                    item
-                  );
-
-                /*
-                 * Hanya dikalikan jumlah produksi.
-                 */
-
-                const qtyBase =
-                  recipeQtyBase *
-                  plannedQty;
-
-                if (
-                  !Number.isFinite(
-                    qtyBase
-                  ) ||
-                  qtyBase <= 0
-                ) {
-                  throw new Error(
-                    `Qty kebutuhan bahan tidak valid untuk ${
-                      item?.barang?.name ||
-                      "barang"
-                    }.`
-                  );
-                }
-
-                return {
-                  barangId:
-                    item.barangId,
-
-                  qtyBase,
-
-                  barang:
-                    item.barang,
-                };
-              }
-            );
-
-          /*
-           * =================================================
-           * MERGE DUPLICATE BARANG
-           * =================================================
-           *
-           * Kalau barang yang sama muncul beberapa kali
-           * dalam Recipe, kebutuhan digabung.
-           * =================================================
-           */
-
-          const merged =
-            new Map<
-              number,
-              {
-                barangId: number;
-                qtyBase: number;
-                barang: any;
-              }
-            >();
-
-          for (
-            const requirement of
-              requirements
-          ) {
-            const old =
-              merged.get(
-                requirement.barangId
-              );
-
-            merged.set(
-              requirement.barangId,
-              {
-                barangId:
-                  requirement.barangId,
-
-                qtyBase:
-                  (old?.qtyBase || 0) +
-                  requirement.qtyBase,
-
-                barang:
-                  requirement.barang,
-              }
-            );
-          }
-
-          /*
-           * =================================================
-           * DOCUMENT NUMBER
-           * =================================================
-           */
-
-          const now =
-            new Date();
-
-          const period =
-            `${now.getFullYear()}${String(
-              now.getMonth() + 1
-            ).padStart(
-              2,
-              "0"
-            )}`;
-
-          const doc =
-            await tx.documentNumber.upsert(
-              {
-                where: {
-                  type_period: {
-                    type:
-                      "MANUFACTURE",
-                    period,
-                  },
-                },
-
-                create: {
-                  type:
-                    "MANUFACTURE",
-
-                  prefix:
-                    `MO-${period}`,
-
-                  period,
-
-                  lastNumber: 1,
-                },
-
-                update: {
-                  lastNumber: {
-                    increment: 1,
-                  },
-                },
-
-                select: {
-                  prefix: true,
-                  lastNumber:
-                    true,
-                },
-              }
-            );
-
-          const number =
-            `${doc.prefix}-${String(
-              doc.lastNumber
-            ).padStart(
-              4,
-              "0"
-            )}`;
-
-          /*
-           * =================================================
-           * CREATE MANUFACTURE ORDER
-           * =================================================
-           *
-           * TIDAK ADA STOCK UPDATE DI SINI.
-           *
-           * ManufactureOrderItem.plannedQty:
-           *   sudah BASE UNIT.
-           * =================================================
-           */
-
-          const order =
-            await tx.manufactureOrder.create(
-              {
-                data: {
-                  number,
-
-                  outletId,
-
-                  recipeId,
-
-                  plannedQty,
-
-                  producedQty: 0,
-
-                  status:
-                    "PLANNED",
-
-                  productionDate:
-                    now,
-
-                  note:
-                    body?.note
-                      ? String(
-                          body.note
-                        ).trim()
-                      : null,
-
-                  createdBy:
-                    user.id,
-
-                  items: {
-                    create:
-                      Array.from(
-                        merged.values()
-                      ).map(
-                        (
-                          requirement
-                        ) => ({
-                          barangId:
-                            requirement.barangId,
-
-                          /*
-                           * FINAL BASE QTY
-                           *
-                           * Tidak dikonversi.
-                           */
-
-                          plannedQty:
-                            requirement.qtyBase,
-
-                          actualQty: 0,
-                        })
-                      ),
-                  },
-                },
-
-                include: {
-                  /*
-                   * Tetap mempertahankan response
-                   * yang digunakan frontend.
-                   */
-
-                  outlet: true,
-
-                  recipe: {
-                    include: {
-                      menu: true,
-
-                      productCk:
-                        true,
-
-                      outputBarang:
-                        true,
-                    },
-                  },
-
-                  items: {
-                    include: {
-                      barang: true,
-                    },
-                  },
-                },
-              }
-            );
-
-          return order;
-        }
-      );
-
-    /*
-     * =======================================================
-     * SUCCESS
-     * =======================================================
-     */
-
-    return NextResponse.json(
-      {
-        success: true,
-
-        message:
-          "Manufacture Order berhasil dibuat. Stock belum berubah sampai order diselesaikan.",
-
-        data: result,
-      },
-      {
-        status: 201,
-      }
-    );
-  } catch (error: any) {
-    console.error(
-      "POST /api/manufacture/orders ERROR:",
-      error
-    );
-
-    return NextResponse.json(
-      {
-        success: false,
-
-        message:
-          error?.message ||
-          "Gagal membuat Manufacture Order.",
-      },
-      {
-        status: 400,
-      }
-    );
-  }
+  );
 }
 
 /*
- * =========================================================
- * GET
- * =========================================================
- *
- * ADMIN / MANAGER:
- *   semua outlet jika outletId tidak diberikan.
- *
- * ADMIN / MANAGER:
- *   filter outlet tertentu jika outletId diberikan.
- *
- * OUTLET_ADMIN:
- *   hanya outlet sendiri.
- *
- * STAFF_OUTLET:
- *   hanya outlet sendiri.
- *
- * Query:
- *
- * ?outletId=4
- * ?status=COMPLETED
- * ?search=MO-202608
- *
- * =========================================================
+ * =======================================================
+ * ROLE
+ * =======================================================
  */
 
-export async function GET(
-  req: NextRequest
+const role =
+  roleOf(user.role);
+
+if (
+  !canManufacture(role)
 ) {
-  try {
-    /*
-     * =======================================================
-     * AUTH
-     * =======================================================
-     */
-
-    const user =
-      await getCurrentUser();
-
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Tidak login atau session tidak valid",
-        },
-        {
-          status: 401,
-        }
-      );
+  return NextResponse.json(
+    {
+      success: false,
+      message:
+        "Tidak memiliki akses Manufacture.",
+    },
+    {
+      status: 403,
     }
+  );
+}
 
-    /*
-     * =======================================================
-     * ROLE
-     * =======================================================
-     */
+/*
+ * =======================================================
+ * REQUEST BODY
+ * =======================================================
+ */
 
-    const role =
-      roleOf(user.role);
+const body =
+  await req
+    .json()
+    .catch(() => ({}));
 
-    if (
-      !canManufacture(role)
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Anda tidak memiliki akses Manufacture",
-        },
-        {
-          status: 403,
-        }
-      );
-    }
+const requestedOutletId =
+  Number(
+    body?.outletId || 0
+  );
 
-    const {
-      searchParams,
-    } = new URL(req.url);
+/*
+ * OUTLET_ADMIN / STAFF_OUTLET:
+ * hanya boleh menggunakan outlet sendiri.
+ *
+ * ADMIN / MANAGER:
+ * menggunakan outletId dari request.
+ */
 
-    const requestedOutletId =
-      searchParams.get(
-        "outletId"
-      );
+const outletId =
+  isOutletScopedRole(role)
+    ? Number(
+        user.outletId || 0
+      )
+    : requestedOutletId;
 
-    const status =
-      searchParams.get(
-        "status"
-      );
+/*
+ * User outlet wajib memiliki outlet.
+ */
 
-    const search =
-      searchParams
-        .get("search")
-        ?.trim();
+if (
+  !Number.isInteger(
+    outletId
+  ) ||
+  outletId <= 0
+) {
+  throw new Error(
+    isOutletScopedRole(role)
+      ? role === ROLE_STAFF_OUTLET
+        ? "User Staff Outlet belum terhubung dengan outlet."
+        : "User Outlet Admin belum terhubung dengan outlet."
+      : "Outlet produksi wajib dipilih."
+  );
+}
 
-    /*
-     * =======================================================
-     * OUTLET FILTER
-     * =======================================================
-     */
+/*
+ * OUTLET_ADMIN / STAFF_OUTLET
+ * tidak boleh menggunakan outlet lain.
+ *
+ * Walaupun body mengirim:
+ *
+ * outletId: 99
+ *
+ * nilai yang digunakan tetap user.outletId.
+ *
+ * Jika outletId user tidak sama dengan outlet target,
+ * akses ditolak.
+ */
 
-    let outletId:
-      | number
-      | undefined;
+if (
+  isOutletScopedRole(role) &&
+  Number(
+    user.outletId
+  ) !== outletId
+) {
+  throw new Error(
+    "Akses outlet ditolak."
+  );
+}
 
-    /*
-     * OUTLET_ADMIN / STAFF_OUTLET:
-     * selalu menggunakan outlet sendiri.
-     */
-    if (
-      isOutletScopedRole(role)
-    ) {
-      if (!user.outletId) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              role === ROLE_STAFF_OUTLET
-                ? "User Staff Outlet belum terhubung dengan outlet"
-                : "User Outlet Admin belum terhubung dengan outlet",
+/*
+ * =======================================================
+ * RECIPE ID
+ * =======================================================
+ */
+
+const recipeId =
+  Number(
+    body?.recipeId || 0
+  );
+
+if (
+  !Number.isInteger(
+    recipeId
+  ) ||
+  recipeId <= 0
+) {
+  throw new Error(
+    "Recipe ID tidak valid."
+  );
+}
+
+/*
+ * =======================================================
+ * PLANNED PRODUCTION QTY
+ * =======================================================
+ *
+ * plannedQty = jumlah produksi / batch.
+ *
+ * Contoh:
+ *
+ * BOM Cuka = 0.03 ml
+ *
+ * plannedQty 1:
+ *   0.03 × 1 = 0.03
+ *
+ * plannedQty 10:
+ *   0.03 × 10 = 0.30
+ *
+ * =======================================================
+ */
+
+const plannedQty =
+  Number(
+    body?.plannedQty || 0
+  );
+
+if (
+  !Number.isFinite(
+    plannedQty
+  ) ||
+  plannedQty <= 0
+) {
+  throw new Error(
+    "Qty produksi harus lebih besar dari 0."
+  );
+}
+
+/*
+ * =======================================================
+ * PRODUCTION DATE
+ * =======================================================
+ *
+ * Frontend mengirim tanggal dalam format YYYY-MM-DD.
+ *
+ * Simpan tanggal yang dipilih pengguna, bukan tanggal
+ * ketika API dipanggil.
+ *
+ * Pukul 12:00 UTC dipakai untuk membantu menjaga tanggal
+ * kalender ketika dibaca pada zona waktu Indonesia.
+ *
+ * =======================================================
+ */
+
+const productionDateInput = String(
+  body?.productionDate ?? ""
+).trim();
+
+if (
+  !/^\d{4}-\d{2}-\d{2}$/.test(
+    productionDateInput
+  )
+) {
+  throw new Error(
+    "Tanggal Manufacture wajib diisi dengan format yang valid."
+  );
+}
+
+const [
+  productionYear,
+  productionMonth,
+  productionDay,
+] = productionDateInput
+  .split("-")
+  .map(Number);
+
+const productionDate = new Date(
+  Date.UTC(
+    productionYear,
+    productionMonth - 1,
+    productionDay,
+    12,
+    0,
+    0
+  )
+);
+
+if (
+  productionDate.getUTCFullYear() !==
+    productionYear ||
+  productionDate.getUTCMonth() !==
+    productionMonth - 1 ||
+  productionDate.getUTCDate() !==
+    productionDay
+) {
+  throw new Error(
+    "Tanggal Manufacture tidak valid."
+  );
+}
+
+/*
+ * =======================================================
+ * TRANSACTION
+ * =======================================================
+ */
+
+const result =
+  await prisma.$transaction(
+    async (tx) => {
+      /*
+       * =================================================
+       * OUTLET
+       * =================================================
+       */
+
+      const outlet =
+        await tx.outlet.findUnique({
+          where: {
+            id: outletId,
           },
-          {
-            status: 403,
-          }
-        );
-      }
 
-      outletId =
-        Number(
-          user.outletId
-        );
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            active: true,
+          },
+        });
 
       if (
-        !Number.isInteger(
-          outletId
-        ) ||
-        outletId <= 0
+        !outlet ||
+        !outlet.active
       ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Outlet user tidak valid",
-          },
-          {
-            status: 403,
-          }
+        throw new Error(
+          "Outlet produksi tidak ditemukan atau tidak aktif."
         );
       }
 
       /*
-       * Jika STAFF_OUTLET / OUTLET_ADMIN
-       * mengirim outletId lain melalui query,
-       * jangan izinkan akses lintas outlet.
+       * =================================================
+       * RECIPE / BOM
+       * =================================================
        */
-      if (
-        requestedOutletId
-      ) {
-        const requested =
-          Number(
-            requestedOutletId
-          );
 
-        if (
-          !Number.isInteger(
-            requested
-          ) ||
-          requested <= 0
-        ) {
-          return NextResponse.json(
-            {
-              success: false,
-              message:
-                "Outlet ID tidak valid",
-            },
-            {
-              status: 400,
-            }
-          );
-        }
-
-        if (
-          requested !==
-          outletId
-        ) {
-          return NextResponse.json(
-            {
-              success: false,
-              message:
-                "Anda tidak dapat melihat Manufacture outlet lain",
-            },
-            {
-              status: 403,
-            }
-          );
-        }
-      }
-    }
-
-    /*
-     * ADMIN / MANAGER:
-     * Jika outletId diberikan,
-     * filter outlet tersebut.
-     *
-     * Jika tidak diberikan:
-     * semua outlet.
-     */
-    else if (
-      requestedOutletId
-    ) {
-      const parsed =
-        Number(
-          requestedOutletId
-        );
-
-      if (
-        !Number.isInteger(
-          parsed
-        ) ||
-        parsed <= 0
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Outlet ID tidak valid",
+      const recipe =
+        await tx.recipe.findUnique({
+          where: {
+            id: recipeId,
           },
-          {
-            status: 400,
-          }
-        );
-      }
-
-      outletId =
-        parsed;
-    }
-
-    /*
-     * =======================================================
-     * WHERE
-     * =======================================================
-     */
-
-    const where: any = {};
-
-    if (
-      outletId !== undefined
-    ) {
-      where.outletId =
-        outletId;
-    }
-
-    if (status) {
-      where.status =
-        status;
-    }
-
-    if (search) {
-      where.OR = [
-        {
-          number: {
-            contains:
-              search,
-          },
-        },
-
-        {
-          recipe: {
-            name: {
-              contains:
-                search,
-            },
-          },
-        },
-
-        {
-          recipe: {
-            code: {
-              contains:
-                search,
-            },
-          },
-        },
-      ];
-    }
-
-    /*
-     * =======================================================
-     * QUERY MANUFACTURE ORDER
-     * =======================================================
-     */
-
-    const data =
-      await prisma.manufactureOrder.findMany(
-        {
-          where,
 
           include: {
-            /*
-             * -------------------------------------------------
-             * RECIPE
-             * -------------------------------------------------
-             */
-
-            recipe: {
-              include: {
-                productCk: {
-                  include: {
-                    outputBarang:
-                      true,
-                  },
-                },
-
-                outputBarang:
-                  true,
-
-                menu:
-                  true,
-
-                items: {
-                  include: {
-                    barang:
-                      true,
-                  },
-
-                  orderBy: {
-                    id: "asc",
-                  },
-                },
-              },
-            },
-
-            /*
-             * -------------------------------------------------
-             * CREATOR
-             * -------------------------------------------------
-             */
-
-            creator: {
-              select: {
-                id: true,
-                fullname: true,
-                username: true,
-                role: true,
-                outletId: true,
-              },
-            },
-
-            /*
-             * -------------------------------------------------
-             * MANUFACTURE ORDER ITEMS
-             * -------------------------------------------------
-             */
-
             items: {
               include: {
                 barang: true,
@@ -1352,404 +856,1219 @@ export async function GET(
                 id: "asc",
               },
             },
+
+            outputBarang: true,
+
+            productCk: true,
           },
+        });
 
-          orderBy: [
-            {
-              productionDate:
-                "desc",
+      if (
+        !recipe ||
+        !recipe.active
+      ) {
+        throw new Error(
+          "Recipe / BOM tidak ditemukan atau tidak aktif."
+        );
+      }
+
+      /*
+       * Manufacture Recipe tidak boleh
+       * berasal dari Menu POS.
+       */
+
+      if (
+        recipe.menuId !== null
+      ) {
+        throw new Error(
+          "Recipe Manufacture tidak boleh menggunakan Menu POS."
+        );
+      }
+
+      /*
+       * Jika Recipe memiliki outlet,
+       * harus sesuai outlet produksi.
+       *
+       * Untuk STAFF_OUTLET / OUTLET_ADMIN,
+       * outlet produksi sudah dipaksa ke user.outletId.
+       */
+
+      if (
+        recipe.outletId &&
+        recipe.outletId !==
+          outletId
+      ) {
+        throw new Error(
+          "Recipe / BOM bukan milik outlet tersebut."
+        );
+      }
+
+      /*
+       * =================================================
+       * OUTPUT BARANG
+       * =================================================
+       */
+
+      if (
+        !recipe.outputBarangId ||
+        !recipe.outputBarang?.active
+      ) {
+        throw new Error(
+          "Barang output Recipe tidak valid."
+        );
+      }
+
+      /*
+       * =================================================
+       * RECIPE ITEMS
+       * =================================================
+       */
+
+      if (
+        !recipe.items.length
+      ) {
+        throw new Error(
+          "Recipe / BOM belum memiliki bahan."
+        );
+      }
+
+      /*
+       * =================================================
+       * IMPORTANT UNIT POLICY
+       * =================================================
+       *
+       * recipe.outputQty SENGAJA TIDAK digunakan
+       * untuk menghitung kebutuhan bahan.
+       *
+       * RecipeItem.qty sudah disimpan sebagai BASE UNIT.
+       *
+       * Dengan demikian:
+       *
+       * RecipeItem:
+       *   qty = 0.03
+       *   unit = ml
+       *
+       * Manufacture:
+       *   plannedQty = 1
+       *
+       * kebutuhan:
+       *   0.03 × 1 = 0.03
+       *
+       * Tidak ada lagi:
+       *
+       *   plannedQty / recipe.outputQty
+       *
+       * karena itu dapat membuat:
+       *
+       * 0.03 -> 30
+       *
+       * apabila outputQty lama tersimpan 0.001.
+       *
+       * =================================================
+       */
+
+      /*
+       * =================================================
+       * BUILD REQUIREMENTS
+       * =================================================
+       */
+
+      const requirements =
+        recipe.items.map(
+          (item) => {
+            /*
+             * RecipeItem.qty SUDAH BASE UNIT.
+             *
+             * Tidak ada konversi lagi.
+             */
+
+            const recipeQtyBase =
+              getRecipeItemBaseQty(
+                item
+              );
+
+            /*
+             * Hanya dikalikan jumlah produksi.
+             */
+
+            const qtyBase =
+              recipeQtyBase *
+              plannedQty;
+
+            if (
+              !Number.isFinite(
+                qtyBase
+              ) ||
+              qtyBase <= 0
+            ) {
+              throw new Error(
+                `Qty kebutuhan bahan tidak valid untuk ${
+                  item?.barang?.name ||
+                  "barang"
+                }.`
+              );
+            }
+
+            return {
+              barangId:
+                item.barangId,
+
+              qtyBase,
+
+              barang:
+                item.barang,
+            };
+          }
+        );
+
+      /*
+       * =================================================
+       * MERGE DUPLICATE BARANG
+       * =================================================
+       *
+       * Kalau barang yang sama muncul beberapa kali
+       * dalam Recipe, kebutuhan digabung.
+       * =================================================
+       */
+
+      const merged =
+        new Map<
+          number,
+          {
+            barangId: number;
+            qtyBase: number;
+            barang: any;
+          }
+        >();
+
+      for (
+        const requirement of
+          requirements
+      ) {
+        const old =
+          merged.get(
+            requirement.barangId
+          );
+
+        merged.set(
+          requirement.barangId,
+          {
+            barangId:
+              requirement.barangId,
+
+            qtyBase:
+              (old?.qtyBase || 0) +
+              requirement.qtyBase,
+
+            barang:
+              requirement.barang,
+          }
+        );
+      }
+
+      /*
+       * =================================================
+       * DOCUMENT NUMBER
+       * =================================================
+       *
+       * Nomor dokumen tetap menggunakan bulan/tahun
+       * saat order dibuat, bukan tanggal produksi.
+       *
+       * Ini mempertahankan perilaku nomor dokumen lama.
+       * =================================================
+       */
+
+      const now =
+        new Date();
+
+      const period =
+        `${now.getFullYear()}${String(
+          now.getMonth() + 1
+        ).padStart(
+          2,
+          "0"
+        )}`;
+
+      const doc =
+        await tx.documentNumber.upsert(
+          {
+            where: {
+              type_period: {
+                type:
+                  "MANUFACTURE",
+                period,
+              },
             },
 
-            {
-              id:
-                "desc",
+            create: {
+              type:
+                "MANUFACTURE",
+
+              prefix:
+                `MO-${period}`,
+
+              period,
+
+              lastNumber: 1,
             },
-          ],
-        }
-      );
 
-    /*
-     * =======================================================
-     * AMBIL OUTLET TERPISAH
-     * =======================================================
-     */
+            update: {
+              lastNumber: {
+                increment: 1,
+              },
+            },
 
-    const outletIds =
-      Array.from(
-        new Set(
-          data
-            .map((order) =>
-              Number(
-                order.outletId
-              )
-            )
-            .filter(
-              (id) =>
-                Number.isInteger(
-                  id
-                ) &&
-                id > 0
-            )
-        )
-      );
+            select: {
+              prefix: true,
+              lastNumber:
+                true,
+            },
+          }
+        );
 
-    const outlets =
-      outletIds.length > 0
-        ? await prisma.outlet.findMany(
-            {
-              where: {
-                id: {
-                  in: outletIds,
+      const number =
+        `${doc.prefix}-${String(
+          doc.lastNumber
+        ).padStart(
+          4,
+          "0"
+        )}`;
+
+      /*
+       * =================================================
+       * CREATE MANUFACTURE ORDER
+       * =================================================
+       *
+       * TIDAK ADA STOCK UPDATE DI SINI.
+       *
+       * ManufactureOrderItem.plannedQty:
+       *   sudah BASE UNIT.
+       *
+       * productionDate:
+       *   menggunakan tanggal yang sudah divalidasi
+       *   dari request frontend.
+       * =================================================
+       */
+
+      const order =
+        await tx.manufactureOrder.create(
+          {
+            data: {
+              number,
+
+              outletId,
+
+              recipeId,
+
+              plannedQty,
+
+              producedQty: 0,
+
+              status:
+                "PLANNED",
+
+              productionDate,
+
+              note:
+                body?.note
+                  ? String(
+                      body.note
+                    ).trim()
+                  : null,
+
+              createdBy:
+                user.id,
+
+              items: {
+                create:
+                  Array.from(
+                    merged.values()
+                  ).map(
+                    (
+                      requirement
+                    ) => ({
+                      barangId:
+                        requirement.barangId,
+
+                      /*
+                       * FINAL BASE QTY
+                       *
+                       * Tidak dikonversi.
+                       */
+
+                      plannedQty:
+                        requirement.qtyBase,
+
+                      actualQty: 0,
+                    })
+                  ),
+              },
+            },
+
+            include: {
+              /*
+               * Tetap mempertahankan response
+               * yang digunakan frontend.
+               */
+
+              outlet: true,
+
+              recipe: {
+                include: {
+                  menu: true,
+
+                  productCk:
+                    true,
+
+                  outputBarang:
+                    true,
                 },
               },
 
-              select: {
-                id: true,
-                code: true,
-                name: true,
-                active: true,
+              items: {
+                include: {
+                  barang: true,
+                },
               },
-            }
-          )
-        : [];
-
-    const outletMap =
-      new Map(
-        outlets.map(
-          (outlet) => [
-            outlet.id,
-            outlet,
-          ]
-        )
-      );
-
-    /*
-     * =======================================================
-     * FORMAT RESPONSE
-     * =======================================================
-     */
-
-    const formattedData =
-      await Promise.all(
-        data.map(
-          async (order) => {
-            /*
-             * -----------------------------------------------
-             * OUTLET
-             * -----------------------------------------------
-             */
-
-            const orderOutletId =
-              Number(
-                order.outletId
-              );
-
-            const outlet =
-              outletMap.get(
-                orderOutletId
-              ) ?? null;
-
-            /*
-             * -----------------------------------------------
-             * BARANG IDS
-             * -----------------------------------------------
-             */
-
-            const barangIds =
-              Array.from(
-                new Set(
-                  order.items
-                    .map(
-                      (item) =>
-                        Number(
-                          item.barangId
-                        )
-                    )
-                    .filter(
-                      (id) =>
-                        Number.isInteger(
-                          id
-                        ) &&
-                        id > 0
-                    )
-                )
-              );
-
-            /*
-             * -----------------------------------------------
-             * OUTLET STOCK
-             * -----------------------------------------------
-             *
-             * Manufacture hanya membaca OutletStock.
-             *
-             * TIDAK membaca:
-             *
-             *   Barang.stock
-             *   Inventory.stock
-             * -----------------------------------------------
-             */
-
-            const outletStocks =
-              orderOutletId > 0 &&
-              barangIds.length > 0
-                ? await prisma.outletStock.findMany(
-                    {
-                      where: {
-                        outletId:
-                          orderOutletId,
-
-                        barangId: {
-                          in: barangIds,
-                        },
-                      },
-
-                      select: {
-                        id: true,
-                        outletId: true,
-                        barangId: true,
-                        stock: true,
-                        minimumStock:
-                          true,
-                        averageCost:
-                          true,
-                      },
-                    }
-                  )
-                : [];
-
-            /*
-             * -----------------------------------------------
-             * STOCK MAP
-             * -----------------------------------------------
-             */
-
-            const stockMap =
-              new Map(
-                outletStocks.map(
-                  (stock) => [
-                    Number(
-                      stock.barangId
-                    ),
-                    stock,
-                  ]
-                )
-              );
-
-            /*
-             * -----------------------------------------------
-             * FORMAT ITEMS
-             * -----------------------------------------------
-             */
-
-            const items =
-              order.items.map(
-                (item) => {
-                  const barangId =
-                    Number(
-                      item.barangId
-                    );
-
-                  const stock =
-                    stockMap.get(
-                      barangId
-                    );
-
-                  const barang =
-                    item.barang;
-
-                  /*
-                   * -----------------------------------------
-                   * UNIT
-                   * -----------------------------------------
-                   */
-
-                  const unit =
-                    barang?.unit ??
-                    "";
-
-                  const baseUnit =
-                    barang?.baseUnit ??
-                    unit;
-
-                  const conversionRate =
-                    Number(
-                      barang?.conversionRate ??
-                        1
-                    );
-
-                  const hasConversion =
-                    Boolean(
-                      unit &&
-                        baseUnit &&
-                        unit !==
-                          baseUnit &&
-                        conversionRate >
-                          1
-                    );
-
-                  /*
-                   * -----------------------------------------
-                   * DEFAULT OUTLET STOCK
-                   * -----------------------------------------
-                   *
-                   * Jangan fallback ke Barang.stock.
-                   *
-                   * Kalau belum ada OutletStock,
-                   * dianggap 0.
-                   * -----------------------------------------
-                   */
-
-                  const outletStock =
-                    stock ?? {
-                      id: null,
-
-                      outletId:
-                        orderOutletId,
-
-                      barangId,
-
-                      stock: 0,
-
-                      minimumStock:
-                        0,
-
-                      averageCost:
-                        0,
-                    };
-
-                  /*
-                   * -----------------------------------------
-                   * BARANG RESPONSE
-                   * -----------------------------------------
-                   */
-
-                  const formattedBarang =
-                    barang
-                      ? {
-                          ...barang,
-
-                          unit,
-
-                          baseUnit,
-
-                          conversionRate,
-
-                          hasConversion,
-
-                          conversionLabel:
-                            hasConversion
-                              ? `1 ${unit} = ${conversionRate} ${baseUnit}`
-                              : `1 ${unit}`,
-
-                          /*
-                           * OutletStock Manufacture
-                           * menggunakan BASE UNIT.
-                           */
-
-                          stockUnit:
-                            baseUnit,
-
-                          stockBaseUnit:
-                            baseUnit,
-                        }
-                      : barang;
-
-                  return {
-                    ...item,
-
-                    outletStock,
-
-                    barang:
-                      formattedBarang,
-                  };
-                }
-              );
-
-            /*
-             * -----------------------------------------------
-             * FINAL ORDER
-             * -----------------------------------------------
-             */
-
-            return {
-              ...order,
-
-              outlet,
-
-              items,
-            };
+            },
           }
-        )
-      );
+        );
 
-    /*
-     * =======================================================
-     * RESPONSE
-     * =======================================================
-     */
+      return order;
+    }
+  );
 
-    return NextResponse.json({
-      success: true,
+/*
+ * =======================================================
+ * SUCCESS
+ * =======================================================
+ */
 
-      scope: {
-        role:
-          user.role,
+return NextResponse.json(
+  {
+    success: true,
 
-        outletId:
-          isOutletScopedRole(role)
-            ? Number(
-                user.outletId
-              )
-            : outletId ??
-              null,
-      },
+    message:
+      "Manufacture Order berhasil dibuat. Stock belum berubah sampai order diselesaikan.",
 
-      total:
-        formattedData.length,
+    data: result,
+  },
+  {
+    status: 201,
+  }
+);
 
-      data:
-        formattedData,
+} catch (error: any) {
+console.error(
+"POST /api/manufacture/orders ERROR:",
+error
+);
 
-      policy: {
-        manufactureStockSource:
-          "OutletStock",
+return NextResponse.json(
+  {
+    success: false,
 
-        centralBarangStockTouched:
-          false,
+    message:
+      error?.message ||
+      "Gagal membuat Manufacture Order.",
+  },
+  {
+    status: 400,
+  }
+);
 
-        centralInventoryStockTouched:
-          false,
+}
+}
 
-        outletStockOnly:
-          true,
+/*
 
-        recipeQtyPolicy:
-          "RecipeItem.qty is already BASE UNIT and is multiplied only by Manufacture plannedQty.",
+=========================================================
 
-        conversionAtManufacture:
-          false,
+GET
 
-        outputQtyUsedForMaterialScaling:
-          false,
-      },
-    });
-  } catch (error: any) {
-    console.error(
-      "GET /api/manufacture/orders ERROR:",
-      error
-    );
+=========================================================
 
+
+
+ADMIN / MANAGER:
+
+semua outlet jika outletId tidak diberikan.
+
+
+
+ADMIN / MANAGER:
+
+filter outlet tertentu jika outletId diberikan.
+
+
+
+OUTLET_ADMIN:
+
+hanya outlet sendiri.
+
+
+
+STAFF_OUTLET:
+
+hanya outlet sendiri.
+
+
+
+Query:
+
+
+
+?outletId=4
+
+?status=COMPLETED
+
+?search=MO-202608
+
+
+
+=========================================================
+*/
+
+export async function GET(
+req: NextRequest
+) {
+try {
+/*
+* =======================================================
+* AUTH
+* =======================================================
+*/
+
+const user =
+  await getCurrentUser();
+
+if (!user) {
+  return NextResponse.json(
+    {
+      success: false,
+      message:
+        "Tidak login atau session tidak valid",
+    },
+    {
+      status: 401,
+    }
+  );
+}
+
+/*
+ * =======================================================
+ * ROLE
+ * =======================================================
+ */
+
+const role =
+  roleOf(user.role);
+
+if (
+  !canManufacture(role)
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      message:
+        "Anda tidak memiliki akses Manufacture",
+    },
+    {
+      status: 403,
+    }
+  );
+}
+
+const {
+  searchParams,
+} = new URL(req.url);
+
+const requestedOutletId =
+  searchParams.get(
+    "outletId"
+  );
+
+const status =
+  searchParams.get(
+    "status"
+  );
+
+const search =
+  searchParams
+    .get("search")
+    ?.trim();
+
+/*
+ * =======================================================
+ * OUTLET FILTER
+ * =======================================================
+ */
+
+let outletId:
+  | number
+  | undefined;
+
+/*
+ * OUTLET_ADMIN / STAFF_OUTLET:
+ * selalu menggunakan outlet sendiri.
+ */
+
+if (
+  isOutletScopedRole(role)
+) {
+  if (!user.outletId) {
     return NextResponse.json(
       {
         success: false,
-
         message:
-          error?.message ||
-          "Gagal mengambil data Manufacture Order",
+          role === ROLE_STAFF_OUTLET
+            ? "User Staff Outlet belum terhubung dengan outlet"
+            : "User Outlet Admin belum terhubung dengan outlet",
       },
       {
-        status: 500,
+        status: 403,
       }
     );
   }
+
+  outletId =
+    Number(
+      user.outletId
+    );
+
+  if (
+    !Number.isInteger(
+      outletId
+    ) ||
+    outletId <= 0
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "Outlet user tidak valid",
+      },
+      {
+        status: 403,
+      }
+    );
+  }
+
+  /*
+   * Jika STAFF_OUTLET / OUTLET_ADMIN
+   * mengirim outletId lain melalui query,
+   * jangan izinkan akses lintas outlet.
+   */
+
+  if (
+    requestedOutletId
+  ) {
+    const requested =
+      Number(
+        requestedOutletId
+      );
+
+    if (
+      !Number.isInteger(
+        requested
+      ) ||
+      requested <= 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Outlet ID tidak valid",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      requested !==
+      outletId
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Anda tidak dapat melihat Manufacture outlet lain",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+  }
+}
+
+/*
+ * ADMIN / MANAGER:
+ * Jika outletId diberikan,
+ * filter outlet tersebut.
+ *
+ * Jika tidak diberikan:
+ * semua outlet.
+ */
+
+else if (
+  requestedOutletId
+) {
+  const parsed =
+    Number(
+      requestedOutletId
+    );
+
+  if (
+    !Number.isInteger(
+      parsed
+    ) ||
+    parsed <= 0
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "Outlet ID tidak valid",
+      },
+      {
+        status: 400,
+      }
+    );
+  }
+
+  outletId =
+    parsed;
+}
+
+/*
+ * =======================================================
+ * WHERE
+ * =======================================================
+ */
+
+const where: any = {};
+
+if (
+  outletId !== undefined
+) {
+  where.outletId =
+    outletId;
+}
+
+if (status) {
+  where.status =
+    status;
+}
+
+if (search) {
+  where.OR = [
+    {
+      number: {
+        contains:
+          search,
+      },
+    },
+
+    {
+      recipe: {
+        name: {
+          contains:
+            search,
+        },
+      },
+    },
+
+    {
+      recipe: {
+        code: {
+          contains:
+            search,
+        },
+      },
+    },
+  ];
+}
+
+/*
+ * =======================================================
+ * QUERY MANUFACTURE ORDER
+ * =======================================================
+ */
+
+const data =
+  await prisma.manufactureOrder.findMany(
+    {
+      where,
+
+      include: {
+        /*
+         * -------------------------------------------------
+         * RECIPE
+         * -------------------------------------------------
+         */
+
+        recipe: {
+          include: {
+            productCk: {
+              include: {
+                outputBarang:
+                  true,
+              },
+            },
+
+            outputBarang:
+              true,
+
+            menu:
+              true,
+
+            items: {
+              include: {
+                barang:
+                  true,
+              },
+
+              orderBy: {
+                id: "asc",
+              },
+            },
+          },
+        },
+
+        /*
+         * -------------------------------------------------
+         * CREATOR
+         * -------------------------------------------------
+         */
+
+        creator: {
+          select: {
+            id: true,
+            fullname: true,
+            username: true,
+            role: true,
+            outletId: true,
+          },
+        },
+
+        /*
+         * -------------------------------------------------
+         * MANUFACTURE ORDER ITEMS
+         * -------------------------------------------------
+         */
+
+        items: {
+          include: {
+            barang: true,
+          },
+
+          orderBy: {
+            id: "asc",
+          },
+        },
+      },
+
+      orderBy: [
+        {
+          productionDate:
+            "desc",
+        },
+
+        {
+          id:
+            "desc",
+        },
+      ],
+    }
+  );
+
+/*
+ * =======================================================
+ * AMBIL OUTLET TERPISAH
+ * =======================================================
+ */
+
+const outletIds =
+  Array.from(
+    new Set(
+      data
+        .map((order) =>
+          Number(
+            order.outletId
+          )
+        )
+        .filter(
+          (id) =>
+            Number.isInteger(
+              id
+            ) &&
+            id > 0
+        )
+    )
+  );
+
+const outlets =
+  outletIds.length > 0
+    ? await prisma.outlet.findMany(
+        {
+          where: {
+            id: {
+              in: outletIds,
+            },
+          },
+
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            active: true,
+          },
+        }
+      )
+    : [];
+
+const outletMap =
+  new Map(
+    outlets.map(
+      (outlet) => [
+        outlet.id,
+        outlet,
+      ]
+    )
+  );
+
+/*
+ * =======================================================
+ * FORMAT RESPONSE
+ * =======================================================
+ */
+
+const formattedData =
+  await Promise.all(
+    data.map(
+      async (order) => {
+        /*
+         * -----------------------------------------------
+         * OUTLET
+         * -----------------------------------------------
+         */
+
+        const orderOutletId =
+          Number(
+            order.outletId
+          );
+
+        const outlet =
+          outletMap.get(
+            orderOutletId
+          ) ?? null;
+
+        /*
+         * -----------------------------------------------
+         * BARANG IDS
+         * -----------------------------------------------
+         */
+
+        const barangIds =
+          Array.from(
+            new Set(
+              order.items
+                .map(
+                  (item) =>
+                    Number(
+                      item.barangId
+                    )
+                )
+                .filter(
+                  (id) =>
+                    Number.isInteger(
+                      id
+                    ) &&
+                    id > 0
+                )
+            )
+          );
+
+        /*
+         * -----------------------------------------------
+         * OUTLET STOCK
+         * -----------------------------------------------
+         *
+         * Manufacture hanya membaca OutletStock.
+         *
+         * TIDAK membaca:
+         *
+         *   Barang.stock
+         *   Inventory.stock
+         * -----------------------------------------------
+         */
+
+        const outletStocks =
+          orderOutletId > 0 &&
+          barangIds.length > 0
+            ? await prisma.outletStock.findMany(
+                {
+                  where: {
+                    outletId:
+                      orderOutletId,
+
+                    barangId: {
+                      in: barangIds,
+                    },
+                  },
+
+                  select: {
+                    id: true,
+                    outletId: true,
+                    barangId: true,
+                    stock: true,
+                    minimumStock:
+                      true,
+                    averageCost:
+                      true,
+                  },
+                }
+              )
+            : [];
+
+        /*
+         * -----------------------------------------------
+         * STOCK MAP
+         * -----------------------------------------------
+         */
+
+        const stockMap =
+          new Map(
+            outletStocks.map(
+              (stock) => [
+                Number(
+                  stock.barangId
+                ),
+                stock,
+              ]
+            )
+          );
+
+        /*
+         * -----------------------------------------------
+         * FORMAT ITEMS
+         * -----------------------------------------------
+         */
+
+        const items =
+          order.items.map(
+            (item) => {
+              const barangId =
+                Number(
+                  item.barangId
+                );
+
+              const stock =
+                stockMap.get(
+                  barangId
+                );
+
+              const barang =
+                item.barang;
+
+              /*
+               * -----------------------------------------
+               * UNIT
+               * -----------------------------------------
+               */
+
+              const unit =
+                barang?.unit ??
+                "";
+
+              const baseUnit =
+                barang?.baseUnit ??
+                unit;
+
+              const conversionRate =
+                Number(
+                  barang?.conversionRate ??
+                    1
+                );
+
+              const hasConversion =
+                Boolean(
+                  unit &&
+                    baseUnit &&
+                    unit !==
+                      baseUnit &&
+                    conversionRate >
+                      1
+                );
+
+              /*
+               * -----------------------------------------
+               * DEFAULT OUTLET STOCK
+               * -----------------------------------------
+               *
+               * Jangan fallback ke Barang.stock.
+               *
+               * Kalau belum ada OutletStock,
+               * dianggap 0.
+               * -----------------------------------------
+               */
+
+              const outletStock =
+                stock ?? {
+                  id: null,
+
+                  outletId:
+                    orderOutletId,
+
+                  barangId,
+
+                  stock: 0,
+
+                  minimumStock:
+                    0,
+
+                  averageCost:
+                    0,
+                };
+
+              /*
+               * -----------------------------------------
+               * BARANG RESPONSE
+               * -----------------------------------------
+               */
+
+              const formattedBarang =
+                barang
+                  ? {
+                      ...barang,
+
+                      unit,
+
+                      baseUnit,
+
+                      conversionRate,
+
+                      hasConversion,
+
+                      conversionLabel:
+                        hasConversion
+                          ? `1 ${unit} = ${conversionRate} ${baseUnit}`
+                          : `1 ${unit}`,
+
+                      /*
+                       * OutletStock Manufacture
+                       * menggunakan BASE UNIT.
+                       */
+
+                      stockUnit:
+                        baseUnit,
+
+                      stockBaseUnit:
+                        baseUnit,
+                    }
+                  : barang;
+
+              return {
+                ...item,
+
+                outletStock,
+
+                barang:
+                  formattedBarang,
+              };
+            }
+          );
+
+        /*
+         * -----------------------------------------------
+         * FINAL ORDER
+         * -----------------------------------------------
+         */
+
+        return {
+          ...order,
+
+          outlet,
+
+          items,
+        };
+      }
+    )
+  );
+
+/*
+ * =======================================================
+ * RESPONSE
+ * =======================================================
+ */
+
+return NextResponse.json({
+  success: true,
+
+  scope: {
+    role:
+      user.role,
+
+    outletId:
+      isOutletScopedRole(role)
+        ? Number(
+            user.outletId
+          )
+        : outletId ??
+          null,
+  },
+
+  total:
+    formattedData.length,
+
+  data:
+    formattedData,
+
+  policy: {
+    manufactureStockSource:
+      "OutletStock",
+
+    centralBarangStockTouched:
+      false,
+
+    centralInventoryStockTouched:
+      false,
+
+    outletStockOnly:
+      true,
+
+    recipeQtyPolicy:
+      "RecipeItem.qty is already BASE UNIT and is multiplied only by Manufacture plannedQty.",
+
+    conversionAtManufacture:
+      false,
+
+    outputQtyUsedForMaterialScaling:
+      false,
+  },
+});
+
+} catch (error: any) {
+console.error(
+"GET /api/manufacture/orders ERROR:",
+error
+);
+
+return NextResponse.json(
+  {
+    success: false,
+
+    message:
+      error?.message ||
+      "Gagal mengambil data Manufacture Order",
+  },
+  {
+    status: 500,
+  }
+);
+
+}
 }

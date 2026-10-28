@@ -128,6 +128,7 @@ type RecipeItemForm = {
 type OrderForm = {
   recipeId: string;
   plannedQty: string;
+  productionDate: string;
   note: string;
 };
 
@@ -394,6 +395,7 @@ export default function ManufacturePage() {
     useState<OrderForm>({
       recipeId: "",
       plannedQty: "",
+      productionDate: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10),
       note: "",
     });
 
@@ -1882,6 +1884,8 @@ export default function ManufacturePage() {
         body: JSON.stringify({
           ...order,
           recipeId: Number(order.recipeId),
+          // Tanggal produksi dikirim sesuai input pengguna (format YYYY-MM-DD).
+          productionDate: order.productionDate,
           // Backend menerima multiplier BOM = jumlah batch.
           plannedQty: batchQty,
           outletId: Number(
@@ -1905,7 +1909,7 @@ export default function ManufacturePage() {
       );
 
       setShowOrder(false);
-      setOrder({ recipeId: "", plannedQty: "", note: "" });
+      setOrder({ recipeId: "", plannedQty: "", productionDate: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), note: "" });
       await load();
     } catch (error) {
       console.error("CREATE ORDER ERROR:", error);
@@ -2275,6 +2279,7 @@ export default function ManufacturePage() {
     setOrder({
       recipeId: "",
       plannedQty: "",
+      productionDate: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10),
       note: "",
     });
 
@@ -3865,7 +3870,7 @@ export default function ManufacturePage() {
 
       {showOrder && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#17271F]/45 p-3 backdrop-blur-sm sm:p-5">
-          <div className="w-full max-w-xl overflow-hidden rounded-[28px] border border-white/50 bg-white shadow-[0_30px_100px_rgba(15,35,27,0.25)]">
+          <div className="flex max-h-[88dvh] w-full max-w-xl flex-col overflow-hidden rounded-[24px] border border-white/50 bg-white shadow-[0_30px_100px_rgba(15,35,27,0.25)] sm:rounded-[28px]">
             <div className="flex items-center justify-between border-b border-[#E7EEEA] px-5 py-4 sm:px-7 sm:py-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF3EE] text-[#3E7462]">
@@ -3897,8 +3902,8 @@ export default function ManufacturePage() {
               </button>
             </div>
 
-            <div className="p-5 sm:p-7">
-              <div className="mb-5 rounded-2xl border border-[#DCE9E2] bg-gradient-to-br from-[#F7FBF9] to-[#EDF6F1] p-4">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+              <div className="mb-4 rounded-2xl border border-[#DCE9E2] bg-gradient-to-br from-[#F7FBF9] to-[#EDF6F1] p-4">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#4D806D] shadow-sm">
                     <Store size={17} />
@@ -3912,6 +3917,30 @@ export default function ManufacturePage() {
                     <div className="mt-1 font-black text-[#29473B]">
                       {selectedOutlet?.name ??
                         "Belum dipilih"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="Tanggal Manufacture" required>
+                  <input
+                    type="date"
+                    required
+                    value={order.productionDate}
+                    onChange={(e) =>
+                      setOrder((prev) => ({
+                        ...prev,
+                        productionDate: e.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <div className="flex items-end">
+                  <div className="w-full rounded-xl border border-[#E5EDE9] bg-[#FAFCFB] px-3 py-3">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#8B9992]">Tanggal tersimpan</div>
+                    <div className="mt-1 text-sm font-bold text-[#29473B]">
+                      {order.productionDate ? formatDate(`${order.productionDate}T12:00:00`) : "Pilih tanggal"}
                     </div>
                   </div>
                 </div>
@@ -4124,10 +4153,10 @@ export default function ManufacturePage() {
                 </Field>
               </div>
 
-              <div className="mt-4">
+              <div className="mt-3">
                 <Field label="Catatan">
                   <textarea
-                    rows={3}
+                    rows={2}
                     value={
                       order.note
                     }

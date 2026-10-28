@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { getCompanyPdfBrand } from "@/lib/company-pdf";
 
 
 export async function GET(
@@ -75,13 +76,17 @@ new jsPDF();
 
 
 
-doc.setFontSize(16);
-
-doc.text(
-"PT. MITRA GARAM BOGATAMA",
-14,
-20
-);
+const companyBrand = await getCompanyPdfBrand();
+if (companyBrand.logoBuffer && companyBrand.logoFormat) {
+  const dataUrl = `data:image/${companyBrand.logoFormat === "JPEG" ? "jpeg" : "png"};base64,${companyBrand.logoBuffer.toString("base64")}`;
+  try { doc.addImage(dataUrl, companyBrand.logoFormat, 14, 10, 18, 18); } catch (error) { console.error("PDF_COMPANY_LOGO_ERROR", error); }
+  doc.setFontSize(14);
+  doc.text(companyBrand.name, 37, 18);
+  if (companyBrand.address) { doc.setFontSize(7); doc.text(companyBrand.address, 37, 23); }
+} else {
+  doc.setFontSize(16);
+  doc.text(companyBrand.name, 14, 20);
+}
 
 
 

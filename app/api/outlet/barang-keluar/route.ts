@@ -593,14 +593,23 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const stockAfter = stockBefore - qtyProcessed;
       const unitCost = Number(stock.averageCost || 0);
       const totalCost = unitCost * qtyProcessed;
+      const initialStatus = type === "WASTE" ? "PENDING" : "APPROVED";
 
-      await tx.outletStock.update({
-        where: { id: stock.id },
-        data: { stock: stockAfter },
-      });
+      // Waste yang masih PENDING belum boleh mengubah saldo.
+      // Barang keluar/pemakaian non-waste tetap diposting langsung.
+      const shouldDeductImmediately = type !== "WASTE";
+      const stockAfter = shouldDeductImmediately
+        ? stockBefore - qtyProcessed
+        : stockBefore;
+
+      if (shouldDeductImmediately) {
+        await tx.outletStock.update({
+          where: { id: stock.id },
+          data: { stock: stockAfter },
+        });
+      }
 
       // =================================================
       // NOMOR DOKUMEN
@@ -665,7 +674,6 @@ export async function POST(req: NextRequest) {
       // STATUS
       // =================================================
 
-      const initialStatus = type === "WASTE" ? "PENDING" : "APPROVED";
       const netQty = qtyProcessed - wasteQty;
 
       // =================================================
@@ -702,33 +710,54 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      // Catat ledger untuk pergerakan yang benar-benar sudah diposting.
+      // Waste PENDING baru dicatat saat approval.
+      if (shouldDeductImmediately) {
+        await tx.stockMutation.create({
+          data: {
+            outletId,
+            barangId,
+            type: "OUTLET_STOCK_OUT",
+            qty: qtyProcessed,
+            stockBefore,
+            stockAfter,
+            reference: number,
+            description: `${type} • ${qtyProcessed} ${stock.barang.unit}`,
+          },
+        });
+      }
+
       // =================================================
       // STOCK CARD
       // Menggunakan tanggal transaksi yang sama.
       // =================================================
 
-      await tx.stockCard.create({
-        data: {
-          barangId,
-          trxDate,
-          trxType: "OUTLET_STOCK_OUT",
-          trxNumber: number,
-          referenceId: stockOut.id,
-          warehouse: `OUTLET:${stock.outlet.code}`,
-          qtyIn: 0,
-          qtyOut: qtyProcessed,
-          balance: stockAfter,
-          unitPrice: unitCost,
-          totalValue: totalCost,
-          note:
-            `${type} | ` +
-            `Diproses: ${qtyProcessed} ${stock.barang.unit} | ` +
-            `Waste: ${wasteQty} ${stock.barang.unit} | ` +
-            `Net: ${netQty} ${stock.barang.unit} | ` +
-            `Status: ${initialStatus}` +
-            (note ? ` | ${note}` : ""),
-        },
-      });
+      // StockCard hanya merekam pergerakan yang benar-benar diposting.
+      // Waste PENDING baru mendapatkan StockCard saat approval.
+      if (shouldDeductImmediately) {
+        await tx.stockCard.create({
+          data: {
+            barangId,
+            trxDate,
+            trxType: "OUTLET_STOCK_OUT",
+            trxNumber: number,
+            referenceId: stockOut.id,
+            warehouse: `OUTLET:${stock.outlet.code}`,
+            qtyIn: 0,
+            qtyOut: qtyProcessed,
+            balance: stockAfter,
+            unitPrice: unitCost,
+            totalValue: totalCost,
+            note:
+              `${type} | ` +
+              `Diproses: ${qtyProcessed} ${stock.barang.unit} | ` +
+              `Waste: ${wasteQty} ${stock.barang.unit} | ` +
+              `Net: ${netQty} ${stock.barang.unit} | ` +
+              `Status: ${initialStatus}` +
+              (note ? ` | ${note}` : ""),
+          },
+        });
+      }
 
       // =================================================
       // GLOBAL HISTORY

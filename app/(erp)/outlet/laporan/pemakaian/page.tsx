@@ -1426,26 +1426,26 @@ export default function LaporanPemakaianOutletPage() {
               </p>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
-              <table className="w-full min-w-[880px] border-collapse text-left text-sm">
-                <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+            <div className="max-h-[340px] overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
+              <table className="w-full min-w-[760px] border-collapse text-left text-xs">
+                <thead className="sticky top-0 z-10 bg-slate-50 text-[9px] uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
                   <tr>
-                    <th className="px-4 py-3.5">Kategori Barang</th>
-                    <th className="px-4 py-3.5 text-right">
+                    <th className="px-3 py-2">Kategori Barang</th>
+                    <th className="px-3 py-2 text-right">
                       {monthNames[previousPeriod.month - 1]}
                     </th>
-                    <th className="px-4 py-3.5 text-right">
+                    <th className="px-3 py-2 text-right">
                       {monthNames[month - 1]}
                     </th>
-                    <th className="px-4 py-3.5 text-right">Selisih</th>
-                    <th className="px-4 py-3.5 text-right">Perubahan</th>
-                    <th className="px-4 py-3.5 text-right">Terhitung</th>
+                    <th className="px-3 py-2 text-right">Selisih</th>
+                    <th className="px-3 py-2 text-right">Perubahan</th>
+                    <th className="px-3 py-2 text-right">Terhitung</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                   {loading && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
+                      <td colSpan={6} className="px-3 py-6 text-center text-slate-500 dark:text-slate-400">
                         <RefreshCw className="mx-auto mb-2 h-5 w-5 animate-spin" />
                         Menghitung perbandingan biaya...
                       </td>
@@ -1455,12 +1455,12 @@ export default function LaporanPemakaianOutletPage() {
                   {!loading &&
                     comparison.map((item) => (
                       <tr key={item.category} className="transition hover:bg-[#F5FAF7] dark:hover:bg-slate-800/70">
-                        <td className="px-4 py-3.5">
-                          <p className="font-bold text-slate-800 dark:text-slate-100">
+                        <td className="px-3 py-2">
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
                             {item.category}
                           </p>
                           {(item.currentPending > 0 || item.previousPending > 0) && (
-                            <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                            <p className="mt-0.5 inline-flex items-center gap-1 text-[9px] font-semibold text-amber-700 dark:text-amber-300">
                               <AlertTriangle className="h-3 w-3" />
                               Ada barang belum lengkap
                             </p>
@@ -1477,7 +1477,7 @@ export default function LaporanPemakaianOutletPage() {
                             ? `${item.difference > 0 ? "+" : ""}${fmtMoney(item.difference)}`
                             : "—"}
                         </td>
-                        <td className="px-4 py-3.5 text-right">
+                        <td className="px-3 py-2 text-right">
                           <ChangeLabel
                             difference={item.difference}
                             percentage={item.percentage}
@@ -1492,7 +1492,7 @@ export default function LaporanPemakaianOutletPage() {
 
                   {!loading && comparison.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
+                      <td colSpan={6} className="px-3 py-6 text-center text-slate-500 dark:text-slate-400">
                         Belum ada kategori untuk dibandingkan.
                       </td>
                     </tr>
@@ -1502,7 +1502,7 @@ export default function LaporanPemakaianOutletPage() {
                 {!loading && comparisonAvailable && (
                   <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-extrabold dark:border-slate-600 dark:bg-slate-800">
                     <tr>
-                      <td className="px-4 py-3.5 text-slate-800 dark:text-slate-100">TOTAL</td>
+                      <td className="px-3 py-2 text-slate-800 dark:text-slate-100">TOTAL</td>
                       <td className="whitespace-nowrap px-4 py-3.5 text-right text-slate-700 dark:text-slate-200">
                         {fmtMoney(previousTotalCost)}
                       </td>
@@ -1513,14 +1513,14 @@ export default function LaporanPemakaianOutletPage() {
                         {totalChange.difference > 0 ? "+" : ""}
                         {fmtMoney(totalChange.difference)}
                       </td>
-                      <td className="px-4 py-3.5 text-right">
+                      <td className="px-3 py-2 text-right">
                         <ChangeLabel
                           difference={totalChange.difference}
                           percentage={totalChange.percentage}
                           available
                         />
                       </td>
-                      <td className="px-4 py-3.5 text-right text-xs text-slate-600 dark:text-slate-300">
+                      <td className="px-3 py-2 text-right text-xs text-slate-600 dark:text-slate-300">
                         {currentCompleteness.calculated}/{allRows.length}
                       </td>
                     </tr>

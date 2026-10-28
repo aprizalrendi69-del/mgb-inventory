@@ -1,13 +1,3 @@
-export default function Page() {
-  return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold">
-        Dalam Pengembangan
-      </h1>
-
-      <p className="text-gray-500 mt-3">
-        Modul ini akan segera dibuat.
-      </p>
-    </div>
-  );
-}
+import Link from "next/link";
+import { ArrowLeft, DatabaseBackup, ShieldAlert, CheckCircle2, Info } from "lucide-react";
+export default function RestorePage(){return <main className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-9 dark:bg-slate-950"><div className="mx-auto max-w-4xl space-y-6"><Link href="/pengaturan" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-emerald-700"><ArrowLeft size={15}/> Kembali ke Pengaturan</Link><section className="overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="h-1 bg-gradient-to-r from-rose-700 via-amber-500 to-emerald-600"/><div className="p-6 sm:p-8"><div className="flex items-start gap-4"><div className="rounded-2xl bg-rose-50 p-3 text-rose-700 dark:bg-rose-950 dark:text-rose-300"><DatabaseBackup size={25}/></div><div><p className="text-[10px] font-black uppercase tracking-[.2em] text-rose-700">Database safety</p><h1 className="mt-1 text-2xl font-black">Restore Database</h1><p className="mt-2 text-sm leading-6 text-slate-500">Pemulihan database dapat menimpa transaksi yang sedang berjalan. Endpoint restore produksi belum tersedia dan tidak akan disimulasikan dengan tombol palsu.</p></div></div><div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 dark:border-rose-900 dark:bg-rose-950/30"><div className="flex gap-3"><ShieldAlert size={20} className="mt-0.5 shrink-0 text-rose-700"/><div><p className="text-sm font-extrabold text-rose-900 dark:text-rose-200">Restore dinonaktifkan demi keamanan data</p><p className="mt-1 text-xs leading-5 text-rose-800 dark:text-rose-300">Sebelum fitur diaktifkan, diperlukan autentikasi admin, validasi file backup, pemeriksaan integritas SQLite, salinan pre-restore, maintenance lock, dan verifikasi setelah pemulihan.</p></div></div></div><div className="mt-5 space-y-3">{["Buat backup database produksi terlebih dahulu.","Uji file backup pada salinan proyek, bukan database aktif.","Validasi integritas database dan kecocokan versi schema.","Pastikan semua proses ERP dihentikan sebelum pemulihan manual.","Simpan salinan database sebelum restore agar rollback tersedia."].map((item,i)=><div key={item} className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-800"><CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-700"/><p className="text-sm text-slate-600 dark:text-slate-300">{item}</p></div>)}</div><p className="mt-5 flex gap-2 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500 dark:bg-slate-950"><Info size={15} className="mt-0.5 shrink-0"/>Tidak ada file atau data yang diubah oleh halaman ini.</p></div></section></div></main>}

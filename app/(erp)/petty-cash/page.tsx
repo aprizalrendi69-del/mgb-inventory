@@ -4507,6 +4507,695 @@ function exportPettyCashPDF() {
         .dark .petty-cash-page [class*="bg-[#F7"],
         .dark .petty-cash-page [class*="bg-[#F8"] { background-color: #18241e !important; }
         .dark .petty-cash-page [class*="text-[#00529C"] { color: #83c8ad !important; }
+
+        /* Dark theme compatibility: support the common theme markers used by the ERP shell. */
+        html.dark .petty-cash-page,
+        body.dark .petty-cash-page,
+        [data-theme="dark"] .petty-cash-page {
+          background: radial-gradient(circle at top right, rgba(73,127,112,.12), transparent 28%), linear-gradient(180deg, #101916 0%, #0b1210 100%) !important;
+          color: #e2e8e5 !important;
+        }
+
+        html.dark .petty-cash-page header,
+        body.dark .petty-cash-page header,
+        [data-theme="dark"] .petty-cash-page header {
+          background-color: rgba(17, 27, 22, .96) !important;
+          border-color: #304239 !important;
+        }
+
+        /* Replace remaining light surfaces (cards, tables, modal bodies and footers). */
+        html.dark .petty-cash-page [class~="bg-white"],
+        html.dark .petty-cash-page [class*="bg-white/"],
+        html.dark .petty-cash-page [class*="bg-[#F"],
+        html.dark .petty-cash-page [class*="bg-[#E"],
+        html.dark .petty-cash-page [class*="bg-[#D"],
+        html.dark .petty-cash-page [class*="bg-[#C"],
+        body.dark .petty-cash-page [class~="bg-white"],
+        body.dark .petty-cash-page [class*="bg-white/"],
+        body.dark .petty-cash-page [class*="bg-[#F"],
+        body.dark .petty-cash-page [class*="bg-[#E"],
+        body.dark .petty-cash-page [class*="bg-[#D"],
+        body.dark .petty-cash-page [class*="bg-[#C"],
+        [data-theme="dark"] .petty-cash-page [class~="bg-white"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-white/"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#F"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#E"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#D"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#C"] {
+          background-color: #151f1b !important;
+          background-image: none;
+        }
+
+        html.dark .petty-cash-page [class*="bg-gradient-to-r from-[#F"],
+        html.dark .petty-cash-page [class*="bg-gradient-to-br from-[#F"],
+        body.dark .petty-cash-page [class*="bg-gradient-to-r from-[#F"],
+        body.dark .petty-cash-page [class*="bg-gradient-to-br from-[#F"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-gradient-to-r from-[#F"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-gradient-to-br from-[#F"] {
+          background-image: linear-gradient(135deg, #17251e, #111a15) !important;
+        }
+
+        html.dark .petty-cash-page [class*="text-[#"],
+        body.dark .petty-cash-page [class*="text-[#"],
+        [data-theme="dark"] .petty-cash-page [class*="text-[#"] {
+          color: #c1cec7 !important;
+        }
+
+        html.dark .petty-cash-page input,
+        html.dark .petty-cash-page textarea,
+        html.dark .petty-cash-page select,
+        html.dark .petty-cash-page option,
+        body.dark .petty-cash-page input,
+        body.dark .petty-cash-page textarea,
+        body.dark .petty-cash-page select,
+        body.dark .petty-cash-page option,
+        [data-theme="dark"] .petty-cash-page input,
+        [data-theme="dark"] .petty-cash-page textarea,
+        [data-theme="dark"] .petty-cash-page select,
+        [data-theme="dark"] .petty-cash-page option {
+          background-color: #101814 !important;
+          color: #e2e8e5 !important;
+          border-color: #3a4c42 !important;
+          color-scheme: dark;
+        }
+
+        html.dark .petty-cash-page table,
+        html.dark .petty-cash-page table tbody tr,
+        html.dark .petty-cash-page table tbody td,
+        body.dark .petty-cash-page table,
+        body.dark .petty-cash-page table tbody tr,
+        body.dark .petty-cash-page table tbody td,
+        [data-theme="dark"] .petty-cash-page table,
+        [data-theme="dark"] .petty-cash-page table tbody tr,
+        [data-theme="dark"] .petty-cash-page table tbody td {
+          background-color: #151f1b !important;
+          color: #d6e1da !important;
+          border-color: #2b3b34 !important;
+        }
+
+        html.dark .petty-cash-page [class*="hover:bg-[#"]:hover,
+        body.dark .petty-cash-page [class*="hover:bg-[#"]:hover,
+        [data-theme="dark"] .petty-cash-page [class*="hover:bg-[#"]:hover {
+          background-color: #202d26 !important;
+        }
+
+        /*
+         * FINAL DARK-MODE SURFACE PASS
+         * Covers light Tailwind utility backgrounds and inline light surfaces
+         * used by the Petty Cash page, including cards, table headers, badges,
+         * modal panels, filter bars and modal footers.
+         */
+        html.dark .petty-cash-page,
+        body.dark .petty-cash-page,
+        [data-theme="dark"] .petty-cash-page {
+          background-color: #0b1210 !important;
+          color: #e5eee8 !important;
+          color-scheme: dark;
+        }
+
+        html.dark .petty-cash-page [class~="bg-white"],
+        html.dark .petty-cash-page [class*="bg-white/"],
+        html.dark .petty-cash-page [class*="bg-slate-50"],
+        html.dark .petty-cash-page [class*="bg-slate-100"],
+        html.dark .petty-cash-page [class*="bg-gray-50"],
+        html.dark .petty-cash-page [class*="bg-gray-100"],
+        html.dark .petty-cash-page [class*="bg-zinc-50"],
+        html.dark .petty-cash-page [class*="bg-zinc-100"],
+        html.dark .petty-cash-page [class*="bg-neutral-50"],
+        html.dark .petty-cash-page [class*="bg-neutral-100"],
+        html.dark .petty-cash-page [class*="bg-sky-50"],
+        html.dark .petty-cash-page [class*="bg-sky-100"],
+        html.dark .petty-cash-page [class*="bg-blue-50"],
+        html.dark .petty-cash-page [class*="bg-blue-100"],
+        html.dark .petty-cash-page [class*="bg-cyan-50"],
+        html.dark .petty-cash-page [class*="bg-cyan-100"],
+        html.dark .petty-cash-page [class*="bg-emerald-50"],
+        html.dark .petty-cash-page [class*="bg-emerald-100"],
+        html.dark .petty-cash-page [class*="bg-green-50"],
+        html.dark .petty-cash-page [class*="bg-green-100"],
+        html.dark .petty-cash-page [class*="bg-red-50"],
+        html.dark .petty-cash-page [class*="bg-red-100"],
+        html.dark .petty-cash-page [class*="bg-rose-50"],
+        html.dark .petty-cash-page [class*="bg-rose-100"],
+        html.dark .petty-cash-page [class*="bg-amber-50"],
+        html.dark .petty-cash-page [class*="bg-amber-100"],
+        html.dark .petty-cash-page [class*="bg-yellow-50"],
+        html.dark .petty-cash-page [class*="bg-yellow-100"],
+        html.dark .petty-cash-page [class*="bg-orange-50"],
+        html.dark .petty-cash-page [class*="bg-orange-100"],
+        body.dark .petty-cash-page [class~="bg-white"],
+        body.dark .petty-cash-page [class*="bg-white/"],
+        body.dark .petty-cash-page [class*="bg-slate-50"],
+        body.dark .petty-cash-page [class*="bg-slate-100"],
+        body.dark .petty-cash-page [class*="bg-gray-50"],
+        body.dark .petty-cash-page [class*="bg-gray-100"],
+        body.dark .petty-cash-page [class*="bg-zinc-50"],
+        body.dark .petty-cash-page [class*="bg-zinc-100"],
+        body.dark .petty-cash-page [class*="bg-neutral-50"],
+        body.dark .petty-cash-page [class*="bg-neutral-100"],
+        body.dark .petty-cash-page [class*="bg-sky-50"],
+        body.dark .petty-cash-page [class*="bg-sky-100"],
+        body.dark .petty-cash-page [class*="bg-blue-50"],
+        body.dark .petty-cash-page [class*="bg-blue-100"],
+        body.dark .petty-cash-page [class*="bg-cyan-50"],
+        body.dark .petty-cash-page [class*="bg-cyan-100"],
+        body.dark .petty-cash-page [class*="bg-emerald-50"],
+        body.dark .petty-cash-page [class*="bg-emerald-100"],
+        body.dark .petty-cash-page [class*="bg-green-50"],
+        body.dark .petty-cash-page [class*="bg-green-100"],
+        body.dark .petty-cash-page [class*="bg-red-50"],
+        body.dark .petty-cash-page [class*="bg-red-100"],
+        body.dark .petty-cash-page [class*="bg-rose-50"],
+        body.dark .petty-cash-page [class*="bg-rose-100"],
+        body.dark .petty-cash-page [class*="bg-amber-50"],
+        body.dark .petty-cash-page [class*="bg-amber-100"],
+        body.dark .petty-cash-page [class*="bg-yellow-50"],
+        body.dark .petty-cash-page [class*="bg-yellow-100"],
+        body.dark .petty-cash-page [class*="bg-orange-50"],
+        body.dark .petty-cash-page [class*="bg-orange-100"],
+        [data-theme="dark"] .petty-cash-page [class~="bg-white"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-white/"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-slate-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-slate-100"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-gray-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-gray-100"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-sky-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-blue-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-emerald-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-green-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-red-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-rose-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-amber-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-yellow-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-orange-50"] {
+          background-color: #17221c !important;
+          background-image: none !important;
+        }
+
+        /* Arbitrary light hex backgrounds: white, gray, pale blue/green and pale amber. */
+        html.dark .petty-cash-page [class*="bg-[#F"],
+        html.dark .petty-cash-page [class*="bg-[#E"],
+        html.dark .petty-cash-page [class*="bg-[#D"],
+        html.dark .petty-cash-page [class*="bg-[#C"],
+        body.dark .petty-cash-page [class*="bg-[#F"],
+        body.dark .petty-cash-page [class*="bg-[#E"],
+        body.dark .petty-cash-page [class*="bg-[#D"],
+        body.dark .petty-cash-page [class*="bg-[#C"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#F"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#E"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#D"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#C"] {
+          background-color: #17221c !important;
+          background-image: none !important;
+        }
+
+        /* Darken pale gradient surfaces without touching blue/green action buttons. */
+        html.dark .petty-cash-page [class*="bg-gradient-to-"][class*="from-[#F"],
+        html.dark .petty-cash-page [class*="bg-gradient-to-"][class*="from-[#E"],
+        body.dark .petty-cash-page [class*="bg-gradient-to-"][class*="from-[#F"],
+        body.dark .petty-cash-page [class*="bg-gradient-to-"][class*="from-[#E"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-gradient-to-"][class*="from-[#F"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-gradient-to-"][class*="from-[#E"] {
+          background-image: linear-gradient(135deg, #1a2921, #111a15) !important;
+        }
+
+        html.dark .petty-cash-page table thead,
+        html.dark .petty-cash-page table thead tr,
+        html.dark .petty-cash-page table thead th,
+        body.dark .petty-cash-page table thead,
+        body.dark .petty-cash-page table thead tr,
+        body.dark .petty-cash-page table thead th,
+        [data-theme="dark"] .petty-cash-page table thead,
+        [data-theme="dark"] .petty-cash-page table thead tr,
+        [data-theme="dark"] .petty-cash-page table thead th {
+          background-color: #1c2a22 !important;
+          color: #dce9e0 !important;
+          border-color: #35483b !important;
+        }
+
+        html.dark .petty-cash-page header,
+        html.dark .petty-cash-page section,
+        html.dark .petty-cash-page article,
+        html.dark .petty-cash-page [role="dialog"],
+        body.dark .petty-cash-page header,
+        body.dark .petty-cash-page section,
+        body.dark .petty-cash-page article,
+        body.dark .petty-cash-page [role="dialog"],
+        [data-theme="dark"] .petty-cash-page header,
+        [data-theme="dark"] .petty-cash-page section,
+        [data-theme="dark"] .petty-cash-page article,
+        [data-theme="dark"] .petty-cash-page [role="dialog"] {
+          border-color: #304239 !important;
+        }
+
+        html.dark .petty-cash-page [class*="text-[#"],
+        body.dark .petty-cash-page [class*="text-[#"],
+        [data-theme="dark"] .petty-cash-page [class*="text-[#"] {
+          color: #c7d6cd !important;
+        }
+
+        html.dark .petty-cash-page input,
+        html.dark .petty-cash-page textarea,
+        html.dark .petty-cash-page select,
+        html.dark .petty-cash-page option,
+        body.dark .petty-cash-page input,
+        body.dark .petty-cash-page textarea,
+        body.dark .petty-cash-page select,
+        body.dark .petty-cash-page option,
+        [data-theme="dark"] .petty-cash-page input,
+        [data-theme="dark"] .petty-cash-page textarea,
+        [data-theme="dark"] .petty-cash-page select,
+        [data-theme="dark"] .petty-cash-page option {
+          background-color: #0f1712 !important;
+          color: #e5eee8 !important;
+          border-color: #3a4c40 !important;
+          color-scheme: dark;
+        }
+
+        html.dark .petty-cash-page input::placeholder,
+        html.dark .petty-cash-page textarea::placeholder,
+        body.dark .petty-cash-page input::placeholder,
+        body.dark .petty-cash-page textarea::placeholder,
+        [data-theme="dark"] .petty-cash-page input::placeholder,
+        [data-theme="dark"] .petty-cash-page textarea::placeholder {
+          color: #84968b !important;
+          opacity: 1;
+        }
+
+        html.dark .petty-cash-page [class*="divide-"],
+        body.dark .petty-cash-page [class*="divide-"],
+        [data-theme="dark"] .petty-cash-page [class*="divide-"] {
+          --tw-divide-opacity: 1 !important;
+          --tw-divide-color: #2b3b31 !important;
+        }
+
+        html.dark .petty-cash-page [class*="shadow-"],
+        body.dark .petty-cash-page [class*="shadow-"],
+        [data-theme="dark"] .petty-cash-page [class*="shadow-"] {
+          --tw-shadow-color: rgb(0 0 0 / 0.25) !important;
+        }
+
+        html.dark .petty-cash-page [class*="hover:bg-white"]:hover,
+        html.dark .petty-cash-page [class*="hover:bg-[#"]:hover,
+        body.dark .petty-cash-page [class*="hover:bg-white"]:hover,
+        body.dark .petty-cash-page [class*="hover:bg-[#"]:hover,
+        [data-theme="dark"] .petty-cash-page [class*="hover:bg-white"]:hover,
+        [data-theme="dark"] .petty-cash-page [class*="hover:bg-[#"]:hover {
+          background-color: #24352a !important;
+        }
+
+
+        /* Explicit light arbitrary gradients that do not use a bg-[#HEX] utility. */
+        html.dark .petty-cash-page [class*="bg-[linear-gradient(135deg,#F"],
+        body.dark .petty-cash-page [class*="bg-[linear-gradient(135deg,#F"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[linear-gradient(135deg,#F"] {
+          background-image: linear-gradient(135deg, #1a2921 0%, #17221c 48%, #111a15 100%) !important;
+        }
+
+        /* Preserve the intentional high-contrast danger action. */
+        html.dark .petty-cash-page [class*="bg-[#C62828"],
+        body.dark .petty-cash-page [class*="bg-[#C62828"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#C62828"] {
+          background-color: #b91c1c !important;
+          background-image: none !important;
+        }
+
+        /*
+         * PETTY CASH DARK MODE — FINAL OVERRIDE
+         * This page uses many hard-coded Tailwind colors, so theme tokens alone
+         * cannot replace its light surfaces. Keep this block last in the style.
+         */
+        .dark .petty-cash-page,
+        html.dark .petty-cash-page,
+        body.dark .petty-cash-page,
+        [data-theme="dark"] .petty-cash-page {
+          background: radial-gradient(circle at top right, rgba(31, 94, 72, 0.12), transparent 28%),
+            linear-gradient(180deg, #0b1512 0%, #080f0d 100%) !important;
+          background-color: #080f0d !important;
+          color: #e2ece6 !important;
+          color-scheme: dark;
+        }
+
+        /* Replace hard-coded light card, panel, filter, modal and footer surfaces. */
+        .dark .petty-cash-page [class~="bg-white"],
+        .dark .petty-cash-page [class*="bg-white/"],
+        .dark .petty-cash-page [class*="bg-slate-50"],
+        .dark .petty-cash-page [class*="bg-slate-100"],
+        .dark .petty-cash-page [class*="bg-gray-50"],
+        .dark .petty-cash-page [class*="bg-gray-100"],
+        .dark .petty-cash-page [class*="bg-zinc-50"],
+        .dark .petty-cash-page [class*="bg-neutral-50"],
+        .dark .petty-cash-page [class*="bg-sky-50"],
+        .dark .petty-cash-page [class*="bg-blue-50"],
+        .dark .petty-cash-page [class*="bg-cyan-50"],
+        .dark .petty-cash-page [class*="bg-emerald-50"],
+        .dark .petty-cash-page [class*="bg-green-50"],
+        .dark .petty-cash-page [class*="bg-red-50"],
+        .dark .petty-cash-page [class*="bg-rose-50"],
+        .dark .petty-cash-page [class*="bg-amber-50"],
+        .dark .petty-cash-page [class*="bg-yellow-50"],
+        .dark .petty-cash-page [class*="bg-orange-50"],
+        html.dark .petty-cash-page [class~="bg-white"],
+        html.dark .petty-cash-page [class*="bg-white/"],
+        html.dark .petty-cash-page [class*="bg-slate-50"],
+        html.dark .petty-cash-page [class*="bg-gray-50"],
+        html.dark .petty-cash-page [class*="bg-blue-50"],
+        html.dark .petty-cash-page [class*="bg-emerald-50"],
+        html.dark .petty-cash-page [class*="bg-green-50"],
+        html.dark .petty-cash-page [class*="bg-red-50"],
+        body.dark .petty-cash-page [class~="bg-white"],
+        body.dark .petty-cash-page [class*="bg-white/"],
+        body.dark .petty-cash-page [class*="bg-slate-50"],
+        body.dark .petty-cash-page [class*="bg-gray-50"],
+        body.dark .petty-cash-page [class*="bg-blue-50"],
+        body.dark .petty-cash-page [class*="bg-emerald-50"],
+        body.dark .petty-cash-page [class*="bg-green-50"],
+        body.dark .petty-cash-page [class*="bg-red-50"],
+        [data-theme="dark"] .petty-cash-page [class~="bg-white"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-white/"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-slate-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-gray-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-blue-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-emerald-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-green-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-red-50"] {
+          background-color: #14221c !important;
+          background-image: none !important;
+          color: #dce8e0 !important;
+          border-color: #30453a !important;
+        }
+
+        /* Hard-coded pale hex backgrounds, including #F7FAFC and #FFFFFF. */
+        .dark .petty-cash-page [class*="bg-[#F"],
+        .dark .petty-cash-page [class*="bg-[#E"],
+        .dark .petty-cash-page [class*="bg-[#D"],
+        .dark .petty-cash-page [class*="bg-[#C"],
+        html.dark .petty-cash-page [class*="bg-[#F"],
+        html.dark .petty-cash-page [class*="bg-[#E"],
+        html.dark .petty-cash-page [class*="bg-[#D"],
+        html.dark .petty-cash-page [class*="bg-[#C"],
+        body.dark .petty-cash-page [class*="bg-[#F"],
+        body.dark .petty-cash-page [class*="bg-[#E"],
+        body.dark .petty-cash-page [class*="bg-[#D"],
+        body.dark .petty-cash-page [class*="bg-[#C"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#F"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#E"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#D"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#C"] {
+          background-color: #14221c !important;
+          background-image: none !important;
+          color: #dce8e0 !important;
+          border-color: #30453a !important;
+        }
+
+        /* The page wrapper uses a pale arbitrary gradient rather than a bg color. */
+        .dark .petty-cash-page[class*="bg-[radial-gradient"],
+        .dark .petty-cash-page[class*="bg-[linear-gradient"],
+        html.dark .petty-cash-page[class*="bg-[radial-gradient"],
+        html.dark .petty-cash-page[class*="bg-[linear-gradient"],
+        body.dark .petty-cash-page[class*="bg-[radial-gradient"],
+        body.dark .petty-cash-page[class*="bg-[linear-gradient"],
+        [data-theme="dark"] .petty-cash-page[class*="bg-[radial-gradient"],
+        [data-theme="dark"] .petty-cash-page[class*="bg-[linear-gradient"] {
+          background: radial-gradient(circle at top right, rgba(31, 94, 72, 0.12), transparent 28%),
+            linear-gradient(180deg, #0b1512 0%, #080f0d 100%) !important;
+        }
+
+        /* Keep action buttons visibly distinct; don't turn their blue gradients into panels. */
+        .dark .petty-cash-page button[class*="from-[#00529C"],
+        .dark .petty-cash-page button[class*="from-[#006BBA"],
+        .dark .petty-cash-page button[class*="from-[#0077C8"],
+        .dark .petty-cash-page button[class*="from-[#0088D1"],
+        html.dark .petty-cash-page button[class*="from-[#00529C"],
+        html.dark .petty-cash-page button[class*="from-[#006BBA"],
+        html.dark .petty-cash-page button[class*="from-[#0077C8"],
+        html.dark .petty-cash-page button[class*="from-[#0088D1"],
+        body.dark .petty-cash-page button[class*="from-[#00529C"],
+        body.dark .petty-cash-page button[class*="from-[#006BBA"],
+        [data-theme="dark"] .petty-cash-page button[class*="from-[#00529C"],
+        [data-theme="dark"] .petty-cash-page button[class*="from-[#006BBA"] {
+          color: #ffffff !important;
+        }
+
+        /* Dark-friendly text, borders, form controls, table rows and separators. */
+        .dark .petty-cash-page [class*="text-[#"],
+        html.dark .petty-cash-page [class*="text-[#"],
+        body.dark .petty-cash-page [class*="text-[#"],
+        [data-theme="dark"] .petty-cash-page [class*="text-[#"] {
+          color: #c7d8ce !important;
+        }
+
+        .dark .petty-cash-page input,
+        .dark .petty-cash-page textarea,
+        .dark .petty-cash-page select,
+        .dark .petty-cash-page option,
+        html.dark .petty-cash-page input,
+        html.dark .petty-cash-page textarea,
+        html.dark .petty-cash-page select,
+        html.dark .petty-cash-page option,
+        body.dark .petty-cash-page input,
+        body.dark .petty-cash-page textarea,
+        body.dark .petty-cash-page select,
+        body.dark .petty-cash-page option,
+        [data-theme="dark"] .petty-cash-page input,
+        [data-theme="dark"] .petty-cash-page textarea,
+        [data-theme="dark"] .petty-cash-page select,
+        [data-theme="dark"] .petty-cash-page option {
+          background-color: #0e1914 !important;
+          color: #e2ece6 !important;
+          border-color: #30453a !important;
+          color-scheme: dark;
+        }
+
+        .dark .petty-cash-page table,
+        .dark .petty-cash-page table tbody tr,
+        .dark .petty-cash-page table tbody td,
+        html.dark .petty-cash-page table,
+        html.dark .petty-cash-page table tbody tr,
+        html.dark .petty-cash-page table tbody td,
+        body.dark .petty-cash-page table,
+        body.dark .petty-cash-page table tbody tr,
+        body.dark .petty-cash-page table tbody td,
+        [data-theme="dark"] .petty-cash-page table,
+        [data-theme="dark"] .petty-cash-page table tbody tr,
+        [data-theme="dark"] .petty-cash-page table tbody td {
+          background-color: #101c16 !important;
+          color: #dce8e0 !important;
+          border-color: #2b3d32 !important;
+        }
+
+        .dark .petty-cash-page table thead,
+        .dark .petty-cash-page table thead tr,
+        .dark .petty-cash-page table thead th,
+        html.dark .petty-cash-page table thead,
+        html.dark .petty-cash-page table thead tr,
+        html.dark .petty-cash-page table thead th,
+        body.dark .petty-cash-page table thead,
+        body.dark .petty-cash-page table thead tr,
+        body.dark .petty-cash-page table thead th,
+        [data-theme="dark"] .petty-cash-page table thead,
+        [data-theme="dark"] .petty-cash-page table thead tr,
+        [data-theme="dark"] .petty-cash-page table thead th {
+          background-color: #103b55 !important;
+          color: #e2edf5 !important;
+          border-color: #24516a !important;
+        }
+
+        .dark .petty-cash-page input::placeholder,
+        .dark .petty-cash-page textarea::placeholder,
+        html.dark .petty-cash-page input::placeholder,
+        html.dark .petty-cash-page textarea::placeholder,
+        body.dark .petty-cash-page input::placeholder,
+        body.dark .petty-cash-page textarea::placeholder,
+        [data-theme="dark"] .petty-cash-page input::placeholder,
+        [data-theme="dark"] .petty-cash-page textarea::placeholder {
+          color: #84998d !important;
+          opacity: 1;
+        }
+
+
+        /*
+         * COMPATIBILITY FIX:
+         * The ERP can activate dark mode on a parent .dark element or by the
+         * browser preference. The earlier rules only checked html.dark/body.dark
+         * and therefore missed the application's actual theme state in some layouts.
+         */
+        .dark .petty-cash-page,
+        html.dark .petty-cash-page,
+        body.dark .petty-cash-page,
+        [data-theme="dark"] .petty-cash-page,
+        [data-mode="dark"] .petty-cash-page {
+          background-color: #0b1220 !important;
+          background-image: none !important;
+          color: #e7edf5 !important;
+          color-scheme: dark;
+        }
+
+        .dark .petty-cash-page header,
+        html.dark .petty-cash-page header,
+        body.dark .petty-cash-page header,
+        [data-theme="dark"] .petty-cash-page header,
+        [data-mode="dark"] .petty-cash-page header {
+          background-color: #101c2d !important;
+          border-color: #2a3a50 !important;
+        }
+
+        .dark .petty-cash-page [class~="bg-white"],
+        .dark .petty-cash-page [class*="bg-white/"],
+        .dark .petty-cash-page [class*="bg-slate-50"],
+        .dark .petty-cash-page [class*="bg-slate-100"],
+        .dark .petty-cash-page [class*="bg-gray-50"],
+        .dark .petty-cash-page [class*="bg-gray-100"],
+        .dark .petty-cash-page [class*="bg-zinc-50"],
+        .dark .petty-cash-page [class*="bg-neutral-50"],
+        .dark .petty-cash-page [class*="bg-[#F"],
+        .dark .petty-cash-page [class*="bg-[#E"],
+        .dark .petty-cash-page [class*="bg-[#D"],
+        .dark .petty-cash-page [class*="bg-[#C"],
+        html.dark .petty-cash-page [class~="bg-white"],
+        html.dark .petty-cash-page [class*="bg-white/"],
+        html.dark .petty-cash-page [class*="bg-slate-50"],
+        html.dark .petty-cash-page [class*="bg-slate-100"],
+        html.dark .petty-cash-page [class*="bg-gray-50"],
+        html.dark .petty-cash-page [class*="bg-gray-100"],
+        html.dark .petty-cash-page [class*="bg-[#F"],
+        html.dark .petty-cash-page [class*="bg-[#E"],
+        html.dark .petty-cash-page [class*="bg-[#D"],
+        html.dark .petty-cash-page [class*="bg-[#C"],
+        body.dark .petty-cash-page [class~="bg-white"],
+        body.dark .petty-cash-page [class*="bg-white/"],
+        body.dark .petty-cash-page [class*="bg-slate-50"],
+        body.dark .petty-cash-page [class*="bg-slate-100"],
+        body.dark .petty-cash-page [class*="bg-gray-50"],
+        body.dark .petty-cash-page [class*="bg-gray-100"],
+        body.dark .petty-cash-page [class*="bg-[#F"],
+        body.dark .petty-cash-page [class*="bg-[#E"],
+        body.dark .petty-cash-page [class*="bg-[#D"],
+        body.dark .petty-cash-page [class*="bg-[#C"],
+        [data-theme="dark"] .petty-cash-page [class~="bg-white"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-white/"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-slate-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-slate-100"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-gray-50"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-gray-100"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#F"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#E"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#D"],
+        [data-theme="dark"] .petty-cash-page [class*="bg-[#C"],
+        [data-mode="dark"] .petty-cash-page [class~="bg-white"],
+        [data-mode="dark"] .petty-cash-page [class*="bg-white/"],
+        [data-mode="dark"] .petty-cash-page [class*="bg-slate-50"],
+        [data-mode="dark"] .petty-cash-page [class*="bg-slate-100"],
+        [data-mode="dark"] .petty-cash-page [class*="bg-gray-50"],
+        [data-mode="dark"] .petty-cash-page [class*="bg-gray-100"],
+        [data-mode="dark"] .petty-cash-page [class*="bg-[#F"],
+        [data-mode="dark"] .petty-cash-page [class*="bg-[#E"],
+        [data-mode="dark"] .petty-cash-page [class*="bg-[#D"],
+        [data-mode="dark"] .petty-cash-page [class*="bg-[#C"] {
+          background-color: #111c2e !important;
+          background-image: none !important;
+          border-color: #2a3a50 !important;
+        }
+
+        .dark .petty-cash-page input,
+        .dark .petty-cash-page textarea,
+        .dark .petty-cash-page select,
+        .dark .petty-cash-page option,
+        html.dark .petty-cash-page input,
+        html.dark .petty-cash-page textarea,
+        html.dark .petty-cash-page select,
+        html.dark .petty-cash-page option,
+        body.dark .petty-cash-page input,
+        body.dark .petty-cash-page textarea,
+        body.dark .petty-cash-page select,
+        body.dark .petty-cash-page option,
+        [data-theme="dark"] .petty-cash-page input,
+        [data-theme="dark"] .petty-cash-page textarea,
+        [data-theme="dark"] .petty-cash-page select,
+        [data-theme="dark"] .petty-cash-page option,
+        [data-mode="dark"] .petty-cash-page input,
+        [data-mode="dark"] .petty-cash-page textarea,
+        [data-mode="dark"] .petty-cash-page select,
+        [data-mode="dark"] .petty-cash-page option {
+          background-color: #0d1728 !important;
+          color: #e7edf5 !important;
+          border-color: #304159 !important;
+          color-scheme: dark;
+        }
+
+        .dark .petty-cash-page table,
+        .dark .petty-cash-page table tbody,
+        .dark .petty-cash-page table tbody tr,
+        .dark .petty-cash-page table tbody td,
+        html.dark .petty-cash-page table,
+        html.dark .petty-cash-page table tbody,
+        html.dark .petty-cash-page table tbody tr,
+        html.dark .petty-cash-page table tbody td,
+        body.dark .petty-cash-page table,
+        body.dark .petty-cash-page table tbody,
+        body.dark .petty-cash-page table tbody tr,
+        body.dark .petty-cash-page table tbody td,
+        [data-theme="dark"] .petty-cash-page table,
+        [data-theme="dark"] .petty-cash-page table tbody,
+        [data-theme="dark"] .petty-cash-page table tbody tr,
+        [data-theme="dark"] .petty-cash-page table tbody td,
+        [data-mode="dark"] .petty-cash-page table,
+        [data-mode="dark"] .petty-cash-page table tbody,
+        [data-mode="dark"] .petty-cash-page table tbody tr,
+        [data-mode="dark"] .petty-cash-page table tbody td {
+          background-color: #111c2e !important;
+          color: #dce5f0 !important;
+          border-color: #2a3a50 !important;
+        }
+
+        @media (prefers-color-scheme: dark) {
+          .petty-cash-page {
+            background-color: #0b1220 !important;
+            background-image: none !important;
+            color: #e7edf5 !important;
+            color-scheme: dark;
+          }
+
+          .petty-cash-page header {
+            background-color: #101c2d !important;
+            border-color: #2a3a50 !important;
+          }
+
+          .petty-cash-page [class~="bg-white"],
+          .petty-cash-page [class*="bg-white/"],
+          .petty-cash-page [class*="bg-slate-50"],
+          .petty-cash-page [class*="bg-slate-100"],
+          .petty-cash-page [class*="bg-gray-50"],
+          .petty-cash-page [class*="bg-gray-100"],
+          .petty-cash-page [class*="bg-[#F"],
+          .petty-cash-page [class*="bg-[#E"],
+          .petty-cash-page [class*="bg-[#D"],
+          .petty-cash-page [class*="bg-[#C"] {
+            background-color: #111c2e !important;
+            background-image: none !important;
+            border-color: #2a3a50 !important;
+          }
+
+          .petty-cash-page input,
+          .petty-cash-page textarea,
+          .petty-cash-page select,
+          .petty-cash-page option {
+            background-color: #0d1728 !important;
+            color: #e7edf5 !important;
+            border-color: #304159 !important;
+            color-scheme: dark;
+          }
+
+          .petty-cash-page table,
+          .petty-cash-page table tbody,
+          .petty-cash-page table tbody tr,
+          .petty-cash-page table tbody td {
+            background-color: #111c2e !important;
+            color: #dce5f0 !important;
+            border-color: #2a3a50 !important;
+          }
+        }
+
       `}</style>
 
     </div>

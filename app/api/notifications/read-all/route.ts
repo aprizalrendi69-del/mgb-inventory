@@ -189,12 +189,26 @@ export async function POST() {
       });
 
     // =========================================================
+    // MARK PAYABLE REMINDERS AS READ
+    // =========================================================
+
+    const payableResult =
+      await prisma.payableReminderLog.updateMany({
+        where: {
+          userId: currentUser.id,
+          readAt: null,
+        },
+        data: { readAt },
+      });
+
+    // =========================================================
     // TOTAL
     // =========================================================
 
     const updated =
       purchaseResult.count +
-      transferResult.count;
+      transferResult.count +
+      payableResult.count;
 
     // =========================================================
     // RESPONSE
@@ -210,6 +224,9 @@ export async function POST() {
 
       transferUpdated:
         transferResult.count,
+
+      payableUpdated:
+        payableResult.count,
 
       message:
         "Semua pemberitahuan telah ditandai sebagai dibaca.",

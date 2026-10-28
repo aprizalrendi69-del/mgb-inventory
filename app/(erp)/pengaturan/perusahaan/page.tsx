@@ -33,6 +33,132 @@ type CompanyData = {
   footer?: string;
 };
 
+/**
+ * Menghapus background polos yang menyentuh tepi gambar, lalu mengubah hasilnya
+ * menjadi PNG transparan. Paling efektif untuk background putih/warna rata;
+ * bukan pengganti pemrosesan AI untuk foto dengan background kompleks.
+ */
+async function removeLogoBackground(file: File): Promise<File> {
+  const bitmap = await createImageBitmap(file);
+
+  try {
+    const maxDimension = 1800;
+    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) throw new Error("Browser tidak mendukung pemrosesan gambar.");
+
+    context.drawImage(bitmap, 0, 0, width, height);
+    const image = context.getImageData(0, 0, width, height);
+    const pixels = image.data;
+    const total = width * height;
+
+    // Ambil sampel dari sudut dan tepi untuk memperkirakan warna background.
+    const samplePoints = [
+      [0, 0],
+      [width - 1, 0],
+      [0, height - 1],
+      [width - 1, height - 1],
+      [Math.floor(width / 2), 0],
+      [Math.floor(width / 2), height - 1],
+      [0, Math.floor(height / 2)],
+      [width - 1, Math.floor(height / 2)],
+    ];
+
+    const samples = samplePoints.map(([x, y]) => {
+      const i = (y * width + x) * 4;
+      return [pixels[i], pixels[i + 1], pixels[i + 2]] as const;
+    });
+
+    const bg = [0, 1, 2].map((channel) => {
+      const values = samples.map((sample) => sample[channel]).sort((a, b) => a - b);
+      return values[Math.floor(values.length / 2)];
+    });
+
+    const colorDistance = (i: number) => {
+      const dr = pixels[i] - bg[0];
+      const dg = pixels[i + 1] - bg[1];
+      const db = pixels[i + 2] - bg[2];
+      return Math.sqrt(dr * dr + dg * dg + db * db);
+    };
+
+    // Flood fill hanya dari tepi agar warna serupa di bagian dalam logo tetap terjaga.
+    const visited = new Uint8Array(total);
+    const queue = new Int32Array(total);
+    let head = 0;
+    let tail = 0;
+
+    const enqueue = (pixelIndex: number) => {
+      if (pixelIndex < 0 || pixelIndex >= total || visited[pixelIndex]) return;
+      const i = pixelIndex * 4;
+      if (pixels[i + 3] === 0) {
+        visited[pixelIndex] = 1;
+        return;
+      }
+
+      const distance = colorDistance(i);
+      // Ambang cukup longgar untuk background putih/abu hasil kompresi JPEG.
+      if (distance > 78) return;
+
+      visited[pixelIndex] = 1;
+      queue[tail++] = pixelIndex;
+    };
+
+    for (let x = 0; x < width; x++) {
+      enqueue(x);
+      enqueue((height - 1) * width + x);
+    }
+    for (let y = 0; y < height; y++) {
+      enqueue(y * width);
+      enqueue(y * width + width - 1);
+    }
+
+    while (head < tail) {
+      const index = queue[head++];
+      const x = index % width;
+      const y = Math.floor(index / width);
+      const i = index * 4;
+      const distance = colorDistance(i);
+
+      // Hilangkan background dan lembutkan pinggiran antialias.
+      if (distance <= 48) {
+        pixels[i + 3] = 0;
+      } else {
+        const blend = Math.min(1, Math.max(0, (distance - 48) / 30));
+        pixels[i + 3] = Math.round(pixels[i + 3] * blend);
+      }
+
+      if (x > 0) enqueue(index - 1);
+      if (x < width - 1) enqueue(index + 1);
+      if (y > 0) enqueue(index - width);
+      if (y < height - 1) enqueue(index + width);
+    }
+
+    context.putImageData(image, 0, 0);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => result ? resolve(result) : reject(new Error("Gagal membuat PNG transparan.")),
+        "image/png",
+      );
+    });
+
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "logo";
+    return new File([blob], `${baseName}-transparan.png`, {
+      type: "image/png",
+      lastModified: Date.now(),
+    });
+  } finally {
+    bitmap.close();
+  }
+}
+
 export default function CompanyPage() {
   const [data, setData] = useState<CompanyData>({});
   const [loading, setLoading] = useState(true);
@@ -342,16 +468,80 @@ export default function CompanyPage() {
                     />
                   </div>
 
-                  <p className="mt-2 text-[10px] leading-5 text-slate-400">
-                    Upload logo ke folder{" "}
-                    <span className="font-bold text-slate-500">
-                      public/uploads
-                    </span>
-                    , kemudian masukkan path seperti:
-                    <span className="ml-1 font-bold text-[#497F70]">
-                      /uploads/logo.png
-                    </span>
-                  </p>
+                  <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3">
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">Unggah logo langsung</label>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="mt-2 block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-[#18352D] file:px-3 file:py-2 file:text-xs file:font-bold file:text-white hover:file:bg-[#285448]"
+                      onChange={async (event) => {
+                        const input = event.currentTarget;
+                        const file = input.files?.[0];
+                        if (!file) return;
+
+                        setError("");
+                        setMessage("");
+
+                        if (file.size > 5 * 1024 * 1024) {
+                          setError("Ukuran gambar asli maksimal 5 MB.");
+                          input.value = "";
+                          return;
+                        }
+
+                        const allowedTypes = ["image/png", "image/jpeg", "image/webp"];
+                        if (!allowedTypes.includes(file.type)) {
+                          setError("Format gambar harus PNG, JPG, atau WEBP.");
+                          input.value = "";
+                          return;
+                        }
+
+                        try {
+                          setSaving(true);
+                          setMessage("Memproses gambar dan menghapus background polos...");
+
+                          let processedFile: File;
+                          try {
+                            processedFile = await removeLogoBackground(file);
+                          } catch (processingError) {
+                            console.error("Pemrosesan background logo gagal:", processingError);
+                            throw new Error(
+                              "Gambar tidak dapat diproses untuk menghapus background. Coba gunakan file PNG/JPG/WEBP lain.",
+                            );
+                          }
+
+                          const form = new FormData();
+                          form.append("file", processedFile);
+
+                          const response = await fetch("/api/upload/company-logo", {
+                            method: "POST",
+                            body: form,
+                            credentials: "include",
+                          });
+                          const result = await response.json();
+
+                          if (!response.ok || !result.success || !result.logo) {
+                            throw new Error(result.message || "Unggah logo gagal.");
+                          }
+
+                          updateField("logo", result.logo);
+                          setMessage(
+                            "Logo diproses dan berhasil diunggah sebagai PNG transparan. Periksa pratinjau, lalu klik Simpan Perubahan.",
+                          );
+                        } catch (uploadError) {
+                          setMessage("");
+                          setError(
+                            uploadError instanceof Error
+                              ? uploadError.message
+                              : "Gagal memproses atau mengunggah logo.",
+                          );
+                        } finally {
+                          setSaving(false);
+                          input.value = "";
+                        }
+                      }}
+                    />
+                    <p className="mt-2 text-[10px] leading-4 text-slate-500">PNG, JPG, atau WEBP · maksimal 5 MB. Sistem akan mencoba menghapus background polos dan menyimpan hasil sebagai PNG transparan. Background foto yang kompleks mungkin masih memerlukan pemrosesan khusus. Setelah upload, klik Simpan Perubahan.</p>
+                  </div>
 
                 </div>
 

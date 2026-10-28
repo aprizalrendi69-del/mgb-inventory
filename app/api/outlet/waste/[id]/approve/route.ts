@@ -268,42 +268,97 @@ export async function PUT(
           );
         }
 
+        const approvedAt = new Date();
+        const claimed = await tx.outletStockOut.updateMany({
+          where: { id: waste.id, status: "PENDING" },
+          data: { status: "APPROVED", approvedBy: approverId, approvedAt },
+        });
+        if (claimed.count !== 1) {
+          throw new Error("Waste sudah diproses atau statusnya sudah berubah.");
+        }
+
         /*
          * ===================================================
-         * APPROVAL
-         *
-         * HANYA status yang berubah.
-         *
-         * STOCK TIDAK DISENTUH.
+         * POST STOCK ON APPROVAL
          * ===================================================
+         * Waste baru tidak mengurangi saldo ketika dibuat PENDING.
+         * Untuk kompatibilitas data lama, jika StockCard dengan referenceId
+         * ini sudah ada, artinya versi lama sudah memotong saldo saat create;
+         * jangan potong dua kali.
          */
+        const existingPostedCard = await tx.stockCard.findFirst({
+          where: {
+            referenceId: waste.id,
+            trxNumber: waste.number,
+            trxType: "OUTLET_STOCK_OUT",
+          },
+          select: { id: true },
+        });
 
-        const approvedAt = new Date();
-
-        const updated =
-          await tx.outletStockOut.updateMany({
+        if (!existingPostedCard) {
+          const stock = await tx.outletStock.findUnique({
             where: {
-              id: waste.id,
-              status: "PENDING",
+              outletId_barangId: {
+                outletId: waste.outletId,
+                barangId: waste.barangId,
+              },
             },
-
-            data: {
-              status: "APPROVED",
-              approvedBy: approverId,
-              approvedAt,
+            include: {
+              barang: { select: { id: true, name: true, unit: true } },
+              outlet: { select: { id: true, code: true, name: true } },
             },
           });
 
-        /*
-         * ===================================================
-         * ATOMIC CHECK
-         * ===================================================
-         */
+          if (!stock) {
+            throw new Error("Saldo barang outlet tidak ditemukan untuk posting Waste.");
+          }
 
-        if (updated.count !== 1) {
-          throw new Error(
-            "Waste sudah diproses atau statusnya sudah berubah."
-          );
+          const stockBefore = Number(stock.stock);
+          const stockAfter = stockBefore - qtyProcessed;
+          const unitCost = Number(stock.averageCost ?? waste.unitCost ?? 0);
+
+          if (!Number.isFinite(stockBefore) || stockBefore < qtyProcessed - 0.000001) {
+            throw new Error(
+              `Stok ${stock.barang.name} tidak cukup untuk approval Waste. Tersedia ${stockBefore} ${stock.barang.unit}, diperlukan ${qtyProcessed} ${stock.barang.unit}.`
+            );
+          }
+
+          const safeStockAfter = Math.abs(stockAfter) < 0.000001 ? 0 : stockAfter;
+
+          await tx.outletStock.update({
+            where: { id: stock.id },
+            data: { stock: safeStockAfter },
+          });
+
+          await tx.stockMutation.create({
+            data: {
+              outletId: waste.outletId,
+              barangId: waste.barangId,
+              type: "WASTE_OUT",
+              qty: qtyProcessed,
+              stockBefore,
+              stockAfter: safeStockAfter,
+              reference: waste.number,
+              description: `Waste approved ${waste.number} • ${qtyProcessed} ${stock.barang.unit}`,
+            },
+          });
+
+          await tx.stockCard.create({
+            data: {
+              barangId: waste.barangId,
+              trxDate: waste.trxDate,
+              trxType: "OUTLET_STOCK_OUT",
+              trxNumber: waste.number,
+              referenceId: waste.id,
+              warehouse: `OUTLET:${stock.outlet.code}`,
+              qtyIn: 0,
+              qtyOut: qtyProcessed,
+              balance: safeStockAfter,
+              unitPrice: unitCost,
+              totalValue: qtyProcessed * unitCost,
+              note: `WASTE APPROVED | ${qtyProcessed} ${stock.barang.unit}`,
+            },
+          });
         }
 
         /*

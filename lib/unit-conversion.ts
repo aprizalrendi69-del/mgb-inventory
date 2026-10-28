@@ -8,20 +8,23 @@
 //    - Contoh:
 //        1 jerigen = 13.000 gram
 //
-// 2. BASE UNIT
-//    - Stock database disimpan dalam BASE UNIT.
-//    - BOM memakai BASE UNIT.
-//    - Manufacture memakai BASE UNIT.
-//    - Waste memakai BASE UNIT.
-//    - POS memakai BASE UNIT.
-//    - Stock Card / Stock Mutation memakai BASE UNIT.
+// 2. STOCK OUTLET (KONVENSI KODE SAAT INI)
+//    - OutletStock.stock dan averageCost disimpan dalam Barang.unit
+//      (unit utama/display), bukan baseUnit.
+//    - Transfer, adjustment, waste, stock opname dan saldo outlet
+//      mengubah/membaca angka dalam unit utama.
+//    - BOM / kebutuhan POS / Manufacture dinormalisasi ke baseUnit saat
+//      menghitung konsumsi; sebelum mengubah saldo, kuantitas base dikonversi
+//      kembali ke unit utama oleh lib/base-unit.ts atau outlet-stock-ledger.ts.
+//    - Qty ledger harus memakai unit yang sama dengan OutletStock.stock.
 //
 // 3. PENTING
-//    - Helper ini TIDAK mengubah database.
-//    - Helper ini TIDAK reset database.
-//    - Helper ini TIDAK delete data.
-//    - Helper ini TIDAK pernah otomatis mengonversi Barang.stock.
-//    - Barang.stock dianggap SUDAH dalam BASE UNIT.
+//    - Helper ini hanya melakukan konversi angka; tidak mengubah database.
+//    - Jangan mengirim OutletStock.stock ke toBaseQty() seolah-olah masih
+//      merupakan kuantitas pembelian.
+//    - Jangan mengalikan conversionRate pada stock yang sudah dalam Barang.unit.
+//    - Perubahan ke penyimpanan baseUnit memerlukan migrasi saldo dan
+//      penyesuaian SELURUH jalur stok; jangan dilakukan parsial.
 //
 // 4. DOUBLE CONVERSION DILARANG
 //
@@ -372,7 +375,8 @@ export function isBaseUnit(
  *
  * Jangan kirim Barang.stock ke fungsi ini.
  *
- * Barang.stock sudah BASE UNIT.
+ * OutletStock.stock menggunakan Barang.unit; fungsi ini hanya untuk
+ * kuantitas pembelian yang masih dalam purchase/main unit.
  */
 export function toBaseQty(
   purchaseQty: number,

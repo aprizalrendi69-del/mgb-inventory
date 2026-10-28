@@ -747,7 +747,7 @@ export default function DeliveryRequestNewPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-slate-50 px-4 py-6 md:px-8 md:py-8">
+      <main className="dr-premium min-h-screen bg-slate-50 px-4 py-6 md:px-8 md:py-8">
         <div className="mx-auto flex min-h-[720px] max-w-[1600px] items-center justify-center">
           <div className="relative w-full max-w-md overflow-hidden rounded-[32px] border border-slate-200 bg-white p-8 shadow-[0_30px_90px_rgba(15,23,42,0.08)]">
             <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-emerald-50" />
@@ -783,7 +783,7 @@ export default function DeliveryRequestNewPage() {
 
   if (!isOutletAdmin) {
     return (
-      <main className="min-h-screen bg-slate-50 px-4 py-6 md:px-8 md:py-8">
+      <main className="dr-premium min-h-screen bg-slate-50 px-4 py-6 md:px-8 md:py-8">
         <div className="mx-auto flex min-h-[720px] max-w-2xl items-center justify-center">
           <div className="w-full overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.08)]">
             <div className="relative overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-900 to-emerald-800 px-6 py-14 text-center text-white md:px-10">
@@ -853,7 +853,340 @@ export default function DeliveryRequestNewPage() {
 
   return (
     <>
-      <main className="min-h-screen bg-slate-50 px-3 py-4 md:px-6 md:py-7 lg:px-8">
+      <style jsx global>{`
+        /* MGB Delivery Request — premium design tokens */
+        .dr-premium {
+          --dr-ink: #14233b;
+          --dr-muted: #64748b;
+          --dr-line: #e2e8f0;
+          --dr-surface: #ffffff;
+          --dr-canvas: #f4f7fb;
+          --dr-navy: #142b49;
+          --dr-emerald: #4f8a78;
+          color: var(--dr-ink);
+          background:
+            radial-gradient(ellipse at 92% 0%, rgba(79,138,120,.08), transparent 30%),
+            var(--dr-canvas) !important;
+        }
+        .dr-premium section {
+          border-radius: 24px !important;
+          box-shadow: 0 12px 34px rgba(15, 23, 42, .045) !important;
+          transition: border-color .2s ease, box-shadow .2s ease;
+        }
+        .dr-premium input, .dr-premium textarea, .dr-premium select {
+          color-scheme: light;
+        }
+        .dr-premium button { -webkit-tap-highlight-color: transparent; }
+        .dr-premium button:focus-visible,
+        .dr-premium input:focus-visible,
+        .dr-premium textarea:focus-visible,
+        .dr-premium select:focus-visible {
+          outline: 2px solid #4f8a78;
+          outline-offset: 2px;
+        }
+        .dr-premium .text-emerald-950 { color: #e87920 !important; }
+        .dr-premium .text-emerald-900 { color: #d96b16 !important; }
+        .dr-premium .text-emerald-800 { color: #285a50 !important; }
+        .dr-premium .bg-emerald-700 { background-color: #315f58 !important; }
+        .dr-premium .hover\\:bg-emerald-800:hover { background-color: #244a44 !important; }
+        .dr-premium .border-emerald-100 { border-color: #dcebe5 !important; }
+        .dr-premium .bg-emerald-50 { background-color: #edf6f2 !important; }
+        .dr-premium .bg-emerald-50\\/70 { background-color: rgba(237,246,242,.82) !important; }
+        .dr-premium .bg-emerald-50\\/60 { background-color: rgba(237,246,242,.68) !important; }
+
+        :global(html.dark) .dr-premium,
+        :global(.dark) .dr-premium {
+          --dr-ink: #e6edf7;
+          --dr-muted: #9aa9bd;
+          --dr-line: #29384c;
+          --dr-surface: #111c2d;
+          --dr-canvas: #091321;
+          --dr-navy: #dce8f7;
+          --dr-emerald: #83b9a8;
+          color: var(--dr-ink) !important;
+          background:
+            radial-gradient(ellipse at 92% 0%, rgba(79,138,120,.13), transparent 32%),
+            #091321 !important;
+        }
+        :global(html.dark) .dr-premium section,
+        :global(.dark) .dr-premium section {
+          background-color: #111c2d !important;
+          border-color: #29384c !important;
+          box-shadow: 0 14px 38px rgba(0,0,0,.18) !important;
+        }
+        :global(html.dark) .dr-premium .bg-white,
+        :global(.dark) .dr-premium .bg-white {
+          background-color: #152236 !important;
+        }
+        :global(html.dark) .dr-premium .bg-slate-50,
+        :global(.dark) .dr-premium .bg-slate-50,
+        :global(html.dark) .dr-premium .bg-slate-50\\/60,
+        :global(.dark) .dr-premium .bg-slate-50\\/60,
+        :global(html.dark) .dr-premium .bg-slate-50\\/70,
+        :global(.dark) .dr-premium .bg-slate-50\\/70 {
+          background-color: #0d1929 !important;
+        }
+        :global(html.dark) .dr-premium .bg-emerald-50,
+        :global(.dark) .dr-premium .bg-emerald-50,
+        :global(html.dark) .dr-premium .bg-emerald-50\\/70,
+        :global(.dark) .dr-premium .bg-emerald-50\\/70,
+        :global(html.dark) .dr-premium .bg-emerald-50\\/60,
+        :global(.dark) .dr-premium .bg-emerald-50\\/60 {
+          background-color: #142b2b !important;
+        }
+        :global(html.dark) .dr-premium .bg-slate-100,
+        :global(.dark) .dr-premium .bg-slate-100 {
+          background-color: #263449 !important;
+        }
+        :global(html.dark) .dr-premium .border-slate-200,
+        :global(.dark) .dr-premium .border-slate-200,
+        :global(html.dark) .dr-premium .border-slate-100,
+        :global(.dark) .dr-premium .border-slate-100,
+        :global(html.dark) .dr-premium .border-emerald-100,
+        :global(.dark) .dr-premium .border-emerald-100 {
+          border-color: #29384c !important;
+        }
+        :global(html.dark) .dr-premium .text-emerald-950,
+        :global(.dark) .dr-premium .text-emerald-950,
+        :global(html.dark) .dr-premium .text-emerald-900,
+        :global(.dark) .dr-premium .text-emerald-900,
+        :global(html.dark) .dr-premium .text-slate-700,
+        :global(.dark) .dr-premium .text-slate-700,
+        :global(html.dark) .dr-premium .text-slate-600,
+        :global(.dark) .dr-premium .text-slate-600 {
+          color: #e3ebf7 !important;
+        }
+        :global(html.dark) .dr-premium .text-slate-500,
+        :global(.dark) .dr-premium .text-slate-500,
+        :global(html.dark) .dr-premium .text-slate-400,
+        :global(.dark) .dr-premium .text-slate-400 {
+          color: #9aa9bd !important;
+        }
+        /* Keep every common text utility readable in dark mode, including labels
+           and helper text that may use gray/zinc/neutral utilities. */
+        :global(html.dark) .dr-premium .text-gray-950,
+        :global(.dark) .dr-premium .text-gray-950,
+        :global(html.dark) .dr-premium .text-gray-900,
+        :global(.dark) .dr-premium .text-gray-900,
+        :global(html.dark) .dr-premium .text-gray-800,
+        :global(.dark) .dr-premium .text-gray-800,
+        :global(html.dark) .dr-premium .text-gray-700,
+        :global(.dark) .dr-premium .text-gray-700,
+        :global(html.dark) .dr-premium .text-gray-600,
+        :global(.dark) .dr-premium .text-gray-600,
+        :global(html.dark) .dr-premium .text-zinc-900,
+        :global(.dark) .dr-premium .text-zinc-900,
+        :global(html.dark) .dr-premium .text-zinc-800,
+        :global(.dark) .dr-premium .text-zinc-800,
+        :global(html.dark) .dr-premium .text-zinc-700,
+        :global(.dark) .dr-premium .text-zinc-700,
+        :global(html.dark) .dr-premium .text-neutral-900,
+        :global(.dark) .dr-premium .text-neutral-900,
+        :global(html.dark) .dr-premium .text-neutral-800,
+        :global(.dark) .dr-premium .text-neutral-800,
+        :global(html.dark) .dr-premium .text-black,
+        :global(.dark) .dr-premium .text-black {
+          color: #e8eef8 !important;
+        }
+        :global(html.dark) .dr-premium .text-gray-500,
+        :global(.dark) .dr-premium .text-gray-500,
+        :global(html.dark) .dr-premium .text-gray-400,
+        :global(.dark) .dr-premium .text-gray-400,
+        :global(html.dark) .dr-premium .text-zinc-500,
+        :global(.dark) .dr-premium .text-zinc-500,
+        :global(html.dark) .dr-premium .text-neutral-500,
+        :global(.dark) .dr-premium .text-neutral-500 {
+          color: #b2bfd1 !important;
+        }
+        :global(html.dark) .dr-premium label,
+        :global(.dark) .dr-premium label,
+        :global(html.dark) .dr-premium legend,
+        :global(.dark) .dr-premium legend {
+          color: #dce6f4;
+        }
+        :global(html.dark) .dr-premium p,
+        :global(.dark) .dr-premium p,
+        :global(html.dark) .dr-premium li,
+        :global(.dark) .dr-premium li,
+        :global(html.dark) .dr-premium small,
+        :global(.dark) .dr-premium small {
+          text-shadow: none;
+        }
+        :global(html.dark) .dr-premium .text-white,
+        :global(.dark) .dr-premium .text-white {
+          color: #ffffff !important;
+        }
+        :global(html.dark) .dr-premium input,
+        :global(html.dark) .dr-premium textarea,
+        :global(html.dark) .dr-premium select,
+        :global(.dark) .dr-premium input,
+        :global(.dark) .dr-premium textarea,
+        :global(.dark) .dr-premium select {
+          color: #e3ebf7 !important;
+          background-color: #0d1929;
+          border-color: #34445a;
+          color-scheme: dark;
+        }
+        :global(html.dark) .dr-premium input::placeholder,
+        :global(html.dark) .dr-premium textarea::placeholder,
+        :global(.dark) .dr-premium input::placeholder,
+        :global(.dark) .dr-premium textarea::placeholder {
+          color: #74859c !important;
+        }
+        :global(html.dark) .dr-premium select option,
+        :global(.dark) .dr-premium select option {
+          color: #e3ebf7;
+          background: #0d1929;
+        }
+        :global(html.dark) .dr-premium button:not(.bg-emerald-700),
+        :global(.dark) .dr-premium button:not(.bg-emerald-700) {
+          text-decoration-color: currentColor;
+        }
+        :global(html.dark) .dr-premium .bg-emerald-700,
+        :global(.dark) .dr-premium .bg-emerald-700 {
+          background-color: #3e7568 !important;
+        }
+        :global(html.dark) .dr-premium .text-emerald-700,
+        :global(.dark) .dr-premium .text-emerald-700,
+        :global(html.dark) .dr-premium .text-emerald-800,
+        :global(.dark) .dr-premium .text-emerald-800 {
+          color: #91c9b7 !important;
+        }
+        :global(html.dark) .dr-premium .hover\\:bg-emerald-50:hover,
+        :global(.dark) .dr-premium .hover\\:bg-emerald-50:hover {
+          background-color: #1b3537 !important;
+        }
+        :global(html.dark) .dr-premium .bg-amber-50,
+        :global(.dark) .dr-premium .bg-amber-50 {
+          background-color: #302719 !important;
+        }
+        :global(html.dark) .dr-premium .text-amber-800,
+        :global(.dark) .dr-premium .text-amber-800 {
+          color: #f4c77c !important;
+        }
+        :global(html.dark) .dr-premium .bg-red-50,
+        :global(.dark) .dr-premium .bg-red-50 {
+          background-color: #351e2a !important;
+        }
+        :global(html.dark) .dr-premium .text-red-700,
+        :global(.dark) .dr-premium .text-red-700 {
+          color: #fda4af !important;
+        }
+        :global(html.dark) .dr-confirm-modal .rounded-\\[32px\\],
+        :global(.dark) .dr-confirm-modal .rounded-\\[32px\\],
+        :global(html.dark) .dr-confirm-modal .bg-white,
+        :global(.dark) .dr-confirm-modal .bg-white {
+          background-color: #111c2d !important;
+          border-color: #29384c !important;
+          color: #e3ebf7 !important;
+        }
+        /* FINAL DARK-MODE CONTRAST OVERRIDE: prevent navy/dark text utilities
+           from remaining dark on navy surfaces. */
+        :global(html.dark) .dr-premium [class~="text-emerald-950"],
+        :global(.dark) .dr-premium [class~="text-emerald-950"],
+        :global(html.dark) .dr-premium [class~="text-emerald-900"],
+        :global(.dark) .dr-premium [class~="text-emerald-900"],
+        :global(html.dark) .dr-premium [class~="text-slate-900"],
+        :global(.dark) .dr-premium [class~="text-slate-900"],
+        :global(html.dark) .dr-premium [class~="text-slate-800"],
+        :global(.dark) .dr-premium [class~="text-slate-800"],
+        :global(html.dark) .dr-premium [class~="text-slate-700"],
+        :global(.dark) .dr-premium [class~="text-slate-700"],
+        :global(html.dark) .dr-premium [class~="text-slate-600"],
+        :global(.dark) .dr-premium [class~="text-slate-600"],
+        :global(html.dark) .dr-premium [class~="text-gray-950"],
+        :global(.dark) .dr-premium [class~="text-gray-950"],
+        :global(html.dark) .dr-premium [class~="text-gray-900"],
+        :global(.dark) .dr-premium [class~="text-gray-900"],
+        :global(html.dark) .dr-premium [class~="text-gray-800"],
+        :global(.dark) .dr-premium [class~="text-gray-800"],
+        :global(html.dark) .dr-premium [class~="text-gray-700"],
+        :global(.dark) .dr-premium [class~="text-gray-700"],
+        :global(html.dark) .dr-premium [class~="text-gray-600"],
+        :global(.dark) .dr-premium [class~="text-gray-600"],
+        :global(html.dark) .dr-premium [class~="text-zinc-900"],
+        :global(.dark) .dr-premium [class~="text-zinc-900"],
+        :global(html.dark) .dr-premium [class~="text-zinc-800"],
+        :global(.dark) .dr-premium [class~="text-zinc-800"],
+        :global(html.dark) .dr-premium [class~="text-zinc-700"],
+        :global(.dark) .dr-premium [class~="text-zinc-700"],
+        :global(html.dark) .dr-premium [class~="text-neutral-900"],
+        :global(.dark) .dr-premium [class~="text-neutral-900"],
+        :global(html.dark) .dr-premium [class~="text-neutral-800"],
+        :global(.dark) .dr-premium [class~="text-neutral-800"] {
+          color: #f3f7ff !important;
+        }
+        :global(html.dark) .dr-premium h1,
+        :global(.dark) .dr-premium h1,
+        :global(html.dark) .dr-premium h2,
+        :global(.dark) .dr-premium h2,
+        :global(html.dark) .dr-premium h3,
+        :global(.dark) .dr-premium h3,
+        :global(html.dark) .dr-premium h4,
+        :global(.dark) .dr-premium h4 {
+          color: #f5f8ff;
+        }
+        :global(html.dark) .dr-premium [data-theme="dark"],
+        :global(.dark) .dr-premium [data-theme="dark"] {
+          color: #eaf1fb;
+        }
+        /* MGB premium refinement: orange replaces navy for key headings and values. */
+        .dr-premium [class~="text-emerald-950"] { color: #e87920 !important; }
+        .dr-premium [class~="text-emerald-900"] { color: #d96b16 !important; }
+        .dr-premium section {
+          backdrop-filter: saturate(1.04);
+        }
+        .dr-premium input,
+        .dr-premium textarea,
+        .dr-premium select {
+          border-radius: 14px;
+          transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+        }
+        .dr-premium button {
+          transition: transform .18s ease, box-shadow .18s ease, background-color .18s ease, border-color .18s ease;
+        }
+        .dr-premium button:disabled {
+          filter: saturate(.72);
+        }
+        :global(html.dark) .dr-premium [class~="text-emerald-950"],
+        :global(.dark) .dr-premium [class~="text-emerald-950"] {
+          color: #ffad5c !important;
+        }
+        :global(html.dark) .dr-premium [class~="text-emerald-900"],
+        :global(.dark) .dr-premium [class~="text-emerald-900"] {
+          color: #ff9a3d !important;
+        }
+        :global(html.dark) .dr-premium .bg-amber-50,
+        :global(.dark) .dr-premium .bg-amber-50 {
+          background-color: #302317 !important;
+          border-color: #68431f !important;
+        }
+        :global(html.dark) .dr-premium .border-amber-200,
+        :global(.dark) .dr-premium .border-amber-200 {
+          border-color: #68431f !important;
+        }
+        :global(html.dark) .dr-premium .text-amber-700,
+        :global(.dark) .dr-premium .text-amber-700 {
+          color: #ffc078 !important;
+        }
+        :global(html.dark) .dr-premium .bg-red-100,
+        :global(.dark) .dr-premium .bg-red-100 {
+          background-color: #48232b !important;
+        }
+        :global(html.dark) .dr-premium .bg-emerald-100,
+        :global(.dark) .dr-premium .bg-emerald-100 {
+          background-color: #1d3937 !important;
+        }
+        :global(html.dark) .dr-premium .text-emerald-600,
+        :global(.dark) .dr-premium .text-emerald-600 {
+          color: #9bd3bd !important;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .dr-premium *, .dr-confirm-modal * { transition-duration: .01ms !important; }
+        }
+      `}</style>
+
+      <main className="dr-premium min-h-screen bg-slate-50 px-3 py-4 md:px-6 md:py-7 lg:px-8">
         <div className="mx-auto w-full max-w-[1320px] space-y-5">
 
           {/* TOP ACCENT */}
@@ -2786,7 +3119,7 @@ export default function DeliveryRequestNewPage() {
 
       {showConfirmModal && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/55 p-3 sm:p-4 backdrop-blur-sm"
+          className="dr-confirm-modal fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/55 p-3 sm:p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="delivery-request-confirm-title"

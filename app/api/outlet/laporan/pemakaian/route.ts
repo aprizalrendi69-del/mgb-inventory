@@ -24,11 +24,12 @@ import { prisma } from "@/lib/prisma";
  * - Perhitungan menggunakan Stock Opname bulanan APPROVED.
  * - Bulan berjalan boleh memakai stok sistem sebagai stok akhir
  *   sementara jika Stock Opname akhir bulan belum tersedia.
- * - Kuantitas transaksi diasumsikan sudah mengikuti satuan
- *   penyimpanan yang digunakan modul terkait.
- * - Penerimaan PO dan Delivery dikonversi ke baseUnit sekali.
- * - Transfer outlet menggunakan kuantitas stok outlet yang
- *   sudah tersimpan dalam satuan stok.
+ * - Saldo OutletStock dan Stock Opname diasumsikan menggunakan baseUnit.
+ * - Penerimaan PO dan Delivery dikonversi ke baseUnit tepat satu kali.
+ * - Transfer receivedQty, waste, adjustment, dan saldo sistem harus sudah
+ *   berada dalam baseUnit sesuai kontrak jalur stok masing-masing.
+ * - StockMutation tidak dijumlahkan di samping dokumen sumber agar tidak
+ *   menghitung penerimaan/transfer/waste yang sama dua kali.
  * =========================================================
  */
 
@@ -77,10 +78,29 @@ function toBaseQty(
   return quantity;
 }
 
+/**
+ * Batas bulan kalender Asia/Jakarta.
+ * Prisma menyimpan DateTime sebagai UTC, jadi awal bulan WIB
+ * dikonversi ke UTC dengan mengurangi 7 jam. Jangan gunakan
+ * constructor lokal server karena server bisa berjalan di UTC.
+ */
 function dateRange(year: number, month: number) {
+  const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
   return {
-    start: new Date(year, month - 1, 1, 0, 0, 0, 0),
-    end: new Date(year, month, 1, 0, 0, 0, 0),
+    start: new Date(Date.UTC(year, month - 1, 1) - WIB_OFFSET_MS),
+    end: new Date(Date.UTC(year, month, 1) - WIB_OFFSET_MS),
+  };
+}
+
+function getJakartaYearMonth(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "numeric",
+  }).formatToParts(date);
+  return {
+    year: Number(parts.find((part) => part.type === "year")?.value),
+    month: Number(parts.find((part) => part.type === "month")?.value),
   };
 }
 
@@ -212,13 +232,14 @@ export async function GET(req: NextRequest) {
 
     const params = req.nextUrl.searchParams;
     const now = new Date();
+    const jakartaNow = getJakartaYearMonth(now);
 
     const year = Number(
-      params.get("year") ?? now.getFullYear()
+      params.get("year") ?? jakartaNow.year
     );
 
     const month = Number(
-      params.get("month") ?? now.getMonth() + 1
+      params.get("month") ?? jakartaNow.month
     );
 
     if (
@@ -324,8 +345,8 @@ export async function GET(req: NextRequest) {
     const { start, end } = dateRange(year, month);
 
     const isCurrentPeriod =
-      year === now.getFullYear() &&
-      month === now.getMonth() + 1;
+      year === jakartaNow.year &&
+      month === jakartaNow.month;
 
     // =====================================================
     // 5. STOCK OPNAME AWAL
@@ -515,6 +536,9 @@ export async function GET(req: NextRequest) {
             lt: end,
           },
           sourceOutletId: { not: null },
+          // Hanya transfer yang sudah diterima sebagian/seluruhnya.
+          // Status SENT saja belum berarti stok sudah masuk ke outlet tujuan.
+          status: { in: ["PARTIAL", "RECEIVED"] },
         },
         include: {
           items: {
@@ -738,6 +762,8 @@ export async function GET(req: NextRequest) {
             gte: start,
             lt: end,
           },
+          // Transfer keluar baru dihitung jika statusnya sudah dikirim.
+          status: { in: ["SENT", "PARTIAL", "RECEIVED"] },
         },
         include: {
           items: {

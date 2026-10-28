@@ -36,11 +36,6 @@ export function proxy(request: NextRequest) {
 
 
 
-  console.log(
-    "CHECK SESSION :",
-    session?.value
-  );
-
 
 
   if(!session){

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createPDF } from "@/lib/pdf";
+import { getCompanyPdfBrand } from "@/lib/company-pdf";
 
 
 
@@ -97,13 +98,16 @@ Buffer.concat(buffers)
 
 
 
-doc.fontSize(18)
-.text(
-"PT. MITRA GARAM BOGATAMA",
-{
-align:"center"
+const companyBrand = await getCompanyPdfBrand();
+if (companyBrand.logoBuffer && companyBrand.logoFormat) {
+  try { doc.image(companyBrand.logoBuffer, 50, 35, { fit: [64, 64] }); } catch (error) { console.error("PDF_COMPANY_LOGO_ERROR", error); }
+  doc.fontSize(16).text(companyBrand.name, 125, 40, { width: 390, align: "left" });
+  if (companyBrand.address) doc.fontSize(8).text(companyBrand.address, 125, 61, { width: 390 });
+  doc.y = 105;
+} else {
+  doc.fontSize(18).text(companyBrand.name, { align: "center" });
 }
-);
+
 
 
 

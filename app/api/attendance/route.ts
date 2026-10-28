@@ -154,6 +154,25 @@ todayEnd.setHours(
 
 if(type==="IN"){
 
+const workDate = new Date(todayStart);
+const schedule = await prisma.employeeWorkSchedule.findUnique({
+  where: { employeeId_workDate: { employeeId: Number(employeeId), workDate } },
+});
+
+if (!schedule) {
+  return NextResponse.json({ success: false, message: "Jadwal kerja hari ini belum dibuat. Hubungi admin untuk mengatur shift sebelum absen." }, { status: 400 });
+}
+
+const [startHour, startMinute] = schedule.startTime.split(":").map(Number);
+if (!Number.isInteger(startHour) || !Number.isInteger(startMinute) || startHour < 0 || startHour > 23 || startMinute < 0 || startMinute > 59) {
+  return NextResponse.json({ success: false, message: "Jam masuk pada jadwal tidak valid." }, { status: 400 });
+}
+const scheduledIn = new Date(todayStart);
+scheduledIn.setHours(startHour, startMinute, 0, 0);
+const actualCheckIn = new Date();
+const expectedCheckout = new Date(actualCheckIn.getTime() + schedule.workHours * 60 * 60 * 1000);
+const attendanceStatus = actualCheckIn.getTime() > scheduledIn.getTime() ? "LATE" : "ON_TIME";
+
 
 
 
@@ -213,10 +232,18 @@ const data = {
 employeeId:Number(employeeId),
 
 
-date:new Date(),
+date:todayStart,
 
 
-checkIn:new Date(),
+checkIn:actualCheckIn,
+
+shiftName: schedule.shiftName,
+
+scheduledIn,
+
+expectedCheckout,
+
+attendanceStatus,
 
 
 

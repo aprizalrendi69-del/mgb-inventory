@@ -13,9 +13,10 @@ import {
   Check,
   CheckCheck,
   ChevronLeft,
-  MessageCircle,
+  MessagesSquare,
   Minus,
   MoreHorizontal,
+  Trash2,
   Search,
   Send,
   Smile,
@@ -556,6 +557,12 @@ export default function GlobalChat() {
     useState(false);
 
   const [sending, setSending] =
+    useState(false);
+
+  const [deletingMessageId, setDeletingMessageId] =
+    useState<number | null>(null);
+
+  const [clearingChat, setClearingChat] =
     useState(false);
 
   const [messageInput, setMessageInput] =
@@ -1284,6 +1291,73 @@ export default function GlobalChat() {
 
   /*
    * ============================================================
+   * DELETE MESSAGE / CLEAR CONVERSATION
+   *
+   * Requires DELETE support in /api/chat/messages:
+   * - ?messageId=<id> deletes one message
+   * - ?conversationId=<id>&clear=true clears this conversation
+   * ============================================================
+   */
+
+  const deleteMessage = useCallback(
+    async (message: ChatMessage) => {
+      if (!selectedConversationId || deletingMessageId !== null) return;
+      if (message.senderId !== currentUser?.id) {
+        setError("Kamu hanya dapat menghapus pesan yang kamu kirim.");
+        return;
+      }
+      if (!window.confirm("Hapus pesan ini? Tindakan ini tidak dapat dibatalkan.")) return;
+
+      try {
+        setDeletingMessageId(message.id);
+        setError("");
+        const response = await fetch(
+          `/api/chat/messages?messageId=${message.id}&conversationId=${selectedConversationId}`,
+          { method: "DELETE", cache: "no-store" },
+        );
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data?.error || "Gagal menghapus pesan. Pastikan API DELETE chat sudah tersedia.");
+        }
+        setMessages((prev) => prev.filter((item) => item.id !== message.id));
+        await loadConversations(true);
+      } catch (err) {
+        console.error(err);
+        setError(err instanceof Error ? err.message : "Gagal menghapus pesan.");
+      } finally {
+        setDeletingMessageId(null);
+      }
+    },
+    [selectedConversationId, deletingMessageId, currentUser?.id, loadConversations],
+  );
+
+  const clearConversation = useCallback(async () => {
+    if (!selectedConversationId || clearingChat) return;
+    if (!window.confirm("Bersihkan semua pesan di percakapan ini? Pesan akan dihapus untuk percakapan ini.")) return;
+
+    try {
+      setClearingChat(true);
+      setError("");
+      const response = await fetch(
+        `/api/chat/messages?conversationId=${selectedConversationId}&clear=true`,
+        { method: "DELETE", cache: "no-store" },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Gagal membersihkan chat. Pastikan API DELETE chat sudah tersedia.");
+      }
+      setMessages([]);
+      await loadConversations(true);
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Gagal membersihkan chat.");
+    } finally {
+      setClearingChat(false);
+    }
+  }, [selectedConversationId, clearingChat, loadConversations]);
+
+  /*
+   * ============================================================
    * INITIAL DATA LOAD
    *
    * IMPORTANT:
@@ -1587,7 +1661,7 @@ export default function GlobalChat() {
               "
             />
 
-            <MessageCircle
+            <MessagesSquare
               className="
                 relative
                 z-10
@@ -1730,7 +1804,7 @@ export default function GlobalChat() {
                 "
               />
 
-              <MessageCircle
+              <MessagesSquare
                 className="relative h-[18px] w-[18px]"
                 strokeWidth={1.8}
               />
@@ -2047,7 +2121,7 @@ export default function GlobalChat() {
                     "
                   />
 
-                  <MessageCircle
+                  <MessagesSquare
                     className="relative h-[19px] w-[19px]"
                     strokeWidth={1.7}
                   />
@@ -2097,6 +2171,22 @@ export default function GlobalChat() {
             )}
 
             <div className="flex items-center gap-1">
+              {selectedConversationId && (
+                <button
+                  type="button"
+                  onClick={clearConversation}
+                  disabled={clearingChat || messages.length === 0}
+                  aria-label="Bersihkan chat"
+                  title="Bersihkan semua pesan di chat ini"
+                  className="flex h-9 w-9 items-center justify-center rounded-[11px] border border-white/10 text-white/80 transition hover:border-rose-200/30 hover:bg-rose-400/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {clearingChat ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/35 border-t-white" />
+                  ) : (
+                    <Trash2 className="h-[16px] w-[16px]" strokeWidth={1.8} />
+                  )}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() =>
@@ -2252,7 +2342,7 @@ export default function GlobalChat() {
                     >
                       <span className="absolute inset-0 bg-gradient-to-br from-[#EFFAF4] to-transparent" />
 
-                      <MessageCircle
+                      <MessagesSquare
                         className="relative h-5 w-5 animate-pulse"
                         strokeWidth={1.7}
                       />
@@ -2286,7 +2376,7 @@ export default function GlobalChat() {
                     >
                       <span className="absolute inset-0 bg-gradient-to-br from-white/35 via-transparent to-transparent" />
 
-                      <MessageCircle
+                      <MessagesSquare
                         className="relative h-6 w-6"
                         strokeWidth={1.6}
                       />
@@ -2315,7 +2405,7 @@ export default function GlobalChat() {
                   return (
                     <div
                       key={message.id}
-                      className={`flex ${
+                      className={`group flex ${
                         mine
                           ? "justify-end"
                           : "justify-start"
@@ -2378,6 +2468,23 @@ export default function GlobalChat() {
                           <div className="whitespace-pre-wrap break-words">
                             {message.message}
                           </div>
+
+                          {mine && (
+                            <button
+                              type="button"
+                              onClick={() => deleteMessage(message)}
+                              disabled={deletingMessageId === message.id}
+                              title="Hapus pesan"
+                              aria-label={`Hapus pesan: ${message.message.slice(0, 60)}`}
+                              className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full border border-white/80 bg-white text-[#C44B55] opacity-100 shadow-[0_4px_12px_rgba(15,23,42,0.16)] transition hover:scale-105 hover:bg-rose-50 disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+                            >
+                              {deletingMessageId === message.id ? (
+                                <span className="h-3 w-3 animate-spin rounded-full border-2 border-rose-200 border-t-rose-600" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.9} />
+                              )}
+                            </button>
+                          )}
 
                           <div
                             className={`

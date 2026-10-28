@@ -41,8 +41,8 @@ export async function changeOutletStock(
   const baseUnit = getBaseUnit(barang);
   const conversionRate = getConversionRate(barang);
 
-  // OutletStock.stock disimpan dalam main/display unit.
-  // deltaBaseQty datang dalam base unit.
+  // Konvensi stok outlet: OutletStock.stock disimpan dalam Barang.unit.
+  // deltaBaseQty datang dalam baseUnit dan dikonversi ke unit utama sekali.
   const deltaStockUnit = baseToMainQty(args.deltaBaseQty, barang);
 
   const existing = await tx.outletStock.findUnique({

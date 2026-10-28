@@ -1049,6 +1049,19 @@ export async function POST(
               },
             });
 
+            await tx.stockMutation.create({
+              data: {
+                outletId: sourceOutlet.id,
+                barangId: item.barangId,
+                type: "OUTLET_TRANSFER_OUT",
+                qty: item.qty,
+                stockBefore: item.stockBefore,
+                stockAfter: item.stockAfter,
+                reference: number,
+                description: `Transfer keluar ${number}: ${sourceOutlet.name} → ${destinationOutlet.name}`,
+              },
+            });
+
             // ===========================================
             // STOCK CARD OUT
             // ===========================================

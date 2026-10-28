@@ -1,13 +1,6 @@
-export default function Page() {
-  return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold">
-        Dalam Pengembangan
-      </h1>
+import Link from "next/link";
+import { ArrowLeft, Boxes, Code2, ShieldCheck, Database, Info } from "lucide-react";
 
-      <p className="text-gray-500 mt-3">
-        Modul ini akan segera dibuat.
-      </p>
-    </div>
-  );
+export default function AboutPage() {
+  return <main className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-9 dark:bg-slate-950"><div className="mx-auto max-w-4xl space-y-6"><Link href="/pengaturan" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-emerald-700"><ArrowLeft size={15}/> Kembali ke Pengaturan</Link><section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="h-1 bg-gradient-to-r from-slate-900 via-emerald-700 to-teal-300"/><div className="p-7 sm:p-9"><div className="flex items-center gap-4"><div className="rounded-2xl bg-emerald-50 p-3 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"><Info size={26}/></div><div><p className="text-[10px] font-black uppercase tracking-[.2em] text-emerald-700">Application information</p><h1 className="mt-1 text-2xl font-black">Tentang MGB Inventory</h1><p className="mt-1 text-sm text-slate-500">Sistem ERP operasional PT. Mitra Garam Bogatama.</p></div></div><div className="mt-7 grid gap-3 sm:grid-cols-2">{[{icon:Boxes,title:"Produk",value:"MGB Inventory ERP",desc:"Pengelolaan inventori, pembelian, outlet, POS, dan laporan."},{icon:Code2,title:"Framework",value:"Next.js · React · TypeScript",desc:"Aplikasi web dengan rendering server dan client."},{icon:Database,title:"Database",value:"Prisma ORM · SQLite (sesuai konfigurasi proyek)",desc:"Backup database wajib dilakukan sebelum pemeliharaan."},{icon:ShieldCheck,title:"Praktik aman",value:"Backup sebelum perubahan",desc:"Restore produksi tidak dilakukan otomatis dari halaman ini."}].map((item)=>{const Icon=item.icon;return <div key={item.title} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800"><Icon size={18} className="text-emerald-700"/><p className="mt-3 text-xs font-bold uppercase tracking-wider text-slate-400">{item.title}</p><p className="mt-1 text-sm font-extrabold">{item.value}</p><p className="mt-1 text-xs leading-5 text-slate-500">{item.desc}</p></div>})}</div><p className="mt-6 rounded-xl bg-slate-50 p-4 text-xs leading-5 text-slate-500 dark:bg-slate-950">Nomor versi build tidak ditampilkan sebagai angka tetap agar tidak memberikan informasi versi yang belum diverifikasi saat aplikasi dijalankan.</p></div></section></div></main>;
 }

@@ -56,7 +56,11 @@ type Item = {
     id: number;
     code: string;
     name: string;
+    /** Satuan transaksi yang dipakai pada form Qty Diterima. */
     unit: string;
+    /** Satuan dasar hanya untuk informasi; konversi stok dilakukan satu kali di API. */
+    baseUnit?: string | null;
+    conversionRate?: number | null;
   };
 };
 
@@ -1858,6 +1862,20 @@ export default function OutletBarangMasukDetailPage() {
   };
 
   // =====================================================
+  // RECEIVE QTY PAYLOAD
+  // =====================================================
+  // Nilai Qty Diterima dari form selalu dikirim dalam satuan transaksi
+  // (barang.unit), tanpa konversi di halaman ini.
+  // Contoh: unit = "kg" dan baseUnit = "kg", input 5 dikirim sebagai 5.
+  // API penerimaan menjadi satu-satunya tempat untuk mengonversi ke base
+  // unit bila memang berbeda. Dengan demikian konversi tidak dilakukan
+  // dua kali di frontend dan backend.
+  const getReceiveQtyForApi = (item: Item): number => {
+    const qty = Number(receivedQty[item.id] ?? 0);
+    return Number.isFinite(qty) && qty >= 0 ? qty : 0;
+  };
+
+  // =====================================================
   // EXECUTE RECEIVE
   // =====================================================
 
@@ -1885,12 +1903,7 @@ export default function OutletBarangMasukDetailPage() {
                 receivableItems.map(
                   (item) => ({
                     id: item.id,
-                    receivedQty:
-                      Number(
-                        receivedQty[
-                          item.id
-                        ] ?? 0
-                      ),
+                    receivedQty: getReceiveQtyForApi(item),
                   })
                 ),
             }),
@@ -1911,9 +1924,7 @@ export default function OutletBarangMasukDetailPage() {
                 invoiceNumberTrimmed || null,
               items: receivableItems.map((item) => ({
                 id: item.id,
-                receivedQty: Number(
-                  receivedQty[item.id] ?? 0
-                ),
+                receivedQty: getReceiveQtyForApi(item),
               })),
             }),
           }
@@ -3929,7 +3940,7 @@ export default function OutletBarangMasukDetailPage() {
               <tfoot>
                 <tr className="bg-[#F5F8F6]">
                   <td
-                    colSpan={3}
+                    colSpan={2}
                     className="px-5 py-5 text-right text-xs font-extrabold uppercase tracking-wider text-[#527065]"
                   >
                     Total Barang Aktif
@@ -3943,7 +3954,9 @@ export default function OutletBarangMasukDetailPage() {
                     {formatNumber(totalReceivedQty)}
                   </td>
 
-                  <td />
+                  <td className="px-5 py-5 text-right text-gray-400">
+                    —
+                  </td>
 
                   <td className="px-5 py-5 text-right font-extrabold text-[#18352D]">
                     {formatCurrency(
@@ -4427,7 +4440,7 @@ export default function OutletBarangMasukDetailPage() {
                       ) : (
                         <ImagePlus size={13} />
                       )}
-                      {commentImageLoading ? "Memproses..." : "Tambah Foto"}
+                      {commentImageLoading ? "Memproses..." : "Foto"}
                     </button>
 
                     <span className="hidden text-[10px] font-medium text-gray-400 sm:inline">

@@ -1,13 +1,3 @@
-export default function Page() {
-  return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold">
-        Dalam Pengembangan
-      </h1>
-
-      <p className="text-gray-500 mt-3">
-        Modul ini akan segera dibuat.
-      </p>
-    </div>
-  );
-}
+import Link from "next/link";
+import { ArrowLeft, Warehouse, Database, Info, ExternalLink } from "lucide-react";
+export default function GudangSettingsPage(){return <main className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-9 dark:bg-slate-950"><div className="mx-auto max-w-4xl space-y-6"><Link href="/pengaturan" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-emerald-700"><ArrowLeft size={15}/> Kembali ke Pengaturan</Link><section className="rounded-[26px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8 dark:border-slate-800 dark:bg-slate-900"><div className="flex items-start gap-4"><div className="rounded-2xl bg-emerald-50 p-3 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"><Warehouse size={25}/></div><div><p className="text-[10px] font-black uppercase tracking-[.2em] text-emerald-700">Inventory configuration</p><h1 className="mt-1 text-2xl font-black">Pengaturan Gudang</h1><p className="mt-2 text-sm leading-6 text-slate-500">Audit schema menemukan bahwa stok pusat menggunakan field teks `Inventory.warehouse` dengan nilai default `MAIN`, bukan master Gudang terpisah. Membuat tombol tambah/edit/hapus gudang tanpa migrasi model dan pemetaan stok berisiko membuat stok tidak konsisten.</p></div></div><div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30"><div className="flex gap-3"><Info size={18} className="mt-0.5 shrink-0 text-amber-700"/><div><p className="text-sm font-extrabold text-amber-900 dark:text-amber-200">Belum ada master gudang multi-lokasi</p><p className="mt-1 text-xs leading-5 text-amber-800 dark:text-amber-300">Halaman ini sengaja tidak menyediakan operasi yang seolah-olah menyimpan gudang baru. Implementasi yang benar memerlukan model Gudang, relasi inventory, aturan transfer, dan migrasi data yang aman.</p></div></div></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><Database size={18} className="text-slate-500"/><p className="mt-2 text-xs font-bold uppercase tracking-wider text-slate-400">Struktur saat ini</p><p className="mt-1 text-sm font-extrabold">Inventory.warehouse</p><p className="mt-1 text-xs text-slate-500">Field teks, default MAIN.</p></div><div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"><Warehouse size={18} className="text-slate-500"/><p className="mt-2 text-xs font-bold uppercase tracking-wider text-slate-400">Langkah aman</p><p className="mt-1 text-sm font-extrabold">Desain master Gudang</p><p className="mt-1 text-xs text-slate-500">Perlu audit semua pembacaan stok sebelum perubahan schema.</p></div></div><Link href="/inventory" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800 dark:bg-emerald-700">Buka modul persediaan <ExternalLink size={15}/></Link></section></div></main>}

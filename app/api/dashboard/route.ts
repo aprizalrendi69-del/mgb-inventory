@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getOutletActor } from "@/lib/outlet-access";
 
 export async function GET(req: NextRequest) {
   try {
+    const actor = await getOutletActor();
+    if (!actor?.active) {
+      return NextResponse.json({ success: false, message: "Sesi tidak valid. Silakan login kembali." }, { status: 401 });
+    }
     /* =====================================================
        PERIOD GRAFIK
     ===================================================== */

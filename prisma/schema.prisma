@@ -39,6 +39,8 @@ model User {
 
   transferComments              OutletTransferComment[]
   outletTransferCommentMentions OutletTransferCommentMention[]
+  payableReminderLogs           PayableReminderLog[]
+  whatsappPhone                 String?
 }
 
 model Outlet {
@@ -52,7 +54,7 @@ model Outlet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sourceBarangs     Barang[]           @relation("BarangSourceOutlet")
+  sourceBarangs     Barang[]                 @relation("BarangSourceOutlet")
   deliveries        Delivery[]
   deliveryRequests  DeliveryRequest[]
   outletBarang      OutletBarang[]
@@ -61,8 +63,8 @@ model Outlet {
   sales             OutletSale[]
   stocks            OutletStock[]
   stockOuts         OutletStockOut[]
-  transfersIn       OutletTransfer[]   @relation("TransferDestinationOutlet")
-  transfersOut      OutletTransfer[]   @relation("TransferSourceOutlet")
+  transfersIn       OutletTransfer[]         @relation("TransferDestinationOutlet")
+  transfersOut      OutletTransfer[]         @relation("TransferSourceOutlet")
   pettyCash         PettyCash[]
   pettyCashAccounts PettyCashAccount?
   purchasePayables  PurchasePayable[]
@@ -72,7 +74,7 @@ model Outlet {
   manufactureOrders ManufactureOrder[]
   stockMutations    StockMutation[]
   outletAdjustments OutletAdjustment[]
-  inventoryMonthly OutletInventoryMonthly[]
+  inventoryMonthly  OutletInventoryMonthly[]
 }
 
 model OutletStockOut {
@@ -186,28 +188,28 @@ model Customer {
 }
 
 model Barang {
-  id                    Int                    @id @default(autoincrement())
-  code                  String                 @unique
-  barcode               String?                @unique
+  id                    Int                      @id @default(autoincrement())
+  code                  String                   @unique
+  barcode               String?                  @unique
   name                  String
   category              String?
   brand                 String?
   unit                  String
   baseUnit              String?
-  conversionRate        Float                  @default(1)
-  minimumStock          Float                  @default(0)
-  stock                 Float                  @default(0)
-  purchasePrice         Float                  @default(0)
-  sellingPrice          Float                  @default(0)
-  hasExpired            Boolean                @default(false)
-  active                Boolean                @default(true)
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-  expiredWarning        Int                    @default(30)
-  source                BarangSource           @default(CENTRAL)
+  conversionRate        Float                    @default(1)
+  minimumStock          Float                    @default(0)
+  stock                 Float                    @default(0)
+  purchasePrice         Float                    @default(0)
+  sellingPrice          Float                    @default(0)
+  hasExpired            Boolean                  @default(false)
+  active                Boolean                  @default(true)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  expiredWarning        Int                      @default(30)
+  source                BarangSource             @default(CENTRAL)
   sourceOutletId        Int?
   adjustmentItems       AdjustmentItem[]
-  sourceOutlet          Outlet?                @relation("BarangSourceOutlet", fields: [sourceOutletId], references: [id])
+  sourceOutlet          Outlet?                  @relation("BarangSourceOutlet", fields: [sourceOutletId], references: [id])
   batches               BarangBatch[]
   batchStocks           BatchStock[]
   deliveryItems         DeliveryItem[]
@@ -224,10 +226,10 @@ model Barang {
   outletStockOuts       OutletStockOut[]
   outletTransferItems   OutletTransferItem[]
   priceSummary          PriceSummary?
-  productCKOutputs      ProductCK?             @relation("ProductCKOutput")
+  productCKOutputs      ProductCK?               @relation("ProductCKOutput")
   purchaseItems         PurchaseItem[]
   receiptItems          ReceiptItem[]
-  recipeOutputs         Recipe[]               @relation("RecipeOutput")
+  recipeOutputs         Recipe[]                 @relation("RecipeOutput")
   recipeItems           RecipeItem[]
   stockCards            StockCard[]
   stockMutations        StockMutation[]
@@ -235,7 +237,7 @@ model Barang {
   stockOpnameItems      StockOpnameItem[]
   stockWastes           StockWaste[]
   outletAdjustmentItems OutletAdjustmentItem[]
-  inventoryMonthly OutletInventoryMonthly[]
+  inventoryMonthly      OutletInventoryMonthly[]
 
   @@index([source])
   @@index([sourceOutletId])
@@ -853,33 +855,79 @@ model History {
 }
 
 model Employee {
-  id          Int          @id @default(autoincrement())
-  nik         String       @unique
-  name        String
-  gender      String?
-  position    String
-  department  String?
-  phone       String?
-  address     String?
-  photo       String?
-  active      Boolean      @default(true)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  attendances Attendance[]
+  id                 Int                    @id @default(autoincrement())
+  nik                String                 @unique
+  name               String
+  gender             String?
+  position           String
+  department         String?
+  phone              String?
+  address            String?
+  photo              String?
+  active             Boolean                @default(true)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  attendances        Attendance[]
+  workSchedules      EmployeeWorkSchedule[]
+  attendanceRequests AttendanceRequest[]
+  leaveBalances      EmployeeLeaveBalance[]
 }
 
 model Attendance {
-  id         Int       @id @default(autoincrement())
+  id               Int       @id @default(autoincrement())
+  employeeId       Int
+  date             DateTime  @default(now())
+  checkIn          DateTime?
+  checkOut         DateTime?
+  photoIn          String?
+  photoOut         String?
+  note             String?
+  shiftName        String?
+  scheduledIn      DateTime?
+  expectedCheckout DateTime?
+  attendanceStatus String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  employee         Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model EmployeeWorkSchedule {
+  id         Int      @id @default(autoincrement())
   employeeId Int
-  date       DateTime  @default(now())
-  checkIn    DateTime?
-  checkOut   DateTime?
-  photoIn    String?
-  photoOut   String?
+  workDate   DateTime
+  shiftName  String
+  startTime  String
+  endTime    String?
+  workHours  Float    @default(9)
   note       String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdBy  Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, workDate])
+  @@index([workDate])
+  @@index([employeeId, workDate])
+}
+
+model AttendanceRequest {
+  id             Int       @id @default(autoincrement())
+  employeeId     Int
+  type           String // CUTI, PH, LEMBUR
+  startDate      DateTime
+  endDate        DateTime
+  reason         String
+  status         String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  requestedHours Float?
+  decisionNote   String?
+  reviewedBy     Int?
+  reviewedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  employee       Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, startDate])
+  @@index([status, type])
 }
 
 model BatchStock {
@@ -1001,12 +1049,28 @@ model PurchasePayable {
   outletPurchase   OutletPurchase? @relation(fields: [outletPurchaseId], references: [id])
   purchase         Purchase?       @relation(fields: [purchaseId], references: [id])
   payments         Payment[]
+  reminderLogs     PayableReminderLog[]
 
   @@index([purchaseId])
   @@index([outletPurchaseId])
   @@index([supplierId])
   @@index([outletId])
   @@index([status])
+}
+
+model EmployeeLeaveBalance {
+  id          Int      @id @default(autoincrement())
+  employeeId  Int
+  year        Int
+  entitlement Float    @default(12)
+  phAdjustment Float   @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, year])
+  @@index([year])
 }
 
 model PriceSummary {
@@ -1262,29 +1326,29 @@ model OutletAdjustmentItem {
 }
 
 model OutletInventoryMonthly {
-  id                   Int      @id @default(autoincrement())
-  outletId             Int
-  barangId             Int
-  periodYear           Int
-  periodMonth          Int
+  id          Int @id @default(autoincrement())
+  outletId    Int
+  barangId    Int
+  periodYear  Int
+  periodMonth Int
 
-  openingStock         Float    @default(0)
-  incomingQty          Float    @default(0)
-  outgoingQty          Float    @default(0)
-  endingStock          Float    @default(0)
+  openingStock Float @default(0)
+  incomingQty  Float @default(0)
+  outgoingQty  Float @default(0)
+  endingStock  Float @default(0)
 
-  averageCost          Float    @default(0)
-  outgoingCost         Float    @default(0)
-  usagePercentage      Float    @default(0)
+  averageCost     Float @default(0)
+  outgoingCost    Float @default(0)
+  usagePercentage Float @default(0)
 
-  previousOutgoingCost Float    @default(0)
-  costChangePercentage Float    @default(0)
-  costStatus           String   @default("STABIL")
+  previousOutgoingCost Float  @default(0)
+  costChangePercentage Float  @default(0)
+  costStatus           String @default("STABIL")
 
-  stockStatus          String   @default("AMAN")
+  stockStatus String @default("AMAN")
 
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
   barang Barang @relation(fields: [barangId], references: [id], onDelete: Cascade)
@@ -1405,4 +1469,32 @@ enum DeliveryRequestStatus {
   PROCESSING
   COMPLETED
   CANCELLED
+}
+
+
+/// Log pengingat pembayaran hutang. Tabel ini hanya menyimpan metadata notifikasi;
+/// tidak mengubah nominal, pembayaran, atau status PurchasePayable.
+model PayableReminderLog {
+  id             Int             @id @default(autoincrement())
+  payableId      Int
+  userId         Int
+  dueDate        DateTime
+  stage          String
+  source         String
+  supplierName   String
+  invoiceNumber  String
+  outstanding    Float           @default(0)
+  message        String
+  readAt         DateTime?
+  whatsappStatus String          @default("PENDING")
+  whatsappSentAt DateTime?
+  whatsappError  String?
+  createdAt      DateTime        @default(now())
+  payable        PurchasePayable @relation(fields: [payableId], references: [id], onDelete: Restrict)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([payableId, userId, stage, dueDate])
+  @@index([userId, createdAt])
+  @@index([payableId, stage])
+  @@index([whatsappStatus])
 }

@@ -774,6 +774,7 @@ export async function GET(
             totalValue: true,
             trxType: true,
             trxDate: true,
+            trxNumber: true,
           },
         },
       );
@@ -804,9 +805,134 @@ export async function GET(
             unitPrice: true,
             totalValue: true,
             trxType: true,
+            trxNumber: true,
           },
         },
       );
+
+    /*
+     * =======================================================
+     * FALLBACK DARI STOCK MUTATION
+     * =======================================================
+     *
+     * Sebagian jalur outlet (penerimaan purchase, transfer,
+     * waste, adjustment, POS dan manufacture) mencatat ke
+     * StockMutation tetapi belum tentu membuat StockCard.
+     * Inventory sebelumnya hanya membaca StockCard sehingga
+     * transaksi tersebut tidak terlihat pada kolom masuk/keluar.
+     *
+     * StockMutation.qty disimpan dalam BASE UNIT. StockCard
+     * juga diperlakukan sebagai BASE UNIT pada laporan ini.
+     * Untuk menghindari double count, mutasi tidak ditambahkan
+     * jika sudah ada StockCard dengan barang + reference yang
+     * sama. Stock opname tidak dihitung sebagai movement.
+     */
+    const currentMutations = await prisma.stockMutation.findMany({
+      where: {
+        outletId,
+        createdAt: { gte: start, lt: end },
+      },
+      select: {
+        barangId: true,
+        type: true,
+        qty: true,
+        reference: true,
+        createdAt: true,
+      },
+    });
+
+    const previousMutations = await prisma.stockMutation.findMany({
+      where: {
+        outletId,
+        createdAt: { gte: previousStart, lt: previousEnd },
+      },
+      select: {
+        barangId: true,
+        type: true,
+        qty: true,
+        reference: true,
+        createdAt: true,
+      },
+    });
+
+    const incomingMutationTypes = new Set([
+      "OUTLET_RECEIPT",
+      "OUTLET_IN",
+      "TRANSFER_IN",
+      "MANUFACTURE_OUTPUT",
+      "ADJUSTMENT_IN",
+      "DELIVERY_IN",
+      "STOCK_IN",
+    ]);
+    const outgoingMutationTypes = new Set([
+      "OUTLET_OUT",
+      "TRANSFER_OUT",
+      "WASTE",
+      "WASTE_OUT",
+      "POS_SALE",
+      "POS_CONSUME",
+      "MANUFACTURE_CONSUME",
+      "ADJUSTMENT_OUT",
+      "OUTLET_RECEIPT_CANCEL",
+      "DELIVERY_OUT",
+      "STOCK_OUT",
+    ]);
+
+    function mutationAlreadyInStockCard(
+      mutation: { barangId: number; reference: string | null },
+      cards: Array<{ barangId: number; trxNumber?: string }>,
+    ) {
+      if (!mutation.reference) return false;
+      return cards.some((card) =>
+        card.barangId === mutation.barangId &&
+        String(card.trxNumber ?? "").trim() === mutation.reference!.trim()
+      );
+    }
+
+    for (const mutation of currentMutations) {
+      const type = String(mutation.type ?? "").toUpperCase();
+      if (type.includes("OPNAME")) continue;
+      if (mutationAlreadyInStockCard(mutation, periodStockCards)) continue;
+
+      const qty = Math.abs(numberValue(mutation.qty));
+      if (!qty) continue;
+      const isIn = incomingMutationTypes.has(type);
+      const isOut = outgoingMutationTypes.has(type);
+      if (!isIn && !isOut) continue;
+
+      periodStockCards.push({
+        barangId: mutation.barangId,
+        qtyIn: isIn ? qty : 0,
+        qtyOut: isOut ? qty : 0,
+        unitPrice: 0,
+        totalValue: 0,
+        trxType: type,
+        trxDate: mutation.createdAt,
+        trxNumber: mutation.reference ?? `MUTATION-${mutation.barangId}-${mutation.createdAt.getTime()}`,
+      });
+    }
+
+    for (const mutation of previousMutations) {
+      const type = String(mutation.type ?? "").toUpperCase();
+      if (type.includes("OPNAME")) continue;
+      if (mutationAlreadyInStockCard(mutation, previousStockCards)) continue;
+
+      const qty = Math.abs(numberValue(mutation.qty));
+      if (!qty) continue;
+      const isIn = incomingMutationTypes.has(type);
+      const isOut = outgoingMutationTypes.has(type);
+      if (!isIn && !isOut) continue;
+
+      previousStockCards.push({
+        barangId: mutation.barangId,
+        qtyIn: isIn ? qty : 0,
+        qtyOut: isOut ? qty : 0,
+        unitPrice: 0,
+        totalValue: 0,
+        trxType: type,
+        trxNumber: mutation.reference ?? `MUTATION-${mutation.barangId}-${mutation.createdAt.getTime()}`,
+      });
+    }
 
     /*
      * =======================================================

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 
@@ -842,17 +842,106 @@ try {
 }
 
 // =====================================================
-// WHATSAPP PURCHASE ORDER
+// WHATSAPP PURCHASE ORDER — RINCIAN LENGKAP & PREMIUM
 // =====================================================
+
+/**
+ * Format pesan mengikuti template yang diminta:
+ * - Identitas PO, supplier, dan tanggal
+ * - Semua item disertakan lengkap dengan qty, satuan, harga, subtotal
+ * - Total pembelian dan catatan pemrosesan
+ * - Penutup nama perusahaan
+ *
+ * Fungsi ini dipakai oleh tombol kirim dan salin agar hasilnya konsisten.
+ */
+function buildCompactWhatsAppMessage() {
+  if (!purchase) return "";
+
+  const items = Array.isArray(purchase.items) ? purchase.items : [];
+  const formatMoney = (value: unknown) =>
+    `Rp ${Number(value ?? 0).toLocaleString("id-ID")}`;
+
+  const dateValue = purchase.purchaseDate ?? purchase.date ?? purchase.createdAt;
+  const date = dateValue
+    ? new Date(dateValue).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "-";
+
+  const itemLines = items.flatMap((item: any, index: number) => {
+    const name = String(
+      item?.barang?.name ??
+      item?.barang?.nama ??
+      item?.barang?.namaBarang ??
+      item?.name ??
+      item?.namaBarang ??
+      item?.description ??
+      `Item ${index + 1}`
+    ).trim();
+
+    const qty = Number(item?.qty ?? item?.quantity ?? 0);
+    const unit = String(
+      item?.barang?.unit ??
+      item?.unit ??
+      item?.satuan ??
+      "unit"
+    ).trim();
+    const price = Number(item?.price ?? item?.harga ?? item?.unitPrice ?? 0);
+    const subtotal = Number(
+      item?.subtotal ??
+      item?.subTotal ??
+      item?.total ??
+      qty * price
+    );
+
+    return [
+      `${index + 1}. ${name}`,
+      `   ${qty.toLocaleString("id-ID")} ${unit} × ${formatMoney(price)}`,
+      `   Subtotal: ${formatMoney(subtotal)}`,
+    ];
+  });
+
+  const itemSummary = itemLines.length
+    ? itemLines.join("\n")
+    : "Belum ada rincian barang.";
+
+  return [
+    "📦 *PURCHASE ORDER*",
+    "━━━━━━━━━━━━━━━━━━",
+    `*No. PO:* ${purchase.number ?? "-"}`,
+    `*Supplier:* ${purchase.supplier?.name ?? purchase.supplierName ?? "-"}`,
+    `*Tanggal:* ${date}`,
+    "",
+    "*RINCIAN BARANG*",
+    "",
+    itemSummary,
+    "",
+    "━━━━━━━━━━━━━━━━━━",
+    `*TOTAL: ${formatMoney(purchase.total)}*`,
+    "",
+    "Mohon Purchase Order ini diproses sesuai dengan rincian pesanan yang tercantum di atas ya Bapak/Ibu.",
+    "Apabila terdapat perubahan harga, jumlah, ketersediaan barang, maupun ketentuan lainnya, mohon dikonfirmasikan terlebih dahulu kepada pihak kami.",
+    "Terima kasih atas perhatian, kerja sama, dan pelayanan yang diberikan.",
+    "",
+    "━━━━━━━━━━━━━━━━",
+    "✨ *PT. MITRA GARAM BOGATAMA*",
+  ].join("\n");
+}
+
+function buildCompactWhatsAppUrl() {
+  const originalUrl = buildWhatsAppPurchaseUrl(purchase);
+  const url = new URL(originalUrl, window.location.origin);
+  url.searchParams.set("text", buildCompactWhatsAppMessage());
+  return url.toString();
+}
 
 function sendPurchaseWhatsApp() {
 if (!purchase) return;
 
 try {
-  const whatsappUrl =
-    buildWhatsAppPurchaseUrl(
-      purchase
-    );
+  const whatsappUrl = buildCompactWhatsAppUrl();
 
   window.open(
     whatsappUrl,
@@ -890,8 +979,7 @@ try {
    * agar isi yang disalin 100% mengikuti pesan WhatsApp yang
    * akan dikirim oleh Purchase Order ini.
    */
-  const whatsappUrl =
-    buildWhatsAppPurchaseUrl(purchase);
+  const whatsappUrl = buildCompactWhatsAppUrl();
 
   const parsedUrl = new URL(
     whatsappUrl,
@@ -1973,37 +2061,6 @@ isInitialTempoModal
 : "Metode pembayaran mengikuti Purchase Order.";
 
 // =====================================================
-// PRICE CHANGE SUMMARY
-// =====================================================
-
-const priceChangeItems =
-purchase?.items
-?.map(
-(
-item: any,
-index: number
-) => ({
-item,
-index,
-priceInfo:
-getPriceChangeInfo(
-item
-),
-})
-)
-.filter(
-({
-priceInfo,
-}: {
-priceInfo: PriceChangeInfo;
-}) =>
-priceInfo.changed
-) ?? [];
-
-const totalPriceChangeItems =
-priceChangeItems.length;
-
-// =====================================================
 // LOADING
 // =====================================================
 
@@ -3021,34 +3078,6 @@ return (
 
           <div className="flex flex-wrap items-center gap-3">
 
-            {totalPriceChangeItems >
-              0 && (
-              <div className="rounded-2xl border border-orange-800/60 bg-orange-950/35 px-5 py-3 shadow-sm">
-
-                <div className="flex items-center gap-2">
-
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-900/50 text-orange-300">
-                    <AlertCircle
-                      size={16}
-                    />
-                  </div>
-
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-wider text-orange-300">
-                      Perubahan Harga
-                    </p>
-
-                    <p className="mt-0.5 text-sm font-black text-orange-100">
-                      {totalPriceChangeItems}{" "}
-                      item memiliki perbedaan
-                      harga
-                    </p>
-                  </div>
-
-                </div>
-
-              </div>
-            )}
 
             <div className="rounded-2xl border border-[#D5E3DE] dark:border-[#29483F] bg-[white] dark:bg-[#101815] px-5 py-3 shadow-sm">
 
@@ -3071,48 +3100,6 @@ return (
 
       </div>
 
-      {/* =====================================================
-          PRICE CHANGE INFORMATION BANNER
-      ===================================================== */}
-
-      {totalPriceChangeItems >
-        0 && (
-        <div className="border-b border-orange-100 bg-gradient-to-r from-orange-50 via-amber-50/70 to-[#101815] px-5 py-4 md:px-7">
-
-          <div className="flex items-start gap-3">
-
-            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-900/50 text-orange-300">
-              <Info
-                size={17}
-              />
-            </div>
-
-            <div className="min-w-0">
-
-              <p className="text-sm font-black text-orange-100">
-                Ada perbedaan harga pada item Purchase
-              </p>
-
-              <p className="mt-1 text-xs leading-5 text-orange-300">
-                Harga pada Purchase Order dibandingkan
-                dengan{" "}
-                <strong>
-                  harga pembelian terakhir
-                </strong>
-                . Jika harga PO lebih tinggi akan
-                ditandai{" "}
-                <strong>HARGA NAIK</strong>,
-                sedangkan jika lebih rendah akan
-                ditandai{" "}
-                <strong>HARGA TURUN</strong>.
-              </p>
-
-            </div>
-
-          </div>
-
-        </div>
-      )}
 
       <div className="overflow-x-auto">
 
@@ -3211,11 +3198,8 @@ return (
                   ];
 
                 return (
+                  <Fragment key={item.id ?? `${itemCode}-${index}`}>
                   <tr
-                    key={
-                      item.id ??
-                      `${itemCode}-${index}`
-                    }
                     className={`group border-b transition ${
                       priceInfo.changed
                         ? priceInfo.direction ===
@@ -3415,112 +3399,6 @@ return (
                           per {itemUnit}
                         </span>
 
-                        {priceInfo.changed && (
-                          <div
-                            className={`mt-3 w-full min-w-[270px] rounded-xl border bg-[white] dark:bg-[#101815] p-3 text-left shadow-sm ${
-                              priceInfo.direction ===
-                              "UP"
-                                ? "border-red-800/60"
-                                : "border-emerald-800/60"
-                            }`}
-                          >
-
-                            <div className="flex items-center justify-between gap-3">
-
-                              <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                                Harga Terakhir
-                              </span>
-
-                              <span className="text-xs font-black text-[#18352D] dark:text-[#E8F2EE]">
-                                Rp{" "}
-                                {formatRupiah(
-                                  priceInfo.hargaLama
-                                )}
-                              </span>
-
-                            </div>
-
-                            <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#E2EBE7] dark:border-[#22362F] pt-2">
-
-                              <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                                Harga PO
-                              </span>
-
-                              <span className="text-xs font-black text-[#18352D] dark:text-[#E8F2EE]">
-                                Rp{" "}
-                                {formatRupiah(
-                                  priceInfo.hargaBaru
-                                )}
-                              </span>
-
-                            </div>
-
-                            <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#E2EBE7] dark:border-[#22362F] pt-2">
-
-                              <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                                Selisih
-                              </span>
-
-                              <span
-                                className={`text-xs font-black ${
-                                  priceInfo.direction ===
-                                  "UP"
-                                    ? "text-red-400"
-                                    : "text-emerald-600"
-                                }`}
-                              >
-                                {formatSignedRupiah(
-                                  priceInfo.difference
-                                )}
-                              </span>
-
-                            </div>
-
-                            <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#E2EBE7] dark:border-[#22362F] pt-2">
-
-                              <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                                Perubahan
-                              </span>
-
-                              <span
-                                className={`text-xs font-black ${
-                                  priceInfo.direction ===
-                                  "UP"
-                                    ? "text-red-400"
-                                    : "text-emerald-600"
-                                }`}
-                              >
-                                {formatPercent(
-                                  priceInfo.persen
-                                )}
-                              </span>
-
-                            </div>
-
-                            {priceInfo.supplier && (
-                              <div className="mt-2 border-t border-[#E2EBE7] dark:border-[#22362F] pt-2">
-
-                                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                                  Supplier Harga Terakhir
-                                </p>
-
-                                <p className="mt-1 truncate text-xs font-bold text-[#3E806D] dark:text-[#5FA18E]">
-                                  {priceInfo.supplier}
-                                </p>
-
-                              </div>
-                            )}
-
-                            <p className="mt-3 text-[10px] leading-4 text-gray-400">
-                              Harga PO dibandingkan
-                              dengan harga
-                              pembelian terakhir
-                              yang tersimpan pada
-                              riwayat harga barang.
-                            </p>
-
-                          </div>
-                        )}
 
                       </div>
 
@@ -3552,6 +3430,72 @@ return (
                     </td>
 
                   </tr>
+
+                  {priceInfo.changed && (
+                    <tr
+                      key={`price-change-${item.id ?? itemCode}-${index}`}
+                      className={`border-b ${
+                        priceInfo.direction === "UP"
+                          ? "border-red-200/70 bg-red-50/70 dark:border-red-900/50 dark:bg-red-950/20"
+                          : "border-emerald-200/70 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/20"
+                      }`}
+                    >
+                      <td className="p-0" />
+                      <td colSpan={6} className="px-4 py-2 align-middle">
+                        <div className="mb-1">
+                          <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[9px] font-black uppercase ${
+                            priceInfo.direction === "UP"
+                              ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          }`}>
+                            <Info size={11} />
+                            Harga {priceInfo.direction === "UP" ? "Naik" : "Turun"}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px] leading-4">
+                          <span className="inline-flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                            <span>Harga terakhir</span>
+                            <strong className="font-extrabold text-[#18352D] dark:text-[#E8F2EE]">
+                              Rp {formatRupiah(priceInfo.hargaLama)}
+                            </strong>
+                          </span>
+                          <span className="text-gray-400" aria-hidden="true">→</span>
+                          <span className="inline-flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                            <span>Harga PO</span>
+                            <strong className="font-extrabold text-[#18352D] dark:text-[#E8F2EE]">
+                              Rp {formatRupiah(priceInfo.hargaBaru)}
+                            </strong>
+                          </span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="text-gray-500 dark:text-gray-400">Selisih</span>
+                            <strong className={`font-extrabold ${
+                              priceInfo.direction === "UP"
+                                ? "text-red-700 dark:text-red-300"
+                                : "text-emerald-700 dark:text-emerald-300"
+                            }`}>
+                              {formatSignedRupiah(priceInfo.difference)}
+                            </strong>
+                          </span>
+                          <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-black ${
+                            priceInfo.direction === "UP"
+                              ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          }`}>
+                            {formatPercent(priceInfo.persen)}
+                          </span>
+                          {priceInfo.supplier && (
+                            <span className="inline-flex min-w-0 items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                              <span>Supplier terakhir:</span>
+                              <strong className="max-w-[240px] truncate font-bold text-[#3E806D] dark:text-[#5FA18E]">
+                                {priceInfo.supplier}
+                              </strong>
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               }
             )}

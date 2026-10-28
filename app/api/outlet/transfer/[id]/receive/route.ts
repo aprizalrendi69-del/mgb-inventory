@@ -1194,6 +1194,19 @@ export async function POST(
           for (
             const item of processedItems
           ) {
+            await tx.stockMutation.create({
+              data: {
+                outletId: current.outletId,
+                barangId: item.barangId,
+                type: "OUTLET_TRANSFER_IN",
+                qty: item.qty,
+                stockBefore: item.stockBefore,
+                stockAfter: item.stockAfter,
+                reference: current.number,
+                description: `Transfer masuk ${current.number} dari ${current.sourceOutlet.name}`,
+              },
+            });
+
             await tx.stockCard.create(
               {
                 data: {

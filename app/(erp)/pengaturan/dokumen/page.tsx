@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -94,6 +94,31 @@ export default function DokumenPage() {
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [period, setPeriod] = useState("");
+
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true); setError("");
+        const response = await fetch("/api/settings/document-numbers", { credentials: "include", cache: "no-store" });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || "Gagal memuat konfigurasi.");
+        if (cancelled) return;
+        setPeriod(result.period || "");
+        setDocuments((current) => current.map((item) => {
+          const savedConfig = (result.data || []).find((row: { type: string; prefix: string }) => row.type === item.id);
+          const prefix = savedConfig?.prefix || item.prefix;
+          return { ...item, prefix, example: createExample(prefix) };
+        }));
+      } catch (err) { if (!cancelled) setError(err instanceof Error ? err.message : "Gagal memuat konfigurasi nomor dokumen."); }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const filteredDocuments = useMemo(() => {
     const keyword = search
@@ -154,38 +179,33 @@ export default function DokumenPage() {
 
     setSearch("");
     setSaved(false);
+    setError("Nilai default baru berlaku setelah Anda menekan Simpan.");
   }
 
   async function handleSave() {
-    setSaving(true);
-    setSaved(false);
-
-    /*
-     * BELUM DIKIRIM KE DATABASE.
-     *
-     * Saat API konfigurasi nomor dokumen
-     * sudah tersedia, bagian ini tinggal
-     * dihubungkan ke endpoint tersebut.
-     *
-     * Untuk sekarang kita tidak mengubah
-     * generator nomor transaksi existing.
-     */
-
-    await new Promise((resolve) =>
-      setTimeout(resolve, 500)
-    );
-
-    setSaving(false);
-    setSaved(true);
-
-    setTimeout(() => {
-      setSaved(false);
-    }, 3000);
+    try {
+      setSaving(true); setSaved(false); setError("");
+      const response = await fetch("/api/settings/document-numbers", {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documents: documents.map(({ id, prefix }) => ({ id, prefix })) }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.message || "Gagal menyimpan konfigurasi.");
+      setPeriod(result.period || period); setSaved(true);
+      window.setTimeout(() => setSaved(false), 3000);
+    } catch (err) { setError(err instanceof Error ? err.message : "Gagal menyimpan nomor dokumen."); }
+    finally { setSaving(false); }
   }
 
   return (
     <main className="min-h-screen bg-[#f6f8f7] px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1400px]">
+        {error && <div role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</div>}
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          {loading ? "Memuat konfigurasi..." : `Konfigurasi tersimpan untuk periode ${period || getCurrentPeriod()}`}
+          <span className="rounded-full bg-amber-50 px-2.5 py-1 font-bold text-amber-700">Perlu integrasi ke generator transaksi</span>
+        </div>
         {/* ================================================= */}
         {/* HEADER */}
         {/* ================================================= */}
@@ -235,7 +255,7 @@ export default function DokumenPage() {
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || loading}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#18352D] px-5 text-sm font-bold text-white shadow-lg shadow-[#18352D]/15 transition hover:-translate-y-0.5 hover:bg-[#24493f] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {saving ? (

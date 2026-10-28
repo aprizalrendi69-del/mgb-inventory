@@ -1,13 +1,5 @@
-export default function Page() {
-  return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold">
-        Dalam Pengembangan
-      </h1>
-
-      <p className="text-gray-500 mt-3">
-        Modul ini akan segera dibuat.
-      </p>
-    </div>
-  );
-}
+"use client";
+import Link from "next/link";
+import { useState } from "react";
+import { ArrowLeft, DatabaseBackup, Copy, ShieldAlert, CheckCircle2, Terminal } from "lucide-react";
+export default function BackupPage(){const [copied,setCopied]=useState(false);async function copyCommand(){try{await navigator.clipboard.writeText("npm run backup");setCopied(true);window.setTimeout(()=>setCopied(false),2500);}catch{setCopied(false);window.alert("Clipboard tidak tersedia. Salin perintah: npm run backup");}}return <main className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-9 dark:bg-slate-950"><div className="mx-auto max-w-4xl space-y-6"><Link href="/pengaturan" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-emerald-700"><ArrowLeft size={15}/> Kembali ke Pengaturan</Link><section className="overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="h-1 bg-gradient-to-r from-slate-900 via-emerald-700 to-teal-300"/><div className="p-6 sm:p-8"><div className="flex items-start gap-4"><div className="rounded-2xl bg-emerald-50 p-3 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"><DatabaseBackup size={25}/></div><div><p className="text-[10px] font-black uppercase tracking-[.2em] text-emerald-700">Database maintenance</p><h1 className="mt-1 text-2xl font-black">Backup Database</h1><p className="mt-2 text-sm leading-6 text-slate-500">Proyek menyediakan skrip `scripts/backup.js` melalui perintah `npm run backup`. Untuk menghindari salinan database saat transaksi sedang berjalan, hentikan server ERP terlebih dahulu.</p></div></div><div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30"><div className="flex gap-3"><ShieldAlert size={19} className="mt-0.5 shrink-0 text-amber-700"/><div><p className="text-sm font-extrabold text-amber-900 dark:text-amber-200">Jalankan saat server dihentikan</p><p className="mt-1 text-xs leading-5 text-amber-800 dark:text-amber-300">Skrip backup yang ada menyalin file SQLite langsung dan folder upload. Ini bukan snapshot online yang dijamin konsisten; hentikan ERP dan pastikan tidak ada proses lain yang mengakses database sebelum menjalankannya.</p></div></div></div><div className="mt-5 rounded-2xl border border-slate-200 p-4 dark:border-slate-800"><div className="flex items-center gap-2 text-slate-500"><Terminal size={16}/><span className="text-xs font-bold uppercase tracking-wider">Perintah backup</span></div><div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><code className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-800 dark:bg-slate-950 dark:text-slate-100">npm run backup</code><button onClick={()=>void copyCommand()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-xs font-bold text-white hover:bg-emerald-800 dark:bg-emerald-700"><Copy size={14}/>{copied?"Perintah disalin":"Salin perintah"}</button></div><p className="mt-3 text-xs leading-5 text-slate-500">Jalankan di terminal pada root proyek. Skrip membuat folder bertanggal di `backups/`; periksa output terminal dan pastikan file database serta folder upload tercakup.</p>{copied&&<p role="status" className="mt-3 text-xs font-bold text-emerald-700"><CheckCircle2 size={14} className="mr-1 inline"/>Perintah disalin ke clipboard.</p>}</div></div></section></div></main>}
